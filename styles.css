@@ -280,3 +280,14 @@ body.readonly main input, body.readonly main select, body.readonly main button {
 .stat b { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
 .stat span { font-size: .8rem; color: var(--muted); }
 #restoreLabel { margin: 0; padding: 10px 14px; }
+
+/* custom meals */
+.portions.custom .item-top select { max-width: 85%; }
+.grams { width: 90px; flex: 0 0 90px; padding: 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.portions.custom .amt { margin-left: auto; font-weight: 600; }
+[data-cadd] { margin-top: 10px; }
+.manual { margin-top: 8px; }
+.manual-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.manual-grid label { margin: 0; font-size: .75rem; }
+.manual-grid input { padding: 8px 6px; }
+@media (max-width: 360px) { .manual-grid { grid-template-columns: repeat(2, 1fr); } }

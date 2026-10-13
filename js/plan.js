@@ -177,6 +177,21 @@ export function portionMeal(template, target, custom = {}) {
   return { title: template.title(named), portions, totals };
 }
 
+// A meal you built yourself: your foods and grams, no auto-sizing. `manual` (any of
+// kcal/p/f/c) overrides the computed totals, e.g. numbers copied from a label or app.
+export function customMeal(c, target) {
+  const portions = (c.items || []).filter((x) => FOODS[x.food]).map((x, i) => ({
+    slot: `i${i}`, food: x.food, grams: +x.grams || 0, options: [], range: FOODS[x.food].range, locked: false, custom: true,
+  }));
+  const totals = sum(portions);
+  for (const k in totals) totals[k] = Math.round(totals[k]);
+  const manual = c.manual && Object.values(c.manual).some((v) => v !== '' && v != null);
+  if (manual) for (const k of ['kcal', 'p', 'f', 'c']) if (c.manual[k] !== '' && c.manual[k] != null) totals[k] = Math.round(+c.manual[k]);
+  const names = portions.filter((x) => x.grams > 0).map((x) => FOODS[x.food].name.replace(/ \(.*\)/, '').toLowerCase());
+  const title = names.length ? names.slice(0, 3).join(', ').replace(/^./, (ch) => ch.toUpperCase()) + (names.length > 3 ? '…' : '') : 'Your meal';
+  return { title, portions, totals, custom: true, manual: !!manual };
+}
+
 // Deterministic rotation so each day looks different.
 export function dayIndex(date) {
   const d = new Date(date);
@@ -192,10 +207,11 @@ export function planForDay(dayTargets, date, custom = {}, prefs = {}) {
   const bKey = BREAKFASTS[custom.breakfast?.template] ? custom.breakfast.template : bKeys[n % bKeys.length];
   const merge = (prefKey, c = {}, extra = {}) => ({ picks: { ...extra, ...prefs[prefKey], ...c.picks }, grams: c.grams });
   const rotate = (offset) => ({ protein: PROTEINS[(n + offset) % PROTEINS.length] });
+  const build = (name, auto) => (custom[name]?.items ? customMeal(custom[name], meals[name]) : auto());
   return {
-    breakfast: { template: bKey, target: meals.breakfast, ...portionMeal(BREAKFASTS[bKey], meals.breakfast, merge(bKey, custom.breakfast)) },
-    lunch: { target: meals.lunch, ...portionMeal(MAIN_MEAL, meals.lunch, merge('main', custom.lunch, rotate(0))) },
-    dinner: { target: meals.dinner, ...portionMeal(MAIN_MEAL, meals.dinner, merge('main', custom.dinner, rotate(2))) },
+    breakfast: { template: bKey, target: meals.breakfast, ...build('breakfast', () => portionMeal(BREAKFASTS[bKey], meals.breakfast, merge(bKey, custom.breakfast))) },
+    lunch: { target: meals.lunch, ...build('lunch', () => portionMeal(MAIN_MEAL, meals.lunch, merge('main', custom.lunch, rotate(0)))) },
+    dinner: { target: meals.dinner, ...build('dinner', () => portionMeal(MAIN_MEAL, meals.dinner, merge('main', custom.dinner, rotate(2)))) },
   };
 }
 

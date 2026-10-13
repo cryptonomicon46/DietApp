@@ -13,6 +13,7 @@ export const FOODS = {
   oats:       { name: 'Rolled oats (dry)',        kcal: 379, p: 13.2, f: 6.5,  c: 67.7, unit: { label: 'cup', grams: 80 },      range: [20, 160, 5] },
   whey:       { name: 'Whey protein',             kcal: 400, p: 80,   f: 5,    c: 10,   unit: { label: 'scoop', grams: 30 },    range: [0, 75, 5] },
   berries:    { name: 'Blueberries',              kcal: 57,  p: 0.7,  f: 0.3,  c: 14.5, unit: { label: 'cup', grams: 148 },     range: [0, 200, 25] },
+  frozenBerries:{ name: 'Frozen mixed berries',  kcal: 50,  p: 0.7,  f: 0.4,  c: 12.0, unit: { label: 'cup', grams: 140 },     range: [0, 300, 10] },
   strawberries:{ name: 'Strawberries',            kcal: 32,  p: 0.7,  f: 0.3,  c: 7.7,  unit: { label: 'cup', grams: 152 },     range: [0, 250, 25] },
   banana:     { name: 'Banana',                   kcal: 89,  p: 1.1,  f: 0.3,  c: 22.8, unit: { label: 'banana', grams: 118 },  range: [0, 240, 20] },
   pb:         { name: 'Peanut butter',            kcal: 588, p: 25,   f: 50,   c: 20,   unit: { label: 'tbsp', grams: 16 },     range: [0, 48, 4] },
@@ -34,6 +35,14 @@ export const FOODS = {
   quinoa:     { name: 'Quinoa',                   kcal: 120, p: 4.4, f: 1.9,  c: 21.3, unit: { label: 'cup', grams: 185 }, range: [0, 450, 10] },
   veggies:    { name: 'Mixed veggies',            kcal: 35,  p: 2.5, f: 0.3,  c: 7.0,  unit: { label: 'cup', grams: 100 }, range: [0, 400, 25] },
   oliveOil:   { name: 'Olive oil',                kcal: 884, p: 0,   f: 100,  c: 0,    unit: { label: 'tsp', grams: 4.5 }, range: [0, 31.5, 4.5] },
+};
+
+// Groups for the "add a food" picker when you build a meal yourself.
+export const FOOD_GROUPS = {
+  Protein: ['whey', 'eggWhites', 'egg', 'chicken', 'thigh', 'beef', 'steak', 'salmon', 'cod', 'trout', 'cheddar'],
+  Carbs: ['oats', 'sourdough', 'wheatBread', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'banana'],
+  'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'avocado'],
+  Fats: ['almondButter', 'pb', 'walnuts', 'butter', 'oliveOil'],
 };
 
 // Default protein rotation (one per day); every protein below can be picked.
@@ -58,7 +67,7 @@ export const BREAKFASTS = {
     items: [
       { slot: 'protein', options: ['whey', 'eggWhites'], drives: 'p', min: 15, max: 60 },
       { slot: 'carb', options: ['oats'], drives: 'c', min: 40, max: 120 },
-      { slot: 'fruit', options: ['berries', 'strawberries', 'banana'], fixed: 75 },
+      { slot: 'fruit', options: ['berries', 'frozenBerries', 'strawberries', 'banana'], fixed: 75 },
       { slot: 'fat', options: ['pb', 'almondButter', 'walnuts'], drives: 'f' },
     ],
   },
@@ -95,6 +104,7 @@ export const STORES = {
   wheatBread:  { store: 'Safeway', tip: 'Whole-wheat sandwich bread', packGrams: 680, packLabel: '24 oz loaf' },
   butter:      { store: 'Costco',  tip: 'Kirkland butter (freeze extra sticks)', packGrams: 454, packLabel: '1 lb' },
   cheddar:     { store: 'Costco',  tip: 'Sharp cheddar block or shredded', packGrams: 907, packLabel: '2 lb' },
+  frozenBerries:{ store: 'Costco', tip: 'Kirkland frozen organic mixed berries (unsweetened)', packGrams: 1810, packLabel: '4 lb bag' },
   strawberries:{ store: 'Sprouts', tip: 'Fresh or frozen strawberries', packGrams: 454, packLabel: '1 lb' },
   banana:      { store: 'Costco',  tip: 'Bananas (3 lb bunch)', packGrams: 1360, packLabel: 'bunch' },
   almondButter:{ store: 'Costco',  tip: 'Kirkland almond butter', packGrams: 765, packLabel: '27 oz jar' },

@@ -118,3 +118,19 @@ test('default plan: 162 → 156 lb at a steady pace', async () => {
   assert.equal(atGoal.lbPerWeek, 0);
   assert.ok(Math.abs(atGoal.kcal - atGoal.tdee) <= 10, 'maintenance at goal');
 });
+
+test('custom meal: your own foods, grams and optional typed macros', async () => {
+  const { customMeal } = await import('../js/plan.js');
+  const t = dailyTargets(man, 210);
+  const items = [{ food: 'whey', grams: 30 }, { food: 'frozenBerries', grams: 140 }, { food: 'almondButter', grams: 16 }];
+  const plan = planForDay(t, new Date(2026, 9, 13), { breakfast: { items } });
+  const b = plan.breakfast;
+  assert.ok(b.custom);
+  assert.equal(b.title, 'Whey protein, frozen mixed berries, almond butter');
+  assert.deepEqual(b.portions.map((x) => [x.food, x.grams]), [['whey', 30], ['frozenBerries', 140], ['almondButter', 16]]);
+  assert.equal(b.totals.p, Math.round(24 + 0.98 + 3.36));
+  assert.ok(b.target.kcal > 0, 'still compared with the breakfast target');
+  const typed = customMeal({ items, manual: { kcal: 320, p: 30, f: '', c: '' } }, b.target);
+  assert.deepEqual([typed.totals.kcal, typed.totals.p, typed.manual], [320, 30, true]);
+  assert.equal(typed.totals.f, b.totals.f, 'blank fields keep the computed value');
+});

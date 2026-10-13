@@ -1,4 +1,4 @@
-import { FOODS, STORES } from './foods.js';
+import { FOODS, STORES, FOOD_GROUPS } from './foods.js';
 import {
   ACTIVITY, PACE, dailyTargets, goalProjection, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
@@ -245,15 +245,136 @@ function mealCard(meal, m) {
           ${meal === 'breakfast' ? `<select class="small-select" data-template aria-label="Breakfast type">
             ${Object.entries(MEAL_TEMPLATES).map(([k, v]) => `<option value="${k}" ${m.template === k ? 'selected' : ''}>${v}</option>`).join('')}
           </select>` : ''}
-          <button class="ghost small" data-reset ${edited ? '' : 'hidden'}>Reset</button>
+          ${m.custom ? '' : '<button class="ghost small" data-customize title="Build this meal yourself">✎ Customize</button>'}
+          <button class="ghost small" data-reset ${edited ? '' : 'hidden'}>${m.custom ? 'Back to plan' : 'Reset'}</button>
         </div>
       </div>
-      <div class="meal-macros" data-role="totals">${totalsLine(m)}</div>
-      <ul class="portions editable">
-        ${m.portions.map((x) => itemRow(x)).join('')}
-      </ul>
+      <div class="meal-macros" data-role="totals">${totalsLine(m)}${m.manual ? ' <small class="muted">(your numbers)</small>' : ''}</div>
+      ${m.custom ? customBody(meal, m) : `<ul class="portions editable">${m.portions.map((x) => itemRow(x)).join('')}</ul>`}
       ${eatButton(meal)}
     </div>`;
+}
+
+// ---- meals you build yourself ----
+function foodOptions(selected, placeholder) {
+  return (placeholder ? `<option value="">${placeholder}</option>` : '')
+    + Object.entries(FOOD_GROUPS).map(([g, keys]) => `<optgroup label="${g}">${keys.map((k) =>
+      `<option value="${k}" ${k === selected ? 'selected' : ''}>${esc(FOODS[k].name)}</option>`).join('')}</optgroup>`).join('');
+}
+
+function customBody(meal, m) {
+  const man = todaysCustom()[meal]?.manual || {};
+  return `
+    <ul class="portions editable custom">
+      ${m.portions.map((x, i) => {
+        const a = amountLabel(x.food, x.grams);
+        return `<li data-ci="${i}">
+          <div class="item-top">
+            <select data-cfood="${i}" aria-label="Food">${foodOptions(x.food)}</select>
+            <button class="x" data-cremove="${i}" aria-label="Remove ${esc(FOODS[x.food].name)}">✕</button>
+          </div>
+          <div class="item-slider">
+            <input type="number" class="grams" data-cgrams="${i}" min="0" max="2000" step="1" inputmode="decimal" value="${x.grams}" aria-label="Grams">
+            <span class="small muted">g</span>
+            <span class="amt" data-role="amt">${a.main}</span>
+          </div>
+        </li>`;
+      }).join('')}
+    </ul>
+    <select data-cadd aria-label="Add a food">${foodOptions('', '+ Add a food…')}</select>
+    <details class="manual" ${m.manual ? 'open' : ''}>
+      <summary>Enter macros yourself</summary>
+      <p class="small muted">Use numbers from a label or another app. Leave a box blank to use the foods above.</p>
+      <div class="manual-grid">
+        ${[['kcal', 'Calories'], ['p', 'Protein g'], ['f', 'Fat g'], ['c', 'Carbs g']].map(([k, label]) =>
+          `<label>${label}<input type="number" min="0" inputmode="decimal" data-manual="${k}" value="${man[k] ?? ''}" placeholder="${m.portions.length ? Math.round(sumOf(m.portions)[k]) : ''}"></label>`).join('')}
+      </div>
+    </details>`;
+}
+
+function sumOf(portions) {
+  const t = { kcal: 0, p: 0, f: 0, c: 0 };
+  for (const x of portions) for (const k in t) t[k] += (FOODS[x.food][k] * x.grams) / 100;
+  return t;
+}
+
+// Update totals and amounts in place while typing, keeping the cursor where it is.
+function refreshCustom(meal) {
+  const m = todayPlan()[meal];
+  const card = document.querySelector(`.meal[data-meal="${meal}"]`);
+  card.querySelector('[data-role="title"]').textContent = m.title;
+  card.querySelector('[data-role="totals"]').innerHTML = totalsLine(m) + (m.manual ? ' <small class="muted">(your numbers)</small>' : '');
+  m.portions.forEach((x, i) => {
+    const el = card.querySelector(`li[data-ci="${i}"] [data-role="amt"]`);
+    if (el) el.textContent = amountLabel(x.food, x.grams).main;
+  });
+  const log = todaysLog();
+  if (log.meals[meal]) {
+    log.meals[meal] = { ...snapshot(m), at: log.meals[meal].at };
+    saveLog();
+    card.querySelector('.eat-row').outerHTML = eatButton(meal);
+    renderDayBar();
+    renderDeficit();
+  }
+}
+
+function editCustom(meal, fn) {
+  editMeal(meal, (c) => { c.items = c.items || []; fn(c); });
+}
+
+$('#meals').addEventListener('click', (e) => {
+  const card = e.target.closest('.meal');
+  if (!card) return;
+  const meal = card.dataset.meal;
+  if (e.target.closest('[data-customize]')) {
+    const m = todayPlan()[meal];
+    editMeal(meal, (c) => {
+      if (meal === 'breakfast') c.template = m.template;
+      c.items = m.portions.filter((x) => x.grams > 0).map((x) => ({ food: x.food, grams: x.grams }));
+    });
+    renderToday();
+  } else if (e.target.closest('[data-cremove]')) {
+    const i = +e.target.closest('[data-cremove]').dataset.cremove;
+    editCustom(meal, (c) => c.items.splice(i, 1));
+    resnap(meal);
+    renderToday();
+  }
+});
+
+$('#meals').addEventListener('change', (e) => {
+  const card = e.target.closest('.meal');
+  if (!card) return;
+  const meal = card.dataset.meal;
+  if (e.target.dataset.cfood != null) {
+    const i = +e.target.dataset.cfood;
+    editCustom(meal, (c) => { c.items[i].food = e.target.value; });
+  } else if (e.target.dataset.cadd != null) {
+    const food = e.target.value;
+    if (!food) return;
+    editCustom(meal, (c) => c.items.push({ food, grams: FOODS[food].unit?.grams || 100 }));
+  } else return;
+  resnap(meal);
+  renderToday();
+});
+
+$('#meals').addEventListener('input', (e) => {
+  const card = e.target.closest('.meal');
+  if (!card) return;
+  const meal = card.dataset.meal;
+  if (e.target.dataset.cgrams != null) {
+    const i = +e.target.dataset.cgrams;
+    editCustom(meal, (c) => { c.items[i].grams = Math.max(0, +e.target.value || 0); });
+  } else if (e.target.dataset.manual) {
+    const k = e.target.dataset.manual;
+    editCustom(meal, (c) => { c.manual = { ...c.manual, [k]: e.target.value === '' ? '' : +e.target.value }; });
+  } else return;
+  refreshCustom(meal);
+});
+
+// Keep an already-logged meal in step with edits.
+function resnap(meal) {
+  const log = todaysLog();
+  if (log.meals[meal]) { log.meals[meal] = { ...snapshot(todayPlan()[meal]), at: log.meals[meal].at }; saveLog(); }
 }
 
 function eatButton(meal) {
@@ -345,7 +466,7 @@ $('#meals').addEventListener('change', (e) => {
   if (!card) return;
   const meal = card.dataset.meal;
   if (e.target.dataset.template != null) {
-    editMeal(meal, (c) => { c.template = e.target.value; delete c.picks; delete c.grams; });
+    editMeal(meal, (c) => { c.template = e.target.value; delete c.picks; delete c.grams; delete c.items; delete c.manual; });
   } else if (e.target.dataset.pick) {
     const slot = e.target.dataset.pick;
     const food = e.target.value;
