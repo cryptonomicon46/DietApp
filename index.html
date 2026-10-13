@@ -137,8 +137,8 @@
   <!-- PROFILE -->
   <dialog id="profileDialog">
     <form id="profileForm" method="dialog">
-      <h2>Your profile</h2>
-      <p class="muted small">Used to estimate your calories. Everything stays on this device.</p>
+      <h2 id="profileTitle">Your profile</h2>
+      <p class="muted small" id="profileIntro">Used to estimate your calories. Everything stays on this device.</p>
       <label>Your name <input name="name" id="profileName" autocomplete="given-name" placeholder="So the app can greet you"></label>
       <label>Sex
         <select name="sex"><option value="male">Male</option><option value="female">Female</option></select>
@@ -156,7 +156,7 @@
       <label>Pace <select name="pace"></select></label>
       <p class="small plan-preview" id="planPreview"></p>
       <div class="row end">
-        <button type="submit">Save</button>
+        <button type="submit" id="profileSubmit">Save</button>
       </div>
     </form>
   </dialog>

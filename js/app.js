@@ -1094,16 +1094,26 @@ function updatePlanPreview() {
 form.addEventListener('input', updatePlanPreview);
 form.addEventListener('change', updatePlanPreview);
 
+// First launch starts from a ready-to-go default profile: tap Continue, or edit first.
+const DEFAULT_PROFILE = {
+  name: 'Sandman', sex: 'male', age: 43, heightIn: 71, weight: 162, goalLb: 156, activity: 'tracked', pace: 'steady',
+};
+
 function openProfile() {
-  const p = state.profile || { sex: 'male', activity: 'tracked', pace: 'steady' };
+  const first = !state.profile;
+  const p = state.profile || DEFAULT_PROFILE;
+  $('#profileTitle').textContent = first ? 'Welcome to Lean Plate' : 'Your profile';
+  $('#profileIntro').textContent = first
+    ? 'We filled in a starting profile. Change anything you like, or tap Continue to start.'
+    : 'Used to estimate your calories. Everything stays on this device.';
+  $('#profileSubmit').textContent = first ? 'Continue' : 'Save';
   $('#profileName').value = p.name ?? '';
   form.sex.value = p.sex;
   form.age.value = p.age ?? '';
   form.ft.value = p.heightIn ? Math.floor(p.heightIn / 12) : '';
   form.in.value = p.heightIn ? Math.round(p.heightIn % 12) : '';
-  // New profiles start from a sample plan: 162 → 156 lb at a steady 0.75%/week.
-  form.weight.value = state.profile ? currentWeight() : 162;
-  form.goalLb.value = p.goalLb ?? 156;
+  form.weight.value = first ? p.weight : currentWeight();
+  form.goalLb.value = p.goalLb ?? '';
   form.activity.value = p.activity;
   form.pace.value = p.pace;
   updatePlanPreview();
