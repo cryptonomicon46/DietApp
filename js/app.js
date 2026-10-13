@@ -12,7 +12,7 @@ import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
 import { initLift, renderLift } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
-import { store, global, PROFILES, activeProfile, setActiveProfile } from './storage.js';
+import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner } from './storage.js';
 import { sync, newHouseholdCode } from './sync.js';
 
 // ---------- storage ----------
@@ -1097,6 +1097,11 @@ const DEFAULT_PROFILES = {
 };
 
 function openProfile() {
+  if (sync.readOnly()) {
+    if (!state.profile) { openPartnerNotice(); return; }
+    return openProfileView();
+  }
+  setProfileEditable(true);
   const first = !state.profile;
   const p = state.profile || DEFAULT_PROFILES[activeProfile().id] || { sex: 'male', activity: 'tracked', pace: 'steady' };
   $('#profileTitle').textContent = first ? `Welcome${p.name ? `, ${p.name}` : ''}` : `${state.profile.name || 'Your'} profile`;
@@ -1104,6 +1109,7 @@ function openProfile() {
     ? 'We filled in a starting profile. Change anything you like, or tap Continue to start.'
     : 'Used to estimate your calories. Everything stays on this device.';
   $('#profileSubmit').textContent = first ? 'Continue' : 'Save';
+  $('#profileClose').hidden = first;
   $('#profileName').value = p.name ?? '';
   form.sex.value = p.sex;
   form.age.value = p.age ?? '';
@@ -1116,8 +1122,58 @@ function openProfile() {
   updatePlanPreview();
   dialog.showModal();
 }
+// Someone else's profile: details are visible but nothing can be changed.
+function setProfileEditable(on) {
+  for (const el of form.elements) if (el.id !== 'profileClose') el.disabled = !on;
+  $('#profileSubmit').hidden = !on;
+}
+function openProfileView() {
+  const p = state.profile;
+  $('#profileTitle').textContent = `${p.name || activeProfile().name}'s profile`;
+  $('#profileIntro').textContent = `View only. ${p.name || activeProfile().name} changes these on their own phone.`;
+  $('#profileName').value = p.name ?? '';
+  form.sex.value = p.sex;
+  form.age.value = p.age ?? '';
+  form.ft.value = p.heightIn ? Math.floor(p.heightIn / 12) : '';
+  form.in.value = p.heightIn ? Math.round(p.heightIn % 12) : '';
+  form.weight.value = currentWeight();
+  form.goalLb.value = p.goalLb ?? '';
+  form.activity.value = p.activity;
+  form.pace.value = p.pace;
+  updatePlanPreview();
+  setProfileEditable(false);
+  $('#profileClose').hidden = false;
+  dialog.showModal();
+}
+$('#profileClose').onclick = () => dialog.close();
+
+// Partner not set up yet: explain, with a way back and a way to close.
+function openPartnerNotice() {
+  const name = activeProfile().name;
+  const owner = PROFILES.find((p) => p.id === ownerId());
+  $('#partnerTitle').textContent = `${name}'s profile isn't set up yet`;
+  $('#partnerText').textContent = `${name} sets up their own profile on their own phone. You can't set it up or change it from here. Once you both turn on sharing (Devices → Share with your household), ${name}'s day shows up here to view.`;
+  $('#partnerBack').textContent = `Back to ${owner?.name || 'my profile'}`;
+  $('#partnerDialog').showModal();
+}
+$('#partnerBack').onclick = () => { setActiveProfile(ownerId()); location.reload(); };
+$('#partnerClose').onclick = () => $('#partnerDialog').close();
+
+// First launch: whose phone is this?
+function openOwnerPicker() {
+  $('#ownerChoices').innerHTML = PROFILES.map((p) => `<button type="button" class="owner-btn" data-owner="${p.id}">${esc(p.name)}</button>`).join('');
+  $('#ownerChoices').onclick = (e) => {
+    const id = e.target.closest('[data-owner]')?.dataset.owner;
+    if (!id) return;
+    setOwner(id);
+    location.reload();
+  };
+  $('#ownerDialog').showModal();
+}
+$('#ownerDialog').addEventListener('cancel', (e) => e.preventDefault());
+
 $('#openProfile').onclick = openProfile;
-dialog.addEventListener('cancel', (e) => { if (!state.profile) e.preventDefault(); });
+dialog.addEventListener('cancel', (e) => { if (!state.profile && !sync.readOnly()) e.preventDefault(); });
 
 form.addEventListener('submit', () => {
   const weight = parseFloat(form.weight.value);
@@ -1166,12 +1222,12 @@ function renderAll() {
 // ---------- PEOPLE: switch between Sandman and Amani ----------
 function renderWho() {
   const active = activeProfile().id;
-  const me = sync.settings()?.me;
+  const me = ownerId();
   $('#who').innerHTML = PROFILES.map((p) => {
     const saved = (() => { try { return JSON.parse(localStorage.getItem(`lp.p.${p.id}.profile`)); } catch { return null; } })();
     return `<label class="who-opt ${p.id === active ? 'on' : ''}">
       <input type="radio" name="who" value="${p.id}" ${p.id === active ? 'checked' : ''}>
-      <span>${esc(saved?.name || p.name)}${sync.enabled() && p.id !== me ? ' <small>view</small>' : ''}</span></label>`;
+      <span>${esc(saved?.name || p.name)}${me && p.id !== me ? ' <small>view</small>' : ''}</span></label>`;
   }).join('');
   $('#who').onchange = (e) => {
     if (e.target.name !== 'who') return;
@@ -1196,8 +1252,10 @@ function renderViewOnly() {
     const seen = global.get(`seen.${activeProfile().id}`, 0);
     $('#viewBanner').innerHTML = seen
       ? `Viewing <b>${esc(name)}</b>'s day · updated ${ago(seen)} · <button class="linkish" id="refreshPartner">Refresh</button>`
-      : `<b>${esc(name)}</b> hasn't synced yet. Once ${esc(name)} sets up sharing on their phone, their day shows up here. <button class="linkish" id="refreshPartner">Check now</button>`;
-    $('#refreshPartner').onclick = async () => {
+      : sync.enabled()
+        ? `<b>${esc(name)}</b> hasn't synced yet. Once ${esc(name)} sets up the app and sharing on their own phone, their day shows up here. <button class="linkish" id="refreshPartner">Check now</button>`
+        : `<b>${esc(name)}</b>'s profile isn't set up on this phone. ${esc(name)} sets it up on their own phone; turn on sharing (Devices) on both phones to see each other's day.`;
+    if ($('#refreshPartner')) $('#refreshPartner').onclick = async () => {
       $('#refreshPartner').textContent = 'Checking…';
       try { if (await sync.pull()) location.reload(); else $('#refreshPartner').textContent = 'Up to date'; } catch (err) { $('#refreshPartner').textContent = err.message; }
     };
@@ -1209,7 +1267,7 @@ function renderSharing() {
   const s = sync.settings() || {};
   $('#shareUrl').value = s.url || devices.get().server || '';
   $('#shareCode').value = s.code || '';
-  $('#shareMe').innerHTML = PROFILES.map((p) => `<option value="${p.id}" ${(s.me || activeProfile().id) === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  $('#shareMe').textContent = PROFILES.find((p) => p.id === ownerId())?.name || '—';
   $('#shareStatus').textContent = sync.enabled()
     ? `Sharing is on. Last upload ${global.get('pushedAt', 0) ? ago(global.get('pushedAt', 0)) : 'not yet'}.`
     : 'Off. Both profiles still work on this phone.';
@@ -1222,7 +1280,7 @@ $('#shareSave').onclick = async () => {
     $('#shareStatus').textContent = 'Add your connector URL and a household code (tap New code on the first phone, then type the same code on the other).';
     return;
   }
-  sync.save({ url, code, me: $('#shareMe').value });
+  sync.save({ url, code });
   $('#shareStatus').textContent = 'Syncing…';
   try {
     await sync.push();
@@ -1240,8 +1298,10 @@ $('#weighDate').value = isoDate();
 const justConnected = devices.takeRedirect();
 renderWho();
 renderViewOnly();
-if (state.profile) renderAll();
-else if (!sync.readOnly()) openProfile();
+if (!ownerId()) openOwnerPicker();
+else if (state.profile) renderAll();
+else if (sync.readOnly()) openPartnerNotice();
+else openProfile();
 // Pull workouts on open (at most every 10 min) and right after connecting.
 if (!sync.readOnly() && (justConnected || Date.now() - store.get('lastSync', 0) > 10 * 60000)) syncDevices();
 // Household: upload my latest, then fetch my partner's; reload if I'm looking at fresh data.

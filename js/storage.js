@@ -28,6 +28,18 @@ export const global = {
   }
 })();
 
+// The person this phone belongs to. Only they can set up or edit a profile here;
+// everyone else's day is view-only. Phones set up before this existed belong to Sandman.
+export function ownerId() {
+  let id = global.get('owner', null);
+  if (!id) {
+    id = global.get('sync', null)?.me || (raw.get('lp.p.sandman.profile') ? 'sandman' : null);
+    if (id) global.set('owner', id);
+  }
+  return id;
+}
+export function setOwner(id) { global.set('owner', id); global.set('active', id); }
+
 export function activeProfile() {
   const id = global.get('active', 'sandman');
   return PROFILES.find((p) => p.id === id) || PROFILES[0];

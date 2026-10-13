@@ -158,9 +158,27 @@
       <label>Pace <select name="pace"></select></label>
       <p class="small plan-preview" id="planPreview"></p>
       <div class="row end">
+        <button type="button" class="ghost" id="profileClose" hidden>Close</button>
         <button type="submit" id="profileSubmit">Save</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- WHOSE PHONE (first launch) -->
+  <dialog id="ownerDialog">
+    <h2>Whose phone is this?</h2>
+    <p class="muted small">You'll set up and edit only your own profile on this phone. Your partner's day can be viewed once you both turn on sharing.</p>
+    <div class="owner-choices" id="ownerChoices"></div>
+  </dialog>
+
+  <!-- PARTNER NOT SET UP -->
+  <dialog id="partnerDialog">
+    <h2 id="partnerTitle"></h2>
+    <p class="small" id="partnerText"></p>
+    <div class="row end">
+      <button type="button" class="ghost" id="partnerClose">Close</button>
+      <button type="button" id="partnerBack">Back</button>
+    </div>
   </dialog>
 
   <!-- DEVICES -->
@@ -184,7 +202,7 @@
       <label>Household code
         <div class="row" style="margin-top:4px"><input id="shareCode" autocomplete="off" placeholder="xxxx-xxxx-xxxx"><button type="button" class="ghost small" id="shareNewCode">New code</button></div>
       </label>
-      <label>This phone belongs to <select id="shareMe"></select></label>
+      <p class="small">This phone belongs to <b id="shareMe"></b>. Its data is what gets shared from here.</p>
       <div class="row"><button type="button" class="small" id="shareSave">Turn on sharing</button><button type="button" class="ghost small" id="shareOff">Turn off</button></div>
       <p class="small" id="shareStatus"></p>
       <div class="row end"><button>Done</button></div>
