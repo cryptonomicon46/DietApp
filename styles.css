@@ -49,10 +49,11 @@ h3 { font-size: 1rem; margin: 0; }
 .big { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .top {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 16px; position: sticky; top: 0; background: var(--bg); z-index: 2;
+  padding: 12px 16px 10px; position: sticky; top: 0; background: var(--bg); z-index: 2;
+  border-bottom: 1px solid var(--line);
 }
-main { max-width: 560px; margin: 0 auto; padding: 0 16px; }
+.top-row { display: flex; align-items: center; justify-content: space-between; max-width: 560px; margin: 0 auto; }
+main { max-width: 560px; margin: 0 auto; padding: 12px 16px 0; }
 .tab { display: none; }
 .tab.active { display: block; }
 
@@ -209,3 +210,26 @@ label.inline select { margin: 0; }
 #libraryList li > span:last-child { text-align: right; }
 .plan-preview { background: var(--bg); border-radius: 10px; padding: 8px 10px; margin-top: 10px; }
 .plan-preview:empty { display: none; }
+
+/* day bar: eaten vs left */
+.daybar { display: block; width: 100%; max-width: 560px; margin: 10px auto 0; padding: 8px 12px; background: var(--card); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 12px; text-align: left; font-weight: 400; }
+.daybar[hidden] { display: none; }
+.daybar-nums { display: flex; align-items: flex-end; gap: 16px; }
+.daybar-nums > span { display: flex; flex-direction: column; line-height: 1.1; }
+.daybar-nums small { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.daybar-nums b { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.daybar-nums .over b { color: var(--warn); }
+.daybar-macros { margin-left: auto; text-align: right; align-items: flex-end; }
+.daybar-macros > span { display: flex; gap: 6px; }
+.daybar-macros em { font-style: normal; font-weight: 600; font-size: .9rem; font-variant-numeric: tabular-nums; }
+.daybar-macros em.p { color: var(--p); } .daybar-macros em.f { color: var(--f); } .daybar-macros em.c { color: var(--c); }
+.daybar-track { height: 6px; background: var(--bg); border-radius: 999px; margin-top: 6px; overflow: hidden; }
+.daybar-track i { display: block; height: 100%; background: var(--brand); border-radius: 999px; transition: width .3s; }
+@media (prefers-reduced-motion: reduce) { .daybar-track i { transition: none; } }
+
+/* meal check-in */
+.eat-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; }
+.eat { width: 100%; }
+.meal.eaten { border-color: var(--brand); }
+.meal.eaten .portions { opacity: .75; }

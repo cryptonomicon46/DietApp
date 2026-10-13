@@ -27,6 +27,7 @@ const state = {
   prefs: store.get('prefs', {}),       // sticky swaps: {oatmeal: {fat: 'almondButter'}, main: {carb: 'quinoa'}}
   macroAdjust: store.get('macroAdjust', { p: 0, f: 0, c: 0 }), // grams, from weekly check-ins
   checkins: store.get('checkins', []), // [{date, feeling, note, change}]
+  eaten: store.get('eaten', {}),       // today's log: {date, meals: {breakfast: {kcal,p,f,c,title}}, fuel, extras: []}
   checked: store.get('checked', {}),   // grocery checkboxes
   workouts: store.get('workouts', []), // synced/imported workouts, last 14 days
   planned: store.get('planned', null), // {date, type, minutes}
@@ -52,6 +53,40 @@ function baseTargets() {
 }
 
 const firstName = () => (state.profile?.name || '').trim().split(/\s+/)[0];
+
+// ---------- eaten today ----------
+function todaysLog() {
+  if (state.eaten.date !== isoDate()) state.eaten = { date: isoDate(), meals: {}, fuel: null, extras: [] };
+  return state.eaten;
+}
+function saveLog() { store.set('eaten', state.eaten); }
+
+function consumed() {
+  const log = todaysLog();
+  const items = [...Object.values(log.meals), ...(log.fuel ? [log.fuel] : []), ...log.extras];
+  const t = { kcal: 0, p: 0, f: 0, c: 0 };
+  for (const it of items) for (const k in t) t[k] += it[k] || 0;
+  return t;
+}
+
+// Quick reference in the header on every tab: eaten vs left for today.
+function renderDayBar() {
+  const bar = $('#dayBar');
+  if (!state.profile) { bar.hidden = true; return; }
+  const t = targets();
+  const ate = consumed();
+  const left = t.kcal - Math.round(ate.kcal);
+  const pct = Math.min(100, Math.round((ate.kcal / t.kcal) * 100));
+  const mLeft = (k) => Math.round(t[k] - ate[k]);
+  bar.hidden = false;
+  bar.innerHTML = `
+    <div class="daybar-nums">
+      <span><small>Eaten</small><b>${Math.round(ate.kcal)}</b></span>
+      <span class="${left < 0 ? 'over' : ''}"><small>${left < 0 ? 'Over' : 'Left'}</small><b>${Math.abs(left)}</b></span>
+      <span class="daybar-macros"><small>Macros left</small><span><em class="p">${mLeft('p')}P</em> <em class="f">${mLeft('f')}F</em> <em class="c">${mLeft('c')}C</em></span></span>
+    </div>
+    <div class="daybar-track" role="progressbar" aria-valuemin="0" aria-valuemax="${t.kcal}" aria-valuenow="${Math.round(ate.kcal)}" aria-label="Calories eaten today"><i style="width:${pct}%"></i></div>`;
+}
 
 // Today's meal edits (reset each day).
 function todaysCustom() {
@@ -123,21 +158,38 @@ function renderToday() {
 
   const name = firstName();
   $('#greeting').textContent = name ? `${greetingWord()}, ${name}` : '';
+  renderDayBar();
   renderCheckin();
   renderAdjustBanner(t);
   renderTraining(t);
 
   const plan = todayPlan(t);
   $('#meals').innerHTML = ['breakfast', 'lunch', 'dinner'].map((meal) => mealCard(meal, plan[meal])).join('')
+    + extrasCard()
     + `<p class="muted small">Pick a food from any menu to swap it. Drag a slider to set that portion yourself (🔒) — the other items re-balance to keep the meal on target. Weigh oats dry; weigh meat, fish, eggs, rice and veggies cooked.</p>`;
 }
+
+function extrasCard() {
+  const extras = todaysLog().extras;
+  if (!extras.length) return '';
+  return `<div class="card"><div class="eyebrow">Snacks & extras</div>
+    <ul class="list">${extras.map((x, i) => `<li><span>${esc(x.title)}<small class="muted"> · ${x.p}P ${x.f}F ${x.c}C</small></span>
+      <span>${x.kcal} kcal <button class="x" data-unextra="${i}" aria-label="Remove">✕</button></span></li>`).join('')}</ul></div>`;
+}
+$('#meals').addEventListener('click', (e) => {
+  const i = e.target.closest('[data-unextra]')?.dataset.unextra;
+  if (i == null) return;
+  todaysLog().extras.splice(+i, 1);
+  saveLog();
+  renderToday();
+});
 
 const MEAL_TEMPLATES = { eggs: 'Switch: eggs', oatmeal: 'Switch: oatmeal' };
 
 function mealCard(meal, m) {
   const edited = !!todaysCustom()[meal];
   return `
-    <div class="card meal" data-meal="${meal}">
+    <div class="card meal ${todaysLog().meals[meal] ? 'eaten' : ''}" data-meal="${meal}">
       <div class="meal-head">
         <div>
           <div class="eyebrow">${meal}</div>
@@ -154,7 +206,20 @@ function mealCard(meal, m) {
       <ul class="portions editable">
         ${m.portions.map((x) => itemRow(x)).join('')}
       </ul>
+      ${eatButton(meal)}
     </div>`;
+}
+
+function eatButton(meal) {
+  const e = todaysLog().meals[meal];
+  return e
+    ? `<div class="eat-row"><span class="tone-good">✓ Eaten at ${e.at} · ${e.kcal} kcal</span><button class="ghost small" data-uneat>Undo</button></div>`
+    : `<div class="eat-row"><button class="eat" data-eat>✓ I ate this</button></div>`;
+}
+
+function snapshot(m) {
+  return { title: m.title, kcal: m.totals.kcal, p: m.totals.p, f: m.totals.f, c: m.totals.c,
+    at: new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) };
 }
 
 function totalsLine(m) {
@@ -186,6 +251,14 @@ function itemRow(x) {
 function refreshMeal(meal, active) {
   const m = todayPlan()[meal];
   const card = document.querySelector(`.meal[data-meal="${meal}"]`);
+  // Editing a meal you already logged corrects what you ate.
+  const log = todaysLog();
+  if (log.meals[meal]) {
+    log.meals[meal] = { ...snapshot(m), at: log.meals[meal].at };
+    saveLog();
+    card.querySelector('.eat-row').outerHTML = eatButton(meal);
+    renderDayBar();
+  }
   card.querySelector('[data-role="title"]').textContent = m.title;
   card.querySelector('[data-role="totals"]').innerHTML = totalsLine(m);
   card.querySelector('[data-reset]').hidden = !todaysCustom()[meal];
@@ -242,6 +315,8 @@ $('#meals').addEventListener('change', (e) => {
       store.set('prefs', state.prefs);
     }
   } else return;
+  const log = todaysLog();
+  if (log.meals[meal]) { log.meals[meal] = { ...snapshot(todayPlan()[meal]), at: log.meals[meal].at }; saveLog(); }
   renderToday();
   renderGroceries();
 });
@@ -254,6 +329,14 @@ $('#meals').addEventListener('click', (e) => {
   if (unlock) {
     editMeal(meal, (c) => { if (c.grams) delete c.grams[unlock]; });
     refreshMeal(meal);
+  } else if (e.target.closest('[data-eat]')) {
+    todaysLog().meals[meal] = snapshot(todayPlan()[meal]);
+    saveLog();
+    renderToday();
+  } else if (e.target.closest('[data-uneat]')) {
+    delete todaysLog().meals[meal];
+    saveLog();
+    renderToday();
   } else if (e.target.closest('[data-reset]')) {
     delete todaysCustom()[meal];
     store.set('custom', state.custom);
@@ -414,6 +497,9 @@ function renderTraining(t) {
       <div class="small muted">${esc(day.intra.note)}${day.intra.mixed ? ' Above 60 g/h, mix glucose + fructose sources (sports drink + fruit) so your gut can absorb it.' : ''}</div>
       <ul class="small fuel-list">${day.intra.options.slice(0, 4).map((o) => `<li>${esc(o.label)}</li>`).join('')}</ul>
       <div class="small muted">These carbs are already taken out of your meals below.</div>
+      <div class="eat-row">${todaysLog().fuel
+        ? `<span class="tone-good">✓ Fuel logged · ${todaysLog().fuel.kcal} kcal</span><button class="ghost small" id="unfuel">Undo</button>`
+        : `<button class="eat" id="ateFuel">✓ I had my fuel</button>`}</div>
     </div>` : '';
 
   $('#training').innerHTML = `
@@ -441,6 +527,11 @@ function renderTraining(t) {
     </div>`;
 
   $('#openDevices').onclick = openDevices;
+  if ($('#ateFuel')) $('#ateFuel').onclick = () => {
+    todaysLog().fuel = { title: 'Intra-workout fuel', kcal: t.intraC * 4, p: 0, f: 0, c: t.intraC };
+    saveLog(); renderToday();
+  };
+  if ($('#unfuel')) $('#unfuel').onclick = () => { todaysLog().fuel = null; saveLog(); renderToday(); };
   if ($('#syncNow')) $('#syncNow').onclick = () => syncDevices(true);
   if ($('#clearPlan')) $('#clearPlan').onclick = () => { state.planned = null; store.set('planned', null); renderAll(); };
   $('#planForm').onsubmit = (e) => {
@@ -774,9 +865,19 @@ function renderProduct(code, p) {
         <li><span>Per 100 g</span><span class="amt meal-macros">${fmt(per100)}</span></li>
       </ul>
       ${proteinNote ? `<p class="small">${proteinNote}</p>` : ''}
-      <div class="row"><button id="addGrocery" class="ghost">+ Add to grocery list</button></div>
+      <div class="row">
+        ${serving ? '<button id="logServing">+ Log 1 serving to today</button>' : ''}
+        <button id="addGrocery" class="ghost">+ Add to grocery list</button>
+      </div>
     </div>`;
 
+  if ($('#logServing')) $('#logServing').onclick = () => {
+    todaysLog().extras.push({ title: name, kcal: serving.kcal, p: Math.round(serving.p), f: Math.round(serving.f), c: Math.round(serving.c) });
+    saveLog();
+    renderToday();
+    $('#logServing').textContent = '✓ Logged';
+    $('#logServing').disabled = true;
+  };
   $('#addGrocery').onclick = () => {
     const list = store.get('customGrocery', []).filter((c) => c.code !== code);
     list.push({ code, name, brand: p.brands || '' });
@@ -871,6 +972,7 @@ function renderAll() {
 }
 
 initLift();
+$('#dayBar').onclick = () => { document.querySelector('[data-tab=today]').click(); };
 $('#weighDate').value = isoDate();
 const justConnected = devices.takeRedirect();
 if (state.profile) renderAll();
