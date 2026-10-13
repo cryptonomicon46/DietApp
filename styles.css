@@ -238,3 +238,23 @@ label.inline select { margin: 0; }
 .fuel-item { margin-top: 8px; }
 .add-activity { display: grid; gap: 8px; margin-top: 10px; }
 .add-activity .row > select { flex: 1 1 110px; }
+
+/* deficit game */
+.daybar-game { display: flex; gap: 12px; font-size: .82rem; font-weight: 600; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+.deficit-card .big { font-size: 1.9rem; color: var(--good); }
+.deficit-card .big.neg { color: var(--warn); }
+.deficit-card .big small { font-size: .85rem; color: var(--muted); font-weight: 500; }
+.coins-total { text-align: right; display: flex; flex-direction: column; }
+.coins-total b { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.coins-total small { color: var(--muted); }
+.def-track { height: 8px; background: var(--bg); border-radius: 999px; overflow: hidden; margin-top: 8px; }
+.def-track i { display: block; height: 100%; background: var(--f); border-radius: 999px; }
+.def-nums { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.kudos { font-weight: 600; margin: 10px 0 6px; }
+.d7row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.d7 { display: flex; flex-direction: column; align-items: center; padding: 6px 0; border-radius: 8px; background: var(--bg); }
+.d7 b { font-size: 1rem; line-height: 1.2; }
+.d7 small { color: var(--muted); font-size: .7rem; }
+.d7.deficit { outline: 1px solid var(--f); }
+.d7.today { outline: 1px dashed var(--line); }
+details summary { cursor: pointer; color: var(--brand); margin-top: 8px; }

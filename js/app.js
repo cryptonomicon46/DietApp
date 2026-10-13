@@ -11,6 +11,7 @@ import {
 import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
 import { initLift, renderLift } from './lift.js';
+import { scoreDay, tally, MILESTONES } from './rewards.js';
 
 // ---------- storage ----------
 const store = {
@@ -33,6 +34,8 @@ const state = {
   eaten: store.get('eaten', {}),       // today's log: {date, meals: {breakfast: {kcal,p,f,c,title}}, fuel, extras: []}
   checked: store.get('checked', {}),   // grocery checkboxes
   workouts: store.get('workouts', []), // synced/imported workouts, last 14 days
+  days: store.get('days', {}),          // daily summary for the deficit game: {date: {eaten, burned, ...}}
+  whoopTotal: store.get('whoopTotal', {}), // {date: kcal} total burned today, typed from WHOOP
   history: store.get('workoutHistory', []), // every imported workout (compact) → personal burn rates
   // Activities you add yourself: [{id, date, type, minutes}] (older single 'planned' entry migrated).
   activities: store.get('activities', null) ?? (store.get('planned', null) ? [{ id: 'p1', ...store.get('planned', null) }] : []),
@@ -74,8 +77,38 @@ function consumed() {
   return t;
 }
 
+// Calories burned today: your WHOOP total if you typed it, otherwise resting + daily
+// life + the full net burn of each activity (the plan only eats back 75% of it).
+function burnedToday() {
+  const today = isoDate();
+  const typed = state.whoopTotal[today];
+  if (typed) return { kcal: typed, source: 'WHOOP (you entered)' };
+  const base = baseTargets();
+  if (!ACTIVITY[state.profile.activity].tracked) return { kcal: base.tdee, source: 'estimate from your activity level' };
+  const day = todaysTraining();
+  const exercise = day.sessions.reduce((a, w) => a + Math.max((w.kcal || 0) - (base.bmr / 1440) * w.minutes, 0), 0);
+  return { kcal: Math.round(base.tdee + exercise), source: 'estimate: daily life + your activities' };
+}
+
+function recordDay() {
+  const t = targets(), base = baseTargets(), ate = consumed();
+  state.days[isoDate()] = {
+    eaten: Math.round(ate.kcal), burned: burnedToday().kcal, target: t.kcal,
+    plannedDeficit: base.tdee - base.kcal, protein: Math.round(ate.p), proteinTarget: t.p,
+    floor: state.profile.sex === 'male' ? 1500 : 1200,
+  };
+  store.set('days', state.days);
+}
+
+function pastTally() {
+  const today = isoDate();
+  const past = Object.fromEntries(Object.entries(state.days).filter(([d]) => d < today));
+  return tally(past, today);
+}
+
 // Quick reference in the header on every tab: eaten vs left for today.
 function renderDayBar() {
+  if (state.profile) recordDay();
   const bar = $('#dayBar');
   if (!state.profile) { bar.hidden = true; return; }
   const t = targets();
@@ -84,7 +117,9 @@ function renderDayBar() {
   const pct = Math.min(100, Math.round((ate.kcal / t.kcal) * 100));
   const mLeft = (k) => Math.round(t[k] - ate[k]);
   bar.hidden = false;
+  const g = pastTally();
   bar.innerHTML = `
+    <div class="daybar-game"><span title="Gold coins">🪙 ${g.coins}</span><span title="Protein cookies">🍪 ${g.cookies}</span><span title="Deficit streak">🔥 ${g.streak}</span></div>
     <div class="daybar-nums">
       <span><small>Eaten</small><b>${Math.round(ate.kcal)}</b></span>
       <span class="${left < 0 ? 'over' : ''}"><small>${left < 0 ? 'Over' : 'Left'}</small><b>${Math.abs(left)}</b></span>
@@ -164,6 +199,7 @@ function renderToday() {
   const name = firstName();
   $('#greeting').textContent = name ? `${greetingWord()}, ${name}` : '';
   renderDayBar();
+  renderDeficit();
   renderCheckin();
   renderAdjustBanner(t);
   renderTraining(t);
@@ -373,6 +409,80 @@ function renderAdjustBanner(t) {
   if ($('#bannerCheckin')) $('#bannerCheckin').onclick = openCheckin;
 }
 
+// ---------- DAILY DEFICIT GAME ----------
+function renderDeficit() {
+  const today = isoDate();
+  const t = targets();
+  const burned = burnedToday();
+  const ate = consumed();
+  const eaten = Math.round(ate.kcal);
+  const now = burned.kcal - eaten;
+  const d = state.days[today];
+  const projected = scoreDay({ ...d, eaten: Math.max(eaten, t.kcal), protein: Math.max(d.protein, t.p) });
+  const actual = scoreDay(d);
+  const g = pastTally();
+  const name = firstName();
+  const pct = Math.max(0, Math.min(100, Math.round((eaten / burned.kcal) * 100)));
+
+  let kudos;
+  if (g.streak >= 1) kudos = `${name ? `${esc(name)}, ` : ''}${g.streak}-day deficit streak 🔥${g.next ? ` — ${g.next.days - g.streak} more for “${g.next.badge}” (+${g.next.coins} 🪙)` : ''}`;
+  else kudos = `${name ? `${esc(name)}, s` : 'S'}tart a streak today: finish in a deficit to earn 🪙 ${projected.coins || 15}.`;
+
+  const status = !eaten
+    ? `Log your meals as you eat. Finish at your target (${t.kcal}) for about a <b>${burned.kcal - t.kcal} kcal</b> deficit and 🪙 ${projected.coins}${projected.cookies ? ' + 🍪' : ''}.`
+    : now <= 0
+      ? `You're <b>${-now} kcal over</b> what you've burned today. Some extra activity could still flip it to a deficit.`
+      : eaten < t.kcal
+        ? `${t.kcal - eaten} kcal left in your plan. Finish there for a <b>${burned.kcal - t.kcal} kcal</b> deficit → 🪙 ${projected.coins}${projected.cookies ? ' + 🍪' : ''}.`
+        : `Deficit locked in so far: 🪙 ${actual.coins}${actual.cookies ? ' + 🍪' : ''} if you stop here.`;
+
+  const last7 = Array.from({ length: 7 }, (_, i) => {
+    const dt = new Date(); dt.setDate(dt.getDate() - (6 - i));
+    const key = isoDate(dt);
+    const s = key === today ? null : scoreDay(state.days[key]);
+    const icon = key === today ? '⏳' : s.status === 'deficit' ? '🪙' : s.status === 'too-big' ? '⚠️' : s.status === 'surplus' ? '▲' : '·';
+    return `<span class="d7 ${s?.status || 'today'}" title="${key}"><b>${icon}</b><small>${dt.toLocaleDateString(undefined, { weekday: 'narrow' })}</small></span>`;
+  }).join('');
+
+  $('#deficit').innerHTML = `
+    <div class="card deficit-card">
+      <div class="row between" style="margin-top:0">
+        <div><div class="eyebrow">Today's deficit so far</div>
+          <div class="big ${now < 0 ? 'neg' : ''}">${now >= 0 ? '' : '+'}${Math.abs(now)} <small>kcal ${now >= 0 ? 'under' : 'over'}</small></div></div>
+        <div class="coins-total"><b>🪙 ${g.coins}</b><small>🍪 ${g.cookies} · best 🔥 ${g.best}</small></div>
+      </div>
+      <div class="def-track"><i style="width:${pct}%"></i></div>
+      <div class="def-nums small"><span>Eaten <b>${eaten}</b></span><span>Burned <b>${burned.kcal}</b> <span class="muted">(${esc(burned.source)})</span></span></div>
+      <p class="small">${status}</p>
+      <label for="whoopTotalInput" class="small">Total calories burned today (from the WHOOP app)</label>
+      <form id="whoopTotalForm" class="row" style="margin-top:4px">
+        <input id="whoopTotalInput" type="number" inputmode="numeric" min="800" max="8000" placeholder="e.g. 2650 — optional" value="${state.whoopTotal[today] ?? ''}">
+        <button class="small" type="submit">Save</button>
+        ${state.whoopTotal[today] ? '<button class="ghost small" type="button" id="clearWhoopTotal">Use estimate</button>' : ''}
+      </form>
+      <p class="kudos">${kudos}</p>
+      <div class="d7row" aria-label="Last 7 days">${last7}</div>
+      ${g.badges.length ? `<p class="small muted">Badges: ${[...new Set(g.badges.map((b) => b.badge))].map(esc).join(' · ')}</p>` : ''}
+      <details class="small"><summary>How scoring works</summary>
+        <p>Each day you log meals and finish under the calories you burned earns 🪙 10, plus 🪙 5 if the deficit stays sustainable (under ~${Math.max(750, Math.round((d.plannedDeficit || 500) * 1.5))} kcal and not below ${d.floor} kcal eaten). Hitting 90% of your protein earns a 🍪. Streaks of ${MILESTONES.map((m) => `${m.days}`).join(', ')} days pay ${MILESTONES.map((m) => `+${m.coins}`).join(', ')} 🪙. Today's coins are added after midnight.</p>
+      </details>
+    </div>`;
+
+  $('#whoopTotalForm').onsubmit = (e) => {
+    e.preventDefault();
+    const v = parseInt($('#whoopTotalInput').value, 10);
+    if (!v) return;
+    state.whoopTotal = { ...Object.fromEntries(Object.entries(state.whoopTotal).filter(([k]) => k >= isoDate(new Date(Date.now() - 60 * DAY)))), [today]: v };
+    store.set('whoopTotal', state.whoopTotal);
+    renderToday();
+  };
+  if ($('#clearWhoopTotal')) $('#clearWhoopTotal').onclick = () => {
+    delete state.whoopTotal[today];
+    store.set('whoopTotal', state.whoopTotal);
+    renderToday();
+  };
+}
+
 // ---------- WEEKLY CHECK-IN ----------
 function greetingWord() {
   const h = new Date().getHours();
@@ -491,7 +601,7 @@ function renderTraining(t) {
 
   const sessions = day.sessions.map((w) => `
     <li><span class="cap">${esc(w.source === 'added' ? (SPORTS[w.sport]?.name || short(w.type)) : w.name)}<small class="muted"> · ${esc(w.source === 'added' ? `${INTENSITY[w.intensity]?.label.toLowerCase() || 'added'} · added by you` : w.source)}</small></span>
-    <span class="amt">${w.minutes} min<small>${w.kcal ? `${w.source === 'added' ? '≈ ' : ''}${w.kcal} kcal` : 'estimated'}${w.strain != null ? ` · strain ${w.strain.toFixed(1)}` : ''}</small></span>
+    <span class="amt">${w.minutes} min<small>${w.kcal ? `${w.source === 'added' && !w.kcalFromYou ? '≈ ' : ''}${w.kcal} kcal` : 'estimated'}${w.strain != null ? ` · strain ${w.strain.toFixed(1)}` : ''}</small></span>
     ${w.source === 'added' ? `<button class="x" data-rmact="${w.id}" aria-label="Remove activity">✕</button>` : ''}</li>`).join('');
   const hidden = state.activities.filter((a) => a.date === today).length - day.sessions.filter((w) => w.source === 'added').length;
 
@@ -535,7 +645,8 @@ function renderTraining(t) {
         </select>
         <div class="row" style="margin-top:0">
           <select id="planIntensity" aria-label="Intensity">${Object.entries(INTENSITY).map(([k, v]) => `<option value="${k}" ${k === 'moderate' ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
-          <input id="planMin" type="number" min="5" max="600" step="5" inputmode="numeric" placeholder="min" style="flex:0 0 80px" aria-label="Minutes">
+          <input id="planMin" type="number" min="5" max="600" step="5" inputmode="numeric" placeholder="min" style="flex:0 0 72px" aria-label="Minutes">
+          <input id="planKcal" type="number" min="0" max="5000" inputmode="numeric" placeholder="kcal" style="flex:0 0 84px" aria-label="Calories burned (from WHOOP)">
           <button type="submit" class="small">Add</button>
         </div>
         <p class="small muted" id="planEstimate"></p>
@@ -563,7 +674,10 @@ function renderTraining(t) {
     if (!sport || !minutes) { $('#planEstimate').textContent = sport ? 'Enter minutes to see the estimate.' : ''; return; }
     const est = estimateActivity(sport, minutes, $('#planIntensity').value, { weightKg, stats });
     const st = stats[sport];
-    $('#planEstimate').innerHTML = `≈ <b>${est.kcal} kcal</b> burned, based on ${esc(est.basis)}${st?.strain != null && st.sessions >= 3 ? ` (typical strain ${st.strain})` : ''}.`;
+    $('#planKcal').placeholder = `≈${est.kcal}`;
+    $('#planEstimate').innerHTML = $('#planKcal').value
+      ? `Using your <b>${$('#planKcal').value} kcal</b> (e.g. from the WHOOP app).`
+      : `≈ <b>${est.kcal} kcal</b> burned, based on ${esc(est.basis)}${st?.strain != null && st.sessions >= 3 ? ` (typical strain ${st.strain})` : ''}. Type WHOOP's number in “kcal” to use it instead.`;
   };
   $('#planSport').onchange = () => {
     const st = stats[$('#planSport').value];
@@ -572,17 +686,19 @@ function renderTraining(t) {
   };
   $('#planIntensity').onchange = showEstimate;
   $('#planMin').oninput = showEstimate;
+  $('#planKcal').oninput = showEstimate;
   $('#planForm').onsubmit = (e) => {
     e.preventDefault();
     const sport = $('#planSport').value;
     const intensity = $('#planIntensity').value;
     const minutes = parseInt($('#planMin').value, 10);
     if (!sport || !minutes) return;
-    const est = estimateActivity(sport, minutes, intensity, { weightKg, stats });
+    const typed = parseInt($('#planKcal').value, 10);
+    const est = typed > 0 ? { kcal: typed } : estimateActivity(sport, minutes, intensity, { weightKg, stats });
     // Keep two weeks of history.
     const cutoff = isoDate(new Date(Date.now() - 14 * DAY));
     state.activities = state.activities.filter((a) => a.date >= cutoff)
-      .concat({ id: `a${Date.now()}`, date: today, sport, intensity, minutes, type: sessionType(sport, intensity), kcal: est.kcal });
+      .concat({ id: `a${Date.now()}`, date: today, sport, intensity, minutes, type: sessionType(sport, intensity), kcal: est.kcal, kcalFromYou: typed > 0 });
     store.set('activities', state.activities);
     renderAll();
   };
