@@ -74,6 +74,22 @@
         </div>
         <ul class="list" id="checkinList"></ul>
       </div>
+      <div class="card" id="statsCard">
+        <div class="row between" style="margin-top:0">
+          <h2>Your stats</h2>
+          <select id="statsRange" class="small-select" aria-label="Period">
+            <option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last year</option>
+          </select>
+        </div>
+        <div class="stat-grid" id="statsGrid"></div>
+        <p class="small muted">A meal is “on target” when its calories are within 10% of that meal's target and protein reaches 90% of it.</p>
+        <div class="row">
+          <button type="button" id="exportData">⇩ Export data (CSV)</button>
+          <button type="button" class="ghost" id="exportBackup">Backup</button>
+          <label class="filebtn ghost" id="restoreLabel">Restore<input id="restoreBackup" type="file" accept=".json,application/json" hidden></label>
+        </div>
+        <p class="small" id="exportStatus"></p>
+      </div>
       <div class="card">
         <h2>History</h2>
         <ul class="list" id="weighList"></ul>

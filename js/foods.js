@@ -5,13 +5,13 @@ export const FOODS = {
   // Breakfast
   egg:        { name: 'Whole eggs',               kcal: 143, p: 12.6, f: 9.5,  c: 0.7,  unit: { label: 'egg', grams: 50 },      range: [50, 250, 50] },
   eggWhites:  { name: 'Egg whites (cooked)',      kcal: 52,  p: 10.9, f: 0.2,  c: 0.7,  unit: { label: 'cup', grams: 243 },     range: [0, 360, 15] },
-  sourdough:  { name: 'Sourdough bread',          kcal: 272, p: 10.8, f: 2.4,  c: 51.9, unit: { label: 'slice', grams: 50 },    range: [0, 200, 25] },
+  sourdough:  { name: 'Sourdough bread',          kcal: 272, p: 10.8, f: 2.4,  c: 51.9, unit: { label: 'slice', grams: 50 },    range: [0, 200, 12.5] },
   wheatBread: { name: 'Whole-wheat bread',        kcal: 252, p: 12.4, f: 3.5,  c: 42.7, unit: { label: 'slice', grams: 32 },    range: [0, 160, 16] },
-  avocado:    { name: 'Avocado',                  kcal: 160, p: 2.0,  f: 14.7, c: 8.5,  unit: { label: 'avocado', grams: 136 }, range: [0, 150, 10] },
+  avocado:    { name: 'Avocado',                  kcal: 160, p: 2.0,  f: 14.7, c: 8.5,  unit: { label: 'avocado', grams: 136 }, range: [0, 150, 5] },
   butter:     { name: 'Butter',                   kcal: 717, p: 0.9,  f: 81.1, c: 0.1,  unit: { label: 'tbsp', grams: 14 },     range: [0, 28, 3.5] },
   cheddar:    { name: 'Cheddar cheese',           kcal: 403, p: 24.9, f: 33.1, c: 1.3,  unit: { label: 'oz', grams: 28 },       range: [0, 56, 7] },
   oats:       { name: 'Rolled oats (dry)',        kcal: 379, p: 13.2, f: 6.5,  c: 67.7, unit: { label: 'cup', grams: 80 },      range: [20, 160, 5] },
-  whey:       { name: 'Whey protein',             kcal: 400, p: 80,   f: 5,    c: 10,   unit: { label: 'scoop', grams: 30 },    range: [0, 75, 7.5] },
+  whey:       { name: 'Whey protein',             kcal: 400, p: 80,   f: 5,    c: 10,   unit: { label: 'scoop', grams: 30 },    range: [0, 75, 5] },
   berries:    { name: 'Blueberries',              kcal: 57,  p: 0.7,  f: 0.3,  c: 14.5, unit: { label: 'cup', grams: 148 },     range: [0, 200, 25] },
   strawberries:{ name: 'Strawberries',            kcal: 32,  p: 0.7,  f: 0.3,  c: 7.7,  unit: { label: 'cup', grams: 152 },     range: [0, 250, 25] },
   banana:     { name: 'Banana',                   kcal: 89,  p: 1.1,  f: 0.3,  c: 22.8, unit: { label: 'banana', grams: 118 },  range: [0, 240, 20] },
@@ -47,7 +47,7 @@ export const BREAKFASTS = {
   eggs: {
     title: () => 'Eggs & toast',
     items: [
-      { slot: 'eggs', options: ['egg'], fixedByFat: true, min: 100, max: 150 },
+      { slot: 'eggs', options: ['egg'], fixedByFat: true, min: 50, max: 150 },
       { slot: 'protein', options: ['eggWhites'], drives: 'p' },
       { slot: 'carb', options: ['sourdough', 'wheatBread'], drives: 'c', min: 25 },
       { slot: 'fat', options: ['avocado', 'butter', 'cheddar', 'oliveOil'], drives: 'f' },

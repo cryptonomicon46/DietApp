@@ -273,3 +273,10 @@ body.readonly main input, body.readonly main select, body.readonly main button {
 .owner-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
 .owner-btn { padding: 18px 10px; font-size: 1.05rem; }
 #profileForm :disabled { opacity: .75; }
+
+/* stats */
+.stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0 6px; }
+.stat { background: var(--bg); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; }
+.stat b { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.stat span { font-size: .8rem; color: var(--muted); }
+#restoreLabel { margin: 0; padding: 10px 14px; }

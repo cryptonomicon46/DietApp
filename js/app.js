@@ -12,8 +12,10 @@ import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
 import { initLift, renderLift } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
-import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner } from './storage.js';
+import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile } from './storage.js';
 import { sync, newHouseholdCode } from './sync.js';
+import { buildTables, toCsv, summary } from './analytics.js';
+import { makeZip } from './zip.js';
 
 // ---------- storage ----------
 // Each person's data is kept separately (see storage.js); `store` reads/writes the open profile.
@@ -25,7 +27,8 @@ const state = {
   prefs: store.get('prefs', {}),       // sticky swaps: {oatmeal: {fat: 'almondButter'}, main: {carb: 'quinoa'}}
   macroAdjust: store.get('macroAdjust', { p: 0, f: 0, c: 0 }), // grams, from weekly check-ins
   checkins: store.get('checkins', []), // [{date, feeling, note, change}]
-  eaten: store.get('eaten', {}),       // today's log: {date, meals: {breakfast: {kcal,p,f,c,title}}, fuel, extras: []}
+  eaten: store.get('eaten', {}),       // today's log: {date, meals: {breakfast: {kcal,p,f,c,title,target}}, fuel, extras: []}
+  mealLog: store.get('mealLog', {}),   // past days' logs, kept for history and export: {date: {meals, fuel, extras}}
   checked: store.get('checked', {}),   // grocery checkboxes
   workouts: store.get('workouts', []), // synced/imported workouts, last 14 days
   days: store.get('days', {}),          // daily summary for the deficit game: {date: {eaten, burned, ...}}
@@ -58,7 +61,15 @@ const firstName = () => (state.profile?.name || '').trim().split(/\s+/)[0];
 
 // ---------- eaten today ----------
 function todaysLog() {
-  if (state.eaten.date !== isoDate()) state.eaten = { date: isoDate(), meals: {}, fuel: null, extras: [] };
+  if (state.eaten.date !== isoDate()) {
+    // New day: file yesterday's log in the history before starting fresh.
+    if (state.eaten.date) {
+      const { date, ...log } = state.eaten;
+      state.mealLog[date] = log;
+      store.set('mealLog', state.mealLog);
+    }
+    state.eaten = { date: isoDate(), meals: {}, fuel: null, extras: [] };
+  }
   return state.eaten;
 }
 function saveLog() { store.set('eaten', state.eaten); }
@@ -253,7 +264,8 @@ function eatButton(meal) {
 }
 
 function snapshot(m) {
-  return { title: m.title, kcal: m.totals.kcal, p: m.totals.p, f: m.totals.f, c: m.totals.c,
+  return { title: m.title, kcal: m.totals.kcal, p: m.totals.p, f: m.totals.f, c: m.totals.c, target: m.target,
+    foods: m.portions.filter((x) => x.grams > 0).map((x) => `${FOODS[x.food].name} ${x.grams}g`).join('; '),
     at: new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) };
 }
 
@@ -689,8 +701,8 @@ function renderTraining(t) {
     if (!sport || !minutes) return;
     const typed = parseInt($('#planKcal').value, 10);
     const est = typed > 0 ? { kcal: typed } : estimateActivity(sport, minutes, intensity, { weightKg, stats });
-    // Keep two weeks of history.
-    const cutoff = isoDate(new Date(Date.now() - 14 * DAY));
+    // Keep a year of activities for history and export.
+    const cutoff = isoDate(new Date(Date.now() - 366 * DAY));
     state.activities = state.activities.filter((a) => a.date >= cutoff)
       .concat({ id: `a${Date.now()}`, date: today, sport, intensity, minutes, type: sessionType(sport, intensity), kcal: est.kcal, kcalFromYou: typed > 0 });
     store.set('activities', state.activities);
@@ -1207,6 +1219,7 @@ document.querySelectorAll('.tabs button').forEach((btn) => {
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${btn.dataset.tab}`));
     if (btn.dataset.tab !== 'scan') stopScan();
     if (btn.dataset.tab === 'lift') renderLift();
+    if (btn.dataset.tab === 'weight' && state.profile) renderStats();
     window.scrollTo(0, 0);
   };
 });
@@ -1216,8 +1229,84 @@ function renderAll() {
   renderToday();
   renderWeight();
   renderCheckinHistory();
+  renderStats();
   renderGroceries();
 }
+
+// ---------- STATS & EXPORT ----------
+function renderStats() {
+  const n = +$('#statsRange').value;
+  const s = summary(exportProfile(activeProfile().id), isoDate(), n);
+  const pctOf = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
+  const tile = (big, label) => `<div class="stat"><b>${big}</b><span>${label}</span></div>`;
+  $('#statsGrid').innerHTML = [
+    tile(s.mealsLogged, 'meals logged'),
+    tile(pctOf(s.mealsOnTarget, s.mealsJudged), `meals on target (${s.mealsOnTarget}/${s.mealsJudged})`),
+    tile(`${s.deficitDays}/${s.daysLogged}`, 'logged days in a deficit'),
+    tile(`${s.proteinDays}/${s.daysLogged}`, 'days protein goal hit'),
+    tile(s.liftSessions, 'lifting workouts finished'),
+    tile(`${s.activities}`, `activities · ${Math.round(s.activityMinutes / 60 * 10) / 10} h`),
+  ].join('');
+}
+$('#statsRange').onchange = renderStats;
+
+const fileSlug = () => `lean-plate-${(state.profile?.name || activeProfile().name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${isoDate()}`;
+
+// Share sheet on phones (Save to Files, AirDrop, email…), plain download elsewhere.
+async function deliver(blob, filename) {
+  const file = new File([blob], filename, { type: blob.type });
+  if (navigator.canShare?.({ files: [file] }) && /iphone|ipad|android/i.test(navigator.userAgent)) {
+    try { await navigator.share({ files: [file], title: filename }); return 'Shared.'; } catch (err) { if (err.name === 'AbortError') return 'Cancelled.'; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  return `Saved ${filename}.`;
+}
+
+$('#exportData').onclick = async () => {
+  const status = $('#exportStatus');
+  status.textContent = 'Preparing…';
+  try {
+    const tables = buildTables(exportProfile(activeProfile().id));
+    const files = Object.entries(tables).filter(([, rows]) => rows.length).map(([name, rows]) => ({ name: `${name}.csv`, text: toCsv(rows) }));
+    files.push({ name: 'README.txt', text: [
+      'Lean Plate export — open the CSV files in Excel, Numbers or Google Sheets.',
+      'meals.csv: every logged meal with its macros, its target and on_target (yes/no).',
+      'days.csv: daily calories eaten vs burned, deficit, protein, coins and weight.',
+      'activities.csv: activities you added plus imported WHOOP/Garmin workouts.',
+      'lifting_sessions.csv / lifting_sets.csv: finished workouts and every set (weight x reps).',
+      'weigh_ins.csv, checkins.csv: weigh-ins and weekly check-ins.',
+    ].join('\n') });
+    status.textContent = await deliver(new Blob([makeZip(files)], { type: 'application/zip' }), `${fileSlug()}.zip`);
+  } catch (err) {
+    status.textContent = err.message;
+  }
+};
+
+$('#exportBackup').onclick = async () => {
+  const blob = new Blob([JSON.stringify({ app: 'lean-plate', version: 1, profile: activeProfile().id, savedAt: new Date().toISOString(), data: exportProfile(activeProfile().id) }, null, 1)], { type: 'application/json' });
+  $('#exportStatus').textContent = await deliver(blob, `${fileSlug()}-backup.json`);
+};
+
+$('#restoreBackup').onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const backup = JSON.parse(await file.text());
+    if (backup.app !== 'lean-plate' || !backup.data?.profile) throw new Error('That file isn\'t a Lean Plate backup.');
+    if (backup.profile !== ownerId()) throw new Error(`That backup belongs to ${PROFILES.find((p) => p.id === backup.profile)?.name || 'someone else'}. You can only restore your own profile on your phone.`);
+    if (!confirm(`Replace everything on this phone for ${state.profile?.name || 'you'} with the backup from ${backup.savedAt.slice(0, 10)}?`)) return;
+    importProfile(ownerId(), backup.data);
+    location.reload();
+  } catch (err) {
+    $('#exportStatus').textContent = err.message;
+  }
+};
 
 // ---------- PEOPLE: switch between Sandman and Amani ----------
 function renderWho() {
@@ -1246,6 +1335,7 @@ function renderViewOnly() {
   const ro = sync.readOnly();
   $('main').inert = ro;
   document.body.classList.toggle('readonly', ro);
+  $('#restoreLabel').hidden = ro;
   const name = state.profile?.name || activeProfile().name;
   $('#viewBanner').hidden = !ro;
   if (ro) {

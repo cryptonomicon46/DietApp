@@ -130,8 +130,10 @@ export function portionMeal(template, target, custom = {}) {
   });
   const grams = items.map((it) => {
     if (it.locked) return clamp(locks[it.slot], it.lo, it.hi);
-    if (it.fixed) return it.fixed;
-    if (it.fixedByFat) return target.f >= 20 ? it.max : it.min;
+    // Fixed sides (fruit, veggies) shrink for small meals so the rest still fits.
+    if (it.fixed) return target.kcal < 350 ? roundTo(it.fixed * 0.6, it.step) : it.fixed;
+    // 3 eggs for bigger breakfasts, 2 for most, 1 when the fat budget is small.
+    if (it.fixedByFat) return target.f >= 20 ? it.max : target.f >= 13 ? 100 : it.min;
     return it.min;
   });
   const total = () => sum(items.map((it, i) => ({ food: it.food, grams: grams[i] })));
