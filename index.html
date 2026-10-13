@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f7d5b">
+  <title>Lean Plate</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Lean Plate</h1>
+    <button id="openProfile" class="ghost" aria-label="Edit profile">⚙︎ Profile</button>
+  </header>
+
+  <main>
+    <!-- TODAY -->
+    <section id="tab-today" class="tab active">
+      <div class="card day-card">
+        <div class="row between">
+          <div>
+            <div class="eyebrow" id="todayDate"></div>
+            <div class="big" id="todayKcal">— kcal</div>
+          </div>
+          <div class="pill" id="paceNote"></div>
+        </div>
+        <div class="macros" id="todayMacros"></div>
+        <div id="adjustBanner"></div>
+      </div>
+      <div id="meals"></div>
+    </section>
+
+    <!-- WEIGHT -->
+    <section id="tab-weight" class="tab">
+      <form id="weighForm" class="card">
+        <h2>Weigh-in</h2>
+        <p class="muted small">Best: same time each morning, after the bathroom, before eating.</p>
+        <div class="row">
+          <input id="weighDate" type="date" required>
+          <input id="weighValue" type="number" step="0.1" min="60" max="700" inputmode="decimal" placeholder="lb" required>
+          <button type="submit">Save</button>
+        </div>
+      </form>
+      <div class="card">
+        <div class="row between">
+          <h2>Progress</h2>
+          <span class="muted small" id="trendNote"></span>
+        </div>
+        <svg id="chart" viewBox="0 0 320 160" role="img" aria-label="Weight chart"></svg>
+        <div class="stats" id="weightStats"></div>
+      </div>
+      <div class="card">
+        <h2>History</h2>
+        <ul class="list" id="weighList"></ul>
+      </div>
+    </section>
+
+    <!-- GROCERIES -->
+    <section id="tab-groceries" class="tab">
+      <div class="card">
+        <div class="row between">
+          <h2>This week's groceries</h2>
+          <button id="clearChecks" class="ghost small">Uncheck all</button>
+        </div>
+        <p class="muted small">Quantities cover the next 7 days of your plan. Store picks are suggestions — brands and sizes vary by location.</p>
+        <div id="groceryList"></div>
+      </div>
+    </section>
+
+    <!-- SCAN -->
+    <section id="tab-scan" class="tab">
+      <div class="card">
+        <h2>Scan a food</h2>
+        <p class="muted small">Point your camera at the barcode on anything from Sprouts, Safeway or Costco. Nutrition comes from Open Food Facts.</p>
+        <div id="reader"></div>
+        <div class="row">
+          <button id="startScan">Start camera</button>
+          <button id="stopScan" class="ghost" hidden>Stop</button>
+        </div>
+        <form id="manualForm" class="row">
+          <input id="manualCode" inputmode="numeric" pattern="[0-9]{6,14}" placeholder="…or type the barcode number">
+          <button type="submit" class="ghost">Look up</button>
+        </form>
+      </div>
+      <div id="scanResult"></div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-tab="today" class="active"><span>🍽</span>Today</button>
+    <button data-tab="weight"><span>⚖︎</span>Weight</button>
+    <button data-tab="groceries"><span>🛒</span>Groceries</button>
+    <button data-tab="scan"><span>▦</span>Scan</button>
+  </nav>
+
+  <!-- PROFILE -->
+  <dialog id="profileDialog">
+    <form id="profileForm" method="dialog">
+      <h2>Your profile</h2>
+      <p class="muted small">Used to estimate your calories. Everything stays on this device.</p>
+      <label>Sex
+        <select name="sex"><option value="male">Male</option><option value="female">Female</option></select>
+      </label>
+      <div class="row">
+        <label>Age <input name="age" type="number" min="16" max="90" required></label>
+        <label>Height (ft) <input name="ft" type="number" min="4" max="7" required></label>
+        <label>(in) <input name="in" type="number" min="0" max="11" required></label>
+      </div>
+      <div class="row">
+        <label>Current weight (lb) <input name="weight" type="number" step="0.1" min="80" max="700" required></label>
+        <label>Goal weight (lb) <input name="goalLb" type="number" step="0.1" min="80" max="700" required></label>
+      </div>
+      <label>Activity <select name="activity"></select></label>
+      <label>Pace <select name="pace"></select></label>
+      <div class="row end">
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
