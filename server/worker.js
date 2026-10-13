@@ -2,6 +2,9 @@
 // Deploy as a Cloudflare Worker — see server/README.md. It stores nothing:
 // tokens are handed back to the app and kept on your phone.
 //
+// Also stores each household member's app data for sharing between phones (KV
+// namespace bound as HOUSEHOLD), keyed by a private household code.
+//
 // Env vars: APP_ORIGIN (e.g. https://you.github.io/DietApp/),
 //           WHOOP_CLIENT_ID, WHOOP_CLIENT_SECRET,
 //           STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET
@@ -26,13 +29,32 @@ export default {
     const cors = {
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
     };
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
     const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
     const callback = `${url.origin}/${url.pathname.split('/')[1]}/callback`;
 
     try {
+      // ---- Household sharing: /household/<code>/<person> ----
+      const hh = url.pathname.match(/^\/household\/([a-z0-9-]{12,64})\/([a-z]{2,20})$/);
+      if (hh) {
+        if (!env.HOUSEHOLD) return json({ error: 'HOUSEHOLD storage not set up — see server/README.md' }, 501);
+        const key = `${hh[1]}:${hh[2]}`;
+        if (req.method === 'GET') {
+          const v = await env.HOUSEHOLD.get(key);
+          return v ? new Response(v, { headers: { ...cors, 'Content-Type': 'application/json' } }) : json({ error: 'not found' }, 404);
+        }
+        if (req.method === 'PUT') {
+          const body = await req.text();
+          if (body.length > 2_000_000) return json({ error: 'too large' }, 413);
+          try { JSON.parse(body); } catch { return json({ error: 'expected JSON' }, 400); }
+          await env.HOUSEHOLD.put(key, body);
+          return json({ ok: true });
+        }
+        return json({ error: 'method not allowed' }, 405);
+      }
+
       switch (url.pathname) {
         // ---- WHOOP ----
         case '/whoop/login':

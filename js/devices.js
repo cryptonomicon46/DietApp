@@ -1,9 +1,9 @@
 import { fromWhoop, fromStrava } from './activity.js';
+import { store } from './storage.js';
 
-// Talks to the connector worker (server/worker.js). Tokens live in localStorage.
-const KEY = 'lp.devices';
-const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
-const save = (d) => { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch { /* blocked */ } };
+// Talks to the connector worker (server/worker.js). Tokens are stored per profile on this phone.
+const load = () => store.get('devices', {});
+const save = (d) => store.set('devices', d);
 
 export const devices = {
   get() { return load(); },

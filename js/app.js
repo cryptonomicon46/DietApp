@@ -12,17 +12,11 @@ import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
 import { initLift, renderLift } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
+import { store, global, PROFILES, activeProfile, setActiveProfile } from './storage.js';
+import { sync, newHouseholdCode } from './sync.js';
 
 // ---------- storage ----------
-const store = {
-  get(key, fallback) {
-    try { return JSON.parse(localStorage.getItem(`lp.${key}`)) ?? fallback; } catch { return fallback; }
-  },
-  set(key, value) {
-    try { localStorage.setItem(`lp.${key}`, JSON.stringify(value)); } catch { /* storage full or blocked */ }
-  },
-};
-
+// Each person's data is kept separately (see storage.js); `store` reads/writes the open profile.
 const state = {
   profile: store.get('profile', null),
   weights: store.get('weights', []),   // [{date: 'YYYY-MM-DD', weight}]
@@ -745,6 +739,7 @@ function openDevices() {
     $(`#${p}Connect`).textContent = d[p] ? 'Disconnect' : 'Connect';
   }
   $('#csvStatus').textContent = '';
+  renderSharing();
   $('#whoopCsvStatus').textContent = '';
   devDialog.showModal();
 }
@@ -1095,14 +1090,16 @@ form.addEventListener('input', updatePlanPreview);
 form.addEventListener('change', updatePlanPreview);
 
 // First launch starts from a ready-to-go default profile: tap Continue, or edit first.
-const DEFAULT_PROFILE = {
-  name: 'Sandman', sex: 'male', age: 43, heightIn: 71, weight: 162, goalLb: 156, activity: 'tracked', pace: 'steady',
+// Amani's starting profile leaves body stats blank for her to fill in.
+const DEFAULT_PROFILES = {
+  sandman: { name: 'Sandman', sex: 'male', age: 43, heightIn: 71, weight: 162, goalLb: 156, activity: 'tracked', pace: 'steady' },
+  amani: { name: 'Amani', sex: 'female', activity: 'tracked', pace: 'steady' },
 };
 
 function openProfile() {
   const first = !state.profile;
-  const p = state.profile || DEFAULT_PROFILE;
-  $('#profileTitle').textContent = first ? 'Welcome to Lean Plate' : 'Your profile';
+  const p = state.profile || DEFAULT_PROFILES[activeProfile().id] || { sex: 'male', activity: 'tracked', pace: 'steady' };
+  $('#profileTitle').textContent = first ? `Welcome${p.name ? `, ${p.name}` : ''}` : `${state.profile.name || 'Your'} profile`;
   $('#profileIntro').textContent = first
     ? 'We filled in a starting profile. Change anything you like, or tap Continue to start.'
     : 'Used to estimate your calories. Everything stays on this device.';
@@ -1112,7 +1109,7 @@ function openProfile() {
   form.age.value = p.age ?? '';
   form.ft.value = p.heightIn ? Math.floor(p.heightIn / 12) : '';
   form.in.value = p.heightIn ? Math.round(p.heightIn % 12) : '';
-  form.weight.value = first ? p.weight : currentWeight();
+  form.weight.value = first ? (p.weight ?? '') : currentWeight();
   form.goalLb.value = p.goalLb ?? '';
   form.activity.value = p.activity;
   form.pace.value = p.pace;
@@ -1166,14 +1163,93 @@ function renderAll() {
   renderGroceries();
 }
 
+// ---------- PEOPLE: switch between Sandman and Amani ----------
+function renderWho() {
+  const active = activeProfile().id;
+  const me = sync.settings()?.me;
+  $('#who').innerHTML = PROFILES.map((p) => {
+    const saved = (() => { try { return JSON.parse(localStorage.getItem(`lp.p.${p.id}.profile`)); } catch { return null; } })();
+    return `<label class="who-opt ${p.id === active ? 'on' : ''}">
+      <input type="radio" name="who" value="${p.id}" ${p.id === active ? 'checked' : ''}>
+      <span>${esc(saved?.name || p.name)}${sync.enabled() && p.id !== me ? ' <small>view</small>' : ''}</span></label>`;
+  }).join('');
+  $('#who').onchange = (e) => {
+    if (e.target.name !== 'who') return;
+    setActiveProfile(e.target.value);
+    location.reload();
+  };
+}
+
+function ago(ms) {
+  const m = Math.round((Date.now() - ms) / 60000);
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+}
+
+// On a synced phone your partner's profile is view-only; their phone is the source.
+function renderViewOnly() {
+  const ro = sync.readOnly();
+  $('main').inert = ro;
+  document.body.classList.toggle('readonly', ro);
+  const name = state.profile?.name || activeProfile().name;
+  $('#viewBanner').hidden = !ro;
+  if (ro) {
+    const seen = global.get(`seen.${activeProfile().id}`, 0);
+    $('#viewBanner').innerHTML = seen
+      ? `Viewing <b>${esc(name)}</b>'s day · updated ${ago(seen)} · <button class="linkish" id="refreshPartner">Refresh</button>`
+      : `<b>${esc(name)}</b> hasn't synced yet. Once ${esc(name)} sets up sharing on their phone, their day shows up here. <button class="linkish" id="refreshPartner">Check now</button>`;
+    $('#refreshPartner').onclick = async () => {
+      $('#refreshPartner').textContent = 'Checking…';
+      try { if (await sync.pull()) location.reload(); else $('#refreshPartner').textContent = 'Up to date'; } catch (err) { $('#refreshPartner').textContent = err.message; }
+    };
+  }
+}
+
+// ---------- HOUSEHOLD SHARING (in Devices) ----------
+function renderSharing() {
+  const s = sync.settings() || {};
+  $('#shareUrl').value = s.url || devices.get().server || '';
+  $('#shareCode').value = s.code || '';
+  $('#shareMe').innerHTML = PROFILES.map((p) => `<option value="${p.id}" ${(s.me || activeProfile().id) === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  $('#shareStatus').textContent = sync.enabled()
+    ? `Sharing is on. Last upload ${global.get('pushedAt', 0) ? ago(global.get('pushedAt', 0)) : 'not yet'}.`
+    : 'Off. Both profiles still work on this phone.';
+}
+$('#shareNewCode').onclick = () => { $('#shareCode').value = newHouseholdCode(); };
+$('#shareSave').onclick = async () => {
+  const url = $('#shareUrl').value.trim().replace(/\/+$/, '');
+  const code = $('#shareCode').value.trim();
+  if (!/^https:\/\//.test(url) || code.length < 12) {
+    $('#shareStatus').textContent = 'Add your connector URL and a household code (tap New code on the first phone, then type the same code on the other).';
+    return;
+  }
+  sync.save({ url, code, me: $('#shareMe').value });
+  $('#shareStatus').textContent = 'Syncing…';
+  try {
+    await sync.push();
+    await sync.pull();
+    location.reload();
+  } catch (err) {
+    $('#shareStatus').textContent = `Couldn't reach the connector: ${err.message}`;
+  }
+};
+$('#shareOff').onclick = () => { sync.save(null); location.reload(); };
+
 initLift();
 $('#dayBar').onclick = () => { document.querySelector('[data-tab=today]').click(); };
 $('#weighDate').value = isoDate();
 const justConnected = devices.takeRedirect();
+renderWho();
+renderViewOnly();
 if (state.profile) renderAll();
-else openProfile();
+else if (!sync.readOnly()) openProfile();
 // Pull workouts on open (at most every 10 min) and right after connecting.
-if (justConnected || Date.now() - store.get('lastSync', 0) > 10 * 60000) syncDevices();
+if (!sync.readOnly() && (justConnected || Date.now() - store.get('lastSync', 0) > 10 * 60000)) syncDevices();
+// Household: upload my latest, then fetch my partner's; reload if I'm looking at fresh data.
+if (sync.enabled()) {
+  sync.push().catch(() => {});
+  sync.pull().then((changed) => { if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
+  setInterval(() => sync.pull().then((changed) => { if (changed && sync.readOnly()) location.reload(); }).catch(() => {}), 5 * 60000);
+}
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});

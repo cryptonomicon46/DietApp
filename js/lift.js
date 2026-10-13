@@ -1,11 +1,11 @@
 import {
   MUSCLES, EXERCISES, DAYS, WEEKS, slotOptions, setsFor, weeklySets, blockPosition, suggestLoad,
 } from './lifting.js';
+import { store } from './storage.js';
 
 // Lift tab: today's full-body session, set logging, history and the exercise library.
-const KEY = 'lp.lift';
-const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(lift)); } catch { /* blocked */ } };
+const load = () => store.get('lift', {});
+const save = () => store.set('lift', lift);
 
 let lift = { block: 1, choices: {}, sessions: [], draft: null, ...load() };
 let libraryMuscle = 'quads';

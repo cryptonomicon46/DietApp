@@ -1,0 +1,10 @@
+name = "lean-plate-connect"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# Household sharing storage. Create it once with:
+#   npx wrangler kv namespace create HOUSEHOLD
+# then paste the id it prints below.
+[[kv_namespaces]]
+binding = "HOUSEHOLD"
+id = "PASTE_KV_NAMESPACE_ID_HERE"

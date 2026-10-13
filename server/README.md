@@ -1,4 +1,4 @@
-# Wearables connector (WHOOP + Garmin via Strava)
+# Connector: household sharing + WHOOP / Garmin sync
 
 WHOOP and Strava both require a **client secret** to finish sign-in, which can't
 live in a static web page. This folder is a ~100-line Cloudflare Worker that does
@@ -14,7 +14,13 @@ so the app gets Garmin data two other ways:
 2. **CSV import (no setup):** Garmin Connect website → *Activities → All
    Activities → Export CSV*, then in Lean Plate tap *Devices → Import Garmin CSV*.
 
-## Setup (≈10 minutes, free tiers)
+## Household sharing (Sandman ↔ Amani)
+
+The same worker keeps a copy of each person's app data so the other phone can view it.
+Data is stored in Cloudflare KV under your private household code; anyone without the
+code can't read it. Treat the code like a password.
+
+## Setup (≈10–15 minutes, free tiers)
 
 1. **Create the apps**
    - WHOOP: <https://developer-dashboard.whoop.com> → create app. Scopes:
@@ -25,12 +31,18 @@ so the app gets Garmin data two other ways:
 2. **Deploy the worker**
    ```sh
    cd server
-   npx wrangler deploy worker.js --name lean-plate-connect --compatibility-date 2026-01-01
+   npx wrangler login
+   npx wrangler kv namespace create HOUSEHOLD     # paste the printed id into wrangler.toml
+   npx wrangler deploy
    npx wrangler secret put WHOOP_CLIENT_ID      --name lean-plate-connect
    npx wrangler secret put WHOOP_CLIENT_SECRET  --name lean-plate-connect
    npx wrangler secret put STRAVA_CLIENT_ID     --name lean-plate-connect
    npx wrangler secret put STRAVA_CLIENT_SECRET --name lean-plate-connect
    npx wrangler secret put APP_ORIGIN           --name lean-plate-connect   # e.g. https://you.github.io/DietApp/
    ```
-3. In Lean Plate open **Devices**, paste the worker URL, and tap **Connect WHOOP** /
-   **Connect Garmin (Strava)**.
+3. **Household sharing:** on Sandman's phone open **Devices → Share with your household**,
+   paste the worker URL, tap **New code**, pick **Sandman**, and tap **Turn on sharing**.
+   On Amani's phone enter the same URL and code, pick **Amani**, and turn it on.
+4. **WHOOP / Garmin (optional):** in **Devices**, paste the worker URL and tap
+   **Connect WHOOP** / **Connect Garmin (Strava)**. Sharing alone needs only `APP_ORIGIN`;
+   the WHOOP/Strava secrets are only needed for those connections.

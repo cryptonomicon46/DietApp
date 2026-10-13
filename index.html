@@ -22,8 +22,10 @@
         <button id="openProfile" class="ghost small" aria-label="Edit profile">⚙︎ Profile</button>
       </div>
     </div>
-    <button class="daybar" id="dayBar" hidden aria-label="Today's calories — open Today"></button>
+    <div class="who" id="who" role="radiogroup" aria-label="Whose day to show"></div>
+    <p class="view-banner small" id="viewBanner" hidden></p>
   </header>
+  <div class="daybar-wrap"><button class="daybar" id="dayBar" hidden aria-label="Today's calories — open Today"></button></div>
 
   <main>
     <!-- TODAY -->
@@ -176,6 +178,15 @@
         <label class="filebtn ghost small">Import<input id="whoopCsv" type="file" accept=".csv,text/csv" hidden></label></div>
       <div class="device"><div><b>Garmin CSV</b><div class="small muted">Garmin Connect → Activities → Export CSV. No setup needed.</div><div class="small" id="csvStatus"></div></div>
         <label class="filebtn ghost small">Import<input id="garminCsv" type="file" accept=".csv,text/csv" hidden></label></div>
+      <h3 class="share-head">Share with your household</h3>
+      <p class="muted small">See each other's macros and day. Each phone uploads its owner's data to your connector and downloads the other person's to view. Use the same household code on both phones.</p>
+      <label>Connector URL <input id="shareUrl" type="url" placeholder="https://lean-plate-connect.you.workers.dev"></label>
+      <label>Household code
+        <div class="row" style="margin-top:4px"><input id="shareCode" autocomplete="off" placeholder="xxxx-xxxx-xxxx"><button type="button" class="ghost small" id="shareNewCode">New code</button></div>
+      </label>
+      <label>This phone belongs to <select id="shareMe"></select></label>
+      <div class="row"><button type="button" class="small" id="shareSave">Turn on sharing</button><button type="button" class="ghost small" id="shareOff">Turn off</button></div>
+      <p class="small" id="shareStatus"></p>
       <div class="row end"><button>Done</button></div>
     </form>
   </dialog>
