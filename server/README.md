@@ -38,7 +38,7 @@ code can't read it. Treat the code like a password.
    npx wrangler secret put WHOOP_CLIENT_SECRET  --name lean-plate-connect
    npx wrangler secret put STRAVA_CLIENT_ID     --name lean-plate-connect
    npx wrangler secret put STRAVA_CLIENT_SECRET --name lean-plate-connect
-   npx wrangler secret put APP_ORIGIN           --name lean-plate-connect   # e.g. https://you.github.io/DietApp/
+   # APP_ORIGIN is set in wrangler.toml (change it if you host the app elsewhere)
    ```
 3. **Household sharing:** on Sandman's phone open **Devices → Share with your household**,
    paste the worker URL, tap **New code**, pick **Sandman**, and tap **Turn on sharing**.

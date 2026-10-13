@@ -2,6 +2,10 @@ name = "lean-plate-connect"
 main = "worker.js"
 compatibility_date = "2026-01-01"
 
+[vars]
+# Where the app is hosted (allowed to call this connector).
+APP_ORIGIN = "https://cryptonomicon46.github.io/DietApp/"
+
 # Household sharing storage. Create it once with:
 #   npx wrangler kv namespace create HOUSEHOLD
 # then paste the id it prints below.
