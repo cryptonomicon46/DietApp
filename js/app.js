@@ -2,6 +2,7 @@ import { FOODS, STORES } from './foods.js';
 import {
   ACTIVITY, PACE, dailyTargets, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
+  FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek,
 } from './plan.js';
 import { SESSION_TYPES, trainingDay, applyTraining, parseGarminCsv } from './activity.js';
 import { devices } from './devices.js';
@@ -21,7 +22,10 @@ const state = {
   profile: store.get('profile', null),
   weights: store.get('weights', []),   // [{date: 'YYYY-MM-DD', weight}]
   adjust: store.get('adjust', 0),      // kcal tweak from check-ins
-  swaps: store.get('swaps', {}),       // {date: {breakfast, lunch, dinner}}
+  custom: store.get('custom', {}),     // today's meal edits: {date, meals: {breakfast: {template, picks, grams}}}
+  prefs: store.get('prefs', {}),       // sticky swaps: {oatmeal: {fat: 'almondButter'}, main: {carb: 'quinoa'}}
+  macroAdjust: store.get('macroAdjust', { p: 0, f: 0, c: 0 }), // grams, from weekly check-ins
+  checkins: store.get('checkins', []), // [{date, feeling, note, change}]
   checked: store.get('checked', {}),   // grocery checkboxes
   workouts: store.get('workouts', []), // synced/imported workouts, last 14 days
   planned: store.get('planned', null), // {date, type, minutes}
@@ -40,7 +44,21 @@ function currentWeight() {
 }
 
 function baseTargets() {
-  return dailyTargets(state.profile, currentWeight(), state.adjust);
+  const t = dailyTargets(state.profile, currentWeight(), state.adjust);
+  const a = state.macroAdjust;
+  const p = Math.max(t.p + a.p, 60), f = Math.max(t.f + a.f, 25), c = Math.max(t.c + a.c, 30);
+  return { ...t, p, f, c, kcal: t.kcal + (p - t.p) * 4 + (f - t.f) * 9 + (c - t.c) * 4 };
+}
+
+const firstName = () => (state.profile?.name || '').trim().split(/\s+/)[0];
+
+// Today's meal edits (reset each day).
+function todaysCustom() {
+  if (state.custom.date !== isoDate()) state.custom = { date: isoDate(), meals: {} };
+  return state.custom.meals;
+}
+function todayPlan(t = targets()) {
+  return planForDay(t, new Date(), todaysCustom(), state.prefs);
 }
 
 function todaysTraining() {
@@ -63,6 +81,7 @@ function targets() {
 // ---------- formatting ----------
 function amountLabel(food, grams) {
   const d = FOODS[food];
+  if (!grams) return { main: 'none', sub: '0 g' };
   if (d.oz) return { main: `${Math.round(grams / 28.35 * 10) / 10} oz`, sub: `${grams} g cooked` };
   const u = d.unit;
   const n = grams / u.grams;
@@ -98,31 +117,145 @@ function renderToday() {
     ['p', 'Protein', t.p], ['f', 'Fat', t.f], ['c', 'Carbs', t.c],
   ].map(([k, label, g]) => `<div class="macro ${k}"><b>${g} g</b><span>${label}</span></div>`).join('');
 
+  const name = firstName();
+  $('#greeting').textContent = name ? `${greetingWord()}, ${name}` : '';
+  renderCheckin();
   renderAdjustBanner(t);
   renderTraining(t);
 
-  const plan = planForDay(t, new Date(), state.swaps[today]);
-  $('#meals').innerHTML = ['breakfast', 'lunch', 'dinner'].map((meal) => {
-    const m = plan[meal];
-    return `
-      <div class="card">
-        <div class="meal-head">
-          <div>
-            <div class="eyebrow">${meal}</div>
-            <h3>${esc(m.title)}</h3>
-            <div class="meal-macros">${macroLine(m.totals)}</div>
-          </div>
-          <button class="ghost small" data-swap="${meal}" aria-label="Swap ${meal}">↻ Swap</button>
-        </div>
-        <ul class="portions">
-          ${m.portions.map(({ food, grams }) => {
-            const a = amountLabel(food, grams);
-            return `<li><span>${esc(FOODS[food].name)}</span><span class="amt">${a.main}<small>${a.sub}</small></span></li>`;
-          }).join('')}
-        </ul>
-      </div>`;
-  }).join('') + `<p class="muted small">Weigh oats dry; weigh meat, fish, eggs, rice and veggies cooked. Season freely — salt, spices, hot sauce, lemon and mustard are basically free.</p>`;
+  const plan = todayPlan(t);
+  $('#meals').innerHTML = ['breakfast', 'lunch', 'dinner'].map((meal) => mealCard(meal, plan[meal])).join('')
+    + `<p class="muted small">Pick a food from any menu to swap it. Drag a slider to set that portion yourself (🔒) — the other items re-balance to keep the meal on target. Weigh oats dry; weigh meat, fish, eggs, rice and veggies cooked.</p>`;
 }
+
+const MEAL_TEMPLATES = { eggs: 'Switch: eggs', oatmeal: 'Switch: oatmeal' };
+
+function mealCard(meal, m) {
+  const edited = !!todaysCustom()[meal];
+  return `
+    <div class="card meal" data-meal="${meal}">
+      <div class="meal-head">
+        <div>
+          <div class="eyebrow">${meal}</div>
+          <h3 data-role="title">${esc(m.title)}</h3>
+        </div>
+        <div class="row" style="margin-top:0">
+          ${meal === 'breakfast' ? `<select class="small-select" data-template aria-label="Breakfast type">
+            ${Object.entries(MEAL_TEMPLATES).map(([k, v]) => `<option value="${k}" ${m.template === k ? 'selected' : ''}>${v}</option>`).join('')}
+          </select>` : ''}
+          <button class="ghost small" data-reset ${edited ? '' : 'hidden'}>Reset</button>
+        </div>
+      </div>
+      <div class="meal-macros" data-role="totals">${totalsLine(m)}</div>
+      <ul class="portions editable">
+        ${m.portions.map((x) => itemRow(x)).join('')}
+      </ul>
+    </div>`;
+}
+
+function totalsLine(m) {
+  const cell = (k, label) => {
+    const d = m.totals[k] - m.target[k];
+    const off = Math.abs(d) > (k === 'kcal' ? 40 : 5);
+    return `<span class="${k}${off ? ' off' : ''}">${m.totals[k]}${label}<small>/${m.target[k]}</small></span>`;
+  };
+  return `${cell('kcal', ' kcal')} · ${cell('p', 'P')} · ${cell('f', 'F')} · ${cell('c', 'C')}`;
+}
+
+function itemRow(x) {
+  const a = amountLabel(x.food, x.grams);
+  const [lo, hi, step] = x.range;
+  const name = x.options.length > 1
+    ? `<select data-pick="${x.slot}" aria-label="Swap ${esc(FOODS[x.food].name)}">${x.options.map((o) => `<option value="${o}" ${o === x.food ? 'selected' : ''}>${esc(FOODS[o].name)}</option>`).join('')}</select>`
+    : `<span>${esc(FOODS[x.food].name)}</span>`;
+  return `
+    <li data-slot="${x.slot}" class="${x.locked ? 'locked' : ''}">
+      <div class="item-top">${name}<span class="amt" data-role="amt">${a.main}<small>${a.sub}</small></span></div>
+      <div class="item-slider">
+        <input type="range" id="r-${x.slot}" data-slide="${x.slot}" min="${lo}" max="${hi}" step="${step}" value="${x.grams}" aria-label="${esc(FOODS[x.food].name)} grams">
+        <button class="lock" data-unlock="${x.slot}" title="${x.locked ? 'Locked — tap to let the app size this' : 'Auto-sized'}">${x.locked ? '🔒' : 'auto'}</button>
+      </div>
+    </li>`;
+}
+
+// Live-update one meal card while a slider moves, without re-rendering the slider being dragged.
+function refreshMeal(meal, active) {
+  const m = todayPlan()[meal];
+  const card = document.querySelector(`.meal[data-meal="${meal}"]`);
+  card.querySelector('[data-role="title"]').textContent = m.title;
+  card.querySelector('[data-role="totals"]').innerHTML = totalsLine(m);
+  card.querySelector('[data-reset]').hidden = !todaysCustom()[meal];
+  for (const x of m.portions) {
+    const li = card.querySelector(`li[data-slot="${x.slot}"]`);
+    const a = amountLabel(x.food, x.grams);
+    li.querySelector('[data-role="amt"]').innerHTML = `${a.main}<small>${a.sub}</small>`;
+    li.classList.toggle('locked', x.locked);
+    const lock = li.querySelector('.lock');
+    lock.textContent = x.locked ? '🔒' : 'auto';
+    const r = li.querySelector('input[type=range]');
+    if (r !== active) r.value = x.grams;
+  }
+}
+
+function editMeal(meal, fn) {
+  const meals = todaysCustom();
+  meals[meal] = meals[meal] || {};
+  fn(meals[meal]);
+  store.set('custom', state.custom);
+}
+
+$('#meals').addEventListener('input', (e) => {
+  const slot = e.target.dataset.slide;
+  if (!slot) return;
+  const meal = e.target.closest('.meal').dataset.meal;
+  const plan = todayPlan()[meal];
+  editMeal(meal, (c) => {
+    if (meal === 'breakfast') c.template = plan.template;
+    c.grams = { ...c.grams, [slot]: +e.target.value };
+  });
+  refreshMeal(meal, e.target);
+});
+
+$('#meals').addEventListener('change', (e) => {
+  const card = e.target.closest('.meal');
+  if (!card) return;
+  const meal = card.dataset.meal;
+  if (e.target.dataset.template != null) {
+    editMeal(meal, (c) => { c.template = e.target.value; delete c.picks; delete c.grams; });
+  } else if (e.target.dataset.pick) {
+    const slot = e.target.dataset.pick;
+    const food = e.target.value;
+    const plan = todayPlan()[meal];
+    editMeal(meal, (c) => {
+      if (meal === 'breakfast') c.template = plan.template;
+      c.picks = { ...c.picks, [slot]: food };
+      if (c.grams) delete c.grams[slot];
+    });
+    // Remember swaps for next time (proteins at lunch/dinner stay day-by-day).
+    if (!(meal !== 'breakfast' && slot === 'protein')) {
+      const key = meal === 'breakfast' ? plan.template : 'main';
+      state.prefs[key] = { ...state.prefs[key], [slot]: food };
+      store.set('prefs', state.prefs);
+    }
+  } else return;
+  renderToday();
+  renderGroceries();
+});
+
+$('#meals').addEventListener('click', (e) => {
+  const card = e.target.closest('.meal');
+  if (!card) return;
+  const meal = card.dataset.meal;
+  const unlock = e.target.closest('[data-unlock]')?.dataset.unlock;
+  if (unlock) {
+    editMeal(meal, (c) => { if (c.grams) delete c.grams[unlock]; });
+    refreshMeal(meal);
+  } else if (e.target.closest('[data-reset]')) {
+    delete todaysCustom()[meal];
+    store.set('custom', state.custom);
+    renderToday();
+  }
+});
 
 function renderAdjustBanner(t) {
   const s = suggestAdjustment(state.weights, t.lbPerWeek);
@@ -139,31 +272,119 @@ function renderAdjustBanner(t) {
     el.innerHTML = `<div class="banner">Trend: <b>${s.lost >= 0 ? '−' : '+'}${Math.abs(s.lost).toFixed(1)} lb/wk</b> — ${s.delta === 0 ? 'right on track 👍' : 'adjusted recently, give it a week'}.</div>`;
     return;
   }
+  // Changes are offered in the weekly check-in, so this is just the heads-up.
   el.innerHTML = `
     <div class="banner">
-      Trend: <b>${s.lost >= 0 ? '−' : '+'}${Math.abs(s.lost).toFixed(1)} lb/wk</b>, ${s.reason}.
-      Suggest ${s.delta > 0 ? 'adding' : 'cutting'} <b>${Math.abs(s.delta)} kcal</b>/day.
-      <div class="row"><button class="small" id="applyAdjust">Apply</button></div>
+      ${firstName() ? `${esc(firstName())}, your trend` : 'Trend'}: <b>${s.lost >= 0 ? '−' : '+'}${Math.abs(s.lost).toFixed(1)} lb/wk</b>, ${s.reason}.
+      ${checkinDue() || draft ? 'See your check-in below.' : '<button class="linkish" id="bannerCheckin">Check in now</button> to adjust your macros.'}
     </div>`;
-  $('#applyAdjust').onclick = () => {
-    state.adjust += s.delta;
-    store.set('adjust', state.adjust);
+  if ($('#bannerCheckin')) $('#bannerCheckin').onclick = openCheckin;
+}
+
+// ---------- WEEKLY CHECK-IN ----------
+function greetingWord() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+}
+
+const DAY = 86400000;
+function checkinDue() {
+  const last = state.checkins[state.checkins.length - 1]?.date || state.profile.createdOn || state.weights[0]?.date;
+  if (!last) return false;
+  if (store.get('checkinSnooze', null) === isoDate()) return false;
+  return Date.now() - new Date(last + 'T00:00').getTime() >= 7 * DAY;
+}
+
+let draft = null; // in-progress check-in: {feeling, note, choice, custom: {p, f, c}, open}
+
+function renderCheckin() {
+  const el = $('#checkin');
+  if (!draft && !checkinDue()) { el.innerHTML = ''; return; }
+  draft = draft || { feeling: null, note: '', choice: null, custom: { p: 0, f: 0, c: 0 } };
+  const name = firstName();
+  const base = baseTargets();
+  const trend = suggestAdjustment(state.weights, base.lbPerWeek);
+  const wow = weekOverWeek(state.weights);
+  const rec = recommendCheckin(trend, draft.feeling);
+  const choice = draft.choice || rec.id;
+  const options = [...CHECKIN_OPTIONS].sort((a, b) => (a.id === rec.id ? -1 : b.id === rec.id ? 1 : 0));
+  const delta = choice === 'custom' ? draft.custom : CHECKIN_OPTIONS.find((o) => o.id === choice).delta;
+  const after = { p: base.p + (delta.p || 0), f: base.f + (delta.f || 0), c: base.c + (delta.c || 0) };
+  const sign = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : '0');
+
+  el.innerHTML = `
+    <div class="card checkin">
+      <div class="eyebrow">Weekly check-in</div>
+      <h3>${name ? `Hi ${esc(name)}, how` : 'How'} did this week go?</h3>
+      ${wow ? `<p class="small">7-day average: <b>${wow.before.toFixed(1)} → ${wow.now.toFixed(1)} lb</b> (${wow.change <= 0 ? '−' : '+'}${Math.abs(wow.change).toFixed(1)}). Goal pace: −${base.lbPerWeek} lb/week.</p>`
+        : '<p class="small muted">Log weigh-ins most mornings and next week I can compare week over week.</p>'}
+      <div class="chips" role="group" aria-label="How the week felt">
+        ${Object.entries(FEELINGS).map(([k, v]) => `<button type="button" class="chip ${draft.feeling === k ? 'on' : ''}" data-feel="${k}">${v}</button>`).join('')}
+      </div>
+      <textarea id="checkinNote" rows="2" placeholder="Anything else? (optional — sleep, stress, travel…)">${esc(draft.note)}</textarea>
+
+      <h3 class="q">${name ? `${esc(name)}, would` : 'Would'} you like to change your macros?</h3>
+      <p class="small muted">Suggested: ${esc(rec.why)}</p>
+      <div class="options">
+        ${options.map((o) => `
+          <label class="opt ${choice === o.id ? 'on' : ''}">
+            <input type="radio" name="checkinChoice" value="${o.id}" ${choice === o.id ? 'checked' : ''}>
+            <span><b>${o.label}</b>${o.id === rec.id ? ' <em class="badge">Suggested</em>' : ''}<small>${o.detail}</small></span>
+          </label>`).join('')}
+        <label class="opt ${choice === 'custom' ? 'on' : ''}">
+          <input type="radio" name="checkinChoice" value="custom" ${choice === 'custom' ? 'checked' : ''}>
+          <span><b>Custom</b><small>Set your own protein, fat and carb change</small></span>
+        </label>
+        ${choice === 'custom' ? `<div class="custom-macros">
+          ${[['p', 'Protein'], ['f', 'Fat'], ['c', 'Carbs']].map(([k, label]) => `
+            <div class="stepper"><span>${label}</span>
+              <button type="button" class="ghost small" data-step="${k}" data-by="-5" aria-label="Less ${label}">−</button>
+              <b>${sign(draft.custom[k])} g</b>
+              <button type="button" class="ghost small" data-step="${k}" data-by="5" aria-label="More ${label}">+</button>
+            </div>`).join('')}
+          <div class="small muted">${sign(deltaKcal(draft.custom))} kcal/day</div>
+        </div>` : ''}
+      </div>
+      <p class="small">New daily targets: <b>${base.kcal + deltaKcal(delta)} kcal</b> · ${after.p}P · ${after.f}F · ${after.c}C</p>
+      <div class="row">
+        <button type="button" id="saveCheckin">Save check-in</button>
+        <button type="button" class="ghost" id="snoozeCheckin">Not now</button>
+      </div>
+    </div>`;
+
+  el.querySelectorAll('[data-feel]').forEach((b) => b.onclick = () => { draft.feeling = b.dataset.feel; draft.choice = null; renderCheckin(); });
+  $('#checkinNote').oninput = (e) => { draft.note = e.target.value; };
+  el.querySelectorAll('input[name=checkinChoice]').forEach((r) => r.onchange = () => { draft.choice = r.value; renderCheckin(); });
+  el.querySelectorAll('[data-step]').forEach((b) => b.onclick = () => { draft.custom[b.dataset.step] += +b.dataset.by; renderCheckin(); });
+  $('#snoozeCheckin').onclick = () => { store.set('checkinSnooze', isoDate()); draft = null; renderCheckin(); };
+  $('#saveCheckin').onclick = () => {
+    for (const k of ['p', 'f', 'c']) state.macroAdjust[k] += delta[k] || 0;
+    store.set('macroAdjust', state.macroAdjust);
+    state.checkins.push({ date: isoDate(), feeling: draft.feeling, note: draft.note.trim(), change: choice, delta, kcal: deltaKcal(delta) });
+    store.set('checkins', state.checkins);
     store.set('adjustAppliedOn', isoDate());
+    draft = null;
     renderAll();
+    $('#checkin').innerHTML = `<div class="banner">Saved${name ? `, ${esc(name)}` : ''}. ${deltaKcal(delta) || delta.p ? 'Your new targets start now.' : 'Same targets — keep it up.'} Next check-in in a week.</div>`;
   };
 }
 
-$('#meals').addEventListener('click', (e) => {
-  const meal = e.target.closest('[data-swap]')?.dataset.swap;
-  if (!meal) return;
-  const today = isoDate();
-  const s = state.swaps[today] || {};
-  s[meal] = (s[meal] || 0) + 1;
-  // Keep only today's swaps.
-  state.swaps = { [today]: s };
-  store.set('swaps', state.swaps);
-  renderToday();
-});
+function openCheckin() {
+  draft = draft || { feeling: null, note: '', choice: null, custom: { p: 0, f: 0, c: 0 } };
+  document.querySelector('[data-tab=today]').click();
+  renderCheckin();
+  $('#checkin').scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderCheckinHistory() {
+  const list = [...state.checkins].reverse();
+  $('#checkinList').innerHTML = list.length ? list.map((c) => `
+    <li><span>${new Date(c.date + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+      <small class="muted">· ${esc(FEELINGS[c.feeling] || '—')}${c.note ? ` · ${esc(c.note)}` : ''}</small></span>
+      <span class="small">${c.change === 'keep' ? 'No change' : `${c.kcal > 0 ? '+' : c.kcal < 0 ? '−' : ''}${Math.abs(c.kcal)} kcal`}</span></li>`).join('')
+    : '<li class="muted">Your first check-in arrives a week after you start.</li>';
+}
+$('#checkinNow').onclick = openCheckin;
 
 // ---------- TRAINING ----------
 function renderTraining(t) {
@@ -373,7 +594,7 @@ $('#weighList').addEventListener('click', (e) => {
 
 // ---------- GROCERIES ----------
 function renderGroceries() {
-  const totals = groceryList(baseTargets(), new Date());
+  const totals = groceryList(baseTargets(), new Date(), 7, state.prefs);
   const byStore = {};
   for (const [food, grams] of Object.entries(totals)) {
     const s = STORES[food];
@@ -524,7 +745,7 @@ function renderProduct(code, p) {
     c: Math.round(per100.c * sq / 10) / 10,
   } : null;
   const fit = fitScore(per100);
-  const meals = planForDay(targets(), new Date(), state.swaps[isoDate()]);
+  const meals = todayPlan();
   const name = p.product_name || 'Unnamed product';
 
   const fmt = (m) => `${m.kcal} kcal · <span class="p">${m.p}P</span> · <span class="f">${m.f}F</span> · <span class="c">${m.c}C</span>`;
@@ -567,6 +788,7 @@ form.pace.innerHTML = Object.entries(PACE).map(([k, v]) => `<option value="${k}"
 
 function openProfile() {
   const p = state.profile || { sex: 'male', activity: 'tracked', pace: 'steady' };
+  $('#profileName').value = p.name ?? '';
   form.sex.value = p.sex;
   form.age.value = p.age ?? '';
   form.ft.value = p.heightIn ? Math.floor(p.heightIn / 12) : '';
@@ -584,6 +806,8 @@ form.addEventListener('submit', () => {
   const weight = parseFloat(form.weight.value);
   const isNew = !state.profile;
   state.profile = {
+    name: $('#profileName').value.trim(),
+    createdOn: state.profile?.createdOn || isoDate(),
     sex: form.sex.value,
     age: +form.age.value,
     heightIn: +form.ft.value * 12 + +form.in.value,
@@ -617,6 +841,7 @@ function renderAll() {
   if (!state.profile) return;
   renderToday();
   renderWeight();
+  renderCheckinHistory();
   renderGroceries();
 }
 

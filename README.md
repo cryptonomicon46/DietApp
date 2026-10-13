@@ -2,9 +2,10 @@
 
 A simple, phone-friendly diet app for sustainable weight loss.
 
-- **Today** – daily calories and protein / fat / carb targets, split into breakfast, lunch and dinner with exact portion sizes (grams + oz / cups / slices / scoops). Oats are weighed dry; meat, fish, eggs, rice and veggies are weighed cooked. The grocery list converts back to raw amounts to buy. Tap **Swap** to rotate a meal.
+- **Today** – daily calories and protein / fat / carb targets, split into breakfast, lunch and dinner with exact portion sizes (grams + oz / cups / slices / scoops). Oats are weighed dry; meat, fish, eggs, rice and veggies are weighed cooked. The grocery list converts back to raw amounts to buy. Every item has a swap menu and a portion slider: pick almond butter instead of peanut butter, butter instead of avocado, steak / chicken thigh (dark) / breast (white) / ground beef / fish, sweet potato instead of rice, and drag a slider to set an amount yourself; the rest of the meal re-balances to stay on target. Swaps (except the day's protein) are remembered.
   - Breakfast: eggs + sourdough + avocado, or oatmeal + whey protein
   - Lunch & dinner: chicken, 95/5 beef, salmon, cod or trout with rice and veggies
+- **Weekly check-in** – once a week the app greets you by name, asks how the week went (great / okay / hungry / low energy / hard to stick to), shows your week-over-week weight change, and offers macro changes (−100, −200, +100, +200 kcal, more protein, more carbs, or a custom P/F/C change) with one suggested from your trend and feedback.
 - **Weight** – log weigh-ins, see a 7-day-average trend chart. After 2 weeks of data it suggests a ±100 kcal tweak if you're losing slower or faster than planned.
 - **Groceries** – a weekly list built from your plan, grouped by Costco / Sprouts / Safeway, with checkboxes.
 - **Training** (on Today) – workouts from **WHOOP** and **Garmin** (or a session you plan) add calories back as carbs. Planned cardio of 45+ minutes gets an **intra-workout carb** target (e.g. ~60 g/h for a 2-hour hard session) with banana / sports drink / gel / date options, taken out of your meals.
