@@ -113,3 +113,26 @@ test('WHOOP workouts.csv import tolerates column naming', () => {
   assert.deepEqual([v.name, v.minutes, v.kcal], ['Weightlifting', 60, 400]);
   assert.throws(() => parseWhoopCsv('a,b\n1,2\n'));
 });
+
+test('sport picker: personal burn rates from WHOOP history, MET fallback', async () => {
+  const { sportOf, sportStats, estimateActivity, sessionType } = await import('../js/activity.js');
+  assert.equal(sportOf('Rock Climbing'), 'climbing');
+  assert.equal(sportOf('Cycling'), 'cycling');
+  assert.equal(sportOf('Weightlifting'), 'weightlifting');
+  assert.equal(sportOf('Running'), 'running');
+  const hist = [
+    { name: 'Rock Climbing', minutes: 90, kcal: 630 },
+    { name: 'Rock Climbing', minutes: 120, kcal: 780 },
+    { name: 'Rock Climbing', minutes: 60, kcal: 450 },
+    { name: 'Cycling', minutes: 60, kcal: 700 },
+  ];
+  const st = sportStats(hist);
+  assert.equal(st.climbing.sessions, 3);
+  assert.equal(st.climbing.kcalPerMin, 7);
+  const climb = estimateActivity('climbing', 100, 'moderate', { weightKg: 73, stats: st });
+  assert.deepEqual([climb.kcal, climb.personal], [700, true]);
+  const ride = estimateActivity('cycling', 60, 'moderate', { weightKg: 73, stats: st });
+  assert.deepEqual([ride.kcal, ride.personal], [584, false], 'only 1 ride → MET estimate');
+  assert.equal(sessionType('cycling', 'hard'), 'hard');
+  assert.equal(sessionType('climbing', 'hard'), 'strength');
+});

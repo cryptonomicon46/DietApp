@@ -4,7 +4,10 @@ import {
   weeklyTrend, suggestAdjustment, fitScore,
   FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek,
 } from './plan.js';
-import { SESSION_TYPES, trainingDay, applyTraining, parseGarminCsv, parseWhoopCsv } from './activity.js';
+import {
+  SESSION_TYPES, SPORTS, INTENSITY, trainingDay, applyTraining, parseGarminCsv, parseWhoopCsv,
+  sportStats, estimateActivity, sessionType,
+} from './activity.js';
 import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
 import { initLift, renderLift } from './lift.js';
@@ -30,6 +33,7 @@ const state = {
   eaten: store.get('eaten', {}),       // today's log: {date, meals: {breakfast: {kcal,p,f,c,title}}, fuel, extras: []}
   checked: store.get('checked', {}),   // grocery checkboxes
   workouts: store.get('workouts', []), // synced/imported workouts, last 14 days
+  history: store.get('workoutHistory', []), // every imported workout (compact) → personal burn rates
   // Activities you add yourself: [{id, date, type, minutes}] (older single 'planned' entry migrated).
   activities: store.get('activities', null) ?? (store.get('planned', null) ? [{ id: 'p1', ...store.get('planned', null) }] : []),
 };
@@ -481,10 +485,13 @@ function renderTraining(t) {
   const today = isoDate();
   const connected = ['whoop', 'strava'].filter((p) => devices.get()[p]);
   const short = (type) => SESSION_TYPES[type]?.label.split(' (')[0] || '';
+  const stats = sportStats(state.history);
+  const mySports = Object.entries(stats).sort((a, b) => b[1].sessions - a[1].sessions);
+  const weightKg = currentWeight() / 2.20462;
 
   const sessions = day.sessions.map((w) => `
-    <li><span class="cap">${esc(w.source === 'added' ? short(w.type) : w.name)}<small class="muted"> · ${esc(w.source === 'added' ? 'added by you' : w.source)}</small></span>
-    <span class="amt">${w.minutes} min<small>${w.kcal ? `${w.kcal} kcal` : 'estimated'}${w.strain != null ? ` · strain ${w.strain.toFixed(1)}` : ''}</small></span>
+    <li><span class="cap">${esc(w.source === 'added' ? (SPORTS[w.sport]?.name || short(w.type)) : w.name)}<small class="muted"> · ${esc(w.source === 'added' ? `${INTENSITY[w.intensity]?.label.toLowerCase() || 'added'} · added by you` : w.source)}</small></span>
+    <span class="amt">${w.minutes} min<small>${w.kcal ? `${w.source === 'added' ? '≈ ' : ''}${w.kcal} kcal` : 'estimated'}${w.strain != null ? ` · strain ${w.strain.toFixed(1)}` : ''}</small></span>
     ${w.source === 'added' ? `<button class="x" data-rmact="${w.id}" aria-label="Remove activity">✕</button>` : ''}</li>`).join('');
   const hidden = state.activities.filter((a) => a.date === today).length - day.sessions.filter((w) => w.source === 'added').length;
 
@@ -498,7 +505,7 @@ function renderTraining(t) {
     <div class="banner fuel">
       <b>Intra-workout fuel: ~${t.intraC} g carbs</b> today.
       ${day.fuel.map((f) => `
-        <div class="fuel-item"><b class="small">${f.session.minutes}-min ${short(f.session.type).toLowerCase()}: ~${f.grams} g</b>
+        <div class="fuel-item"><b class="small">${f.session.minutes}-min ${(SPORTS[f.session.sport]?.name || short(f.session.type)).toLowerCase()}${f.session.intensity === 'hard' ? ' (hard)' : ''}: ~${f.grams} g</b>
         <div class="small muted">${esc(f.note)}${f.mixed ? ' Above 60 g/h, mix glucose + fructose sources (sports drink + fruit) so your gut can absorb it.' : ''}</div>
         <div class="small">e.g. ${f.options.slice(0, 3).map((o) => esc(o.label)).join(' · ')}</div></div>`).join('')}
       <div class="small muted">These carbs are already taken out of your meals below.</div>
@@ -520,13 +527,18 @@ function renderTraining(t) {
       ${hidden > 0 ? `<p class="small muted">${hidden} activit${hidden === 1 ? 'y you added was' : 'ies you added were'} matched to synced workouts, so ${hidden === 1 ? 'it isn\'t' : 'they aren\'t'} counted twice.</p>` : ''}
       ${extra}
       ${intra}
-      <form id="planForm" class="row">
-        <select id="planType" aria-label="Activity type">
+      <form id="planForm" class="add-activity">
+        <select id="planSport" aria-label="Activity">
           <option value="">Add an activity…</option>
-          ${Object.entries(SESSION_TYPES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}
+          ${mySports.length ? `<optgroup label="Your sports (from WHOOP / Garmin)">${mySports.map(([k, st]) => `<option value="${k}">${SPORTS[k].name} · ${st.sessions} sessions</option>`).join('')}</optgroup>` : ''}
+          <optgroup label="${mySports.length ? 'Other activities' : 'Activities'}">${Object.keys(SPORTS).filter((k) => !stats[k]).map((k) => `<option value="${k}">${SPORTS[k].name}</option>`).join('')}</optgroup>
         </select>
-        <input id="planMin" type="number" min="5" max="600" step="5" inputmode="numeric" placeholder="min" style="flex:0 0 80px">
-        <button type="submit" class="small">Add</button>
+        <div class="row" style="margin-top:0">
+          <select id="planIntensity" aria-label="Intensity">${Object.entries(INTENSITY).map(([k, v]) => `<option value="${k}" ${k === 'moderate' ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
+          <input id="planMin" type="number" min="5" max="600" step="5" inputmode="numeric" placeholder="min" style="flex:0 0 80px" aria-label="Minutes">
+          <button type="submit" class="small">Add</button>
+        </div>
+        <p class="small muted" id="planEstimate"></p>
       </form>
       <p class="small muted" id="syncStatus">${connected.length
         ? `Connected: ${connected.map((c) => (c === 'strava' ? 'Garmin (Strava)' : 'WHOOP')).join(', ')}. Add planned sessions here to get fuel advice — they're replaced by the synced workout once it arrives.`
@@ -545,21 +557,47 @@ function renderTraining(t) {
     store.set('activities', state.activities);
     renderAll();
   });
+  const showEstimate = () => {
+    const sport = $('#planSport').value;
+    const minutes = parseInt($('#planMin').value, 10);
+    if (!sport || !minutes) { $('#planEstimate').textContent = sport ? 'Enter minutes to see the estimate.' : ''; return; }
+    const est = estimateActivity(sport, minutes, $('#planIntensity').value, { weightKg, stats });
+    const st = stats[sport];
+    $('#planEstimate').innerHTML = `≈ <b>${est.kcal} kcal</b> burned, based on ${esc(est.basis)}${st?.strain != null && st.sessions >= 3 ? ` (typical strain ${st.strain})` : ''}.`;
+  };
+  $('#planSport').onchange = () => {
+    const st = stats[$('#planSport').value];
+    if ($('#planSport').value && !$('#planMin').value) $('#planMin').value = st?.typicalMin || 60;
+    showEstimate();
+  };
+  $('#planIntensity').onchange = showEstimate;
+  $('#planMin').oninput = showEstimate;
   $('#planForm').onsubmit = (e) => {
     e.preventDefault();
-    const type = $('#planType').value;
+    const sport = $('#planSport').value;
+    const intensity = $('#planIntensity').value;
     const minutes = parseInt($('#planMin').value, 10);
-    if (!type || !minutes) return;
+    if (!sport || !minutes) return;
+    const est = estimateActivity(sport, minutes, intensity, { weightKg, stats });
     // Keep two weeks of history.
     const cutoff = isoDate(new Date(Date.now() - 14 * DAY));
     state.activities = state.activities.filter((a) => a.date >= cutoff)
-      .concat({ id: `a${Date.now()}`, date: today, type, minutes });
+      .concat({ id: `a${Date.now()}`, date: today, sport, intensity, minutes, type: sessionType(sport, intensity), kcal: est.kcal });
     store.set('activities', state.activities);
     renderAll();
   };
 }
 
+// Keep a compact copy of every imported workout to learn your burn rate per sport.
+function addHistory(list) {
+  const byId = new Map(state.history.map((w) => [w.id, w]));
+  for (const w of list) byId.set(w.id, { id: w.id, name: w.name, start: w.start, minutes: w.minutes, kcal: w.kcal, strain: w.strain ?? null });
+  state.history = [...byId.values()];
+  store.set('workoutHistory', state.history);
+}
+
 function mergeWorkouts(list) {
+  addHistory(list);
   const cutoff = Date.now() - 14 * 86400000;
   const byId = new Map(state.workouts.map((w) => [w.id, w]));
   for (const w of list) byId.set(w.id, w);
@@ -610,8 +648,10 @@ $('#whoopCsv').onchange = async (e) => {
   try {
     const list = parseWhoopCsv(await file.text());
     mergeWorkouts(list);
-    const recent = list.filter((w) => Date.now() - new Date(w.start).getTime() < 14 * 86400000).length;
-    $('#whoopCsvStatus').textContent = `Imported ${recent} workout${recent === 1 ? '' : 's'} from the last 2 weeks.`;
+    const st = sportStats(list);
+    const top = Object.entries(st).sort((a, b) => b[1].sessions - a[1].sessions).slice(0, 4)
+      .map(([k, v]) => `${SPORTS[k].name} ${Math.round(v.kcalPerMin * 60)} kcal/h`).join(' · ');
+    $('#whoopCsvStatus').textContent = `Read ${list.length} workouts. Your burn rates: ${top || 'no matching sports found'}.`;
     renderAll();
   } catch (err) {
     $('#whoopCsvStatus').textContent = err.message;

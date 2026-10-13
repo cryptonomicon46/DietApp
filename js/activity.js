@@ -13,6 +13,69 @@ export const SESSION_TYPES = {
   hard:     { label: 'Hard cardio (intervals, tempo, long ride)', met: 10.0, cardio: true },
 };
 
+// Activities you can add. MET at a moderate effort from the 2011 Compendium of Physical
+// Activities (Ainsworth et al.); `fuel` = endurance work that can need intra-workout carbs.
+// `match` maps WHOOP / Garmin activity names to the sport.
+export const SPORTS = {
+  running:       { name: 'Running',          met: 9.8, fuel: true,  match: /run|jog|track/i },
+  cycling:       { name: 'Cycling',          met: 8.0, fuel: true,  match: /cycl|bike|biking|spin|peloton|ride/i },
+  climbing:      { name: 'Rock climbing',    met: 7.5, fuel: false, match: /climb|boulder/i },
+  weightlifting: { name: 'Weight lifting',   met: 5.0, fuel: false, match: /weight|strength|lift|powerlift|bodybuild|functional/i },
+  hiit:          { name: 'HIIT / circuits',  met: 8.0, fuel: false, match: /hiit|circuit|crossfit|interval|bootcamp/i },
+  swimming:      { name: 'Swimming',         met: 5.8, fuel: true,  match: /swim/i },
+  rowing:        { name: 'Rowing',           met: 7.0, fuel: true,  match: /row(ing|er)?\b/i },
+  hiking:        { name: 'Hiking',           met: 6.0, fuel: true,  match: /hik|rucking|ruck/i },
+  walking:       { name: 'Walking',          met: 3.5, fuel: false, match: /walk/i },
+  elliptical:    { name: 'Elliptical',       met: 5.0, fuel: true,  match: /ellip|stair|stepper/i },
+  tennis:        { name: 'Tennis',           met: 7.3, fuel: false, match: /tennis|pickleball|squash|padel|racquet/i },
+  basketball:    { name: 'Basketball',       met: 6.5, fuel: false, match: /basketball/i },
+  soccer:        { name: 'Soccer',           met: 7.0, fuel: true,  match: /soccer|football/i },
+  skiing:        { name: 'Skiing / snowboarding', met: 5.3, fuel: false, match: /ski|snowboard/i },
+  yoga:          { name: 'Yoga',             met: 2.5, fuel: false, match: /yoga|stretch|mobility/i },
+  pilates:       { name: 'Pilates',          met: 3.0, fuel: false, match: /pilates|barre/i },
+};
+
+export const INTENSITY = { easy: { label: 'Easy', factor: 0.8 }, moderate: { label: 'Moderate', factor: 1 }, hard: { label: 'Hard', factor: 1.2 } };
+
+export function sportOf(name = '') {
+  return Object.keys(SPORTS).find((k) => SPORTS[k].match.test(name)) || null;
+}
+
+// Your personal burn rate per sport, from every workout you've imported (WHOOP export,
+// Garmin CSV or sync). Median kcal/min resists the odd mis-tracked session.
+export function sportStats(history) {
+  const by = {};
+  for (const w of history) {
+    const k = sportOf(w.name);
+    if (!k || !w.kcal || !w.minutes || w.minutes < 5) continue;
+    (by[k] ||= []).push(w);
+  }
+  const median = (xs) => { const a = [...xs].sort((x, y) => x - y); const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+  return Object.fromEntries(Object.entries(by).map(([k, ws]) => [k, {
+    sessions: ws.length,
+    kcalPerMin: +median(ws.map((w) => w.kcal / w.minutes)).toFixed(2),
+    typicalMin: Math.round(median(ws.map((w) => w.minutes)) / 5) * 5,
+    strain: ws.some((w) => w.strain != null) ? +median(ws.filter((w) => w.strain != null).map((w) => w.strain)).toFixed(1) : null,
+  }]));
+}
+
+// Estimated calories for an activity you add: your own history when there are at least
+// 3 sessions of that sport, otherwise the Compendium MET value.
+export function estimateActivity(sport, minutes, intensity, { weightKg, stats = {} }) {
+  const f = INTENSITY[intensity]?.factor ?? 1;
+  const mine = stats[sport];
+  if (mine && mine.sessions >= 3) {
+    return { kcal: Math.round(mine.kcalPerMin * minutes * f), basis: `your ${mine.sessions} ${SPORTS[sport].name.toLowerCase()} sessions`, personal: true };
+  }
+  return { kcal: Math.round(SPORTS[sport].met * f * weightKg * (minutes / 60)), basis: 'typical values for your weight', personal: false };
+}
+
+// Session type used for fuel and day labels.
+export function sessionType(sport, intensity) {
+  if (!SPORTS[sport]?.fuel) return 'strength';
+  return intensity === 'hard' ? 'hard' : intensity === 'easy' ? 'easy' : 'moderate';
+}
+
 const STRENGTH_WORDS = /weight|strength|lift|functional|crossfit|powerlift|bodybuild|hiit strength|pilates|yoga|core/i;
 
 // Intensity of a workout from what the wearable gives us.
