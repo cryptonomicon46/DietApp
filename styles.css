@@ -131,7 +131,7 @@ label > input, label > select { margin-top: 4px; }
 
 .tabs {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 3;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   background: var(--card); border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -187,3 +187,23 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
 .stepper { display: grid; grid-template-columns: 1fr auto 70px auto; align-items: center; gap: 8px; }
 .stepper b { text-align: center; font-variant-numeric: tabular-nums; }
 .linkish { background: none; color: var(--brand); padding: 0; font-weight: 600; text-decoration: underline; }
+
+/* lifting */
+.weeks { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 10px 0 4px; }
+.wk { text-align: center; padding: 6px 0; border-radius: 8px; background: var(--bg); color: var(--muted); font-weight: 600; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.wk.past { color: var(--ink); }
+.wk.on { background: var(--brand); color: var(--brand-ink); }
+.wk.deload { border: 1px dashed var(--line); }
+label.inline { display: flex; align-items: center; gap: 6px; margin: 0; flex: 1 1 120px; }
+label.inline select { margin: 0; }
+.lift { border-top: 1px solid var(--line); padding: 12px 0; display: grid; gap: 6px; }
+.lift select { font-weight: 600; }
+.target { font-size: .9rem; }
+.sets { display: grid; gap: 6px; margin-top: 2px; }
+.setrow { display: grid; grid-template-columns: 44px 1fr auto 1fr 40px; align-items: center; gap: 6px; }
+.setrow input { padding: 8px; text-align: center; font-variant-numeric: tabular-nums; }
+.setrow.done input { border-color: var(--brand); }
+.tick { background: var(--bg); color: var(--brand); border: 1px solid var(--line); padding: 6px 0; font-size: 1rem; }
+.setrow.done .tick { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+#libraryList li span small { display: block; }
+#libraryList li > span:last-child { text-align: right; }

@@ -7,6 +7,7 @@ A simple, phone-friendly diet app for sustainable weight loss.
   - Lunch & dinner: chicken, 95/5 beef, salmon, cod or trout with rice and veggies
 - **Weekly check-in** – once a week the app greets you by name, asks how the week went (great / okay / hungry / low energy / hard to stick to), shows your week-over-week weight change, and offers macro changes (−100, −200, +100, +200 kcal, more protein, more carbs, or a custom P/F/C change) with one suggested from your trend and feedback.
 - **Weight** – log weigh-ins, see a 7-day-average trend chart. After 2 weeks of data it suggests a ±100 kcal tweak if you're losing slower or faster than planned.
+- **Lift** – a full-body program 3 days a week (A heavy · B moderate · C light) with a 54-exercise library across 10 muscle groups. Pick any exercise for a slot; the app sets sets × reps, reps-in-reserve and rest, and suggests your next weight from your last session. Weeks 1–5 build volume and effort, week 6 is a deload, then a new block starts.
 - **Groceries** – a weekly list built from your plan, grouped by Costco / Sprouts / Safeway, with checkboxes.
 - **Training** (on Today) – workouts from **WHOOP** and **Garmin** (or a session you plan) add calories back as carbs. Planned cardio of 45+ minutes gets an **intra-workout carb** target (e.g. ~60 g/h for a 2-hour hard session) with banana / sports drink / gel / date options, taken out of your meals.
 - **Science** – every number links to the peer-reviewed paper it comes from.
@@ -34,6 +35,19 @@ A simple, phone-friendly diet app for sustainable weight loss.
 | Intra-workout carbs | Jeukendrup 2014, *Sports Med* 44(S1):S25 — [doi](https://doi.org/10.1007/s40279-014-0148-z) |
 | Wearable calorie error 27–93% | Shcherbina et al. 2017, *J Pers Med* 7:3 — [doi](https://doi.org/10.3390/jpm7020003) |
 | MET values for planned sessions | Ainsworth et al. 2011, *Med Sci Sports Exerc* 43:1575 — [doi](https://doi.org/10.1249/MSS.0b013e31821ece12) |
+
+### Training sources
+
+| Setting | Paper |
+|---|---|
+| Each muscle ~3×/week | Schoenfeld, Ogborn & Krieger 2016, *Sports Med* 46:1689 — [doi](https://doi.org/10.1007/s40279-016-0543-8) |
+| ~10+ weekly sets per muscle, rising | Schoenfeld, Ogborn & Krieger 2017, *J Sports Sci* 35:1073 — [doi](https://doi.org/10.1080/02640414.2016.1210197) |
+| Heavy / moderate / light days | Schoenfeld et al. 2017, *JSCR* 31:3508 — [doi](https://doi.org/10.1519/JSC.0000000000002200) |
+| Reps in reserve | Helms et al. 2016, *Strength Cond J* 38(4):42 — [doi](https://doi.org/10.1519/SSC.0000000000000218) |
+| Failure not required | Refalo et al. 2023, *Sports Med* 53:649 — [doi](https://doi.org/10.1007/s40279-022-01784-y) |
+| Progressive overload | ACSM 2009 position stand, *MSSE* 41:687 — [doi](https://doi.org/10.1249/MSS.0b013e3181915670) |
+| Rest 2–3 min on compounds | Schoenfeld et al. 2016, *JSCR* 30:1805 |
+| Deload week | Bell et al. 2023, *Sports Med Open* 9:87 — [doi](https://doi.org/10.1186/s40798-023-00633-0) |
 
 ## WHOOP & Garmin
 

@@ -7,6 +7,7 @@ import {
 import { SESSION_TYPES, trainingDay, applyTraining, parseGarminCsv } from './activity.js';
 import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
+import { initLift, renderLift } from './lift.js';
 
 // ---------- storage ----------
 const store = {
@@ -511,9 +512,11 @@ $('#garminCsv').onchange = async (e) => {
 
 // ---------- SCIENCE ----------
 $('#openScience').onclick = () => {
-  $('#scienceList').innerHTML = RESEARCH.map((r) => `
+  const item = (r) => `
     <li><b>${esc(r.topic)}</b><div class="small">${esc(r.used)}</div>
-    <div class="small muted"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.cite)}</a></div></li>`).join('');
+    <div class="small muted"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.cite)}</a></div></li>`;
+  $('#scienceList').innerHTML = [['nutrition', 'Nutrition'], ['training', 'Training']].map(([area, title]) =>
+    `<li class="science-head"><h3>${title}</h3></li>${RESEARCH.filter((r) => (r.area || 'nutrition') === area).map(item).join('')}`).join('');
   $('#scienceDialog').showModal();
 };
 
@@ -833,6 +836,7 @@ document.querySelectorAll('.tabs button').forEach((btn) => {
     document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${btn.dataset.tab}`));
     if (btn.dataset.tab !== 'scan') stopScan();
+    if (btn.dataset.tab === 'lift') renderLift();
     window.scrollTo(0, 0);
   };
 });
@@ -845,6 +849,7 @@ function renderAll() {
   renderGroceries();
 }
 
+initLift();
 $('#weighDate').value = isoDate();
 const justConnected = devices.takeRedirect();
 if (state.profile) renderAll();
