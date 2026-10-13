@@ -13,7 +13,10 @@
 <body>
   <header class="top">
     <h1>Lean Plate</h1>
-    <button id="openProfile" class="ghost" aria-label="Edit profile">⚙︎ Profile</button>
+    <div class="row" style="margin-top:0">
+      <button id="openScience" class="ghost small" aria-label="The science">ⓘ Science</button>
+      <button id="openProfile" class="ghost small" aria-label="Edit profile">⚙︎ Profile</button>
+    </div>
   </header>
 
   <main>
@@ -30,6 +33,7 @@
         <div class="macros" id="todayMacros"></div>
         <div id="adjustBanner"></div>
       </div>
+      <div id="training"></div>
       <div id="meals"></div>
     </section>
 
@@ -118,6 +122,34 @@
       <div class="row end">
         <button type="submit">Save</button>
       </div>
+    </form>
+  </dialog>
+
+  <!-- DEVICES -->
+  <dialog id="devicesDialog">
+    <form method="dialog">
+      <h2>Devices</h2>
+      <p class="muted small">Workouts from WHOOP and Garmin adjust today's calories and carbs.</p>
+      <label>Connector URL
+        <input id="serverUrl" type="url" placeholder="https://lean-plate-connect.you.workers.dev">
+      </label>
+      <p class="muted small">One-time setup — see <code>server/README.md</code>. Needed for WHOOP and Garmin auto-sync.</p>
+      <div class="device"><div><b>WHOOP</b><div class="small muted" id="whoopStatus"></div></div><button type="button" class="ghost small" id="whoopConnect">Connect</button></div>
+      <div class="device"><div><b>Garmin</b> <span class="small muted">via Strava auto-sync</span><div class="small muted" id="stravaStatus"></div></div><button type="button" class="ghost small" id="stravaConnect">Connect</button></div>
+      <div class="device"><div><b>Garmin CSV</b><div class="small muted">Garmin Connect → Activities → Export CSV. No setup needed.</div><div class="small" id="csvStatus"></div></div>
+        <label class="filebtn ghost small">Import<input id="garminCsv" type="file" accept=".csv,text/csv" hidden></label></div>
+      <div class="row end"><button>Done</button></div>
+    </form>
+  </dialog>
+
+  <!-- SCIENCE -->
+  <dialog id="scienceDialog">
+    <form method="dialog">
+      <h2>The science behind your numbers</h2>
+      <p class="muted small">Peer-reviewed sources used for each setting.</p>
+      <ul class="list science" id="scienceList"></ul>
+      <p class="muted small">General guidance, not medical advice.</p>
+      <div class="row end"><button>Close</button></div>
     </form>
   </dialog>
 

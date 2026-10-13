@@ -3,6 +3,9 @@ import {
   ACTIVITY, PACE, dailyTargets, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
 } from './plan.js';
+import { SESSION_TYPES, trainingDay, applyTraining, parseGarminCsv } from './activity.js';
+import { devices } from './devices.js';
+import { RESEARCH } from './research.js';
 
 // ---------- storage ----------
 const store = {
@@ -20,6 +23,8 @@ const state = {
   adjust: store.get('adjust', 0),      // kcal tweak from check-ins
   swaps: store.get('swaps', {}),       // {date: {breakfast, lunch, dinner}}
   checked: store.get('checked', {}),   // grocery checkboxes
+  workouts: store.get('workouts', []), // synced/imported workouts, last 14 days
+  planned: store.get('planned', null), // {date, type, minutes}
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -34,8 +39,25 @@ function currentWeight() {
   return last ? last.weight : state.profile.weight;
 }
 
-function targets() {
+function baseTargets() {
   return dailyTargets(state.profile, currentWeight(), state.adjust);
+}
+
+function todaysTraining() {
+  const base = baseTargets();
+  const today = isoDate();
+  const workouts = state.workouts.filter((w) => isoDate(new Date(w.start)) === today);
+  const planned = state.planned?.date === today ? state.planned : null;
+  return trainingDay(workouts, planned, {
+    bmr: base.bmr,
+    weightKg: currentWeight() / 2.20462,
+    tracked: !!ACTIVITY[state.profile.activity].tracked,
+  });
+}
+
+// Today's targets, including workout calories and intra-workout carbs.
+function targets() {
+  return applyTraining(baseTargets(), todaysTraining());
 }
 
 // ---------- formatting ----------
@@ -77,6 +99,7 @@ function renderToday() {
   ].map(([k, label, g]) => `<div class="macro ${k}"><b>${g} g</b><span>${label}</span></div>`).join('');
 
   renderAdjustBanner(t);
+  renderTraining(t);
 
   const plan = planForDay(t, new Date(), state.swaps[today]);
   $('#meals').innerHTML = ['breakfast', 'lunch', 'dinner'].map((meal) => {
@@ -141,6 +164,137 @@ $('#meals').addEventListener('click', (e) => {
   store.set('swaps', state.swaps);
   renderToday();
 });
+
+// ---------- TRAINING ----------
+function renderTraining(t) {
+  const day = todaysTraining();
+  const tracked = ACTIVITY[state.profile.activity].tracked;
+  const today = isoDate();
+  const planned = state.planned?.date === today ? state.planned : null;
+  const connected = ['whoop', 'strava'].filter((p) => devices.get()[p]);
+
+  const sessions = day.sessions.map((w) => `
+    <li><span class="cap">${esc(w.name || SESSION_TYPES[w.type]?.label)}<small class="muted"> · ${esc(w.source === 'planned' ? 'planned' : w.source)}</small></span>
+    <span class="amt">${w.minutes} min<small>${w.kcal ? `${w.kcal} kcal` : SESSION_TYPES[w.type]?.label.split(' (')[0] || ''}${w.strain != null ? ` · strain ${w.strain.toFixed(1)}` : ''}</small></span></li>`).join('');
+
+  const extra = day.extraKcal
+    ? `<p class="small">+${day.extraKcal} kcal added back as carbs for today's training (75% of the estimated net burn, since calorie estimates tend to run high).</p>`
+    : !tracked && day.sessions.length
+      ? `<p class="small muted">Your profile's activity level already includes exercise. Choose “Count my workouts” in Profile to adjust calories per day.</p>`
+      : '';
+
+  const intra = day.intra && t.intraC ? `
+    <div class="banner fuel">
+      <b>Intra-workout fuel: ~${t.intraC} g carbs</b> during your ${planned.minutes}-min ${SESSION_TYPES[planned.type].label.split(' (')[0].toLowerCase()}.
+      <div class="small muted">${esc(day.intra.note)}${day.intra.mixed ? ' Above 60 g/h, mix glucose + fructose sources (sports drink + fruit) so your gut can absorb it.' : ''}</div>
+      <ul class="small fuel-list">${day.intra.options.slice(0, 4).map((o) => `<li>${esc(o.label)}</li>`).join('')}</ul>
+      <div class="small muted">These carbs are already taken out of your meals below.</div>
+    </div>` : '';
+
+  $('#training').innerHTML = `
+    <div class="card">
+      <div class="row between" style="margin-top:0">
+        <div><div class="eyebrow">Training</div><h3>${day.label}</h3></div>
+        <div class="row" style="margin-top:0">
+          ${connected.length ? '<button class="ghost small" id="syncNow">⟳ Sync</button>' : ''}
+          <button class="ghost small" id="openDevices">Devices</button>
+        </div>
+      </div>
+      ${sessions ? `<ul class="portions">${sessions}</ul>` : ''}
+      ${extra}
+      ${intra}
+      <form id="planForm" class="row">
+        <select id="planType" aria-label="Planned session">
+          <option value="">Plan a session…</option>
+          ${Object.entries(SESSION_TYPES).map(([k, v]) => `<option value="${k}" ${planned?.type === k ? 'selected' : ''}>${v.label}</option>`).join('')}
+        </select>
+        <input id="planMin" type="number" min="10" max="600" step="5" inputmode="numeric" placeholder="min" value="${planned?.minutes ?? ''}" style="flex:0 0 80px">
+        <button type="submit" class="small">${planned ? 'Update' : 'Add'}</button>
+        ${planned ? '<button type="button" class="ghost small" id="clearPlan">Clear</button>' : ''}
+      </form>
+      <p class="small muted" id="syncStatus">${connected.length ? `Connected: ${connected.map((c) => (c === 'strava' ? 'Garmin (Strava)' : 'WHOOP')).join(', ')}` : 'Plan today\'s session, or connect WHOOP / Garmin under Devices.'}</p>
+    </div>`;
+
+  $('#openDevices').onclick = openDevices;
+  if ($('#syncNow')) $('#syncNow').onclick = () => syncDevices(true);
+  if ($('#clearPlan')) $('#clearPlan').onclick = () => { state.planned = null; store.set('planned', null); renderAll(); };
+  $('#planForm').onsubmit = (e) => {
+    e.preventDefault();
+    const type = $('#planType').value;
+    const minutes = parseInt($('#planMin').value, 10);
+    if (!type || !minutes) return;
+    state.planned = { date: today, type, minutes };
+    store.set('planned', state.planned);
+    renderAll();
+  };
+}
+
+function mergeWorkouts(list) {
+  const cutoff = Date.now() - 14 * 86400000;
+  const byId = new Map(state.workouts.map((w) => [w.id, w]));
+  for (const w of list) byId.set(w.id, w);
+  state.workouts = [...byId.values()].filter((w) => new Date(w.start).getTime() > cutoff)
+    .sort((a, b) => a.start.localeCompare(b.start));
+  store.set('workouts', state.workouts);
+}
+
+async function syncDevices(manual = false) {
+  const d = devices.get();
+  if (!d.server || (!d.whoop && !d.strava)) return;
+  const status = $('#syncStatus');
+  if (manual && status) status.textContent = 'Syncing…';
+  const start = new Date(); start.setDate(start.getDate() - 2); start.setHours(0, 0, 0, 0);
+  const { workouts, errors } = await devices.sync(start);
+  mergeWorkouts(workouts);
+  store.set('lastSync', Date.now());
+  renderAll();
+  if (errors.length) $('#syncStatus').textContent = `Sync problem — ${errors.join('; ')}`;
+}
+
+// ---------- DEVICES ----------
+const devDialog = $('#devicesDialog');
+function openDevices() {
+  const d = devices.get();
+  $('#serverUrl').value = d.server || '';
+  for (const p of ['whoop', 'strava']) {
+    $(`#${p}Status`).textContent = d[p] ? 'Connected' : 'Not connected';
+    $(`#${p}Connect`).textContent = d[p] ? 'Disconnect' : 'Connect';
+  }
+  $('#csvStatus').textContent = '';
+  devDialog.showModal();
+}
+for (const p of ['whoop', 'strava']) {
+  $(`#${p}Connect`).onclick = () => {
+    if (devices.get()[p]) { devices.disconnect(p); openDevices(); renderAll(); return; }
+    const url = $('#serverUrl').value.trim();
+    if (!/^https:\/\//.test(url)) { $(`#${p}Status`).textContent = 'Add your connector URL first (see server/README.md).'; return; }
+    devices.setServer(url);
+    location.href = devices.connectUrl(p);
+  };
+}
+$('#serverUrl').onchange = (e) => devices.setServer(e.target.value.trim());
+$('#garminCsv').onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const list = parseGarminCsv(await file.text());
+    mergeWorkouts(list);
+    const recent = list.filter((w) => Date.now() - new Date(w.start).getTime() < 14 * 86400000).length;
+    $('#csvStatus').textContent = `Imported ${recent} recent activit${recent === 1 ? 'y' : 'ies'}.`;
+    renderAll();
+  } catch (err) {
+    $('#csvStatus').textContent = err.message;
+  }
+  e.target.value = '';
+};
+
+// ---------- SCIENCE ----------
+$('#openScience').onclick = () => {
+  $('#scienceList').innerHTML = RESEARCH.map((r) => `
+    <li><b>${esc(r.topic)}</b><div class="small">${esc(r.used)}</div>
+    <div class="small muted"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.cite)}</a></div></li>`).join('');
+  $('#scienceDialog').showModal();
+};
 
 // ---------- WEIGHT ----------
 function renderWeight() {
@@ -219,7 +373,7 @@ $('#weighList').addEventListener('click', (e) => {
 
 // ---------- GROCERIES ----------
 function renderGroceries() {
-  const totals = groceryList(targets(), new Date());
+  const totals = groceryList(baseTargets(), new Date());
   const byStore = {};
   for (const [food, grams] of Object.entries(totals)) {
     const s = STORES[food];
@@ -412,7 +566,7 @@ form.activity.innerHTML = Object.entries(ACTIVITY).map(([k, v]) => `<option valu
 form.pace.innerHTML = Object.entries(PACE).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
 
 function openProfile() {
-  const p = state.profile || { sex: 'male', activity: 'light', pace: 'steady' };
+  const p = state.profile || { sex: 'male', activity: 'tracked', pace: 'steady' };
   form.sex.value = p.sex;
   form.age.value = p.age ?? '';
   form.ft.value = p.heightIn ? Math.floor(p.heightIn / 12) : '';
@@ -467,8 +621,11 @@ function renderAll() {
 }
 
 $('#weighDate').value = isoDate();
+const justConnected = devices.takeRedirect();
 if (state.profile) renderAll();
 else openProfile();
+// Pull workouts on open (at most every 10 min) and right after connecting.
+if (justConnected || Date.now() - store.get('lastSync', 0) > 10 * 60000) syncDevices();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});

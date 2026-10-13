@@ -3,14 +3,18 @@ import { FOODS, BREAKFASTS, PROTEINS, mainMeal } from './foods.js';
 export const LB_PER_KG = 2.20462;
 const KCAL_PER_LB_FAT = 3500;
 
+// `tracked` covers everyday life only; workouts are added per day from
+// Whoop / Garmin / manual logs (see activity.js), so they aren't double counted.
 export const ACTIVITY = {
+  tracked:   { label: 'Count my workouts (Whoop / Garmin / log) — recommended', factor: 1.3, tracked: true },
   sedentary: { label: 'Sedentary (desk job, little exercise)', factor: 1.2 },
   light:     { label: 'Light (1–3 workouts/week)', factor: 1.375 },
   moderate:  { label: 'Moderate (3–5 workouts/week)', factor: 1.55 },
   very:      { label: 'Very active (6–7 workouts/week)', factor: 1.725 },
 };
 
-// Weekly loss as a % of body weight. ~0.5–1%/week is the usual sustainable range.
+// Weekly loss as a % of body weight. 0.5–1%/week preserves lean mass
+// (Helms et al. 2014; Garthe et al. 2011 found 0.7%/wk beat 1.4%/wk).
 export const PACE = {
   gentle: { label: 'Gentle (0.5% / week)', pct: 0.005 },
   steady: { label: 'Steady (0.75% / week)', pct: 0.0075 },
@@ -39,16 +43,20 @@ export function dailyTargets(profile, weightLb, adjust = 0) {
   const floor = profile.sex === 'male' ? 1500 : 1200;
   const kcal = Math.round(Math.max(tdee - deficit + adjust, floor) / 10) * 10;
 
-  // Protein ~1 g per lb of goal weight keeps muscle while cutting.
+  // Protein ~1 g/lb goal weight (≈2.2 g/kg): the top of Morton et al. 2018's
+  // range and within Helms et al. 2014's 2.3–3.1 g/kg lean mass for a cut.
+  // Fat 27% of calories (Helms: 15–30%); carbs fill the rest.
   const goal = Math.min(profile.goalLb || weightLb, weightLb);
   const p = Math.round(Math.max(goal, weightLb * 0.7));
   const f = Math.round(Math.max(kcal * 0.27 / 9, goal * 0.3));
   const c = Math.max(Math.round((kcal - p * 4 - f * 9) / 4), 50);
 
-  return { kcal, p, f, c, tdee: Math.round(tdee), lbPerWeek: +lbPerWeek.toFixed(2) };
+  return { kcal, p, f, c, bmr: Math.round(base), tdee: Math.round(tdee), lbPerWeek: +lbPerWeek.toFixed(2) };
 }
 
 export function mealTargets(day) {
+  // Intra-workout carbs come out of the meals' share.
+  if (day.intraC) day = { ...day, kcal: day.kcal - day.intraC * 4, c: day.c - day.intraC };
   const out = {};
   for (const [meal, split] of Object.entries(MEAL_SPLIT)) {
     const kcal = day.kcal * split.kcal;

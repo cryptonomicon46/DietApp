@@ -1,6 +1,6 @@
 // Offline cache for the app shell. Barcode lookups always go to the network.
-const CACHE = 'lean-plate-v1';
-const SHELL = ['./', 'index.html', 'styles.css', 'js/app.js', 'js/plan.js', 'js/foods.js', 'manifest.webmanifest', 'icon.svg'];
+const CACHE = 'lean-plate-v2';
+const SHELL = ['./', 'index.html', 'styles.css', 'js/app.js', 'js/plan.js', 'js/foods.js', 'js/activity.js', 'js/devices.js', 'js/research.js', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
