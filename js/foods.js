@@ -1,21 +1,22 @@
-// Macros per 100 g (USDA FoodData Central averages, rounded).
+// Macros per 100 g as weighed: oats dry, everything cooked (USDA FoodData Central).
 // `unit` lets the UI show a friendlier amount next to grams.
+// `yield` = cooked weight / raw weight, used to turn cooked portions into a raw shopping amount.
 export const FOODS = {
   egg:        { name: 'Whole eggs',            kcal: 143, p: 12.6, f: 9.5,  c: 0.7,  unit: { label: 'egg', grams: 50 } },
-  eggWhites:  { name: 'Liquid egg whites',     kcal: 52,  p: 10.9, f: 0.2,  c: 0.7,  unit: { label: 'cup', grams: 243 } },
+  eggWhites:  { name: 'Egg whites (cooked)',     kcal: 52,  p: 10.9, f: 0.2,  c: 0.7,  unit: { label: 'cup', grams: 243 } },
   sourdough:  { name: 'Sourdough bread',       kcal: 272, p: 10.8, f: 2.4,  c: 51.9, unit: { label: 'slice', grams: 50 } },
   avocado:    { name: 'Avocado',               kcal: 160, p: 2.0,  f: 14.7, c: 8.5,  unit: { label: 'avocado', grams: 136 } },
   oats:       { name: 'Rolled oats (dry)',     kcal: 379, p: 13.2, f: 6.5,  c: 67.7, unit: { label: 'cup', grams: 80 } },
   whey:       { name: 'Whey protein',          kcal: 400, p: 80,   f: 5,    c: 10,   unit: { label: 'scoop', grams: 30 } },
   berries:    { name: 'Blueberries',           kcal: 57,  p: 0.7,  f: 0.3,  c: 14.5, unit: { label: 'cup', grams: 148 } },
   pb:         { name: 'Peanut butter',         kcal: 588, p: 25,   f: 50,   c: 20,   unit: { label: 'tbsp', grams: 16 } },
-  chicken:    { name: 'Chicken breast (raw)',  kcal: 120, p: 22.5, f: 2.6,  c: 0,    oz: true },
-  beef:       { name: '95/5 ground beef (raw)',kcal: 137, p: 21.4, f: 5.0,  c: 0,    oz: true },
-  salmon:     { name: 'Salmon (raw)',          kcal: 208, p: 20.4, f: 13.4, c: 0,    oz: true },
-  cod:        { name: 'Cod (raw)',             kcal: 82,  p: 17.8, f: 0.7,  c: 0,    oz: true },
-  trout:      { name: 'Rainbow trout (raw)',   kcal: 141, p: 19.9, f: 6.2,  c: 0,    oz: true },
+  chicken:    { name: 'Chicken breast (cooked)',  kcal: 165, p: 31.0, f: 3.6,  c: 0, oz: true, yield: 0.75 },
+  beef:       { name: '95/5 ground beef (cooked)',kcal: 193, p: 29.2, f: 7.6,  c: 0, oz: true, yield: 0.72 },
+  salmon:     { name: 'Salmon (cooked)',          kcal: 206, p: 22.1, f: 12.4, c: 0, oz: true, yield: 0.8 },
+  cod:        { name: 'Cod (cooked)',             kcal: 105, p: 22.8, f: 0.9,  c: 0, oz: true, yield: 0.8 },
+  trout:      { name: 'Rainbow trout (cooked)',   kcal: 168, p: 23.8, f: 7.4,  c: 0, oz: true, yield: 0.8 },
   rice:       { name: 'White/jasmine rice (cooked)', kcal: 130, p: 2.7, f: 0.3, c: 28.2, unit: { label: 'cup', grams: 158 } },
-  veggies:    { name: 'Mixed veggies',         kcal: 35,  p: 2.5,  f: 0.3,  c: 7.0,  unit: { label: 'cup', grams: 100 } },
+  veggies:    { name: 'Mixed veggies (cooked)',         kcal: 35,  p: 2.5,  f: 0.3,  c: 7.0,  unit: { label: 'cup', grams: 100 } },
   oliveOil:   { name: 'Olive oil',             kcal: 884, p: 0,    f: 100,  c: 0,    unit: { label: 'tsp', grams: 4.5 } },
 };
 
@@ -46,9 +47,9 @@ export const BREAKFASTS = {
 
 export function mainMeal(protein) {
   return {
-    title: `${FOODS[protein].name.replace(' (raw)', '')}, rice & veggies`,
+    title: `${FOODS[protein].name.replace(' (cooked)', '')}, rice & veggies`,
     items: [
-      { food: protein, drives: 'p', step: 5, min: 85, max: 340 },
+      { food: protein, drives: 'p', step: 5, min: 65, max: 260 },
       { food: 'rice', drives: 'c', step: 10, min: 0, max: 400 },
       { food: 'veggies', fixed: 200 },
       { food: 'oliveOil', drives: 'f', step: 4.5, min: 0, max: 27 },

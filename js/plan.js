@@ -154,7 +154,8 @@ export function groceryList(dayTargets, startDate, days = 7) {
     d.setDate(d.getDate() + i);
     const plan = planForDay(dayTargets, d);
     for (const meal of Object.values(plan)) {
-      for (const { food, grams } of meal.portions) totals[food] = (totals[food] || 0) + grams;
+      // Portions are cooked weights; shop by raw weight.
+      for (const { food, grams } of meal.portions) totals[food] = (totals[food] || 0) + grams / (FOODS[food].yield || 1);
     }
   }
   return totals;

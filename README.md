@@ -2,7 +2,7 @@
 
 A simple, phone-friendly diet app for sustainable weight loss.
 
-- **Today** – daily calories and protein / fat / carb targets, split into breakfast, lunch and dinner with exact portion sizes (grams + oz / cups / slices / scoops). Tap **Swap** to rotate a meal.
+- **Today** – daily calories and protein / fat / carb targets, split into breakfast, lunch and dinner with exact portion sizes (grams + oz / cups / slices / scoops). Oats are weighed dry; meat, fish, eggs, rice and veggies are weighed cooked. The grocery list converts back to raw amounts to buy. Tap **Swap** to rotate a meal.
   - Breakfast: eggs + sourdough + avocado, or oatmeal + whey protein
   - Lunch & dinner: chicken, 95/5 beef, salmon, cod or trout with rice and veggies
 - **Weight** – log weigh-ins, see a 7-day-average trend chart. After 2 weeks of data it suggests a ±100 kcal tweak if you're losing slower or faster than planned.

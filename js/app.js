@@ -63,7 +63,7 @@ function targets() {
 // ---------- formatting ----------
 function amountLabel(food, grams) {
   const d = FOODS[food];
-  if (d.oz) return { main: `${Math.round(grams / 28.35 * 10) / 10} oz`, sub: `${grams} g raw` };
+  if (d.oz) return { main: `${Math.round(grams / 28.35 * 10) / 10} oz`, sub: `${grams} g cooked` };
   const u = d.unit;
   const n = grams / u.grams;
   const plural = Math.round(n * 4) / 4 > 1 ? 's' : '';
@@ -121,7 +121,7 @@ function renderToday() {
           }).join('')}
         </ul>
       </div>`;
-  }).join('') + `<p class="muted small">Weigh proteins raw and rice cooked. Season freely — salt, spices, hot sauce, lemon and mustard are basically free.</p>`;
+  }).join('') + `<p class="muted small">Weigh oats dry; weigh meat, fish, eggs, rice and veggies cooked. Season freely — salt, spices, hot sauce, lemon and mustard are basically free.</p>`;
 }
 
 function renderAdjustBanner(t) {
