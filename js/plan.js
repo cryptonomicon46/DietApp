@@ -37,7 +37,9 @@ export function dailyTargets(profile, weightLb, adjust = 0) {
   const base = bmr({ ...profile, weightLb });
   const tdee = base * ACTIVITY[profile.activity].factor;
 
-  const lbPerWeek = Math.min(weightLb * PACE[profile.pace].pct, 2);
+  // At or below goal: eat at maintenance.
+  const toGo = Math.max(weightLb - (profile.goalLb || 0), 0);
+  const lbPerWeek = toGo > 0 ? Math.min(weightLb * PACE[profile.pace].pct, 2) : 0;
   // Never cut more than 25% below maintenance.
   const deficit = Math.min((lbPerWeek * KCAL_PER_LB_FAT) / 7, tdee * 0.25);
   const floor = profile.sex === 'male' ? 1500 : 1200;
@@ -51,7 +53,29 @@ export function dailyTargets(profile, weightLb, adjust = 0) {
   const f = Math.round(Math.max(kcal * 0.27 / 9, goal * 0.3));
   const c = Math.max(Math.round((kcal - p * 4 - f * 9) / 4), 50);
 
-  return { kcal, p, f, c, bmr: Math.round(base), tdee: Math.round(tdee), lbPerWeek: +lbPerWeek.toFixed(2) };
+  // Report the rate the deficit actually supports (the 25% cap can slow it).
+  const actualRate = (deficit * 7) / KCAL_PER_LB_FAT;
+  return { kcal, p, f, c, bmr: Math.round(base), tdee: Math.round(tdee), lbPerWeek: +actualRate.toFixed(2) };
+}
+
+// Weeks and date to reach the goal at the planned pace (the pace eases slightly as weight drops).
+// Pass `rate` (lb/week from dailyTargets) when known; otherwise the pace setting is used.
+export function goalProjection(profile, weightLb, from = new Date(), rate = null) {
+  const goal = profile.goalLb;
+  if (!goal || weightLb <= goal) return { reached: true, weeks: 0, date: from };
+  if (rate > 0) {
+    const weeks = (weightLb - goal) / rate;
+    const date = new Date(from); date.setDate(date.getDate() + Math.round(weeks * 7));
+    return { reached: false, weeks: Math.max(1, Math.round(weeks)), date };
+  }
+  let w = weightLb, weeks = 0;
+  while (w > goal && weeks < 520) {
+    const step = Math.min(w * PACE[profile.pace].pct, 2);
+    if (w - step <= goal) { weeks += (w - goal) / step; break; }
+    w -= step; weeks++;
+  }
+  const date = new Date(from); date.setDate(date.getDate() + Math.round(weeks * 7));
+  return { reached: false, weeks: Math.max(1, Math.round(weeks)), date };
 }
 
 export function mealTargets(day) {

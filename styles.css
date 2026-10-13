@@ -207,3 +207,5 @@ label.inline select { margin: 0; }
 .setrow.done .tick { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
 #libraryList li span small { display: block; }
 #libraryList li > span:last-child { text-align: right; }
+.plan-preview { background: var(--bg); border-radius: 10px; padding: 8px 10px; margin-top: 10px; }
+.plan-preview:empty { display: none; }

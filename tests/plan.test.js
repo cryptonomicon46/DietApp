@@ -105,3 +105,16 @@ test('weekly check-in recommendations', async () => {
   assert.deepEqual([k.minus100, k.plus100, k.moreProtein], [-100, 100, 0]);
   assert.ok(Math.abs(k.minus200 + 200) <= 5 && Math.abs(k.moreCarbs) <= 5);
 });
+
+test('default plan: 162 → 156 lb at a steady pace', async () => {
+  const { goalProjection } = await import('../js/plan.js');
+  const prof = { sex: 'male', age: 35, heightIn: 70, activity: 'tracked', pace: 'steady', goalLb: 156 };
+  const t = dailyTargets(prof, 162);
+  assert.ok(t.lbPerWeek >= 1 && t.lbPerWeek <= 1.25, `${t.lbPerWeek}`);
+  const proj = goalProjection(prof, 162, new Date(2026, 9, 13), t.lbPerWeek);
+  assert.ok(proj.weeks >= 5 && proj.weeks <= 6, `${proj.weeks}`);
+  assert.ok(t.kcal < t.tdee && t.kcal >= t.tdee * 0.75 - 10);
+  const atGoal = dailyTargets(prof, 155.8);
+  assert.equal(atGoal.lbPerWeek, 0);
+  assert.ok(Math.abs(atGoal.kcal - atGoal.tdee) <= 10, 'maintenance at goal');
+});

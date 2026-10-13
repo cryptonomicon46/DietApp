@@ -1,6 +1,6 @@
 import { FOODS, STORES } from './foods.js';
 import {
-  ACTIVITY, PACE, dailyTargets, planForDay, groceryList,
+  ACTIVITY, PACE, dailyTargets, goalProjection, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
   FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek,
 } from './plan.js';
@@ -113,7 +113,10 @@ function renderToday() {
   const today = isoDate();
   $('#todayDate').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
   $('#todayKcal').textContent = `${t.kcal} kcal`;
-  $('#paceNote').textContent = `−${t.lbPerWeek} lb/wk target`;
+  const proj = goalProjection(state.profile, currentWeight(), new Date(), baseTargets().lbPerWeek);
+  $('#paceNote').textContent = proj.reached
+    ? `Goal reached · maintenance`
+    : `−${t.lbPerWeek} lb/wk · ${state.profile.goalLb} lb by ${proj.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
   $('#todayMacros').innerHTML = [
     ['p', 'Protein', t.p], ['f', 'Fat', t.f], ['c', 'Carbs', t.c],
   ].map(([k, label, g]) => `<div class="macro ${k}"><b>${g} g</b><span>${label}</span></div>`).join('');
@@ -789,6 +792,22 @@ const form = $('#profileForm');
 form.activity.innerHTML = Object.entries(ACTIVITY).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
 form.pace.innerHTML = Object.entries(PACE).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
 
+function updatePlanPreview() {
+  const weight = parseFloat(form.weight.value), goalLb = parseFloat(form.goalLb.value);
+  const el = $('#planPreview');
+  if (!weight || !goalLb) { el.textContent = ''; return; }
+  const age = +form.age.value, heightIn = +form.ft.value * 12 + +form.in.value;
+  const draftProfile = { sex: form.sex.value, age, heightIn, activity: form.activity.value, pace: form.pace.value, goalLb };
+  // With age and height we know the real (capped) rate; otherwise use the pace setting.
+  const perWeek = age && heightIn ? dailyTargets(draftProfile, weight).lbPerWeek : Math.min(weight * PACE[form.pace.value].pct, 2);
+  const proj = goalProjection(draftProfile, weight, new Date(), perWeek);
+  el.textContent = proj.reached
+    ? 'You\'re at or below your goal, so calories are set for maintenance.'
+    : `Plan: about −${perWeek.toFixed(1)} lb/week → ${goalLb} lb in ~${proj.weeks} week${proj.weeks === 1 ? '' : 's'} (${proj.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}). Then you switch to maintenance.`;
+}
+form.addEventListener('input', updatePlanPreview);
+form.addEventListener('change', updatePlanPreview);
+
 function openProfile() {
   const p = state.profile || { sex: 'male', activity: 'tracked', pace: 'steady' };
   $('#profileName').value = p.name ?? '';
@@ -796,10 +815,12 @@ function openProfile() {
   form.age.value = p.age ?? '';
   form.ft.value = p.heightIn ? Math.floor(p.heightIn / 12) : '';
   form.in.value = p.heightIn ? Math.round(p.heightIn % 12) : '';
-  form.weight.value = state.profile ? currentWeight() : '';
-  form.goalLb.value = p.goalLb ?? '';
+  // New profiles start from a sample plan: 162 → 156 lb at a steady 0.75%/week.
+  form.weight.value = state.profile ? currentWeight() : 162;
+  form.goalLb.value = p.goalLb ?? 156;
   form.activity.value = p.activity;
   form.pace.value = p.pace;
+  updatePlanPreview();
   dialog.showModal();
 }
 $('#openProfile').onclick = openProfile;
