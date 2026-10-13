@@ -82,32 +82,39 @@ function fuelOptions(grams, mixed) {
   return opts;
 }
 
-// Combine logged/synced workouts (or a planned session) into today's adjustments.
-// Extra calories go to carbohydrate: protein and fat stay put and carbs follow
-// training load (carb periodization, Thomas et al. 2016).
-export function trainingDay(workouts, planned, { bmr, weightKg, tracked }) {
-  const sessions = workouts.length
-    ? workouts.map((w) => ({ ...w, type: w.type || classify(w, weightKg), source: w.source }))
-    : planned ? [{ ...planned, source: 'planned' }] : [];
+// Combine synced/imported workouts with activities you add yourself (any number per day).
+// An added activity is skipped when a synced workout already covers it (same kind —
+// cardio vs strength — and at least 60% of the minutes), so WHOOP / Garmin calories
+// aren't double counted. Extra calories go to carbohydrate: protein and fat stay put
+// and carbs follow training load (carb periodization, Thomas et al. 2016).
+export function trainingDay(workouts, manual = [], { bmr, weightKg, tracked }) {
+  const synced = workouts.map((w) => ({ ...w, type: w.type || classify(w, weightKg) }));
+  const isCardio = (s) => !!SESSION_TYPES[s.type]?.cardio;
+  const used = new Set();
+  const added = manual.filter((m) => {
+    const i = synced.findIndex((s, k) => !used.has(k) && isCardio(s) === isCardio(m) && s.minutes >= m.minutes * 0.6);
+    if (i >= 0) { used.add(i); return false; }
+    return true;
+  }).map((m) => ({ ...m, source: 'added' }));
+  const sessions = [...synced, ...added];
 
   const extraKcal = tracked ? Math.round(sessions.reduce((s, w) => s + netWorkoutKcal(w, { bmr, weightKg }), 0) / 10) * 10 : 0;
 
-  // Fuel the planned cardio session, unless a synced cardio workout shows it's done.
-  const done = planned && sessions.some((s) => s.source !== 'planned' && SESSION_TYPES[s.type]?.cardio && s.minutes >= planned.minutes * 0.6);
-  const fuelSession = planned && !done && SESSION_TYPES[planned.type]?.cardio ? planned : null;
-  const intra = fuelSession ? intraWorkoutCarbs(fuelSession.type, fuelSession.minutes) : null;
+  // Fuel each added cardio session that hasn't shown up from a device yet.
+  const fuel = added.filter(isCardio).map((m) => ({ session: m, ...intraWorkoutCarbs(m.type, m.minutes) })).filter((f) => f.grams);
+  const intraGrams = fuel.reduce((a, f) => a + f.grams, 0);
 
-  const cardioMin = sessions.filter((s) => SESSION_TYPES[s.type]?.cardio).reduce((a, s) => a + s.minutes, 0);
+  const cardioMin = sessions.filter(isCardio).reduce((a, s) => a + s.minutes, 0);
   const hardCardio = sessions.some((s) => s.type === 'hard') || cardioMin >= 90;
   const label = !sessions.length ? 'Rest day' : hardCardio ? 'Heavy cardio day' : cardioMin ? 'Cardio day' : 'Training day';
-  return { sessions, extraKcal, intra, label, hardCardio };
+  return { sessions, extraKcal, fuel, intraGrams, label, hardCardio };
 }
 
 // Apply training adjustments to base daily targets.
 export function applyTraining(base, day) {
   const kcal = base.kcal + day.extraKcal;
   const c = base.c + Math.round(day.extraKcal / 4);
-  const intraC = day.intra ? Math.min(day.intra.grams, Math.max(c - 50, 0)) : 0;
+  const intraC = Math.min(day.intraGrams || 0, Math.max(c - 50, 0));
   return { ...base, kcal, c, intraC };
 }
 
@@ -160,6 +167,39 @@ export function parseGarminCsv(text) {
       start,
       minutes: Math.round(durationToMin(r[iTime])),
       kcal: iCal >= 0 ? Math.round(parseFloat(String(r[iCal]).replace(/,/g, ''))) || null : null,
+      avgHr: iHr >= 0 ? parseFloat(r[iHr]) || null : null,
+    };
+  }).filter((w) => w.minutes > 0);
+}
+
+// WHOOP app → Data Export → workouts.csv. Column names are matched loosely so small
+// wording changes in WHOOP's export don't break the import.
+export function parseWhoopCsv(text) {
+  const rows = parseCsv(text.replace(/^\uFEFF/, ''));
+  if (rows.length < 2) return [];
+  const head = rows[0].map((h) => h.trim().toLowerCase());
+  const find = (test) => head.findIndex(test);
+  const iStart = find((h) => h.includes('workout start')) >= 0 ? find((h) => h.includes('workout start')) : find((h) => h.includes('start') && !h.includes('cycle'));
+  const iEnd = find((h) => h.includes('workout end')) >= 0 ? find((h) => h.includes('workout end')) : find((h) => h.includes('end') && !h.includes('cycle'));
+  const iDur = find((h) => h.includes('duration'));
+  const iName = find((h) => h.includes('activity name') || h.includes('sport') || h === 'activity');
+  const iStrain = find((h) => h.includes('strain'));
+  const iEnergy = find((h) => h.includes('energy') || h.includes('calor') || h.includes('kilojoule'));
+  const kj = iEnergy >= 0 && /kj|kilojoule/.test(head[iEnergy]);
+  const iHr = find((h) => /(average|avg)\s*(hr|heart)/.test(h));
+  if (iStart < 0 || (iDur < 0 && iEnd < 0)) throw new Error('This doesn\'t look like a WHOOP workouts export (need workout start time and duration).');
+  return rows.slice(1).filter((r) => r[iStart]).map((r) => {
+    const start = r[iStart].trim().replace(' ', 'T');
+    const minutes = iDur >= 0 ? parseFloat(r[iDur]) : (new Date(r[iEnd].trim().replace(' ', 'T')) - new Date(start)) / 60000;
+    const energy = iEnergy >= 0 ? parseFloat(String(r[iEnergy]).replace(/,/g, '')) : NaN;
+    return {
+      id: `whoopcsv:${start}`,
+      source: 'Whoop',
+      name: (iName >= 0 && r[iName]) || 'Workout',
+      start,
+      minutes: Math.round(minutes),
+      kcal: Number.isFinite(energy) ? Math.round(kj ? energy / 4.184 : energy) : null,
+      strain: iStrain >= 0 && r[iStrain] !== '' ? parseFloat(r[iStrain]) : null,
       avgHr: iHr >= 0 ? parseFloat(r[iHr]) || null : null,
     };
   }).filter((w) => w.minutes > 0);

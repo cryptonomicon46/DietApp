@@ -10,7 +10,7 @@ A simple, phone-friendly diet app for sustainable weight loss.
 - **Weight** – log weigh-ins, see a 7-day-average trend chart. After 2 weeks of data it suggests a ±100 kcal tweak if you're losing slower or faster than planned.
 - **Lift** – a full-body program 3 days a week (A heavy · B moderate · C light) with a 54-exercise library across 10 muscle groups. Pick any exercise for a slot; the app sets sets × reps, reps-in-reserve and rest, and suggests your next weight from your last session. Weeks 1–5 build volume and effort, week 6 is a deload, then a new block starts.
 - **Groceries** – a weekly list built from your plan, grouped by Costco / Sprouts / Safeway, with checkboxes.
-- **Training** (on Today) – workouts from **WHOOP** and **Garmin** (or a session you plan) add calories back as carbs. Planned cardio of 45+ minutes gets an **intra-workout carb** target (e.g. ~60 g/h for a 2-hour hard session) with banana / sports drink / gel / date options, taken out of your meals.
+- **Training** (on Today) – add as many activities as you like per day; workouts from **WHOOP** and **Garmin** replace matching ones you added so nothing is counted twice. Training add calories back as carbs. Planned cardio of 45+ minutes gets an **intra-workout carb** target (e.g. ~60 g/h for a 2-hour hard session) with banana / sports drink / gel / date options, taken out of your meals.
 - **Science** – every number links to the peer-reviewed paper it comes from.
 - **Scan** – scan a barcode with your phone camera (or type it) to see macros from [Open Food Facts](https://world.openfoodfacts.org) and how well it fits your plan; add it to your grocery list.
 
@@ -52,6 +52,7 @@ A simple, phone-friendly diet app for sustainable weight loss.
 
 ## WHOOP & Garmin
 
+- **WHOOP export import** works with no setup: WHOOP app → More → App Settings → Data Export → import `workouts.csv` under Devices.
 - **Garmin CSV import** works with no setup: Garmin Connect → Activities → Export CSV → Lean Plate → Devices → Import.
 - **Automatic sync** for WHOOP and Garmin (through Strava, since Garmin's own API is limited to approved businesses) needs a small free connector — see [`server/README.md`](server/README.md).
 

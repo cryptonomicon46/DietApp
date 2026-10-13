@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { intraWorkoutCarbs, trainingDay, applyTraining, fromWhoop, fromStrava, parseGarminCsv, classify } from '../js/activity.js';
+import { intraWorkoutCarbs, trainingDay, applyTraining, fromWhoop, fromStrava, parseGarminCsv, parseWhoopCsv, classify } from '../js/activity.js';
 import { dailyTargets, mealTargets } from '../js/plan.js';
 
 const profile = { sex: 'male', age: 35, heightIn: 70, activity: 'tracked', pace: 'steady', goalLb: 180 };
@@ -20,11 +20,11 @@ test('intra-workout carbs follow Jeukendrup duration bands', () => {
 });
 
 test('rest day adds nothing; heavy cardio adds carbs and intra fuel', () => {
-  const rest = trainingDay([], null, ctx);
+  const rest = trainingDay([], [], ctx);
   assert.equal(rest.label, 'Rest day');
   assert.equal(rest.extraKcal, 0);
 
-  const heavy = trainingDay([], { type: 'hard', minutes: 120 }, ctx);
+  const heavy = trainingDay([], [{ id: 'h', type: 'hard', minutes: 120 }], ctx);
   assert.equal(heavy.label, 'Heavy cardio day');
   assert.ok(heavy.extraKcal > 800 && heavy.extraKcal < 1300, `${heavy.extraKcal}`);
   const base = dailyTargets(profile, 210);
@@ -40,13 +40,13 @@ test('rest day adds nothing; heavy cardio adds carbs and intra fuel', () => {
 });
 
 test('untracked profiles keep calories but still get fuel advice', () => {
-  const d = trainingDay([], { type: 'hard', minutes: 120 }, { ...ctx, tracked: false });
+  const d = trainingDay([], [{ id: 'h', type: 'hard', minutes: 120 }], { ...ctx, tracked: false });
   assert.equal(d.extraKcal, 0);
-  assert.ok(d.intra);
+  assert.equal(d.intraGrams, 120);
 });
 
 test('wearable calories are discounted', () => {
-  const d = trainingDay([{ id: 'x', start: '2026-10-13T07:00', minutes: 60, kcal: 800, name: 'Running' }], null, ctx);
+  const d = trainingDay([{ id: 'x', start: '2026-10-13T07:00', minutes: 60, kcal: 800, name: 'Running' }], [], ctx);
   const net = (800 - 1900 / 1440 * 60) * 0.75;
   assert.ok(Math.abs(d.extraKcal - net) <= 5);
 });
@@ -77,9 +77,39 @@ test('normalize WHOOP, Strava and Garmin CSV', () => {
 });
 
 test('fuel advice drops once the planned cardio has synced', () => {
-  const planned = { type: 'hard', minutes: 120 };
-  assert.ok(trainingDay([], planned, ctx).intra);
+  const planned = [{ id: 'p', type: 'hard', minutes: 120 }];
+  assert.equal(trainingDay([], planned, ctx).intraGrams, 120);
   const synced = [{ id: 'w', start: '2026-10-13T07:00', minutes: 110, kcal: 1300, strain: 15, name: 'Cycling' }];
-  assert.equal(trainingDay(synced, planned, ctx).intra, null);
+  const d = trainingDay(synced, planned, ctx);
+  assert.equal(d.intraGrams, 0);
+  assert.equal(d.sessions.length, 1, 'planned ride replaced by the synced one');
   assert.equal(intraWorkoutCarbs('hard', 120).options[0].label, '4½ bananas');
+});
+
+test('multiple activities add up; synced strength does not cover a planned run', () => {
+  const manual = [
+    { id: 'a', type: 'strength', minutes: 60 },
+    { id: 'b', type: 'moderate', minutes: 90 },
+    { id: 'c', type: 'easy', minutes: 30 },
+  ];
+  const d = trainingDay([], manual, ctx);
+  assert.equal(d.sessions.length, 3);
+  const one = trainingDay([], [manual[0]], ctx);
+  assert.ok(d.extraKcal > one.extraKcal);
+  assert.equal(d.fuel.length, 1, 'only the 90-min ride needs fuel');
+  const whoopLift = [{ id: 'w', start: '2026-10-13T07:00', minutes: 55, kcal: 350, name: 'Weightlifting' }];
+  const mixed = trainingDay(whoopLift, manual, ctx);
+  assert.equal(mixed.sessions.length, 3, 'lift matched to WHOOP; run and walk kept');
+  assert.equal(mixed.sessions.filter((s) => s.source === 'added').length, 2);
+});
+
+test('WHOOP workouts.csv import tolerates column naming', () => {
+  const a = 'Cycle start time,Cycle end time,Workout start time,Workout end time,Duration (min),Activity name,Activity Strain,Energy burned (cal),Max HR (bpm),Average HR (bpm)\n' +
+    '2026-10-13 05:00:00,2026-10-14 05:00:00,2026-10-13 07:00:00,2026-10-13 08:30:00,90,Cycling,14.8,1100,171,148\n';
+  const w = parseWhoopCsv(a)[0];
+  assert.deepEqual([w.name, w.minutes, w.kcal, w.strain, w.avgHr, w.start], ['Cycling', 90, 1100, 14.8, 148, '2026-10-13T07:00:00']);
+  const b = 'Workout Start,Workout End,Sport,Strain,Kilojoules\n2026-10-13 18:00:00,2026-10-13 19:00:00,Weightlifting,9.1,1674\n';
+  const v = parseWhoopCsv(b)[0];
+  assert.deepEqual([v.name, v.minutes, v.kcal], ['Weightlifting', 60, 400]);
+  assert.throws(() => parseWhoopCsv('a,b\n1,2\n'));
 });

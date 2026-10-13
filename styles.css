@@ -233,3 +233,6 @@ label.inline select { margin: 0; }
 .eat { width: 100%; }
 .meal.eaten { border-color: var(--brand); }
 .meal.eaten .portions { opacity: .75; }
+.activities li { align-items: center; }
+.activities li .amt { margin-left: auto; }
+.fuel-item { margin-top: 8px; }
