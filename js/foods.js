@@ -85,7 +85,7 @@ export const BREAKFASTS = {
       { slot: 'eggs', options: ['egg'], fixedByFat: true, min: 50, max: 150 },
       { slot: 'protein', options: ['eggWhites'], drives: 'p' },
       { slot: 'carb', options: ['sourdough', 'wheatBread'], drives: 'c', min: 25 },
-      { slot: 'fat', options: ['avocado', 'butter', 'cheddar', 'oliveOil'], drives: 'f' },
+      { slot: 'fat', options: ['avocado', 'butter', 'cheddar', 'oliveOil', 'mixedNuts', 'cashews'], drives: 'f' },
     ],
   },
   oatmeal: {
@@ -94,7 +94,7 @@ export const BREAKFASTS = {
       { slot: 'protein', options: ['whey', 'eggWhites'], drives: 'p', min: 15, max: 60 },
       { slot: 'carb', options: ['oats'], drives: 'c', min: 40, max: 120 },
       { slot: 'fruit', options: ['berries', 'frozenBerries', 'strawberries', 'banana'], fixed: 75 },
-      { slot: 'fat', options: ['pb', 'almondButter', 'walnuts'], drives: 'f' },
+      { slot: 'fat', options: ['pb', 'almondButter', 'walnuts', 'mixedNuts', 'cashews'], drives: 'f' },
     ],
   },
 };
@@ -105,7 +105,7 @@ export const MAIN_MEAL = {
     { slot: 'protein', options: PROTEIN_OPTIONS, drives: 'p', min: 60, max: 260 },
     { slot: 'carb', options: ['rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'sourdough'], drives: 'c', max: 450 },
     { slot: 'veggies', options: ['veggies', 'broccoli', 'cauliflower'], fixed: 200 },
-    { slot: 'fat', options: ['oliveOil', 'butter', 'avocado'], drives: 'f', max: 27 },
+    { slot: 'fat', options: ['oliveOil', 'butter', 'avocado', 'mixedNuts', 'cashews'], drives: 'f' },
   ],
 };
 
