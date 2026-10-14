@@ -1502,7 +1502,7 @@ $('#joinBtn').onclick = async () => {
   $('#joinStatus').textContent = 'Linking…';
   try {
     const got = await sync.join($('#joinCode').value);
-    $('#joinStatus').textContent = got ? 'Linked! Loading…' : `Linked. Make sure the other phone shows this same code (${sync.settings().code}) after reopening the app.`;
+    $('#joinStatus').textContent = got ? 'Linked! Loading…' : `Linked ✓ This phone now uses ${sync.settings().code}, the same code as the other phone.`;
     $('#myCode').textContent = sync.settings().code;
     if (got) setTimeout(() => location.reload(), 600);
   } catch (err) {
