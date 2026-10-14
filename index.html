@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Lean Plate">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=61">
 </head>
 <body>
   <header class="top">
@@ -303,6 +303,7 @@
 
   <div class="boot-fail" id="bootFail" hidden>
     <p><b>Lean Plate didn't finish loading.</b> This can happen right after an update, when your browser still has an older copy of some files.</p>
+    <p class="small muted" id="bootErr"></p>
     <button type="button" id="bootReload">Reload the latest version</button>
   </div>
   <script>
@@ -312,7 +313,10 @@
       var shown = false;
       function show() { if (shown || window.__leanPlateBooted) return; shown = true; document.getElementById('bootFail').hidden = false; }
       setTimeout(show, 6000);
-      window.addEventListener('error', function (e) { if (!window.__leanPlateBooted && /module|import|export|Failed to fetch/i.test(String(e.message || ''))) setTimeout(show, 500); });
+      // Show what went wrong so it can be reported (a screenshot is enough).
+      function note(msg) { if (window.__leanPlateBooted) return; var el = document.getElementById('bootErr'); if (el && !el.textContent) el.textContent = 'Details: ' + String(msg).slice(0, 200); setTimeout(show, 500); }
+      window.addEventListener('error', function (e) { note(e.message || (e.target && e.target.src ? 'could not load ' + e.target.src : 'unknown error')); }, true);
+      window.addEventListener('unhandledrejection', function (e) { note(e.reason && e.reason.message || e.reason); });
       document.getElementById('bootReload').onclick = function () {
         var clear = window.caches ? caches.keys().then(function (k) { return Promise.all(k.map(function (n) { return caches.delete(n); })); }) : Promise.resolve();
         var unreg = navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (r) { return Promise.all(r.map(function (x) { return x.unregister(); })); }) : Promise.resolve();
@@ -320,6 +324,31 @@
       };
     })();
   </script>
-  <script type="module" src="js/app.js"></script>
+  <script type="importmap" id="versions">
+{
+  "imports": {
+    "./js/activity.js": "./js/activity.js?v=61",
+    "./js/analytics.js": "./js/analytics.js?v=61",
+    "./js/app.js": "./js/app.js?v=61",
+    "./js/commands.js": "./js/commands.js?v=61",
+    "./js/devices.js": "./js/devices.js?v=61",
+    "./js/foods.js": "./js/foods.js?v=61",
+    "./js/lift.js": "./js/lift.js?v=61",
+    "./js/lifting.js": "./js/lifting.js?v=61",
+    "./js/notes.js": "./js/notes.js?v=61",
+    "./js/plan.js": "./js/plan.js?v=61",
+    "./js/plans.js": "./js/plans.js?v=61",
+    "./js/poster.js": "./js/poster.js?v=61",
+    "./js/research.js": "./js/research.js?v=61",
+    "./js/review.js": "./js/review.js?v=61",
+    "./js/rewards.js": "./js/rewards.js?v=61",
+    "./js/share.js": "./js/share.js?v=61",
+    "./js/storage.js": "./js/storage.js?v=61",
+    "./js/sync.js": "./js/sync.js?v=61",
+    "./js/zip.js": "./js/zip.js?v=61"
+  }
+}
+  </script>
+  <script type="module" src="js/app.js?v=61"></script>
 </body>
 </html>

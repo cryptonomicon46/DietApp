@@ -83,3 +83,7 @@ npm test           # unit tests for the planning math
 The camera scanner needs **HTTPS** on a phone. The easiest way is GitHub Pages: repo **Settings → Pages → Deploy from branch** (root folder), then open the site on your phone and use **Add to Home Screen**.
 
 All data stays in your browser's local storage.
+
+## Releasing an update
+
+Run `node scripts/bump-version.mjs` before committing. It gives every app file a new `?v=` address (through the import map in `index.html`) and renames the offline cache, so phones never mix old and new files after an update.
