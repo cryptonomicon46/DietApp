@@ -185,3 +185,29 @@ export function suggestLoad(exerciseId, slot, history, week) {
   if (work.some((x) => x.r < lo)) return { weight: top, text: `${lastText} — below ${lo} reps. Stay at ${top} lb and build reps.` };
   return { weight: top, text: `${lastText}. Stay at ${top} lb and beat at least one set by a rep.` };
 }
+
+// ---------- plate math ----------
+export const PLATES = [45, 35, 25, 15, 10, 5, 2.5];
+
+// Bar + both sides. counts = {45: 1, 25: 1, ...} plates on ONE side.
+export function plateTotal(bar, counts) {
+  return bar + 2 * PLATES.reduce((a, p) => a + p * (counts[p] || 0), 0);
+}
+
+// Returns null if the weight can't be made exactly.
+// Plates per side (biggest first). `plates` = what's available; many gyms have no 35s.
+export function platesFor(weight, bar = 45, plates = PLATES) {
+  let side = (weight - bar) / 2;
+  if (side < 0) return null;
+  const out = {};
+  for (const p of plates) {
+    const n = Math.floor((side + 1e-9) / p);
+    if (n) { out[p] = n; side -= n * p; }
+  }
+  return side > 1e-6 ? null : out;
+}
+
+export const platesText = (counts) => {
+  const parts = PLATES.filter((p) => counts[p]).map((p) => (counts[p] > 1 ? `${counts[p]}×${p}` : `${p}`));
+  return parts.length ? parts.join(' + ') : 'empty bar';
+};

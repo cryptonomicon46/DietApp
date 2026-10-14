@@ -1,5 +1,6 @@
 import {
   MUSCLES, EXERCISES, DAYS, WEEKS, slotOptions, setsFor, weeklySets, blockPosition, suggestLoad,
+  PLATES, plateTotal, platesFor, platesText,
 } from './lifting.js';
 import { store } from './storage.js';
 
@@ -67,6 +68,9 @@ export function renderLift() {
       const ex = EXERCISES[e.exercise];
       const sug = suggestLoad(e.exercise, slot, lift.sessions, d.week);
       const [lo, hi] = slot.reps;
+      const barbell = ex.equip === 'Barbell';
+      // Hints skip 35s unless you've loaded them yourself.
+      const load = barbell && sug.weight ? platesFor(sug.weight, lift.bar || 45, lift.use35 ? PLATES : PLATES.filter((x) => x !== 35)) : null;
       return `
       <div class="lift" data-slot="${slot.id}">
         <div class="eyebrow">${MUSCLES[slot.muscle]} · ${ex.kind}</div>
@@ -75,11 +79,13 @@ export function renderLift() {
         </select>
         <div class="target"><b>${e.sets.length} × ${lo}–${hi} reps</b> · RIR ${d.week === 5 && ex.kind === 'isolation' ? '0 on last set' : wk.rir} · rest ${slot.rest}</div>
         <div class="small muted">${esc(sug.text)} ${esc(ex.cue)}</div>
+        ${load ? `<div class="small plate-hint">Load ${sug.weight} lb: <b>${platesText(load)}</b> per side on a ${lift.bar || 45} lb bar</div>` : ''}
         <div class="sets">
           ${e.sets.map((s, j) => `
-            <div class="setrow ${s.done ? 'done' : ''}">
+            <div class="setrow ${s.done ? 'done' : ''} ${barbell ? 'has-plates' : ''}">
               <span class="small muted">Set ${j + 1}</span>
               <input type="number" inputmode="decimal" step="any" min="0" data-w="${slot.id}:${j}" value="${s.w}" placeholder="lb" aria-label="Set ${j + 1} weight">
+              ${barbell ? `<button type="button" class="plate-btn" data-plates="${slot.id}:${j}" aria-label="Count plates for set ${j + 1}">⦿</button>` : ''}
               <span class="muted">×</span>
               <input type="number" inputmode="numeric" min="0" max="100" data-r="${slot.id}:${j}" value="${s.r}" placeholder="${hi}" aria-label="Set ${j + 1} reps">
               <button type="button" class="tick" data-done="${slot.id}:${j}" aria-label="Mark set ${j + 1} done">${s.done ? '✓' : '○'}</button>
@@ -120,7 +126,68 @@ function renderLibrary() {
     <li><span>${esc(e.name)}<small class="muted">${esc(e.cue)}</small></span><span class="small">${e.equip}<br><span class="muted">${e.kind}</span></span></li>`).join('');
 }
 
+// ---------- plate calculator ----------
+let plateRef = null;
+let plateCounts = {};
+
+function openPlates(ref) {
+  plateRef = ref;
+  const [slotId, j] = ref.split(':');
+  const set = lift.draft.entries[slotId].sets[+j];
+  // Start from the plates you loaded for this set, else split the weight in the box.
+  plateCounts = set.plates && plateTotal(lift.bar || 45, set.plates) === +set.w
+    ? { ...set.plates }
+    : (set.w && platesFor(+set.w, lift.bar || 45, lift.use35 ? PLATES : PLATES.filter((x) => x !== 35))) || {};
+  const ex = EXERCISES[lift.draft.entries[slotId].exercise];
+  $('#plateTitle').textContent = `${ex.name} · set ${+j + 1}`;
+  $('#plateBar').value = String(lift.bar || 45);
+  renderPlates();
+  $('#plateDialog').showModal();
+}
+
+function renderPlates() {
+  const bar = +$('#plateBar').value;
+  $('#plateRows').innerHTML = PLATES.map((p) => `
+    <div class="plate-row">
+      <span class="plate-chip p${String(p).replace('.', '_')}">${p}</span>
+      <button type="button" class="ghost small" data-pminus="${p}" aria-label="One less ${p}">−</button>
+      <b>${plateCounts[p] || 0}</b>
+      <button type="button" class="ghost small" data-pplus="${p}" aria-label="One more ${p}">+</button>
+    </div>`).join('');
+  const total = plateTotal(bar, plateCounts);
+  $('#plateTotal').innerHTML = `<b>${total} lb</b><span class="small muted">${bar} bar + 2 × ${total / 2 - bar / 2} (${platesText(plateCounts)} per side)</span>`;
+  $('#plateUse').textContent = `Use ${total} lb`;
+}
+
+function initPlates() {
+  $('#plateRows').onclick = (e) => {
+    const plus = e.target.closest('[data-pplus]')?.dataset.pplus;
+    const minus = e.target.closest('[data-pminus]')?.dataset.pminus;
+    if (plus) plateCounts[plus] = (plateCounts[plus] || 0) + 1;
+    if (minus && plateCounts[minus]) plateCounts[minus] -= 1;
+    renderPlates();
+  };
+  $('#plateBar').onchange = () => { lift.bar = +$('#plateBar').value; save(); renderPlates(); };
+  $('#plateClear').onclick = () => { plateCounts = {}; renderPlates(); };
+  $('#plateClose').onclick = () => $('#plateDialog').close();
+  $('#plateUse').onclick = () => {
+    const [slotId, j] = plateRef.split(':');
+    const total = plateTotal(+$('#plateBar').value, plateCounts);
+    const sets = lift.draft.entries[slotId].sets;
+    // Fill this set and any later sets that are still empty or had the old weight.
+    const old = sets[+j].w;
+    if (plateCounts[35]) lift.use35 = true;
+    sets.forEach((x, k) => {
+      if (k === +j || (k > +j && !x.done && (x.w === '' || x.w === old))) { x.w = total; x.plates = { ...plateCounts }; }
+    });
+    save();
+    $('#plateDialog').close();
+    renderLift();
+  };
+}
+
 export function initLift() {
+  initPlates();
   const root = $('#tab-lift');
   root.addEventListener('change', (e) => {
     const t = e.target;
@@ -155,6 +222,8 @@ export function initLift() {
       if (set.done && set.r === '') set.r = DAYS[lift.draft.day].slots.find((s) => s.id === slotId).reps[1];
       save();
       renderLift();
+    } else if (t.dataset.plates) {
+      openPlates(t.dataset.plates);
     } else if (t.dataset.addset || t.dataset.rmset || t.dataset.resetsets) {
       const slotId = t.dataset.addset || t.dataset.rmset || t.dataset.resetsets;
       const day = DAYS[lift.draft.day];

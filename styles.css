@@ -334,3 +334,16 @@ dialog.review { width: min(520px, calc(100vw - 24px)); }
 .next-opt p { margin: 4px 0 8px; }
 .set-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
 .set-tools button:disabled { opacity: .4; }
+
+/* plate calculator */
+.setrow.has-plates { grid-template-columns: 44px 1fr 34px auto 1fr 40px; }
+.plate-btn { background: var(--bg); color: var(--ink); border: 1px solid var(--line); padding: 6px 0; font-size: 1rem; }
+.plate-hint { color: var(--muted); }
+.plate-hint b { color: var(--ink); }
+.plate-rows { display: grid; gap: 6px; margin: 10px 0; }
+.plate-row { display: grid; grid-template-columns: 1fr 44px 36px 44px; align-items: center; gap: 8px; }
+.plate-row b { text-align: center; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.plate-chip { justify-self: start; min-width: 54px; text-align: center; font-weight: 700; border-radius: 999px; padding: 6px 10px; background: var(--bg); border: 2px solid var(--line); font-variant-numeric: tabular-nums; }
+.plate-chip::after { content: ' lb'; font-weight: 400; font-size: .75rem; color: var(--muted); }
+.plate-total { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; background: var(--bg); border-radius: 10px; }
+.plate-total b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }

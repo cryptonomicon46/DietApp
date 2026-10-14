@@ -235,6 +235,20 @@
     </form>
   </dialog>
 
+  <!-- PLATE CALCULATOR -->
+  <dialog id="plateDialog" class="plates">
+    <h2 id="plateTitle">Plates</h2>
+    <p class="small muted">Count the plates on <b>one side</b> of the bar.</p>
+    <label class="inline">Bar <select id="plateBar"><option value="45">45 lb (standard)</option><option value="35">35 lb (women's)</option><option value="25">25 lb (technique)</option><option value="15">15 lb (training)</option></select></label>
+    <div id="plateRows" class="plate-rows"></div>
+    <div class="plate-total" id="plateTotal"></div>
+    <div class="row end">
+      <button type="button" class="ghost" id="plateClear">Clear</button>
+      <button type="button" class="ghost" id="plateClose">Cancel</button>
+      <button type="button" id="plateUse">Use</button>
+    </div>
+  </dialog>
+
   <!-- PROGRAM REVIEW -->
   <dialog id="reviewDialog" class="review">
     <div id="reviewBody"></div>

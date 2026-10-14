@@ -61,3 +61,22 @@ test('extra sets carry through progression and deload', () => {
   assert.equal(setsFor(squat, 1, 0, -5), 1, 'never below one set');
   assert.ok(weeklySets(1, { A1: 2 }).quads === weeklySets(1).quads + 2);
 });
+
+test('plate math', async () => {
+  const { plateTotal, platesFor, platesText } = await import('../js/lifting.js');
+  assert.equal(plateTotal(45, { 45: 1, 25: 1, 10: 1 }), 205);
+  assert.equal(plateTotal(45, { 45: 2, 5: 1 }), 235);
+  assert.equal(plateTotal(45, {}), 45);
+  assert.equal(plateTotal(35, { 15: 2 }), 95);
+  assert.deepEqual(platesFor(225), { 45: 2 });
+  assert.deepEqual(platesFor(185), { 45: 1, 25: 1 });
+  assert.deepEqual(platesFor(155), { 45: 1, 10: 1 });
+  assert.equal(platesFor(47), null);
+  assert.equal(platesText({ 45: 2, 10: 1 }), '2×45 + 10');
+});
+
+test('plate hints without 35s', async () => {
+  const { platesFor, PLATES } = await import('../js/lifting.js');
+  assert.deepEqual(platesFor(215, 45, PLATES.filter((p) => p !== 35)), { 45: 1, 25: 1, 15: 1 });
+  assert.deepEqual(platesFor(200, 45, PLATES.filter((p) => p !== 35)), { 45: 1, 25: 1, 5: 1, 2.5: 1 });
+});
