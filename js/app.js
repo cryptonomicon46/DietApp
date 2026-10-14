@@ -30,6 +30,8 @@ const state = {
   weights: store.get('weights', []),   // [{date: 'YYYY-MM-DD', weight}]
   adjust: store.get('adjust', 0),      // kcal tweak from check-ins
   custom: store.get('custom', {}),     // today's meal edits: {date, meals: {breakfast: {template, picks, grams}}}
+  planned: store.get('planned', {}),   // meal edits made ahead for future days: {date: {breakfast: {...}}}
+  viewDate: null,                      // the day shown on Today (null = today)
   prefs: store.get('prefs', {}),       // sticky swaps: {oatmeal: {fat: 'almondButter'}, main: {carb: 'quinoa'}}
   macroAdjust: store.get('macroAdjust', { p: 0, f: 0, c: 0 }), // grams, from weekly check-ins
   checkins: store.get('checkins', []), // [{date, feeling, note, change}]
@@ -163,13 +165,35 @@ function renderDayBar() {
     <div class="daybar-track" role="progressbar" aria-valuemin="0" aria-valuemax="${t.kcal}" aria-valuenow="${Math.round(ate.kcal)}" aria-label="Calories eaten today"><i style="width:${pct}%"></i></div>`;
 }
 
-// Today's meal edits (reset each day).
+// The day shown on the Today tab: today, a past day (review) or a future day (plan ahead).
+const viewDay = () => state.viewDate || isoDate();
+const viewingToday = () => viewDay() === isoDate();
+const viewingFuture = () => viewDay() > isoDate();
+const dateOf = (iso) => new Date(`${iso}T12:00:00`);
+
+// Meal edits for the day being shown. Today's reset each day, starting from anything you
+// planned ahead for it; future days keep what you plan for them.
 function todaysCustom() {
-  if (state.custom.date !== isoDate()) state.custom = { date: isoDate(), meals: {} };
+  if (!viewingToday()) return (state.planned[viewDay()] ||= {});
+  if (state.custom.date !== isoDate()) {
+    state.custom = { date: isoDate(), meals: state.planned[isoDate()] || {} };
+    delete state.planned[isoDate()];
+    for (const d of Object.keys(state.planned)) if (d < isoDate()) delete state.planned[d];
+    store.set('planned', state.planned);
+  }
   return state.custom.meals;
 }
-function todayPlan(t = targets()) {
-  return planForDay(t, new Date(), todaysCustom(), state.prefs);
+function saveCustom() {
+  if (viewingToday()) store.set('custom', state.custom);
+  else store.set('planned', state.planned);
+}
+// Future days use your base targets (no workouts known yet).
+function todayPlan(t = viewingToday() ? targets() : baseTargets()) {
+  return planForDay(t, dateOf(viewDay()), todaysCustom(), state.prefs);
+}
+// What you've logged for the day being shown (nothing for future days).
+function viewLog() {
+  return viewingToday() ? todaysLog() : { meals: {}, fuel: null, extras: [] };
 }
 
 function todaysTraining() {
@@ -219,9 +243,93 @@ const macroLine = (m) =>
   `${m.kcal} kcal · <span class="p">${m.p}P</span> · <span class="f">${m.f}F</span> · <span class="c">${m.c}C</span>`;
 
 // ---------- TODAY ----------
+// ‹ previous day · Today · next day ›, plus a date picker. Past days back to your first
+// log; up to two weeks ahead.
+const PLAN_AHEAD_DAYS = 14;
+function shiftDay(iso, n) { const d = dateOf(iso); d.setDate(d.getDate() + n); return isoDate(d); }
+function firstLoggedDay() {
+  const days = [...Object.keys(state.mealLog), ...Object.keys(state.days)].filter((d) => d < isoDate()).sort();
+  return days[0] || shiftDay(isoDate(), -1);
+}
+function renderDayNav() {
+  const d = viewDay(), today = isoDate();
+  const min = firstLoggedDay(), max = shiftDay(today, PLAN_AHEAD_DAYS);
+  const label = d === today ? 'Today' : d === shiftDay(today, -1) ? 'Yesterday' : d === shiftDay(today, 1) ? 'Tomorrow'
+    : dateOf(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  $('#dayNav').innerHTML = `
+    <button type="button" class="ghost small" data-day="${shiftDay(d, -1)}" ${d <= min ? 'disabled' : ''} aria-label="Previous day">‹</button>
+    <label class="day-pick"><span>${esc(label)}</span><small>${d < today ? 'Review' : d > today ? 'Plan ahead' : 'Log your day'}</small>
+      <input type="date" id="dayPick" value="${d}" min="${min}" max="${max}" aria-label="Pick a day"></label>
+    <button type="button" class="ghost small" data-day="${shiftDay(d, 1)}" ${d >= max ? 'disabled' : ''} aria-label="Next day">›</button>
+    ${d !== today ? `<button type="button" class="small today-btn" data-day="${today}">Today</button>` : ''}`;
+}
+$('#dayNav').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-day]');
+  if (!b || b.disabled) return;
+  state.viewDate = b.dataset.day === isoDate() ? null : b.dataset.day;
+  renderToday();
+});
+$('#dayNav').addEventListener('change', (e) => {
+  if (e.target.id !== 'dayPick' || !e.target.value) return;
+  state.viewDate = e.target.value === isoDate() ? null : e.target.value;
+  renderToday();
+});
+
+// A past day: what you logged against that day's targets.
+function renderPastDay(day) {
+  const log = state.mealLog[day] || { meals: {}, extras: [] };
+  const rec = state.days[day];
+  const items = [...Object.entries(log.meals || {}).map(([k, m]) => ({ ...m, slot: k })), ...(log.fuel ? [{ ...log.fuel, slot: 'fuel' }] : []), ...(log.extras || []).map((x) => ({ ...x, slot: 'extra' }))];
+  const ate = { kcal: 0, p: 0, f: 0, c: 0 };
+  for (const it of items) for (const k in ate) ate[k] += it[k] || 0;
+  // Day targets: the meal targets you had that day add up to the day's food target.
+  const target = { kcal: rec?.target || 0, p: rec?.proteinTarget || 0, f: 0, c: 0 };
+  for (const m of Object.values(log.meals || {})) if (m.target) { target.f += m.target.f || 0; target.c += m.target.c || 0; }
+  const weigh = state.weights.find((w) => w.date === day);
+  const burned = rec?.burned;
+  const cell = (k, label) => `<div class="macro ${k}"><b>${Math.round(ate[k])}${k === 'kcal' ? '' : 'g'}</b><span>${label}</span>${target[k] ? `<small>of ${Math.round(target[k])}${k === 'kcal' ? '' : 'g'}</small>` : ''}</div>`;
+  const status = rec ? scoreDay(rec) : null;
+  const order = { breakfast: 0, lunch: 1, dinner: 2, fuel: 3, extra: 4 };
+  return `
+    <div class="card past-day">
+      <div class="macros">${cell('kcal', 'kcal')}${cell('p', 'Protein')}${cell('f', 'Fat')}${cell('c', 'Carbs')}</div>
+      <p class="small">${[
+        burned ? `Burned ~${burned} kcal → ${burned - Math.round(ate.kcal) >= 0 ? `${burned - Math.round(ate.kcal)} kcal deficit` : `${Math.round(ate.kcal) - burned} kcal over`}` : '',
+        weigh ? `Weigh-in ${weigh.weight} lb` : '',
+        status?.coins ? `Earned 🪙 ${status.coins}${status.cookies ? ' + 🍪' : ''}` : '',
+      ].filter(Boolean).join(' · ') || '<span class="muted">No totals saved for this day.</span>'}</p>
+    </div>
+    ${items.length ? items.sort((a, b) => order[a.slot] - order[b.slot]).map((m) => `
+      <div class="card meal past">
+        <div class="eyebrow">${m.slot === 'extra' ? 'Snack / extra' : m.slot === 'fuel' ? 'Workout fuel' : m.slot}${m.at ? ` · ${esc(m.at)}` : ''}</div>
+        <h3>${esc(m.title || 'Meal')}</h3>
+        <div class="meal-macros">${macroLine({ kcal: Math.round(m.kcal || 0), p: Math.round(m.p || 0), f: Math.round(m.f || 0), c: Math.round(m.c || 0) })}${m.target ? ` <small class="muted">· target ${m.target.kcal} kcal</small>` : ''}</div>
+        ${m.foods ? `<p class="small muted">${esc(m.foods)}</p>` : ''}
+      </div>`).join('') : '<div class="card"><p class="muted small">Nothing was logged on this day.</p></div>'}`;
+}
+
 function renderToday() {
+  renderDayNav();
+  const day = viewDay(), today = isoDate();
+  const isToday = day === today, past = day < today;
+  // Today-only cards.
+  for (const id of ['#deficit', '#checkin', '#training', '#adjustBanner']) $(id).hidden = !isToday;
+  if (!isToday) {
+    const t = past ? null : baseTargets();
+    $('#todayDate').textContent = dateOf(day).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+    $('#greeting').textContent = past ? 'Looking back' : 'Planning ahead';
+    $('#todayKcal').textContent = past ? `${state.days[day]?.target ?? '—'} kcal target` : `${t.kcal} kcal`;
+    $('#paceNote').textContent = past ? 'Logged' : 'Planned · workouts not included';
+    $('#todayMacros').innerHTML = past ? '' : [['p', 'Protein', t.p], ['f', 'Fat', t.f], ['c', 'Carbs', t.c]]
+      .map(([k, label, g]) => `<div class="macro ${k}"><b>${g} g</b><span>${label}</span></div>`).join('');
+    renderDayBar();
+    if (past) { $('#meals').innerHTML = renderPastDay(day); return; }
+    const plan = todayPlan(t);
+    $('#meals').innerHTML = ['breakfast', 'lunch', 'dinner'].map((meal) => mealCard(meal, plan[meal])).join('')
+      + `<p class="muted small">Changes here are saved for ${esc(dateOf(day).toLocaleDateString(undefined, { weekday: 'long' }))} and show up on Today when the day comes. Tap Reset on a meal to go back to the plan.</p>`;
+    return;
+  }
   const t = targets();
-  const today = isoDate();
   $('#todayDate').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
   $('#todayKcal').textContent = `${t.kcal} kcal`;
   const rate = baseTargets().lbPerWeek;
@@ -272,7 +380,7 @@ const MEAL_TEMPLATES = { eggs: 'Switch: eggs', oatmeal: 'Switch: oatmeal' };
 function mealCard(meal, m) {
   const edited = !!todaysCustom()[meal];
   return `
-    <div class="card meal ${todaysLog().meals[meal] ? 'eaten' : ''}" data-meal="${meal}">
+    <div class="card meal ${viewLog().meals[meal] ? 'eaten' : ''}" data-meal="${meal}">
       <div class="meal-head">
         <div>
           <div class="eyebrow">${meal}</div>
@@ -372,7 +480,7 @@ function refreshCustom(meal) {
     const el = card.querySelector(`li[data-ci="${i}"] [data-role="amt"]`);
     if (el) el.textContent = amountLabel(x.food, x.grams).main;
   });
-  const log = todaysLog();
+  const log = viewLog();
   if (log.meals[meal]) {
     log.meals[meal] = { ...snapshot(m), at: log.meals[meal].at };
     saveLog();
@@ -468,11 +576,12 @@ $('#meals').addEventListener('input', (e) => {
 
 // Keep an already-logged meal in step with edits.
 function resnap(meal) {
-  const log = todaysLog();
+  const log = viewLog();
   if (log.meals[meal]) { log.meals[meal] = { ...snapshot(todayPlan()[meal]), at: log.meals[meal].at }; saveLog(); }
 }
 
 function eatButton(meal) {
+  if (viewingFuture()) return '<div class="eat-row"><span class="small muted">Planned · you can log it on the day</span></div>';
   const e = todaysLog().meals[meal];
   return e
     ? `<div class="eat-row"><span class="tone-good">✓ Eaten at ${e.at} · ${e.kcal} kcal</span><button class="ghost small" data-uneat>Undo</button></div>`
@@ -515,7 +624,7 @@ function refreshMeal(meal, active) {
   const m = todayPlan()[meal];
   const card = document.querySelector(`.meal[data-meal="${meal}"]`);
   // Editing a meal you already logged corrects what you ate.
-  const log = todaysLog();
+  const log = viewLog();
   if (log.meals[meal]) {
     log.meals[meal] = { ...snapshot(m), at: log.meals[meal].at };
     saveLog();
@@ -541,7 +650,7 @@ function editMeal(meal, fn) {
   const meals = todaysCustom();
   meals[meal] = meals[meal] || {};
   fn(meals[meal]);
-  store.set('custom', state.custom);
+  saveCustom();
 }
 
 $('#meals').addEventListener('input', (e) => {
@@ -578,7 +687,7 @@ $('#meals').addEventListener('change', (e) => {
       store.set('prefs', state.prefs);
     }
   } else return;
-  const log = todaysLog();
+  const log = viewLog();
   if (log.meals[meal]) { log.meals[meal] = { ...snapshot(todayPlan()[meal]), at: log.meals[meal].at }; saveLog(); }
   renderToday();
   renderGroceries();
@@ -602,7 +711,7 @@ $('#meals').addEventListener('click', (e) => {
     renderToday();
   } else if (e.target.closest('[data-reset]')) {
     delete todaysCustom()[meal];
-    store.set('custom', state.custom);
+    saveCustom();
     renderToday();
   }
 });
@@ -1462,6 +1571,7 @@ function renderProduct(code, p) {
       const foods = { ...store.get('scannedFoods', {}), [id]: { name: name.slice(0, 60), ...per100, ...(sq > 0 ? { unit: { label: 'serving', grams: sq } } : {}), range: [0, Math.max(500, Math.ceil((sq || 100) * 4)), 1], scanned: true } };
       store.set('scannedFoods', foods);
       addScannedFoods(foods);
+      state.viewDate = null; // scanned food goes into today's meal
       addToMeal(meal, id, grams);
     }
     renderToday();
