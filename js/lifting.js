@@ -159,16 +159,26 @@ const roundTo = (x, step) => Math.round(x / step) * step;
 // ACSM (2009): add ~2–10% once you beat the target reps.
 export function suggestLoad(exerciseId, slot, history, week) {
   const ex = EXERCISES[exerciseId];
-  const last = [...history].reverse().find((s) => s.entries.some((e) => e.exercise === exerciseId && e.sets.some((x) => x.w > 0 && x.r > 0)));
-  if (!last) return { weight: null, text: 'First time: pick a weight you could lift for a few more reps than the target.' };
+  const has = (s) => s.entries.some((e) => e.exercise === exerciseId && e.sets.some((x) => x.w > 0 && x.r > 0));
+  const done = history.filter(has);
+  const lastAny = done[done.length - 1];
+  // Progress from real working sessions, never from a deload's lighter sets.
+  const last = [...done].reverse().find((s) => s.week < 6);
+  if (!last) {
+    if (lastAny) {
+      const top = Math.max(...lastAny.entries.find((e) => e.exercise === exerciseId).sets.map((x) => x.w));
+      return { weight: top, text: `Last time: ${top} lb (deload).` };
+    }
+    return { weight: null, text: 'First time: pick a weight you could lift for a few more reps than the target.' };
+  }
   const sets = last.entries.find((e) => e.exercise === exerciseId).sets.filter((x) => x.w > 0 && x.r > 0);
   const top = Math.max(...sets.map((x) => x.w));
   const work = sets.filter((x) => x.w === top);
   const [lo, hi] = slot.reps;
   const step = ex.lower && ex.kind === 'compound' ? 10 : 5;
-  const lastText = `Last time: ${top} lb × ${work.map((x) => x.r).join(', ')}`;
+  const lastText = `Last working session: ${top} lb × ${work.map((x) => x.r).join(', ')}`;
   if (week >= 6) return { weight: roundTo(top * 0.85, 5), text: `${lastText}. Deload: ~85% for easy sets.` };
-  if (last.week >= 6) return { weight: top, text: `${lastText} (deload). Back to your pre-deload weights.` };
+  if (lastAny !== last && lastAny.week >= 6) return { weight: top, text: `${lastText}. Back to your pre-deload weights.` };
   if (work.every((x) => x.r >= hi)) return { weight: top + step, text: `${lastText} — every set hit ${hi}. Add ${step} lb.` };
   if (work.some((x) => x.r < lo)) return { weight: top, text: `${lastText} — below ${lo} reps. Stay at ${top} lb and build reps.` };
   return { weight: top, text: `${lastText}. Stay at ${top} lb and beat at least one set by a rep.` };

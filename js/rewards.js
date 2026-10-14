@@ -22,8 +22,12 @@ export function scoreDay(day) {
   const notes = [];
   let coins = 0, cookies = 0;
   let status = 'surplus';
-  // At goal weight the job is holding steady: within 200 kcal of what you burned.
-  if ((day.plannedDeficit ?? 1) <= 0) {
+  // Lean gain: a planned surplus; on plan if you ate a little over what you burned.
+  if ((day.plannedDeficit ?? 1) < 0) {
+    const surplus = -deficit;
+    if (surplus >= -100 && surplus <= Math.max(400, -day.plannedDeficit * 1.5)) { coins += COINS.deficit + COINS.sustainable; status = 'on-plan'; notes.push(`On plan +${COINS.deficit + COINS.sustainable}`); }
+  // At goal weight or on a diet break the job is holding steady: within 200 kcal of what you burned.
+  } else if ((day.plannedDeficit ?? 1) === 0) {
     if (Math.abs(deficit) <= 200) { coins += COINS.deficit + COINS.sustainable; status = 'maintained'; notes.push(`Held steady +${COINS.deficit + COINS.sustainable}`); }
   } else if (deficit > 0) {
     coins += COINS.deficit;
@@ -46,7 +50,7 @@ export function scoreDay(day) {
 }
 
 // Days that keep a streak going.
-const OK = /^(deficit|too-big|maintained)$/;
+const OK = /^(deficit|too-big|maintained|on-plan)$/;
 
 const prevDate = (iso) => {
   const d = new Date(iso + 'T12:00');

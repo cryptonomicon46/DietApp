@@ -41,6 +41,7 @@
         </div>
         <p class="muted small" style="margin:6px 0 0">Best: same time each morning, after the bathroom, before eating.</p>
       </form>
+      <div id="program"></div>
       <div class="card day-card">
         <div class="row between">
           <div>
@@ -85,6 +86,7 @@
       <div class="card" id="statsCard">
         <div class="row between" style="margin-top:0">
           <h2>Your stats</h2>
+          <button type="button" class="ghost small" id="openReview2">Program review</button>
           <select id="statsRange" class="small-select" aria-label="Period">
             <option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last year</option>
           </select>
@@ -231,6 +233,12 @@
       <p class="small" id="shareStatus"></p>
       <div class="row end"><button>Done</button></div>
     </form>
+  </dialog>
+
+  <!-- PROGRAM REVIEW -->
+  <dialog id="reviewDialog" class="review">
+    <div id="reviewBody"></div>
+    <div class="row end"><button type="button" class="ghost" id="reviewClose">Close</button></div>
   </dialog>
 
   <!-- SCIENCE -->

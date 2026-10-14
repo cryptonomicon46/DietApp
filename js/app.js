@@ -1,6 +1,6 @@
 import { FOODS, STORES, FOOD_GROUPS } from './foods.js';
 import {
-  ACTIVITY, PACE, dailyTargets, goalProjection, planForDay, groceryList,
+  ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
   FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek,
 } from './plan.js';
@@ -16,6 +16,7 @@ import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setO
 import { sync, newHouseholdCode } from './sync.js';
 import { buildTables, toCsv, summary } from './analytics.js';
 import { makeZip } from './zip.js';
+import { programReview } from './review.js';
 
 // ---------- storage ----------
 // Each person's data is kept separately (see storage.js); `store` reads/writes the open profile.
@@ -53,8 +54,13 @@ function currentWeight() {
 function baseTargets() {
   const t = dailyTargets(state.profile, currentWeight(), state.adjust);
   const a = state.macroAdjust;
-  const p = Math.max(t.p + a.p, 60), f = Math.max(t.f + a.f, 25), c = Math.max(t.c + a.c, 30);
-  return { ...t, p, f, c, kcal: t.kcal + (p - t.p) * 4 + (f - t.f) * 9 + (c - t.c) * 4 };
+  const p = Math.max(t.p + a.p, 60), f = Math.max(t.f + a.f, 25);
+  let c = Math.max(t.c + a.c, 30);
+  // Check-in changes never push calories below the safe minimum (1500 men / 1200 women).
+  const floor = state.profile.sex === 'male' ? 1500 : 1200;
+  const kcalWith = (cc) => t.kcal + (p - t.p) * 4 + (f - t.f) * 9 + (cc - t.c) * 4;
+  if (kcalWith(c) < floor) c += Math.ceil((floor - kcalWith(c)) / 4);
+  return { ...t, p, f, c, kcal: Math.round(kcalWith(c)), atFloor: kcalWith(c) <= floor + 20 };
 }
 
 const firstName = () => (state.profile?.name || '').trim().split(/\s+/)[0];
@@ -95,6 +101,20 @@ function burnedToday() {
   return { kcal: Math.round(base.tdee + exercise), source: 'estimate: daily life + your activities' };
 }
 
+// Positive while cutting, 0 at maintenance or on a diet break, negative on a lean gain.
+function plannedDeficitFor(base, burned, t) {
+  if (base.lbPerWeek < 0) return base.tdee - base.kcal;
+  if (base.lbPerWeek === 0) return 0;
+  return Math.max(base.tdee - base.kcal, burned - t.kcal);
+}
+
+// Weigh-ins since the current phase started (trends shouldn't mix a cut with a gain).
+function phaseWeights() {
+  const start = state.profile.phaseStart || '';
+  const w = state.weights.filter((x) => x.date >= start);
+  return w.length >= 2 ? w : state.weights;
+}
+
 function recordDay() {
   const t = targets(), base = baseTargets(), ate = consumed();
   const burned = burnedToday().kcal;
@@ -102,7 +122,7 @@ function recordDay() {
     eaten: Math.round(ate.kcal), burned, target: t.kcal,
     // The plan's deficit for today includes the share of training calories it doesn't
     // add back to food, so eating to target on a big training day isn't "too big".
-    plannedDeficit: base.tdee - base.kcal <= 0 ? 0 : Math.max(base.tdee - base.kcal, burned - t.kcal), protein: Math.round(ate.p), proteinTarget: t.p,
+    plannedDeficit: plannedDeficitFor(base, burned, t), protein: Math.round(ate.p), proteinTarget: t.p,
     floor: state.profile.sex === 'male' ? 1500 : 1200,
     meals: Object.keys(todaysLog().meals).length,
   };
@@ -198,10 +218,15 @@ function renderToday() {
   const today = isoDate();
   $('#todayDate').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
   $('#todayKcal').textContent = `${t.kcal} kcal`;
-  const proj = goalProjection(state.profile, currentWeight(), new Date(), baseTargets().lbPerWeek);
-  $('#paceNote').textContent = proj.reached
-    ? `Goal reached · maintenance`
-    : `−${t.lbPerWeek} lb/wk · ${state.profile.goalLb} lb by ${proj.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+  const rate = baseTargets().lbPerWeek;
+  const proj = goalProjection(state.profile, currentWeight(), new Date(), rate);
+  const by = proj.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const phase = state.profile.phase || 'cut';
+  $('#paceNote').textContent = phase === 'break' ? 'Diet break · eating at maintenance'
+    : phase === 'maintain' ? 'Maintenance · holding steady'
+      : phase === 'gain' ? `Lean gain · +${-rate} lb/wk${proj.reached ? '' : ` · ${state.profile.goalLb} lb by ${by}`}`
+        : proj.reached ? 'Goal reached · maintenance' : `−${rate} lb/wk · ${state.profile.goalLb} lb by ${by}`;
+  renderProgram();
   $('#todayMacros').innerHTML = [
     ['p', 'Protein', t.p], ['f', 'Fat', t.f], ['c', 'Carbs', t.c],
   ].map(([k, label, g]) => `<div class="macro ${k}"><b>${g} g</b><span>${label}</span></div>`).join('');
@@ -519,7 +544,7 @@ $('#meals').addEventListener('click', (e) => {
 });
 
 function renderAdjustBanner(t) {
-  const s = suggestAdjustment(state.weights, t.lbPerWeek);
+  const s = suggestAdjustment(phaseWeights(), baseTargets().lbPerWeek);
   const el = $('#adjustBanner');
   const lastApplied = store.get('adjustAppliedOn', null);
   const recentlyApplied = lastApplied && (Date.now() - new Date(lastApplied).getTime()) < 7 * 86400000;
@@ -542,6 +567,91 @@ function renderAdjustBanner(t) {
   if ($('#bannerCheckin')) $('#bannerCheckin').onclick = openCheckin;
 }
 
+// ---------- PROGRAM: 8-week phases and what to do next ----------
+function renderProgram() {
+  const today = isoDate();
+  const phase = PHASES[state.profile.phase] ? state.profile.phase : 'cut';
+  const start = state.profile.phaseStart || state.profile.createdOn || today;
+  const weeks = state.profile.phaseWeeks || PHASES[phase].weeks;
+  const dayN = Math.max(1, Math.round((new Date(today + 'T12:00') - new Date(start + 'T12:00')) / DAY) + 1);
+  const done = dayN > weeks * 7;
+  const week = Math.min(Math.ceil(dayN / 7), weeks);
+  const pct = Math.min(100, Math.round((dayN / (weeks * 7)) * 100));
+  $('#program').innerHTML = done
+    ? `<div class="card program done">
+        <div class="eyebrow">${PHASES[phase].label} complete</div>
+        <h3>🎉 Your ${weeks}-week ${PHASES[phase].label.toLowerCase()} is done${firstName() ? `, ${esc(firstName())}` : ''}!</h3>
+        <p class="small">See your results and pick what to do next.</p>
+        <button type="button" class="eat" id="openReview">See results & next step</button>
+      </div>`
+    : `<button type="button" class="program-strip" id="openReview" aria-label="See progress">
+        <span><b>${PHASES[phase].label}</b> · week ${week} of ${weeks}</span>
+        <span class="prog-track"><i style="width:${pct}%"></i></span>
+        <span class="small muted">Progress ›</span>
+      </button>`;
+  $('#openReview').onclick = openReview;
+}
+
+const signed = (n, unit = '') => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n)}${unit}`;
+
+function openReview() {
+  const today = isoDate();
+  const b = baseTargets();
+  const r = programReview(exportProfile(activeProfile().id), today, { rate: b.lbPerWeek, atFloor: b.atFloor });
+  const name = state.profile.name || activeProfile().name;
+  const w = r.weight, n = r.nutrition, tr = r.training;
+  const ro = sync.readOnly();
+  const fmt = (d) => new Date(d + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  $('#reviewBody').innerHTML = `
+    <div class="eyebrow">${PHASES[r.phase].label} · ${fmt(r.start)} – ${fmt(r.today)}</div>
+    <h2>${r.done ? `${esc(name)}'s ${r.weeksPlanned}-week results` : `${esc(name)}'s progress · week ${Math.min(Math.ceil(r.weeksDone), r.weeksPlanned)} of ${r.weeksPlanned}`}</h2>
+    <div class="stat-grid">
+      <div class="stat"><b>${w.change != null ? signed(w.change, ' lb') : '—'}</b><span>weight (${w.start ?? '—'} → ${w.end ?? '—'}, 7-day avg)</span></div>
+      <div class="stat"><b>${w.ratePerWeek != null ? signed(-w.ratePerWeek, ' lb/wk') : '—'}</b><span>average rate${w.pctBody != null ? ` · ${signed(w.pctBody, '%')} body weight` : ''}</span></div>
+      <div class="stat"><b>${n.daysLogged}/${n.days}</b><span>days fully logged</span></div>
+      <div class="stat"><b>${n.onTargetPct ?? '—'}${n.onTargetPct != null ? '%' : ''}</b><span>meals on target (${n.mealsLogged} logged)</span></div>
+      <div class="stat"><b>${n.daysOnTrack}</b><span>days on track · 🪙 ${n.coins}</span></div>
+      <div class="stat"><b>${n.proteinDays}</b><span>days protein goal hit</span></div>
+      <div class="stat"><b>${tr.workouts}</b><span>lifting workouts</span></div>
+      <div class="stat"><b>${tr.activities}</b><span>activities · ${tr.activityHours} h</span></div>
+    </div>
+    ${tr.strength.length ? `<h3>Strength (estimated 1-rep max, first vs last 2 weeks)</h3>
+      <ul class="list">${tr.strength.map((x) => `<li><span>${esc(x.exercise)}</span><span class="small"><b>${x.from} → ${x.to} lb</b> <span class="${x.pct >= 0 ? 'tone-good' : 'tone-warn'}">${signed(x.pct, '%')}</span></span></li>`).join('')}</ul>` : ''}
+    <h3>${r.done ? 'What to do next' : 'When this phase ends'}</h3>
+    <div class="next-opts">
+      ${r.next.options.map((o) => `<div class="next-opt ${o.recommended ? 'rec' : ''}">
+        <div><b>${esc(o.title)}</b>${o.recommended ? ' <em class="badge">Recommended</em>' : ''}</div>
+        <p class="small">${esc(o.why)}</p>
+        ${r.done && !ro ? `<button type="button" class="small ${o.recommended ? '' : 'ghost'}" data-phase="${o.id}" data-adjust="${o.adjust || 0}" data-weeks="${o.weeks || ''}">Choose this</button>` : ''}
+      </div>`).join('')}
+    </div>
+    <p class="small">${esc(r.next.tip)}</p>
+    <p class="small muted">Why: diet breaks of 1–2 weeks at maintenance (Byrne 2018; Peos 2021), slowing loss after weeks of dieting (Trexler 2014), lean gain at ~0.25–0.5% body weight a week (Iraki 2019). See ⓘ Science.</p>`;
+  $('#reviewBody').querySelectorAll('[data-phase]').forEach((b) => b.onclick = () => startPhase(b.dataset.phase, +b.dataset.adjust, +b.dataset.weeks || 0));
+  $('#reviewDialog').showModal();
+}
+$('#reviewClose').onclick = () => $('#reviewDialog').close();
+$('#openReview2').onclick = openReview;
+
+function startPhase(phase, adjust = 0, weeks = 0) {
+  const now = currentWeight();
+  const p = state.profile;
+  p.phase = phase;
+  p.phaseStart = isoDate();
+  p.phaseWeeks = weeks || PHASES[phase].weeks;
+  if (phase === 'maintain') p.goalLb = Math.round(now);
+  if (phase === 'gain') p.goalLb = Math.round(now * 1.03);
+  // A new cut when already at the goal aims ~3% lower.
+  if (phase === 'cut' && now <= (p.goalLb || 0) + 0.5) p.goalLb = Math.round(now * 0.97);
+  store.set('profile', p);
+  if (adjust) { state.macroAdjust.c += Math.round(adjust / 4); store.set('macroAdjust', state.macroAdjust); }
+  // Check-ins restart with the new phase.
+  state.checkins.push({ date: isoDate(), feeling: null, note: `Started ${PHASES[phase].label.toLowerCase()}`, change: 'phase', delta: { p: 0, f: 0, c: adjust ? Math.round(adjust / 4) : 0 }, kcal: adjust });
+  store.set('checkins', state.checkins);
+  $('#reviewDialog').close();
+  renderAll();
+}
+
 // ---------- DAILY DEFICIT GAME ----------
 function renderDeficit() {
   const today = isoDate();
@@ -561,10 +671,13 @@ function renderDeficit() {
   if (g.streak >= 1) kudos = `${name ? `${esc(name)}, ` : ''}${g.streak}-day deficit streak 🔥${g.next ? ` — ${g.next.days - g.streak} more for “${g.next.badge}” (+${g.next.coins} 🪙)` : ''}`;
   else kudos = `${name ? `${esc(name)}, s` : 'S'}tart a streak today: finish in a deficit to earn 🪙 ${projected.coins || 15}.`;
 
-  const atGoal = d.plannedDeficit <= 0;
+  const atGoal = d.plannedDeficit === 0;
+  const gaining = d.plannedDeficit < 0;
   const loggedMeals = Object.keys(todaysLog().meals).length;
-  const status = atGoal
-    ? `You're at your goal, so today's aim is holding steady: finish within 200 kcal of what you burn (now ${burned.kcal}) for 🪙 15.`
+  const status = gaining
+    ? `Lean gain: eat about ${-d.plannedDeficit} kcal more than you burn (now ${burned.kcal}). Finish within 100 under to ${Math.max(400, Math.round(-d.plannedDeficit * 1.5))} over for 🪙 15.`
+    : atGoal
+    ? `${(state.profile.phase || 'cut') === 'break' ? 'Diet break' : 'Maintenance'}: today's aim is holding steady. Finish within 200 kcal of what you burn (now ${burned.kcal}) for 🪙 15.`
     : !eaten
     ? `Log your meals as you eat. Finish at your target (${t.kcal}) for about a <b>${burned.kcal - t.kcal} kcal</b> deficit and 🪙 ${projected.coins}${projected.cookies ? ' + 🍪' : ''}.`
     : now <= 0
@@ -586,7 +699,7 @@ function renderDeficit() {
   $('#deficit').innerHTML = `
     <div class="card deficit-card">
       <div class="row between" style="margin-top:0">
-        <div><div class="eyebrow">Today's deficit so far</div>
+        <div><div class="eyebrow">${gaining ? "Today's balance so far" : "Today's deficit so far"}</div>
           <div class="big ${now < 0 ? 'neg' : ''}">${now >= 0 ? '' : '+'}${Math.abs(now)} <small>kcal ${now >= 0 ? 'under' : 'over'}</small></div></div>
         <div class="coins-total"><b>🪙 ${g.coins}</b><small>🍪 ${g.cookies} · best 🔥 ${g.best}</small></div>
       </div>
@@ -644,9 +757,9 @@ function renderCheckin() {
   draft = draft || { feeling: null, note: '', choice: null, custom: { p: 0, f: 0, c: 0 } };
   const name = firstName();
   const base = baseTargets();
-  const trend = suggestAdjustment(state.weights, base.lbPerWeek);
+  const trend = suggestAdjustment(phaseWeights(), base.lbPerWeek);
   const wow = weekOverWeek(state.weights);
-  const rec = recommendCheckin(trend, draft.feeling);
+  const rec = recommendCheckin(trend, draft.feeling, base.atFloor);
   const choice = draft.choice || rec.id;
   const options = [...CHECKIN_OPTIONS].sort((a, b) => (a.id === rec.id ? -1 : b.id === rec.id ? 1 : 0));
   const delta = choice === 'custom' ? draft.custom : CHECKIN_OPTIONS.find((o) => o.id === choice).delta;

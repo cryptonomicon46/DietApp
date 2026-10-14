@@ -134,3 +134,10 @@ test('custom meal: your own foods, grams and optional typed macros', async () =>
   assert.deepEqual([typed.totals.kcal, typed.totals.p, typed.manual], [320, 30, true]);
   assert.equal(typed.totals.f, b.totals.f, 'blank fields keep the computed value');
 });
+
+test('no check-in cut below the calorie floor', async () => {
+  const { recommendCheckin } = await import('../js/plan.js');
+  const r = recommendCheckin({ delta: -100, lost: 0.1, target: 1, reason: 'slower than planned' }, 'great', true);
+  assert.equal(r.id, 'keep');
+  assert.match(r.why, /safe minimum/);
+});

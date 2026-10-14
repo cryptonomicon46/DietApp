@@ -33,15 +33,27 @@ export function bmr({ sex, age, heightIn, weightLb }) {
   return 10 * kg + 6.25 * cm - 5 * age + (sex === 'male' ? 5 : -161);
 }
 
+// Phases after (or between) cuts. A diet break or maintenance eats at maintenance;
+// a lean gain eats a small surplus for ~0.25%/week gain (Iraki et al. 2019).
+export const PHASES = {
+  cut:      { label: 'Cut', weeks: 8 },
+  break:    { label: 'Diet break', weeks: 2 },
+  maintain: { label: 'Maintenance', weeks: 4 },
+  gain:     { label: 'Lean gain', weeks: 12, pct: 0.0025 },
+};
+
 export function dailyTargets(profile, weightLb, adjust = 0) {
   const base = bmr({ ...profile, weightLb });
   const tdee = base * ACTIVITY[profile.activity].factor;
+  const phase = PHASES[profile.phase] ? profile.phase : 'cut';
 
-  // At or below goal: eat at maintenance.
+  // Cut: lose at the chosen pace until the goal; at or below goal, eat at maintenance.
   const toGo = Math.max(weightLb - (profile.goalLb || 0), 0);
-  const lbPerWeek = toGo > 0 ? Math.min(weightLb * PACE[profile.pace].pct, 2) : 0;
+  const lbPerWeek = phase === 'cut' && toGo > 0 ? Math.min(weightLb * PACE[profile.pace].pct, 2) : 0;
   // Never cut more than 25% below maintenance.
-  const deficit = Math.min((lbPerWeek * KCAL_PER_LB_FAT) / 7, tdee * 0.25);
+  let deficit = Math.min((lbPerWeek * KCAL_PER_LB_FAT) / 7, tdee * 0.25);
+  // Lean gain: a surplus of at most 15% above maintenance.
+  if (phase === 'gain') deficit = -Math.min((weightLb * PHASES.gain.pct * KCAL_PER_LB_FAT) / 7, tdee * 0.15);
   const floor = profile.sex === 'male' ? 1500 : 1200;
   const kcal = Math.round(Math.max(tdee - deficit + adjust, floor) / 10) * 10;
 
@@ -54,14 +66,21 @@ export function dailyTargets(profile, weightLb, adjust = 0) {
   const c = Math.max(Math.round((kcal - p * 4 - f * 9) / 4), 50);
 
   // Report the rate the deficit actually supports (the 25% cap can slow it).
+  // Positive = losing, negative = gaining.
   const actualRate = (deficit * 7) / KCAL_PER_LB_FAT;
-  return { kcal, p, f, c, bmr: Math.round(base), tdee: Math.round(tdee), lbPerWeek: +actualRate.toFixed(2) };
+  return { kcal, p, f, c, bmr: Math.round(base), tdee: Math.round(tdee), lbPerWeek: +actualRate.toFixed(2), phase };
 }
 
 // Weeks and date to reach the goal at the planned pace (the pace eases slightly as weight drops).
 // Pass `rate` (lb/week from dailyTargets) when known; otherwise the pace setting is used.
 export function goalProjection(profile, weightLb, from = new Date(), rate = null) {
   const goal = profile.goalLb;
+  if (profile.phase === 'gain') {
+    if (!goal || weightLb >= goal || !(rate < 0)) return { reached: true, weeks: 0, date: from };
+    const weeks = (goal - weightLb) / -rate;
+    const date = new Date(from); date.setDate(date.getDate() + Math.round(weeks * 7));
+    return { reached: false, weeks: Math.max(1, Math.round(weeks)), date };
+  }
   if (!goal || weightLb <= goal) return { reached: true, weeks: 0, date: from };
   if (rate > 0) {
     const weeks = (weightLb - goal) / rate;
@@ -250,14 +269,19 @@ export function weeklyTrend(entries, windowDays = 21) {
 }
 
 // After 2+ weeks of data, nudge calories by 100 if progress is off pace.
+// target: planned lb/week lost (negative while gaining, 0 at maintenance).
 export function suggestAdjustment(entries, targetLbPerWeek) {
   const trend = weeklyTrend(entries);
   if (!trend || trend.spanDays < 14) return null;
   const lost = -trend.lbPerWeek;
-  if (lost < targetLbPerWeek * 0.5) return { delta: -100, lost, reason: 'slower than planned' };
-  if (lost > targetLbPerWeek * 1.5) return { delta: 100, lost, reason: 'faster than planned — protect muscle & energy' };
-  return { delta: 0, lost, reason: 'on track' };
+  const target = targetLbPerWeek;
+  const tol = Math.max(0.25, Math.abs(target) * 0.5);
+  if (lost < target - tol) return { delta: -100, lost, target, reason: target > 0 ? 'slower than planned' : target < 0 ? 'gaining faster than planned' : 'drifting up' };
+  if (lost > target + tol) return { delta: 100, lost, target, reason: target > 0 ? 'faster than planned — protect muscle & energy' : target < 0 ? 'not gaining yet' : 'drifting down' };
+  return { delta: 0, lost, target, reason: 'on track' };
 }
+
+export const rateText = (lost) => (lost > 0.05 ? `losing ${lost.toFixed(1)} lb/week` : lost < -0.05 ? `gaining ${(-lost).toFixed(1)} lb/week` : 'holding steady');
 
 // Rough "how well does this fit a cut" signal, from per-100 g values.
 export function fitScore({ kcal, p }) {
@@ -292,25 +316,30 @@ export const CHECKIN_OPTIONS = [
 export const deltaKcal = (d) => (d.p || 0) * 4 + (d.f || 0) * 9 + (d.c || 0) * 4;
 
 // Pick the suggested option from the weight trend and how the week felt.
-export function recommendCheckin(trend, feeling) {
+export function recommendCheckin(trend, feeling, atFloor = false) {
   const struggling = feeling === 'hungry' || feeling === 'tired' || feeling === 'hard';
+  // Already at the calorie floor: don't cut further — move more instead.
+  if (atFloor && trend && trend.delta < 0) {
+    return { id: 'keep', why: `You're ${rateText(trend.lost)}, but your calories are already at the safe minimum. Keep them here and add activity instead — a daily 30–45 min walk adds roughly 150–250 kcal.` };
+  }
   if (!trend) {
     if (feeling === 'hungry') return { id: 'moreProtein', why: 'Protein is the most filling macro — same calories, fewer cravings.' };
     if (feeling === 'tired') return { id: 'moreCarbs', why: 'Shifting fat to carbs usually helps training energy at the same calories.' };
     return { id: 'keep', why: 'Not enough weigh-ins yet to judge your trend — keep going and log a few more.' };
   }
-  const lost = trend.lost.toFixed(1);
+  const now = rateText(trend.lost);
+  const cutting = (trend.target ?? 1) > 0;
   if (trend.delta < 0) {
-    if (trend.lost < 0 && !struggling) return { id: 'minus200', why: `You're up ${Math.abs(lost)} lb/week, so a bigger cut makes sense.` };
-    return { id: 'minus100', why: `You're losing ${lost} lb/week, slower than planned. A small cut gets you back on pace${struggling ? ' — taken from carbs so protein keeps you full' : ''}.` };
+    if (cutting && trend.lost < 0 && !struggling) return { id: 'minus200', why: `You're ${now} while cutting, so a bigger cut makes sense.` };
+    return { id: 'minus100', why: `You're ${now}, ${trend.reason ?? 'off plan'}. A small cut gets you back on track${struggling ? ' — taken from carbs so protein keeps you full' : ''}.` };
   }
   if (trend.delta > 0) {
-    if (struggling) return { id: 'plus200', why: `You're losing ${lost} lb/week — faster than needed, and it's showing. More food will help you keep muscle and energy.` };
-    return { id: 'plus100', why: `You're losing ${lost} lb/week, faster than planned. A little more food protects muscle.` };
+    if (cutting && struggling) return { id: 'plus200', why: `You're ${now} — faster than needed, and it's showing. More food will help you keep muscle and energy.` };
+    return { id: 'plus100', why: `You're ${now}, ${trend.reason ?? 'off plan'}. A little more food gets you back on track.` };
   }
-  if (feeling === 'hungry') return { id: 'moreProtein', why: `Right on pace (${lost} lb/week). Swapping carbs for protein should help with hunger.` };
-  if (feeling === 'tired') return { id: 'moreCarbs', why: `Right on pace (${lost} lb/week). Moving some fat to carbs should help energy.` };
-  return { id: 'keep', why: `Right on pace at ${lost} lb/week — no change needed.` };
+  if (feeling === 'hungry') return { id: 'moreProtein', why: `Right on plan (${now}). Swapping carbs for protein should help with hunger.` };
+  if (feeling === 'tired') return { id: 'moreCarbs', why: `Right on plan (${now}). Moving some fat to carbs should help energy.` };
+  return { id: 'keep', why: `Right on plan (${now}) — no change needed.` };
 }
 
 // Average weight of the last 7 days vs the 7 days before.

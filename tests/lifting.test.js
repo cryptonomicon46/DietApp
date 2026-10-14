@@ -42,3 +42,15 @@ test('double progression load suggestions', () => {
   const curl = DAYS.A.slots[5];
   assert.equal(suggestLoad('dbCurl', curl, [{ week: 1, entries: [{ exercise: 'dbCurl', sets: [{ w: 30, r: 12 }, { w: 30, r: 12 }] }] }], 2).weight, 35);
 });
+
+test('after a deload, loads go back to the last working weights', () => {
+  const slot = DAYS.A.slots[0];
+  const hist = [
+    { week: 5, entries: [{ exercise: 'backSquat', sets: [{ w: 225, r: 5 }, { w: 225, r: 5 }] }] },
+    { week: 6, entries: [{ exercise: 'backSquat', sets: [{ w: 190, r: 5 }] }] },
+  ];
+  const s = suggestLoad('backSquat', slot, hist, 1);
+  assert.equal(s.weight, 225);
+  assert.match(s.text, /pre-deload/);
+  assert.equal(suggestLoad('backSquat', slot, hist, 6).weight, 190, 'deload again → 85% of 225');
+});

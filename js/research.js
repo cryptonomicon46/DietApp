@@ -61,6 +61,30 @@ export const RESEARCH = [
     cite: 'Ainsworth BE, Haskell WL, Herrmann SD, et al. 2011 Compendium of Physical Activities: a second update of codes and MET values. Med Sci Sports Exerc. 2011;43(8):1575–1581.',
     url: 'https://doi.org/10.1249/MSS.0b013e31821ece12',
   },
+  {
+    topic: 'Diet breaks',
+    used: 'After an 8-week cut, a 2-week break at maintenance is suggested before cutting again.',
+    cite: 'Byrne NM, Sainsbury A, King NA, Hills AP, Wood RE. Intermittent energy restriction improves weight loss efficiency in obese men: the MATADOR study. Int J Obes. 2018;42(2):129–138.',
+    url: 'https://doi.org/10.1038/ijo.2017.206',
+  },
+  {
+    topic: 'Diet breaks in people who lift',
+    used: 'Breaks don’t speed fat loss, but they lower hunger with similar results, so they’re offered when the plan feels hard.',
+    cite: 'Peos JJ, Helms ER, Fournier PA, et al. Continuous versus intermittent dieting for fat loss and fat-free mass retention in resistance-trained adults: the ICECAP trial. Med Sci Sports Exerc. 2021;53(8):1685–1698.',
+    url: 'https://doi.org/10.1249/MSS.0000000000002636',
+  },
+  {
+    topic: 'Why weight loss slows',
+    used: 'A plateau after weeks of good adherence is treated as adaptation: a break or a small cut is suggested, not blame.',
+    cite: 'Trexler ET, Smith-Ryan AE, Norton LE. Metabolic adaptation to weight loss: implications for the athlete. J Int Soc Sports Nutr. 2014;11:7.',
+    url: 'https://doi.org/10.1186/1550-2783-11-7',
+  },
+  {
+    topic: 'Lean gain',
+    used: 'Lean-gain phase: a surplus for ~0.25% body weight a week (the lower end, to limit fat gain).',
+    cite: 'Iraki J, Fitschen P, Espinar S, Helms E. Nutrition recommendations for bodybuilders in the off-season: a narrative review. Sports. 2019;7(7):154.',
+    url: 'https://doi.org/10.3390/sports7070154',
+  },
   // ---------- training ----------
   {
     area: 'training',

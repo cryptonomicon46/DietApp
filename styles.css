@@ -319,3 +319,16 @@ body.readonly main input, body.readonly main select, body.readonly main button {
 .seg button.on { background: var(--brand); color: var(--brand-ink); }
 .weigh-card.done { border-color: var(--brand); }
 .daybar-macros .over { color: var(--warn); }
+
+/* program */
+.program-strip { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; width: 100%; text-align: left; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px; font-weight: 400; }
+.program-strip .prog-track { grid-column: 1 / -1; grid-row: 2; height: 6px; background: var(--bg); border-radius: 999px; overflow: hidden; }
+.program-strip .prog-track i { display: block; height: 100%; background: var(--brand); }
+.program.done { border-color: var(--brand); }
+.program.done h3 { margin: 4px 0; }
+dialog.review { width: min(520px, calc(100vw - 24px)); }
+.review h3 { margin-top: 14px; }
+.next-opts { display: grid; gap: 8px; }
+.next-opt { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.next-opt.rec { border-color: var(--brand); background: var(--bg); }
+.next-opt p { margin: 4px 0 8px; }
