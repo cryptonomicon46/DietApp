@@ -77,7 +77,7 @@ export function buildTables(data) {
         lifting_sets.push({
           date: s.date, block: s.block, week: s.week === 6 ? 'deload' : s.week, day: s.day,
           exercise: EXERCISES[e.exercise]?.name || e.exercise, muscle: MUSCLES[EXERCISES[e.exercise]?.muscle] || '',
-          set: i + 1, weight_lb: x.w, reps: x.r,
+          set: i + 1, weight_lb: x.w, reps: x.r, bodyweight: x.bw ? 'yes' : '',
         });
       });
     }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCommand, matchExercise } from '../js/commands.js';
+import { parseCommand, matchExercise, describe } from '../js/commands.js';
 
 const one = (t, ids) => parseCommand(t, ids).actions;
 
@@ -54,4 +54,15 @@ test('reorder commands', () => {
   assert.deepEqual(parseCommand('bench first', ids).actions, [{ type: 'move', exercise: 'bench', to: 'start' }]);
   // Logging sets still works when "after" appears with numbers.
   assert.equal(parseCommand('squats 3 sets of 5 at 185', ids).actions[0].type, 'sets');
+});
+
+test('heel raises are bodyweight', () => {
+  const { actions } = parseCommand('heel raises 3 sets of 15', []);
+  assert.equal(actions[0].exercise, 'heelRaise');
+  assert.equal(describe(actions[0]), 'Bodyweight heel raise: 3 sets × 15, 15, 15 (bodyweight)');
+});
+
+test('rep lists without a weight', () => {
+  const { actions } = parseCommand('pull ups 8, 7, 6 reps', ['pullUp']);
+  assert.deepEqual(actions[0].sets, [{ r: 8, w: null }, { r: 7, w: null }, { r: 6, w: null }]);
 });

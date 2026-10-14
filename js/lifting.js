@@ -16,7 +16,8 @@ export const MUSCLES = {
   shoulders: 'Shoulders', biceps: 'Biceps', triceps: 'Triceps', calves: 'Calves', abs: 'Abs',
 };
 
-// kind: compound | isolation; lower: lower-body (bigger load jumps); equip for filtering.
+// kind: compound | isolation; lower: lower-body (bigger load jumps); equip for filtering;
+// bw: the load is your body weight (sets log reps only).
 export const EXERCISES = {
   // Quads
   backSquat:      { name: 'Barbell back squat',         muscle: 'quads', kind: 'compound', equip: 'Barbell', lower: true, cue: 'Brace, sit between your hips, knees track over toes.' },
@@ -35,15 +36,15 @@ export const EXERCISES = {
   hipThrust:      { name: 'Barbell hip thrust',         muscle: 'hams', kind: 'compound', equip: 'Barbell', lower: true, cue: 'Chin tucked, squeeze glutes at the top.' },
   lyingCurl:      { name: 'Lying leg curl',             muscle: 'hams', kind: 'isolation', equip: 'Machine', lower: true, cue: 'Hips pinned, slow lowering.' },
   seatedCurl:     { name: 'Seated leg curl',            muscle: 'hams', kind: 'isolation', equip: 'Machine', lower: true, cue: 'Lean forward slightly for a bigger stretch.' },
-  backExtension:  { name: '45° back extension',         muscle: 'hams', kind: 'isolation', equip: 'Bodyweight', lower: true, cue: 'Hinge at the hips, round slightly for glutes.' },
+  backExtension:  { name: '45° back extension',         muscle: 'hams', kind: 'isolation', equip: 'Bodyweight', bw: true, lower: true, cue: 'Hinge at the hips, round slightly for glutes.' },
   // Chest
   bench:          { name: 'Barbell bench press',        muscle: 'chest', kind: 'compound', equip: 'Barbell', cue: 'Shoulder blades pinned, bar to lower chest.' },
   dbBench:        { name: 'Dumbbell bench press',       muscle: 'chest', kind: 'compound', equip: 'Dumbbell', cue: 'Deep stretch at the bottom.' },
   inclineDb:      { name: 'Incline dumbbell press',     muscle: 'chest', kind: 'compound', equip: 'Dumbbell', cue: 'Bench at 30°, elbows ~45°.' },
   inclineBb:      { name: 'Incline barbell press',      muscle: 'chest', kind: 'compound', equip: 'Barbell', cue: 'Bar to upper chest.' },
   machinePress:   { name: 'Machine chest press',        muscle: 'chest', kind: 'compound', equip: 'Machine', cue: 'Handles at mid-chest.' },
-  dips:           { name: 'Dips',                       muscle: 'chest', kind: 'compound', equip: 'Bodyweight', cue: 'Lean forward for chest, add weight when easy.' },
-  pushUp:         { name: 'Push-up',                    muscle: 'chest', kind: 'compound', equip: 'Bodyweight', cue: 'Body in one line; elevate feet to progress.' },
+  dips:           { name: 'Dips',                       muscle: 'chest', kind: 'compound', equip: 'Bodyweight', bw: true, cue: 'Lean forward for chest; slow the lowering when sets get easy.' },
+  pushUp:         { name: 'Push-up',                    muscle: 'chest', kind: 'compound', equip: 'Bodyweight', bw: true, cue: 'Body in one line; elevate feet to progress.' },
   cableFly:       { name: 'Cable fly',                  muscle: 'chest', kind: 'isolation', equip: 'Cable', cue: 'Slight elbow bend, hug a tree.' },
   pecDeck:        { name: 'Pec deck',                   muscle: 'chest', kind: 'isolation', equip: 'Machine', cue: 'Stretch wide, squeeze together.' },
   // Back — rows
@@ -53,8 +54,8 @@ export const EXERCISES = {
   cableRow:       { name: 'Seated cable row',           muscle: 'back', kind: 'compound', equip: 'Cable', cue: 'Tall chest, squeeze shoulder blades.' },
   tBarRow:        { name: 'T-bar row',                  muscle: 'back', kind: 'compound', equip: 'Barbell', cue: 'Neutral spine, drive elbows back.' },
   // Back — lats
-  pullUp:         { name: 'Pull-up',                    muscle: 'lats', kind: 'compound', equip: 'Bodyweight', cue: 'Full hang to chin over bar; add weight when easy.' },
-  chinUp:         { name: 'Chin-up',                    muscle: 'lats', kind: 'compound', equip: 'Bodyweight', cue: 'Palms facing you, chest to bar.' },
+  pullUp:         { name: 'Pull-up',                    muscle: 'lats', kind: 'compound', equip: 'Bodyweight', bw: true, cue: 'Full hang to chin over bar; slow the lowering when sets get easy.' },
+  chinUp:         { name: 'Chin-up',                    muscle: 'lats', kind: 'compound', equip: 'Bodyweight', bw: true, cue: 'Palms facing you, chest to bar.' },
   latPulldown:    { name: 'Lat pulldown',               muscle: 'lats', kind: 'compound', equip: 'Cable', cue: 'Pull to upper chest, elbows down and in.' },
   neutralPulldown:{ name: 'Neutral-grip pulldown',      muscle: 'lats', kind: 'compound', equip: 'Cable', cue: 'Palms facing, full stretch at top.' },
   straightArm:    { name: 'Straight-arm pulldown',      muscle: 'lats', kind: 'isolation', equip: 'Cable', cue: 'Arms long, sweep to thighs.' },
@@ -81,11 +82,12 @@ export const EXERCISES = {
   // Calves
   standingCalf:   { name: 'Standing calf raise',        muscle: 'calves', kind: 'isolation', equip: 'Machine', lower: true, cue: 'Pause 2 s in the deep stretch.' },
   seatedCalf:     { name: 'Seated calf raise',          muscle: 'calves', kind: 'isolation', equip: 'Machine', lower: true, cue: 'Full range, no bouncing.' },
+  heelRaise:      { name: 'Bodyweight heel raise',      muscle: 'calves', kind: 'isolation', equip: 'Bodyweight', bw: true, lower: true, cue: 'Balls of feet on a step, pause 2 s in the stretch; go one leg at a time when both is easy.' },
   legPressCalf:   { name: 'Calf press on leg press',    muscle: 'calves', kind: 'isolation', equip: 'Machine', lower: true, cue: 'Balls of feet on the platform edge.' },
   // Abs
   cableCrunch:    { name: 'Cable crunch',               muscle: 'abs', kind: 'isolation', equip: 'Cable', cue: 'Curl ribs to hips.' },
-  hangingRaise:   { name: 'Hanging leg raise',          muscle: 'abs', kind: 'isolation', equip: 'Bodyweight', cue: 'Tilt the pelvis up, no swinging.' },
-  abWheel:        { name: 'Ab wheel rollout',           muscle: 'abs', kind: 'isolation', equip: 'Bodyweight', cue: 'Ribs down, roll only as far as you control.' },
+  hangingRaise:   { name: 'Hanging leg raise',          muscle: 'abs', kind: 'isolation', equip: 'Bodyweight', bw: true, cue: 'Tilt the pelvis up, no swinging.' },
+  abWheel:        { name: 'Ab wheel rollout',           muscle: 'abs', kind: 'isolation', equip: 'Bodyweight', bw: true, cue: 'Ribs down, roll only as far as you control.' },
 };
 
 const byMuscle = (m, ...extra) => [...Object.keys(EXERCISES).filter((k) => EXERCISES[k].muscle === m), ...extra];
@@ -166,6 +168,11 @@ export function suggestLoad(exerciseId, slot, history, week) {
   const lastAny = done[done.length - 1];
   // Progress from real working sessions, never from a deload's lighter sets.
   const last = [...done].reverse().find((s) => s.week < 6);
+  if (ex.bw) {
+    const prev = (last || lastAny)?.entries.find((e) => e.exercise === exerciseId).sets;
+    if (!prev) return { weight: null, text: `Bodyweight. Aim for ${slot.reps[0]}–${slot.reps[1]} reps; if you can't reach ${slot.reps[0]}, use a band or the assisted machine.` };
+    if (!last) return { weight: null, text: `Last time: ${prev.map((x) => x.r).join(', ')} reps (deload).` };
+  }
   if (!last) {
     if (lastAny) {
       const top = Math.max(...lastAny.entries.find((e) => e.exercise === exerciseId).sets.map((x) => x.w));
@@ -173,6 +180,7 @@ export function suggestLoad(exerciseId, slot, history, week) {
     }
     return { weight: null, text: 'First time: pick a weight you could lift for a few more reps than the target.' };
   }
+  if (ex.bw) return bodyweightTip(last.entries.find((e) => e.exercise === exerciseId).sets, slot, week);
   const sets = last.entries.find((e) => e.exercise === exerciseId).sets.filter((x) => x.w > 0 && x.r > 0);
   const top = Math.max(...sets.map((x) => x.w));
   const work = sets.filter((x) => x.w === top);
@@ -184,6 +192,17 @@ export function suggestLoad(exerciseId, slot, history, week) {
   if (work.every((x) => x.r >= hi)) return { weight: top + step, text: `${lastText} — every set hit ${hi}. Add ${step} lb.` };
   if (work.some((x) => x.r < lo)) return { weight: top, text: `${lastText} — below ${lo} reps. Stay at ${top} lb and build reps.` };
   return { weight: top, text: `${lastText}. Stay at ${top} lb and beat at least one set by a rep.` };
+}
+
+// Bodyweight moves progress by reps, then by making the move harder.
+function bodyweightTip(sets, slot, week) {
+  const reps = sets.filter((x) => x.r > 0).map((x) => x.r);
+  const [lo, hi] = slot.reps;
+  const lastText = `Last working session: ${reps.join(', ')} reps`;
+  if (week >= 6) return { weight: null, text: `${lastText}. Deload: about half the reps, stop well short of failure.` };
+  if (reps.length && reps.every((r) => r >= hi)) return { weight: null, text: `${lastText} — every set hit ${hi}. Make it harder: slow 3 s lowering, a pause, or one leg / a harder variation.` };
+  if (reps.some((r) => r < lo)) return { weight: null, text: `${lastText} — below ${lo}. Keep going and build reps; a band helps reach ${lo}.` };
+  return { weight: null, text: `${lastText}. Beat at least one set by a rep.` };
 }
 
 // ---------- plate math ----------

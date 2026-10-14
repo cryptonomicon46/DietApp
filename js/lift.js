@@ -38,6 +38,12 @@ const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const isoDate = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
+// Body weight for bodyweight moves: latest weigh-in, else the profile's weight.
+function bodyWeight() {
+  const w = store.get('weights', []);
+  return w.length ? w[w.length - 1].weight : (+store.get('profile', null)?.weight || null);
+}
+
 const blockSessions = () => lift.sessions.filter((s) => s.block === lift.block);
 
 function startDraft(day, week) {
@@ -61,7 +67,8 @@ export function addExercise(exerciseId, after, keep = false) {
 
 function newSets(exercise, slot, week, index) {
   const s = suggestLoad(exercise, slot, lift.sessions, week);
-  return Array.from({ length: setsFor(slot, week, index, lift.extraSets[slot.id] || 0) }, () => ({ w: s.weight ?? '', r: '', done: false }));
+  const w = EXERCISES[exercise].bw ? bodyWeight() ?? '' : s.weight ?? '';
+  return Array.from({ length: setsFor(slot, week, index, lift.extraSets[slot.id] || 0) }, () => ({ w, r: '', done: false }));
 }
 
 export function renderLift() {
@@ -106,6 +113,8 @@ export function renderLift() {
       const sug = suggestLoad(e.exercise, slot, lift.sessions, d.week);
       const [lo, hi] = slot.reps;
       const barbell = ex.equip === 'Barbell';
+      const bw = ex.bw ? bodyWeight() : null;
+      if (ex.bw) e.sets.forEach((x) => { x.w = bw ?? ''; });
       // Hints skip 35s unless you've loaded them yourself.
       const load = barbell && sug.weight ? platesFor(sug.weight, lift.bar || 45, lift.use35 ? PLATES : PLATES.filter((x) => x !== 35)) : null;
       return `
@@ -124,11 +133,14 @@ export function renderLift() {
         <div class="target"><b>${e.sets.length} × ${lo}–${hi} reps</b> · RIR ${d.week === 5 && ex.kind === 'isolation' ? '0 on last set' : wk.rir} · rest ${slot.rest}</div>
         <div class="small muted">${esc(sug.text)} ${esc(ex.cue)}</div>
         ${load ? `<div class="small plate-hint">Load ${sug.weight} lb: <b>${platesText(load)}</b> per side on a ${lift.bar || 45} lb bar</div>` : ''}
+        ${ex.bw && !bw ? `<form class="bw-ask small" data-bwform>Bodyweight exercise: what do you weigh?
+          <input type="number" inputmode="decimal" step="any" min="50" max="700" name="bw" placeholder="lb" required aria-label="Your body weight in pounds">
+          <button type="submit" class="small">Save</button><span class="muted">Also saved as today's weigh-in.</span></form>` : ''}
         <div class="sets">
           ${e.sets.map((s, j) => `
             <div class="setrow ${s.done ? 'done' : ''} ${barbell ? 'has-plates' : ''}">
               <span class="small muted">Set ${j + 1}</span>
-              <input type="number" inputmode="decimal" step="any" min="0" data-w="${slot.id}:${j}" value="${s.w}" placeholder="lb" aria-label="Set ${j + 1} weight">
+              ${ex.bw ? `<span class="bw-chip" title="Body weight">BW${bw ? ` ${bw}` : ''}</span>` : `<input type="number" inputmode="decimal" step="any" min="0" data-w="${slot.id}:${j}" value="${s.w}" placeholder="lb" aria-label="Set ${j + 1} weight">`}
               ${barbell ? `<button type="button" class="plate-btn" data-plates="${slot.id}:${j}" aria-label="Count plates for set ${j + 1}">⦿</button>` : ''}
               <span class="muted">×</span>
               <input type="number" inputmode="numeric" min="0" max="100" data-r="${slot.id}:${j}" value="${s.r}" placeholder="${hi}" aria-label="Set ${j + 1} reps">
@@ -220,7 +232,7 @@ export function applyActions(actions) {
     for (const st of a.sets) {
       if (!sets[k]) sets.push({ w: '', r: '', done: false });
       const prevW = sets[k].w !== '' ? sets[k].w : [...sets].slice(0, k).reverse().find((x) => x.w !== '')?.w ?? '';
-      sets[k].w = st.w ?? prevW;
+      sets[k].w = EXERCISES[d.entries[slot.id].exercise].bw ? bodyWeight() ?? '' : st.w ?? prevW;
       sets[k].r = st.r;
       sets[k].done = true;
       k++;
@@ -350,6 +362,13 @@ function initPlates() {
 export function initLift() {
   initPlates();
   $('#tab-lift').addEventListener('submit', (e) => {
+    if (e.target.dataset.bwform != null) {
+      e.preventDefault();
+      const lb = +e.target.elements.bw.value;
+      if (lb >= 50 && lb <= 700) window.dispatchEvent(new CustomEvent('lp:weighin', { detail: lb }));
+      renderLift();
+      return;
+    }
     if (e.target.id !== 'cmdForm') return;
     e.preventDefault();
     const text = $('#cmdText').value.trim();
@@ -478,7 +497,7 @@ export function initLift() {
     } else if (t.id === 'finishLift') {
       const d = lift.draft;
       const entries = sessionSlots().filter((s) => d.entries[s.id]).map((s) => [s.id, d.entries[s.id]]).map(([slot, e]) => ({
-        slot, exercise: e.exercise, sets: e.sets.filter((s) => +s.r > 0).map((s) => ({ w: +s.w || 0, r: +s.r })),
+        slot, exercise: e.exercise, sets: e.sets.filter((s) => +s.r > 0).map((s) => ({ w: +s.w || 0, r: +s.r, ...(EXERCISES[e.exercise].bw ? { bw: true } : {}) })),
       }));
       if (!entries.some((e) => e.sets.length)) { t.textContent = 'Log at least one set first'; return; }
       lift.sessions.push({ date: isoDate(), block: lift.block, week: d.week, day: d.day, entries });

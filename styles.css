@@ -361,3 +361,6 @@ dialog.review { width: min(520px, calc(100vw - 24px)); }
 .move-btns button { min-width: 36px; padding: 4px 8px; }
 .move-btns button:disabled { opacity: .3; }
 .order-bar { background: var(--bg); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+.bw-chip { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 10px; border-radius: 10px; background: var(--bg); font-weight: 700; font-size: 14px; white-space: nowrap; }
+.bw-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; }
+.bw-ask input { width: 90px; }

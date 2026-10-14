@@ -102,3 +102,13 @@ test('exercise order: apply and move', async () => {
   assert.deepEqual(moveSlot(ids, 'A4', { after: 'A1' }), ['A1', 'A4', 'A2', 'A3']);
   assert.deepEqual(moveSlot(ids, 'A1', { before: 'A4' }), ['A2', 'A3', 'A1', 'A4']);
 });
+
+test('bodyweight moves progress by reps', () => {
+  const slot = { id: 'B3', reps: [6, 10], sets: 3 };
+  assert.match(suggestLoad('pullUp', slot, [], 1).text, /Bodyweight/);
+  const hist = [{ week: 1, entries: [{ exercise: 'pullUp', sets: [{ w: 160, r: 10, bw: true }, { w: 160, r: 10, bw: true }] }] }];
+  const s = suggestLoad('pullUp', slot, hist, 2);
+  assert.equal(s.weight, null);
+  assert.match(s.text, /Make it harder/);
+  assert.ok(EXERCISES.heelRaise.bw && EXERCISES.pullUp.bw && !EXERCISES.standingCalf.bw);
+});

@@ -44,7 +44,7 @@ const ALIASES = [
   ['cable lateral', 'cableLateral'], ['lateral raise', 'lateralRaise'], ['side raise', 'lateralRaise'], ['lateral', 'lateralRaise'], ['rear delt', 'rearDelt'], ['face pull', 'facePull'],
   ['hammer curl', 'hammerCurl'], ['preacher curl', 'preacherCurl'], ['incline curl', 'inclineCurl'], ['cable curl', 'cableCurl'], ['barbell curl', 'bbCurl'], ['bicep curl', 'dbCurl'], ['biceps curl', 'dbCurl'], ['curl', 'dbCurl'],
   ['pushdown', 'pushdown'], ['push down', 'pushdown'], ['tricep extension', 'overheadExt'], ['overhead extension', 'overheadExt'], ['skull crusher', 'skullcrusher'], ['skullcrusher', 'skullcrusher'],
-  ['seated calf', 'seatedCalf'], ['calf raise', 'standingCalf'], ['calf', 'standingCalf'],
+  ['heel raise', 'heelRaise'], ['bodyweight calf', 'heelRaise'], ['seated calf', 'seatedCalf'], ['calf raise', 'standingCalf'], ['calf', 'standingCalf'],
   ['cable crunch', 'cableCrunch'], ['crunch', 'cableCrunch'], ['leg raise', 'hangingRaise'], ['ab wheel', 'abWheel'], ['rollout', 'abWheel'],
 ].sort((a, b) => b[0].length - a[0].length);
 
@@ -94,6 +94,8 @@ function parseSets(text) {
   if ((m = text.match(new RegExp(`${n}\\s*reps?\\s*(?:at|with|@|of)\\s*${n}`)))) return [{ r: +m[1], w: +m[2] }];
   // 185 (pounds) 5 reps
   if ((m = text.match(new RegExp(`\\b${n}\\s*(?:pounds?|lbs?)?\\s+${n}\\s*reps?`)))) return [{ r: +m[2], w: +m[1] }];
+  // 8, 7, 6 reps (bodyweight / same weight)
+  if ((m = text.match(/((?:\d+\s*,\s*)+\d+)\s*reps?\b/))) return m[1].match(/\d+/g).map(Number).slice(0, 12).map((r) => ({ r, w: null }));
   // 12 reps (bodyweight / same weight)
   if ((m = text.match(new RegExp(`${n}\\s*reps?\\b`)))) return [{ r: +m[1], w: null }];
   return null;
@@ -155,5 +157,6 @@ export function describe(a) {
   }
   const ws = [...new Set(a.sets.map((s) => s.w))];
   const reps = a.sets.map((s) => s.r).join(', ');
-  return `${name}: ${a.sets.length} set${a.sets.length > 1 ? 's' : ''} × ${reps}${ws.length === 1 && ws[0] != null ? ` @ ${ws[0]} lb` : ''}`;
+  const load = a.exercise && EXERCISES[a.exercise].bw ? ' (bodyweight)' : ws.length === 1 && ws[0] != null ? ` @ ${ws[0]} lb` : '';
+  return `${name}: ${a.sets.length} set${a.sets.length > 1 ? 's' : ''} × ${reps}${load}`;
 }
