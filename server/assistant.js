@@ -4,7 +4,7 @@
 // parser produces ({type:'sets'|'add'|'weight'}). Nothing is stored.
 //
 // Needs the ANTHROPIC_API_KEY secret (npx wrangler secret put ANTHROPIC_API_KEY).
-import { EXERCISES } from '../js/lifting.js';
+import { EXERCISES, MUSCLES } from '../js/lifting.js';
 
 export const MODEL = 'claude-opus-5-5';
 const IDS = Object.keys(EXERCISES);
@@ -49,6 +49,22 @@ export const TOOLS = [
         after_exercise_id: { type: ['string', 'null'], enum: [...IDS, null], description: 'If the exercise is new to today, the session exercise it should come after (e.g. "after squats"). null to put it after the last one used.' },
       },
       required: ['exercise_id', 'after_exercise_id'],
+    },
+  },
+  {
+    name: 'check_sets',
+    description: 'Mark sets as done (blank reps get the target). Set exactly one way of choosing: all, an exercise, a muscle group, or the exercise\'s number in today\'s list (-1 for the last one); leave the others null/false.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        all: { type: 'boolean' },
+        exercise_id: { type: ['string', 'null'], enum: [...IDS, null] },
+        muscle: { type: ['string', 'null'], enum: [...Object.keys(MUSCLES), null] },
+        exercise_number: { type: ['integer', 'null'] },
+      },
+      required: ['all', 'exercise_id', 'muscle', 'exercise_number'],
     },
   },
   {
@@ -115,6 +131,11 @@ export function toActions(response) {
     const input = block.input || {};
     if (block.name === 'log_weight' && input.pounds > 50 && input.pounds < 700) {
       actions.push({ type: 'weight', lb: Math.round(input.pounds * 10) / 10 });
+    } else if (block.name === 'check_sets') {
+      if (input.all) actions.push({ type: 'check', all: true });
+      else if (EXERCISES[input.exercise_id]) actions.push({ type: 'check', exercise: input.exercise_id });
+      else if (MUSCLES[input.muscle]) actions.push({ type: 'check', muscle: input.muscle });
+      else if (Number.isInteger(input.exercise_number) && input.exercise_number !== 0) actions.push({ type: 'check', index: input.exercise_number });
     } else if (block.name === 'move_exercise' && EXERCISES[input.exercise_id]) {
       const rel = input.position === 'after' || input.position === 'before';
       if (rel && EXERCISES[input.other_exercise_id]) actions.push({ type: 'move', exercise: input.exercise_id, [input.position]: input.other_exercise_id });

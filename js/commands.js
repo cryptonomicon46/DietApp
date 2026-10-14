@@ -5,8 +5,9 @@
 //   "curls 30 pounds 12 reps"            → 1 set
 //   "weigh in 161.4"                      → today's weigh-in
 //   "move rows after squats", "do RDLs last", "bench first" → reorder today's session
+//   "check all sets for calves", "check exercise 3", "done with squats", "check everything" → tick sets
 // Several commands can be joined with "and", "then", commas before a new exercise, or periods.
-import { EXERCISES } from './lifting.js';
+import { EXERCISES, MUSCLES } from './lifting.js';
 
 const WORDS = {
   zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
@@ -117,6 +118,8 @@ export function parseCommand(input, sessionIds = []) {
   const clauses = text.split(/\s(?:and then|then|and|also|next)\s|[;.\n]+|,(?=\s*[a-z])/).map((c) => c.trim()).filter(Boolean);
   let lastExercise = null;
   for (const clause of clauses) {
+    const check = parseCheck(clause, sessionIds);
+    if (check) { actions.push(check); if (check.exercise) lastExercise = check.exercise; continue; }
     const move = parseMove(clause, sessionIds);
     if (move) { actions.push(move); lastExercise = move.exercise; continue; }
     const adding = /\b(add|include|throw in)\b/.test(clause);
@@ -127,6 +130,31 @@ export function parseCommand(input, sessionIds = []) {
     else if (exercise && adding) actions.push({ type: 'add', exercise });
   }
   return { actions, understood: actions.length > 0 };
+}
+
+// Muscle words people say → muscle keys.
+const MUSCLE_WORDS = [
+  [/\b(quads?|quadriceps|legs?)\b/, 'quads'], [/\b(hamstrings?|hams|glutes?)\b/, 'hams'], [/\b(chest|pecs?)\b/, 'chest'],
+  [/\b(lats?)\b/, 'lats'], [/\b(back|rows?)\b/, 'back'], [/\b(shoulders?|delts?)\b/, 'shoulders'],
+  [/\b(biceps?|bis)\b/, 'biceps'], [/\b(triceps?|tris)\b/, 'triceps'], [/\b(calf|calves)\b/, 'calves'], [/\b(abs|core)\b/, 'abs'],
+];
+const ORDINALS = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10, last: -1 };
+
+// "check all my sets for calves" / "done with exercise 3" / "tick squats" / "check everything"
+function parseCheck(clause, sessionIds) {
+  if (!/\b(check|tick|mark|complete|completed|done|finished|finish)\b/.test(clause)) return null;
+  if (/\b(sets? of|reps?\b.*\d|\d+\s*x\s*\d)/.test(clause) && !/\ball\b/.test(clause)) return null;
+  const num = clause.match(/(?:exercise|number|no\.?|#)\s*(\d+)|(\d+)(?:st|nd|rd|th)\s+exercise|\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last)\s+(?:exercise|one)/);
+  if (num) return { type: 'check', index: num[3] ? ORDINALS[num[3]] : +(num[1] || num[2]) };
+  const muscle = MUSCLE_WORDS.find(([re]) => re.test(clause));
+  const rest = clause.replace(/\b(check|tick|mark|complete|completed|done|finished|finish|all|my|sets?|the|for|with|off|as|of|i|did|am|i'm)\b/g, ' ');
+  const exercise = matchExercise(rest, sessionIds);
+  // "calves" alone ticks every calf exercise; "calf raises" or "back squats" names one exercise.
+  const extra = muscle ? rest.replace(muscle[0], ' ').trim() : 'x';
+  if (exercise && extra) return { type: 'check', exercise };
+  if (muscle) return { type: 'check', muscle: muscle[1] };
+  if (/\b(all|everything|every set|whole workout)\b/.test(clause)) return { type: 'check', all: true };
+  return null;
 }
 
 // "move rows after squats" / "do lunges before bench" / "RDLs last" / "move curls to the end"
@@ -151,6 +179,10 @@ export function describe(a) {
   if (a.type === 'weight') return `Weigh-in ${a.lb} lb`;
   const name = a.exercise ? EXERCISES[a.exercise].name : 'Current exercise';
   if (a.type === 'add') return `Added ${name}`;
+  if (a.type === 'check') {
+    const what = a.all ? 'every exercise' : a.index ? `exercise ${a.index === -1 ? '(last)' : a.index}` : a.muscle ? MUSCLES[a.muscle] : name;
+    return `Checked ${what}`;
+  }
   if (a.type === 'move') {
     if (a.after || a.before) return `Moved ${name} ${a.after ? 'after' : 'before'} ${EXERCISES[a.after || a.before].name}`;
     return `Moved ${name} to the ${a.to === 'end' ? 'end' : 'start'}`;

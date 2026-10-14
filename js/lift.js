@@ -24,6 +24,14 @@ function sessionSlots(d = lift.draft) {
 const planOrder = (d = lift.draft) => mergeSlots(DAYS[d.day].slots, [...(lift.kept[d.day] || []), ...(d.extra || [])]).map((s) => s.id);
 const sameOrder = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
+// Tick every set of one exercise; blank reps get the target (top of the range), like tapping ○.
+function checkSlot(slotId) {
+  const slot = slotById(slotId);
+  const sets = lift.draft.entries[slotId].sets;
+  sets.forEach((x) => { x.done = true; if (x.r === '') x.r = slot.reps[1]; });
+  return sets;
+}
+
 // Reorder today's session (e.g. the squat rack is taken).
 function moveExercise(id, where) {
   const d = lift.draft;
@@ -150,6 +158,7 @@ export function renderLift() {
         <div class="set-tools">
           <button type="button" class="ghost small" data-addset="${slot.id}">+ Add set</button>
           <button type="button" class="ghost small" data-rmset="${slot.id}" ${e.sets.length <= 1 ? 'disabled' : ''}>− Remove set</button>
+          ${e.sets.some((x) => !x.done) ? `<button type="button" class="ghost small" data-checkall="${slot.id}">✓ Check all</button>` : ''}
           ${lift.extraSets[slot.id] ? `<span class="small muted">Plan: ${setsFor(slot, d.week, i)} sets · <button type="button" class="linkish" data-resetsets="${slot.id}">Back to plan</button></span>` : ''}
         </div>
         <div class="set-tools">
@@ -199,6 +208,22 @@ export function applyActions(actions) {
     if (a.type === 'weight') {
       window.dispatchEvent(new CustomEvent('lp:weighin', { detail: a.lb }));
       lines.push(`✓ ${describe(a)}`);
+      continue;
+    }
+    if (a.type === 'check') {
+      const all = sessionSlots();
+      const slots = a.all ? all
+        : a.index ? [all.at(a.index === -1 ? -1 : a.index - 1)].filter((x) => x && (a.index === -1 || a.index <= all.length))
+        : a.muscle ? all.filter((x) => EXERCISES[d.entries[x.id]?.exercise]?.muscle === a.muscle)
+        : all.filter((x) => d.entries[x.id]?.exercise === a.exercise);
+      if (!slots.length) { lines.push(`• ${describe(a).replace('Checked ', '')} isn't in today's session`); continue; }
+      for (const slot of slots) {
+        const sets = checkSlot(slot.id);
+        const ex = EXERCISES[d.entries[slot.id].exercise];
+        const noWeight = !ex.bw && sets.some((x) => x.w === '');
+        lines.push(`✓ ${ex.name}: ${sets.length} set${sets.length > 1 ? 's' : ''} × ${sets.map((x) => x.r).join(', ')}${noWeight ? ' (enter the weights)' : ''}`);
+        lastSlotId = slot.id;
+      }
       continue;
     }
     if (a.type === 'move') {
@@ -431,6 +456,10 @@ export function initLift() {
       rec.onerror = (ev) => setCommandFeedback(ev.error === 'not-allowed' ? 'Microphone access is off. Use the 🎤 on your keyboard instead.' : 'Didn\'t hear anything — try again or type it.');
       rec.onend = () => t.classList.remove('listening');
       rec.start();
+    } else if (t.dataset.checkall) {
+      checkSlot(t.dataset.checkall);
+      save();
+      renderLift();
     } else if (t.dataset.move) {
       const [id, to] = t.dataset.move.split(':');
       moveExercise(id, { to });

@@ -66,3 +66,17 @@ test('rep lists without a weight', () => {
   const { actions } = parseCommand('pull ups 8, 7, 6 reps', ['pullUp']);
   assert.deepEqual(actions[0].sets, [{ r: 8, w: null }, { r: 7, w: null }, { r: 6, w: null }]);
 });
+
+test('check commands', () => {
+  const ids = ['legPress', 'standingCalf', 'pullUp', 'backSquat'];
+  const one = (t) => parseCommand(t, ids).actions[0];
+  assert.deepEqual(one('check all my sets for calves'), { type: 'check', muscle: 'calves' });
+  assert.deepEqual(one('check exercise 3'), { type: 'check', index: 3 });
+  assert.deepEqual(one('done with the 2nd exercise'), { type: 'check', index: 2 });
+  assert.deepEqual(one('check the last exercise'), { type: 'check', index: -1 });
+  assert.deepEqual(one('tick pull ups'), { type: 'check', exercise: 'pullUp' });
+  assert.deepEqual(one('check calf raises'), { type: 'check', exercise: 'standingCalf' });
+  assert.deepEqual(one('check back squats'), { type: 'check', exercise: 'backSquat' });
+  assert.deepEqual(one('check everything'), { type: 'check', all: true });
+  assert.equal(one('squats 3 sets of 5 at 185').type, 'sets');
+});
