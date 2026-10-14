@@ -98,8 +98,21 @@ let timer = null;
 onChange((id) => {
   if (!sync.enabled() || id !== ownerId()) return;
   clearTimeout(timer);
-  timer = setTimeout(() => sync.push().catch(() => {}), 3000);
+  timer = setTimeout(() => { timer = null; sync.push().catch(() => {}); }, 3000);
 });
+// Switching away pauses the page on phones, so send anything waiting right away.
+if (typeof document !== 'undefined') {
+  const flush = () => { if (timer) { clearTimeout(timer); timer = null; sync.push().catch(() => {}); } };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+  window.addEventListener('pagehide', flush);
+}
+
+// Upload now (notes, plans, replies): don't wait for the quiet period.
+export async function pushNow() {
+  clearTimeout(timer); timer = null;
+  try { await sync.push(); global.set('pushError', null); return true; }
+  catch (err) { global.set('pushError', err.message); return false; }
+}
 
 export function newHouseholdCode() {
   const a = new Uint8Array(12);

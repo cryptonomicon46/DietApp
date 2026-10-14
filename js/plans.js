@@ -1,7 +1,8 @@
 // "Feeling like…": suggest a plan to each other (movie, brunch, dinner somewhere, a show
 // tonight…) and answer with I'm in / Maybe / Another time. Each person's suggestions and
 // replies live in their own profile, so household sync carries them both ways.
-import { PROFILES, ownerId, profileStore, global } from './storage.js';
+import { PROFILES, ownerId, profileStore, global, seenItems } from './storage.js';
+import { sync, pushNow } from './sync.js';
 
 export const PLAN_KINDS = {
   movie:   { icon: '🍿', label: 'Movie', what: 'Which movie?', where: 'Theater (optional)' },
@@ -53,21 +54,32 @@ export function whenText(p, today = isoDate()) {
   return `${new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}${time}`;
 }
 
-export function unreadPlans() {
+// New from the other person: their upcoming plans and their answers to yours.
+function unreadPlanKeys() {
   const p = partner();
-  if (!me() || !p) return 0;
-  const seen = global.get('plansSeenAt', 0);
+  if (!me() || !p) return [];
+  const mine = new Set(plansOf(me()).map((x) => x.id));
   const replies = profileStore(p.id).get('planReplies', {});
-  const newPlans = plansOf(p.id).filter((x) => x.at > seen && isUpcoming(x)).length;
-  const newReplies = Object.values(replies).filter((r) => r.at > seen).length;
-  return newPlans + newReplies;
+  return [
+    ...plansOf(p.id).filter(isUpcoming).map((x) => `p:${p.id}:${x.id}`),
+    ...Object.entries(replies).filter(([id]) => mine.has(id)).map(([id, r]) => `r:${id}:${r.r}:${r.at}`),
+  ].filter((k) => !seenItems.has(k));
+}
+export function unreadPlans() { return unreadPlanKeys().length; }
+
+// Shows whether your last change reached the connector and when this phone last checked.
+export function syncLine() {
+  if (!sync.enabled()) return '<p class="small muted sync-line">Sharing is off on this phone.</p>';
+  const ago = (t) => { if (!t) return 'not yet'; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
+  const err = global.get('pushError', null);
+  return `<p class="small sync-line ${err ? 'tone-warn' : 'muted'}">${err ? `Not sent: ${esc(err)}` : `Sent ${ago(global.get('pushedAt', 0))}`} · checked ${ago(global.get('pulledAt', 0))} · <button type="button" class="linkish" data-syncnow>Refresh</button></p>`;
 }
 
 let kind = 'dinner';
 let when = 'tonight';
 
 export function renderPlans(el) {
-  global.set('plansSeenAt', Date.now());
+  seenItems.add(unreadPlanKeys());
   const p = partner();
   const pName = nameOf(p.id);
   const k = PLAN_KINDS[kind];
@@ -101,6 +113,7 @@ export function renderPlans(el) {
   };
 
   el.innerHTML = `
+    ${syncLine()}
     <div class="card plan-compose">
       <h2 style="margin-top:0">I'm feeling like…</h2>
       <div class="kind-row" role="radiogroup" aria-label="What kind of plan">
@@ -145,10 +158,12 @@ export function initPlans(root, rerender) {
       if (replies[id]?.r === r) delete replies[id]; else replies[id] = { r, at: Date.now() };
       s.set('planReplies', replies);
       rerender();
+      pushNow().then(rerender);
     } else if (t.dataset.plandone || t.dataset.plandel) {
       const id = t.dataset.plandone || t.dataset.plandel;
       s.set('plans', s.get('plans', []).flatMap((pl) => (pl.id !== id ? [pl] : t.dataset.plandone ? [{ ...pl, done: true }] : [])));
       rerender();
+      pushNow().then(rerender);
     }
   });
   root.addEventListener('submit', (e) => {
@@ -165,5 +180,6 @@ export function initPlans(root, rerender) {
     const s = profileStore(me());
     s.set('plans', [...s.get('plans', []), plan].slice(-100));
     rerender();
+    pushNow().then(rerender);
   });
 }

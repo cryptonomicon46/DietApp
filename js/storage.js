@@ -82,3 +82,14 @@ export function importProfile(id, data) {
   }
   for (const [k, v] of Object.entries(data)) raw.set(prefix + k, v);
 }
+
+// Which shared items (notes, plans, replies) this phone has shown you. Tracked by id rather
+// than time, so something that syncs in late still counts as new.
+export const seenItems = {
+  has: (k) => (raw.get('lp.g.seenItems') || []).includes(k),
+  add(keys) {
+    const all = raw.get('lp.g.seenItems') || [];
+    const add = keys.filter((k) => !all.includes(k));
+    if (add.length) raw.set('lp.g.seenItems', [...all, ...add].slice(-1000));
+  },
+};

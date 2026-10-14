@@ -12,6 +12,7 @@ import {
 import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
 import { initNotes, renderNotes, updateNotesBadge, openUs } from './notes.js';
+import { syncLine } from './plans.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile } from './storage.js';
@@ -1897,10 +1898,13 @@ if (sync.enabled()) {
   const onNotes = () => document.querySelector('#tab-notes').classList.contains('active');
   const refresh = () => sync.pull().then((changed) => {
     updateNotesBadge();
-    if (changed && onNotes()) renderNotes();
+    if (onNotes() && changed) renderNotes();
+    else if (onNotes()) { const l = document.querySelector('#tab-notes .sync-line'); if (l) l.outerHTML = syncLine(); }
     else if (changed && sync.readOnly()) location.reload();
   }).catch(() => {});
   setInterval(refresh, 5 * 60000);
+  // While the Us tab is open, check for new notes and plans often.
+  setInterval(() => { if (onNotes() && document.visibilityState === 'visible') refresh(); }, 20000);
   // A home-screen app resumes without reloading: catch up when it comes back.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && Date.now() - global.get('pulledAt', 0) > 30000) { sync.push().catch(() => {}); refresh(); }

@@ -1,8 +1,9 @@
 // Notes tab: a shared post-it board for little daily notes to each other.
 // Each person's notes live in their own profile (so household sync carries them);
 // hearts you give the other person's notes live in yours.
-import { PROFILES, ownerId, profileStore, global } from './storage.js';
-import { renderPlans, initPlans, unreadPlans } from './plans.js';
+import { PROFILES, ownerId, profileStore, global, seenItems } from './storage.js';
+import { sync, pushNow } from './sync.js';
+import { renderPlans, initPlans, unreadPlans, syncLine } from './plans.js';
 
 export const NOTE_EMOJI = ['❤️', '😘', '🥰', '😍', '💕', '🤗', '💪', '🔥', '🌟', '🎉', '☀️', '🌙', '🌸', '🍳', '🥗', '🍓', '☕', '😂', '🙏', '👏'];
 export const NOTE_COLORS = { yellow: 'Yellow', pink: 'Pink', blue: 'Blue', green: 'Green' };
@@ -46,12 +47,14 @@ export function noteStreak(notes, today = isoDate()) {
   return n;
 }
 
-function unreadNotes() {
+const noteKey = (n) => `n:${n.from}:${n.id}`;
+const unreadNoteList = () => {
   const p = partner();
-  if (!me() || !p) return 0;
-  const seen = global.get('notesSeenAt', 0);
-  return notesOf(p.id).filter((n) => n.at > seen).length;
-}
+  if (!me() || !p) return [];
+  const week = Date.now() - 7 * 86400000;
+  return notesOf(p.id).map((n) => ({ ...n, from: p.id })).filter((n) => n.at > week && !seenItems.has(noteKey(n)));
+};
+function unreadNotes() { return unreadNoteList().length; }
 export const unreadCount = () => unreadNotes() + unreadPlans();
 
 // The tab has two pages: notes and "feeling like" plans.
@@ -75,14 +78,18 @@ export function updateNotesBadge() {
 export function renderNotes() {
   const el = $('#notesBoard');
   if (!el || !me()) return;
+  // Keep a half-written note when the board refreshes.
+  const draft = $('#noteText')?.value || '';
+  const focused = document.activeElement?.id === 'noteText';
+  queueMicrotask(() => { const ta = $('#noteText'); if (ta && draft && !ta.value) { ta.value = draft; $('#noteCount').textContent = `${[...draft].length}/${MAX}`; if (focused) ta.focus(); } });
   const n = unreadNotes(), pl = unreadPlans();
   $('#usPages').innerHTML = [['notes', '💌 Notes', n], ['plans', '✨ Feeling like', pl]].map(([k, label, c]) =>
     `<button type="button" class="${k === page ? 'on' : ''}" data-page="${k}" aria-pressed="${k === page}">${label}${c && k !== page ? ` <b class="dot">${c}</b>` : ''}</button>`).join('');
   if (page === 'plans') { renderPlans(el); updateNotesBadge(); return; }
   const start = boardStart();
-  const prevSeen = global.get('notesSeenAt', 0);
-  for (const x of allNotes()) if (x.from !== me() && x.at > prevSeen && x.at < start) carried.add(key(x));
-  global.set('notesSeenAt', Date.now());
+  const fresh = unreadNoteList();
+  for (const x of fresh) if (x.at < start) carried.add(key(x));
+  seenItems.add(fresh.map(noteKey));
   updateNotesBadge();
   const p = partner();
   const pName = nameOf(p.id);
@@ -107,6 +114,7 @@ export function renderNotes() {
   };
 
   el.innerHTML = `
+    ${syncLine()}
     <div class="card note-compose">
       <div class="row between" style="margin-top:0">
         <h2 style="margin:0">${wroteToday ? `Another note for ${esc(pName)}` : `Today's note for ${esc(pName)}`}</h2>
@@ -163,6 +171,11 @@ export function initNotes() {
   root.addEventListener('click', (e) => {
     const t = e.target.closest('button');
     if (!t) return;
+    if (t.dataset.syncnow != null) {
+      t.textContent = 'Checking…';
+      pushNow().then(() => sync.pull()).catch((err) => global.set('pushError', err.message)).finally(() => { renderNotes(); });
+      return;
+    }
     if (t.dataset.emoji) {
       const ta = $('#noteText');
       const at = ta.selectionStart ?? ta.value.length;
@@ -186,12 +199,14 @@ export function initNotes() {
       const s = profileStore(me());
       s.set('notes', s.get('notes', []).filter((n) => n.id !== t.dataset.delnote));
       renderNotes();
+      pushNow().then(renderNotes);
     } else if (t.dataset.heart) {
       const s = profileStore(me());
       const h = s.get('noteHearts', {});
       if (h[t.dataset.heart]) delete h[t.dataset.heart]; else h[t.dataset.heart] = '❤️';
       s.set('noteHearts', h);
       renderNotes();
+      pushNow().then(renderNotes);
     }
   });
   root.addEventListener('input', (e) => {
@@ -207,6 +222,8 @@ export function initNotes() {
     // Keep the last ~200 notes so synced data stays small.
     s.set('notes', [...s.get('notes', []), { id: now.toString(36), text, color, at: now, date: isoDate(), ...(replyTo ? { replyTo: { id: replyTo.id, from: replyTo.from } } : {}) }].slice(-200));
     replyTo = null;
+    $('#noteText').value = '';
     renderNotes();
+    pushNow().then(renderNotes);
   });
 }
