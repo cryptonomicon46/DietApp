@@ -22,7 +22,8 @@ export const FOODS = {
   orange:     { name: 'Orange',                   kcal: 47,  p: 0.9,  f: 0.1,  c: 11.8, unit: { label: 'orange', grams: 131 }, range: [0, 393, 65.5] },
   pear:       { name: 'Pear',                     kcal: 57,  p: 0.4,  f: 0.1,  c: 15.2, unit: { label: 'pear', grams: 178 },   range: [0, 534, 89] },
   grapes:     { name: 'Grapes',                   kcal: 69,  p: 0.7,  f: 0.2,  c: 18.1, unit: { label: 'cup', grams: 151 },    range: [0, 453, 37.75] },
-  mixedNuts:  { name: 'Mixed nuts',               kcal: 607, p: 20,   f: 54,   c: 21,   unit: { label: 'handful', grams: 28 }, range: [0, 84, 7] },
+  mixedNuts:  { name: 'Mixed nuts (unsalted)',               kcal: 607, p: 20,   f: 54,   c: 21,   unit: { label: 'handful', grams: 28 }, range: [0, 84, 7] },
+  cashews:    { name: 'Cashews (unsalted)',       kcal: 574, p: 15.3, f: 46.4, c: 32.7, unit: { label: 'handful', grams: 28 }, range: [0, 84, 7] },
   almonds:    { name: 'Almonds',                  kcal: 579, p: 21.2, f: 49.9, c: 21.6, unit: { label: 'handful', grams: 28 }, range: [0, 84, 7] },
   greekYogurt:{ name: 'Greek yogurt (plain 0%)',  kcal: 59,  p: 10.3, f: 0.4,  c: 3.6,  unit: { label: 'cup', grams: 170 },    range: [0, 510, 42.5] },
   // Bars & shakes: per 100 g from one bar/bottle's label (a common flavor).
@@ -65,7 +66,7 @@ export const FOOD_GROUPS = {
   Carbs: ['oats', 'sourdough', 'wheatBread', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'banana'],
   'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'cauliflower', 'avocado'],
   Milk: ['oatMilk', 'almondMilk', 'milk2'],
-  Snacks: ['apple', 'banana', 'orange', 'pear', 'grapes', 'strawberries', 'berries', 'mixedNuts', 'almonds', 'greekYogurt'],
+  Snacks: ['apple', 'banana', 'orange', 'pear', 'grapes', 'strawberries', 'berries', 'mixedNuts', 'cashews', 'almonds', 'greekYogurt'],
   'Bars & shakes': ['clifBar', 'clifBuilders', 'barebells', 'questBar', 'rxBar', 'kirklandBar', 'premierShake', 'corePower'],
   Fats: ['almondButter', 'pb', 'walnuts', 'butter', 'oliveOil'],
 };
@@ -139,6 +140,7 @@ export const STORES = {
   pear:        { store: 'Sprouts', tip: 'Pears', packGrams: 178 * 4, packLabel: '4 pears' },
   grapes:      { store: 'Costco',  tip: 'Seedless grapes', packGrams: 1360, packLabel: '3 lb clamshell' },
   mixedNuts:   { store: 'Costco',  tip: 'Kirkland unsalted mixed nuts', packGrams: 1130, packLabel: '2.5 lb jar' },
+  cashews:     { store: 'Costco',  tip: 'Kirkland unsalted whole cashews', packGrams: 1130, packLabel: '2.5 lb bag' },
   almonds:     { store: 'Costco',  tip: 'Kirkland whole almonds', packGrams: 1360, packLabel: '3 lb bag' },
   greekYogurt: { store: 'Costco',  tip: 'Kirkland or Fage plain nonfat Greek yogurt', packGrams: 1360, packLabel: '48 oz tub' },
   oatMilk:     { store: 'Costco',  tip: 'Oatly or Califia oat milk (Costco multipacks)', packGrams: 1890, packLabel: 'half gallon' },

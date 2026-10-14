@@ -546,7 +546,7 @@ const MEAL_TEMPLATES = { eggs: 'Switch: eggs', oatmeal: 'Switch: oatmeal' };
 
 // Order of the day's cards; the afternoon snack sits between lunch and dinner when it's on.
 const mealOrder = (plan) => ['breakfast', 'lunch', ...(plan.snack ? ['snack'] : []), 'dinner'];
-const SNACK_PICKS = [['apple', '🍎'], ['banana', '🍌'], ['orange', '🍊'], ['grapes', '🍇'], ['strawberries', '🍓'], ['berries', '🫐'], ['mixedNuts', '🥜'], ['almonds', '🌰'], ['greekYogurt', '🥛'], ['premierShake', '🥤'], ['barebells', '🍫']];
+const SNACK_PICKS = [['apple', '🍎'], ['banana', '🍌'], ['orange', '🍊'], ['grapes', '🍇'], ['strawberries', '🍓'], ['berries', '🫐'], ['mixedNuts', '🥜'], ['cashews', '🥜'], ['almonds', '🌰'], ['greekYogurt', '🥛'], ['premierShake', '🥤'], ['barebells', '🍫']];
 function mealCardsWithAdd(plan) {
   return mealOrder(plan).map((meal) => mealCard(meal, plan[meal]) + (meal === 'lunch' && !plan.snack ? addSnackCard() : '')).join('');
 }
@@ -571,7 +571,7 @@ function snackCard(m) {
       </div>
       <div class="meal-macros" data-role="totals">${macroLine(m.totals)}${m.portions.length ? ` <small class="muted">· lunch & dinner make room</small>` : ''}</div>
       <div class="snack-picks" role="group" aria-label="Add to your snack">
-        ${SNACK_PICKS.filter(([k]) => FOODS[k]).map(([k, icon]) => `<button type="button" class="chip" data-snackadd="${k}">${icon} ${esc(FOODS[k].name.replace(/ \(.*\)/, '').replace(' protein bar', '').replace(' Protein shake', ' shake'))}</button>`).join('')}
+        ${SNACK_PICKS.filter(([k]) => FOODS[k]).map(([k, icon]) => `<button type="button" class="chip" data-snackadd="${k}">${icon} ${esc(FOODS[k].name.replace(' (unsalted)', ', unsalted').replace(/ \(.*\)/, '').replace(' protein bar', '').replace(' Protein shake', ' shake'))}</button>`).join('')}
       </div>
       ${comboRow('snack', m)}
       ${m.portions.length ? customBody('snack', m) : '<p class="small muted">Tap what you had. Tap again for another one, or use the slider.</p>'}
