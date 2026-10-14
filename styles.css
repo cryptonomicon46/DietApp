@@ -349,3 +349,10 @@ dialog.review { width: min(520px, calc(100vw - 24px)); }
 .plate-total b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
 .add-panel { display: grid; gap: 8px; margin-top: 8px; padding: 10px; border: 1px dashed var(--brand); border-radius: 10px; background: var(--bg); }
 .added-tag { color: var(--brand); font-weight: 700; }
+
+/* voice / text commands */
+.cmd { display: flex; gap: 6px; margin-top: 10px; }
+.cmd input { flex: 1; }
+.mic { padding: 8px 10px; font-size: 1.1rem; }
+.mic.listening { background: var(--warn); color: #fff; border-color: var(--warn); }
+.cmd-result { margin: 6px 0 4px; min-height: 1em; }

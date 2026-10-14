@@ -1690,6 +1690,13 @@ $('#shareSave').onclick = async () => {
 $('#shareOff').onclick = () => { sync.save(null); location.reload(); };
 
 initLift();
+// Weigh-ins said on the Lift tab ("weigh in 161.4").
+window.addEventListener('lp:weighin', (e) => {
+  const date = isoDate();
+  state.weights = state.weights.filter((x) => x.date !== date).concat({ date, weight: +e.detail }).sort((a, b) => a.date.localeCompare(b.date));
+  store.set('weights', state.weights);
+  renderAll();
+});
 $('#dayBar').onclick = () => { document.querySelector('[data-tab=today]').click(); };
 $('#weighDate').value = isoDate();
 const justConnected = devices.takeRedirect();

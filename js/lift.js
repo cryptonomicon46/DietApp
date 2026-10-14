@@ -3,6 +3,7 @@ import {
   PLATES, plateTotal, platesFor, platesText, extraSlot, mergeSlots,
 } from './lifting.js';
 import { store } from './storage.js';
+import { parseCommand, describe } from './commands.js';
 
 // Lift tab: today's full-body session, set logging, history and the exercise library.
 const load = () => store.get('lift', {});
@@ -79,6 +80,12 @@ export function renderLift() {
   $('#liftSession').innerHTML = `
     <div class="row between" style="margin-top:0"><h2>${day.title}</h2></div>
     <p class="small muted">${esc(day.note)}</p>
+    <form class="cmd" id="cmdForm" autocomplete="off">
+      <input id="cmdText" type="text" enterkeyhint="send" placeholder="Say or type: squats 3 sets of 5 at 185" aria-label="Log by voice or text">
+      ${SpeechRec ? '<button type="button" class="ghost mic" id="cmdMic" aria-label="Dictate">🎤</button>' : ''}
+      <button type="submit" class="small">Log</button>
+    </form>
+    <div class="small cmd-result" id="cmdResult">${cmdFeedback}</div>
     ${sessionSlots().map((slot) => {
       const i = slot.added ? 99 : slotIndex(slot.id);
       const e = d.entries[slot.id] ||= { exercise: lift.choices[slot.id] || slot.default, sets: newSets(lift.choices[slot.id] || slot.default, slot, d.week, i) };
@@ -130,6 +137,75 @@ export function renderLift() {
   renderHistory();
   renderLibrary();
 }
+
+// ---------- voice / text commands ----------
+const SpeechRec = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+let cmdFeedback = '';
+let undoDraft = null;
+let lastSlotId = null;
+
+// Apply parsed actions to today's session. Returns lines describing what happened.
+export function applyActions(actions) {
+  const d = lift.draft;
+  const lines = [];
+  undoDraft = JSON.stringify({ draft: d, kept: lift.kept });
+  for (const a of actions) {
+    if (a.type === 'weight') {
+      window.dispatchEvent(new CustomEvent('lp:weighin', { detail: a.lb }));
+      lines.push(`✓ ${describe(a)}`);
+      continue;
+    }
+    let slot = a.exercise ? sessionSlots().find((s) => d.entries[s.id]?.exercise === a.exercise) : null;
+    if (!slot && !a.exercise) {
+      // No exercise named: the last one you used, else the first one with sets left.
+      slot = (lastSlotId && slotById(lastSlotId)) || sessionSlots().find((s) => d.entries[s.id]?.sets.some((x) => x.r === ''));
+    }
+    if (!slot && a.exercise) {
+      const id = addExercise(a.exercise, lastSlotId || undefined, false);
+      slot = slotById(id);
+      if (a.type === 'add') { lines.push(`✓ ${describe(a)}`); lastSlotId = id; continue; }
+    } else if (a.type === 'add') {
+      lines.push(`• ${describe(a).replace('Added ', '')} is already in today's session`);
+      lastSlotId = slot.id;
+      continue;
+    }
+    if (!slot) { lines.push('• Say which exercise, e.g. "squats 3 sets of 5 at 185"'); continue; }
+    const sets = d.entries[slot.id].sets;
+    let k = sets.findIndex((x) => x.r === '');
+    if (k < 0) k = sets.length;
+    for (const st of a.sets) {
+      if (!sets[k]) sets.push({ w: '', r: '', done: false });
+      const prevW = sets[k].w !== '' ? sets[k].w : [...sets].slice(0, k).reverse().find((x) => x.w !== '')?.w ?? '';
+      sets[k].w = st.w ?? prevW;
+      sets[k].r = st.r;
+      sets[k].done = true;
+      k++;
+    }
+    lastSlotId = slot.id;
+    lines.push(`✓ ${describe({ ...a, exercise: d.entries[slot.id].exercise })}`);
+  }
+  save();
+  return lines;
+}
+
+function runCommand(text) {
+  const ids = sessionSlots().map((s) => lift.draft.entries[s.id]?.exercise).filter(Boolean);
+  const { actions, understood } = parseCommand(text, ids);
+  if (!understood) {
+    cmdFeedback = `<span class="tone-warn">Didn't catch that.</span> Try “bench 3 sets of 8 at 135” or “split squats 40 for 10, 10, 8”.`;
+    window.dispatchEvent(new CustomEvent('lp:assistant', { detail: { text, context: { exercises: ids, day: lift.draft.day } } }));
+  } else {
+    cmdFeedback = `${applyActions(actions).map(esc).join('<br>')} <button type="button" class="linkish" id="cmdUndo">Undo</button>`;
+  }
+  renderLift();
+}
+
+// Called by the app when Claude turns a request into actions.
+export function applyAssistantActions(actions, note = '') {
+  cmdFeedback = `${applyActions(actions).map(esc).join('<br>')}${note ? `<br><span class="muted">${esc(note)}</span>` : ''} <button type="button" class="linkish" id="cmdUndo">Undo</button>`;
+  renderLift();
+}
+export function setCommandFeedback(html) { cmdFeedback = html; const el = $('#cmdResult'); if (el) el.innerHTML = html; }
 
 // Picker for a new exercise: muscle group, then exercise.
 let addingAfter = null;
@@ -229,6 +305,12 @@ function initPlates() {
 
 export function initLift() {
   initPlates();
+  $('#tab-lift').addEventListener('submit', (e) => {
+    if (e.target.id !== 'cmdForm') return;
+    e.preventDefault();
+    const text = $('#cmdText').value.trim();
+    if (text) runCommand(text);
+  });
   const root = $('#tab-lift');
   root.addEventListener('change', (e) => {
     const t = e.target;
@@ -270,6 +352,22 @@ export function initLift() {
       if (set.done && set.r === '') set.r = slotById(slotId).reps[1];
       save();
       renderLift();
+    } else if (t.id === 'cmdUndo' && undoDraft) {
+      const u = JSON.parse(undoDraft);
+      lift.draft = u.draft; lift.kept = u.kept; undoDraft = null;
+      cmdFeedback = 'Undone.';
+      save();
+      renderLift();
+    } else if (t.id === 'cmdMic') {
+      const rec = new SpeechRec();
+      rec.lang = navigator.language || 'en-US';
+      rec.interimResults = false;
+      t.classList.add('listening');
+      setCommandFeedback('Listening… say e.g. “squats three sets of five at one eighty-five”.');
+      rec.onresult = (ev) => { const said = ev.results[0][0].transcript; $('#cmdText').value = said; runCommand(said); };
+      rec.onerror = (ev) => setCommandFeedback(ev.error === 'not-allowed' ? 'Microphone access is off. Use the 🎤 on your keyboard instead.' : 'Didn\'t hear anything — try again or type it.');
+      rec.onend = () => t.classList.remove('listening');
+      rec.start();
     } else if (t.dataset.addex) {
       addingAfter = addingAfter === t.dataset.addex ? null : t.dataset.addex;
       addMuscle = null;
