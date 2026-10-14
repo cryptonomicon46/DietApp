@@ -261,7 +261,7 @@ details summary { cursor: pointer; color: var(--brand); margin-top: 8px; }
 .who { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; max-width: 560px; margin: 10px auto 0; background: var(--card);
   border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
 .who-opt { position: relative; margin: 0; text-align: center; padding: 7px 8px; border-radius: 9px; color: var(--ink); font-weight: 600; font-size: .95rem; cursor: pointer; }
-.who-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.who-opt input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
 .who-opt.on { background: var(--brand); color: var(--brand-ink); }
 .who-opt:focus-within { outline: 2px solid var(--brand); outline-offset: 1px; }
 .who-opt small { font-weight: 500; opacity: .8; font-size: .72rem; }
@@ -424,3 +424,5 @@ dialog.review { width: min(520px, calc(100vw - 24px)); }
 .past-notes summary { cursor: pointer; }
 .past-notes h4.note-day { margin: 12px 4px 6px; }
 .sync-line { margin: 0 4px 10px; }
+/* Never scroll sideways on a phone. */
+html { overflow-x: clip; }

@@ -68,10 +68,18 @@ export function profileStore(id) {
 }
 
 // Everything one person has saved, as a single object (for household sync).
-export function exportProfile(id) {
+// Never shared with the other phone: WHOOP/Strava sign-in tokens and per-phone bookkeeping.
+const PRIVATE_KEYS = new Set(['devices', 'lastSync']);
+
+export function exportProfile(id, { shared = false } = {}) {
   const prefix = `lp.p.${id}.`;
   const out = {};
-  for (const k of raw.keys()) if (k.startsWith(prefix)) out[k.slice(prefix.length)] = raw.get(k);
+  for (const k of raw.keys()) {
+    if (!k.startsWith(prefix)) continue;
+    const key = k.slice(prefix.length);
+    if (shared && PRIVATE_KEYS.has(key)) continue;
+    out[key] = raw.get(k);
+  }
   return out;
 }
 

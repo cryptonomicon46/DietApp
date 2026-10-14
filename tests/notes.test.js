@@ -30,3 +30,9 @@ test('board starts fresh at 5 AM', async () => {
   assert.equal(boardStart(at(23, 30)), new Date(2026, 9, 14, 5).getTime());
   assert.equal(boardStart(at(2)), new Date(2026, 9, 13, 5).getTime(), 'a 2 AM note still belongs to last night');
 });
+
+test('a fresh plan counts as upcoming when used as a filter', async () => {
+  const { isUpcoming } = await import('../js/plans.js');
+  const d = new Date(); const today = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  assert.equal([{ date: today, when: 'tonight' }].filter((x) => isUpcoming(x)).length, 1);
+});

@@ -61,7 +61,7 @@ function unreadPlanKeys() {
   const mine = new Set(plansOf(me()).map((x) => x.id));
   const replies = profileStore(p.id).get('planReplies', {});
   return [
-    ...plansOf(p.id).filter(isUpcoming).map((x) => `p:${p.id}:${x.id}`),
+    ...plansOf(p.id).filter((x) => isUpcoming(x)).map((x) => `p:${p.id}:${x.id}`),
     ...Object.entries(replies).filter(([id]) => mine.has(id)).map(([id, r]) => `r:${id}:${r.r}:${r.at}`),
   ].filter((k) => !seenItems.has(k));
 }

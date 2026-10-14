@@ -1847,6 +1847,8 @@ window.addEventListener('lp:assistant', async (e) => {
       body: JSON.stringify({ code: s.code, text: e.detail.text, context: e.detail.context }),
     });
     const out = await res.json().catch(() => ({}));
+    // Connector without Claude set up: just show the usual tip.
+    if (res.status === 404 || res.status === 501) { setCommandFeedback(e.detail.message); return; }
     if (!res.ok) throw new Error(out.error || `Claude request failed (${res.status})`);
     if (out.actions?.length) applyAssistantActions(out.actions, out.note ? `Claude: ${out.note}` : 'via Claude');
     else setCommandFeedback(`<span class="tone-warn">${esc(out.note || 'Claude didn\'t find anything to log.')}</span>`);
@@ -1904,7 +1906,7 @@ if (sync.enabled()) {
   }).catch(() => {});
   setInterval(refresh, 5 * 60000);
   // While the Us tab is open, check for new notes and plans often.
-  setInterval(() => { if (onNotes() && document.visibilityState === 'visible') refresh(); }, 20000);
+  setInterval(() => { if (onNotes() && document.visibilityState === 'visible') refresh(); }, 10000);
   // A home-screen app resumes without reloading: catch up when it comes back.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && Date.now() - global.get('pulledAt', 0) > 30000) { sync.push().catch(() => {}); refresh(); }

@@ -64,7 +64,7 @@ export const sync = {
     const res = await fetch(`${s.url}/household/${encodeURIComponent(s.code)}/${ownerId()}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ savedAt: Date.now(), data: exportProfile(ownerId()) }),
+      body: JSON.stringify({ savedAt: Date.now(), data: exportProfile(ownerId(), { shared: true }) }),
     });
     if (!res.ok) throw new Error(`upload failed (${res.status})`);
     global.set('pushedAt', Date.now());
