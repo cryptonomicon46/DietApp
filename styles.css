@@ -452,3 +452,4 @@ html { overflow-x: clip; }
 .share-dialog .share-seg button { flex: 1; padding: 7px 4px; }
 .share-preview { white-space: pre-wrap; font: .82rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; max-height: 40vh; overflow: auto; margin: 6px 0; }
 #shareRangeWrap[hidden] { display: none; }
+select[data-quicksnack] { width: 100%; margin-top: 6px; }

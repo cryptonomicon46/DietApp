@@ -519,11 +519,21 @@ function renderToday() {
 
 function extrasCard() {
   const extras = todaysLog().extras;
-  if (!extras.length) return '';
   return `<div class="card"><div class="eyebrow">Snacks & extras</div>
-    <ul class="list">${extras.map((x, i) => `<li><span>${esc(x.title)}<small class="muted"> · ${x.p}P ${x.f}F ${x.c}C</small></span>
-      <span>${x.kcal} kcal <button class="x" data-unextra="${i}" aria-label="Remove">✕</button></span></li>`).join('')}</ul></div>`;
+    ${extras.length ? `<ul class="list">${extras.map((x, i) => `<li><span>${esc(x.title)}<small class="muted"> · ${x.p}P ${x.f}F ${x.c}C</small></span>
+      <span>${x.kcal} kcal <button class="x" data-unextra="${i}" aria-label="Remove">✕</button></span></li>`).join('')}</ul>` : ''}
+    ${quickPicker('data-quicksnack', '➕ Snack: bar or shake')}
+  </div>`;
 }
+$('#meals').addEventListener('change', (e) => {
+  const food = e.target.dataset.quicksnack != null && e.target.value;
+  if (!food) return;
+  const f = FOODS[food], g = f.unit.grams;
+  const r = (k) => Math.round((f[k] * g) / 100);
+  todaysLog().extras.push({ title: f.name, kcal: r('kcal'), p: r('p'), f: r('f'), c: r('c') });
+  saveLog();
+  renderToday();
+});
 $('#meals').addEventListener('click', (e) => {
   const i = e.target.closest('[data-unextra]')?.dataset.unextra;
   if (i == null) return;
@@ -610,12 +620,33 @@ function comboRow(meal, m) {
     </select>` : '';
   return `<div class="combo-row">
       ${pick}
+      ${quickPicker('data-quick', '⚡ Quick swap: bar or shake')}
       ${m.eatout ? '' : `<button type="button" class="ghost small" data-savecombo>☆ Save ${label.toLowerCase()} combo</button>`}
       ${mine.length ? `<button type="button" class="linkish small" data-managecombos>${managingCombos === meal ? 'Done' : 'Edit list'}</button>` : ''}
     </div>
     ${managingCombos === meal ? `<ul class="list combo-list">${mine.map((c) => `<li><span>${esc(c.name)} <small class="muted">${MEAL_NAMES[comboMeal(c)]} · ${c.items.map((x) => FOODS[x.food]?.name).filter(Boolean).join(', ')}</small></span>
       <button type="button" class="x" data-delcombo="${esc(c.id)}" aria-label="Delete ${esc(c.name)}">✕</button></li>`).join('')}</ul>` : ''}`;
 }
+// Bars and shakes, for swapping out a meal or adding a snack in one tap.
+const QUICK = () => Object.keys(FOODS).filter((k) => FOODS[k].quick);
+function quickPicker(attr, label) {
+  return `<select ${attr} aria-label="${esc(label)}"><option value="">${esc(label)}</option>${QUICK().map((k) => {
+    const f = FOODS[k], g = f.unit.grams;
+    return `<option value="${k}">${esc(f.name)} · ${Math.round(f.kcal * g / 100)} kcal · ${Math.round(f.p * g / 100)}g protein</option>`;
+  }).join('')}</select>`;
+}
+function useQuick(meal, food) {
+  const m = todayPlan()[meal];
+  editMeal(meal, (c) => {
+    for (const k of ['eatout', 'picks', 'grams', 'manual']) delete c[k];
+    if (meal === 'breakfast') c.template = m.template;
+    c.items = [{ food, grams: FOODS[food].unit.grams }];
+    c.title = FOODS[food].name;
+  });
+  resnap(meal);
+  renderToday();
+}
+
 function comboKcal(c) {
   if (c.manual?.kcal) return Math.round(+c.manual.kcal);
   return Math.round(c.items.reduce((a, x) => a + (FOODS[x.food]?.kcal || 0) * x.grams / 100, 0));
@@ -790,6 +821,9 @@ $('#meals').addEventListener('change', (e) => {
   const meal = card.dataset.meal;
   if (e.target.dataset.combo != null) {
     if (e.target.value) useCombo(meal, e.target.value);
+    return;
+  } else if (e.target.dataset.quick != null) {
+    if (e.target.value) useQuick(meal, e.target.value);
     return;
   } else if (e.target.dataset.eo === 'dish') {
     editMeal(meal, (c) => { c.eatout = { ...c.eatout, dish: e.target.value }; });

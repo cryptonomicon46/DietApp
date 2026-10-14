@@ -17,6 +17,15 @@ export const FOODS = {
   strawberries:{ name: 'Strawberries',            kcal: 32,  p: 0.7,  f: 0.3,  c: 7.7,  unit: { label: 'cup', grams: 152 },     range: [0, 250, 25] },
   banana:     { name: 'Banana',                   kcal: 89,  p: 1.1,  f: 0.3,  c: 22.8, unit: { label: 'banana', grams: 118 },  range: [0, 240, 20] },
   pb:         { name: 'Peanut butter',            kcal: 588, p: 25,   f: 50,   c: 20,   unit: { label: 'tbsp', grams: 16 },     range: [0, 48, 4] },
+  // Bars & shakes: per 100 g from one bar/bottle's label (a common flavor).
+  clifBar:     { name: 'Clif Bar (chocolate chip)', kcal: 367.6, p: 14.7, f: 7.4, c: 64.7, unit: { label: 'bar', grams: 68 }, range: [0, 204, 34], quick: true },
+  clifBuilders: { name: 'Clif Builders protein bar', kcal: 426.5, p: 29.4, f: 16.2, c: 44.1, unit: { label: 'bar', grams: 68 }, range: [0, 204, 34], quick: true },
+  barebells:   { name: 'Barebells protein bar', kcal: 363.6, p: 36.4, f: 14.5, c: 30.9, unit: { label: 'bar', grams: 55 }, range: [0, 165, 27.5], quick: true },
+  questBar:    { name: 'Quest protein bar', kcal: 316.7, p: 35.0, f: 13.3, c: 36.7, unit: { label: 'bar', grams: 60 }, range: [0, 180, 30], quick: true },
+  rxBar:       { name: 'RXBAR', kcal: 403.8, p: 23.1, f: 17.3, c: 44.2, unit: { label: 'bar', grams: 52 }, range: [0, 156, 26], quick: true },
+  kirklandBar: { name: 'Kirkland protein bar', kcal: 316.7, p: 35.0, f: 11.7, c: 36.7, unit: { label: 'bar', grams: 60 }, range: [0, 180, 30], quick: true },
+  premierShake: { name: 'Premier Protein shake', kcal: 47.1, p: 8.8, f: 0.9, c: 1.5, unit: { label: 'bottle', grams: 340 }, range: [0, 1020, 170], quick: true },
+  corePower:   { name: 'Fairlife Core Power (26 g)', kcal: 41.1, p: 6.3, f: 1.1, c: 1.9, unit: { label: 'bottle', grams: 414 }, range: [0, 1242, 207], quick: true },
   oatMilk:    { name: 'Oat milk',                 kcal: 50,  p: 1.3,  f: 2.9,  c: 6.7,  unit: { label: 'cup', grams: 240 },     range: [0, 480, 20] },
   almondMilk: { name: 'Almond milk (unsweetened)', kcal: 15, p: 0.6,  f: 1.2,  c: 0.3,  unit: { label: 'cup', grams: 240 },     range: [0, 480, 20] },
   milk2:      { name: '2% milk',                  kcal: 50,  p: 3.3,  f: 2.0,  c: 4.8,  unit: { label: 'cup', grams: 244 },     range: [0, 480, 20] },
@@ -48,6 +57,7 @@ export const FOOD_GROUPS = {
   Carbs: ['oats', 'sourdough', 'wheatBread', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'banana'],
   'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'cauliflower', 'avocado'],
   Milk: ['oatMilk', 'almondMilk', 'milk2'],
+  'Bars & shakes': ['clifBar', 'clifBuilders', 'barebells', 'questBar', 'rxBar', 'kirklandBar', 'premierShake', 'corePower'],
   Fats: ['almondButter', 'pb', 'walnuts', 'butter', 'oliveOil'],
 };
 
