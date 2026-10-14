@@ -48,6 +48,9 @@ code can't read it. Treat the code like a password.
    Or both phones type the same private phrase (12+ letters/numbers, e.g. “sunset tacos 4821”)
    into that box; each phone switches to exactly what it was given. Chrome, Safari and a
    home-screen icon keep separate app data, so link the one you actually use on each phone.
+   **One-tap link:** open `https://<you>.github.io/DietApp/#link=your private phrase` once in each
+   browser you use; it links that browser and removes the phrase from the address bar. The part
+   after `#` never reaches any server. Don't put the phrase in this repo; it's public.
    If you host your own worker, change `DEFAULT_CONNECTOR` or set the URL under **Devices → Share with your household**.
 4. **WHOOP / Garmin (optional):** in **Devices**, paste the worker URL and tap
    **Connect WHOOP** / **Connect Garmin (Strava)**. Sharing alone needs only `APP_ORIGIN`;

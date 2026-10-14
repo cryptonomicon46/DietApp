@@ -1582,7 +1582,8 @@ function renderLinkBox(name) {
 $('#sendCode').onclick = async () => {
   const code = sync.settings()?.code;
   if (!code) return;
-  const text = `My Lean Plate code: ${code}\nOpen Lean Plate, tap my name at the top, and enter it under "Code from my phone" to see each other's day.`;
+  const url = `${location.origin}${location.pathname}#link=${encodeURIComponent(code)}`;
+  const text = `Tap to link our Lean Plate apps (open it in the browser you use for Lean Plate): ${url}\nOr enter this code under "Code from my phone": ${code}`;
   try {
     if (navigator.share) await navigator.share({ text });
     else { await navigator.clipboard.writeText(code); $('#joinStatus').textContent = 'Code copied.'; }
@@ -1855,6 +1856,30 @@ window.addEventListener('lp:assistant', async (e) => {
 $('#dayBar').onclick = () => { document.querySelector('[data-tab=today]').click(); };
 $('#weighDate').value = isoDate();
 const justConnected = devices.takeRedirect();
+// One-tap linking: opening the app at …#link=<code or phrase> joins that household.
+// The part after # never leaves the phone, so the phrase isn't in any server log or the code.
+function takeLinkFromUrl() {
+  const m = location.hash.match(/^#link=(.+)$/);
+  if (!m) return false;
+  history.replaceState(null, '', location.pathname + location.search);
+  global.set('pendingLink', decodeURIComponent(m[1]));
+  return true;
+}
+takeLinkFromUrl();
+// Link opened while the app is already open in this tab.
+window.addEventListener('hashchange', () => { if (takeLinkFromUrl()) applyPendingLink(); });
+async function applyPendingLink() {
+  const phrase = global.get('pendingLink', null);
+  if (!phrase || !ownerId()) return;
+  global.set('pendingLink', null);
+  try {
+    await sync.join(phrase);
+    alert(`Linked ✓ This ${navigator.userAgent.includes('CriOS') ? 'Chrome' : 'browser'} now shares with the household code ${sync.settings().code}.`);
+    location.reload();
+  } catch (err) {
+    alert(`Couldn't link: ${err.message}`);
+  }
+}
 sync.ensure(); // household sharing is on by default
 renderWho();
 renderViewOnly();
@@ -1865,6 +1890,7 @@ else openProfile();
 // Pull workouts on open (at most every 10 min) and right after connecting.
 if (!sync.readOnly() && (justConnected || Date.now() - store.get('lastSync', 0) > 10 * 60000)) syncDevices();
 // Household: upload my latest, then fetch my partner's; reload if I'm looking at fresh data.
+applyPendingLink();
 if (sync.enabled()) {
   sync.push().catch(() => {});
   sync.pull().then((changed) => { updateNotesBadge(); if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
