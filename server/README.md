@@ -41,9 +41,11 @@ code can't read it. Treat the code like a password.
    npx wrangler secret put STRAVA_CLIENT_SECRET --name lean-plate-connect
    # APP_ORIGIN is set in wrangler.toml (change it if you host the app elsewhere)
    ```
-3. **Household sharing:** on Sandman's phone open **Devices → Share with your household**,
-   paste the worker URL, tap **New code**, pick **Sandman**, and tap **Turn on sharing**.
-   On Amani's phone enter the same URL and code, pick **Amani**, and turn it on.
+3. **Household sharing** is on by default (the app has this worker's URL built in, in
+   `js/sync.js`). Each phone starts with its own private code. To link the phones once:
+   on Sandman's phone tap **Amani** at the top, and enter the code shown in the same box on
+   Amani's phone (or tap **Send** to text yours to her and she enters it). If you host your
+   own worker, change `DEFAULT_CONNECTOR` or set the URL under **Devices → Share with your household**.
 4. **WHOOP / Garmin (optional):** in **Devices**, paste the worker URL and tap
    **Connect WHOOP** / **Connect Garmin (Strava)**. Sharing alone needs only `APP_ORIGIN`;
    the WHOOP/Strava secrets are only needed for those connections.

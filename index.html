@@ -201,6 +201,15 @@
   <dialog id="partnerDialog">
     <h2 id="partnerTitle"></h2>
     <p class="small" id="partnerText"></p>
+    <div class="link-box" id="partnerLink">
+      <p class="small"><b>Link your phones (once):</b> on one phone, enter the other phone's code.</p>
+      <div class="small">This phone's code</div>
+      <div class="row" style="margin-top:4px"><code class="share-code" id="myCode"></code><button type="button" class="ghost small" id="sendCode">Send</button></div>
+      <label class="small">Code from <span id="partnerName2"></span>'s phone
+        <div class="row" style="margin-top:4px"><input id="joinCode" autocomplete="off" autocapitalize="none" placeholder="xxxx-xxxx-xxxx"><button type="button" class="small" id="joinBtn">Link</button></div>
+      </label>
+      <p class="small" id="joinStatus"></p>
+    </div>
     <div class="row end">
       <button type="button" class="ghost" id="partnerClose">Close</button>
       <button type="button" id="partnerBack">Back</button>

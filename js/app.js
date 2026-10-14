@@ -13,7 +13,7 @@ import { RESEARCH } from './research.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile } from './storage.js';
-import { sync, newHouseholdCode } from './sync.js';
+import { sync, newHouseholdCode, DEFAULT_CONNECTOR } from './sync.js';
 import { buildTables, toCsv, summary } from './analytics.js';
 import { makeZip } from './zip.js';
 import { programReview } from './review.js';
@@ -1470,11 +1470,39 @@ $('#profileClose').onclick = () => dialog.close();
 function openPartnerNotice() {
   const name = activeProfile().name;
   const owner = PROFILES.find((p) => p.id === ownerId());
-  $('#partnerTitle').textContent = `${name}'s profile isn't set up yet`;
-  $('#partnerText').textContent = `${name} sets up their own profile on their own phone. You can't set it up or change it from here. Once you both turn on sharing (Devices → Share with your household), ${name}'s day shows up here to view.`;
+  $('#partnerTitle').textContent = `${name}'s day isn't on this phone yet`;
+  $('#partnerText').textContent = `${name} sets up and edits ${name}'s profile on ${name}'s own phone. Once your phones are linked, ${name}'s day shows up here to view, and updates every few minutes.`;
   $('#partnerBack').textContent = `Back to ${owner?.name || 'my profile'}`;
+  renderLinkBox(name);
   $('#partnerDialog').showModal();
 }
+
+// Linking: show this phone's household code, or take the other phone's.
+function renderLinkBox(name) {
+  $('#partnerName2').textContent = name;
+  $('#myCode').textContent = sync.settings()?.code || '—';
+  $('#joinStatus').textContent = '';
+}
+$('#sendCode').onclick = async () => {
+  const code = sync.settings()?.code;
+  if (!code) return;
+  const text = `My Lean Plate code: ${code}\nOpen Lean Plate, tap my name at the top, and enter it under "Code from my phone" to see each other's day.`;
+  try {
+    if (navigator.share) await navigator.share({ text });
+    else { await navigator.clipboard.writeText(code); $('#joinStatus').textContent = 'Code copied.'; }
+  } catch { /* share sheet closed */ }
+};
+$('#joinBtn').onclick = async () => {
+  $('#joinStatus').textContent = 'Linking…';
+  try {
+    const got = await sync.join($('#joinCode').value);
+    $('#joinStatus').textContent = got ? 'Linked! Loading…' : 'Linked. Their day shows up once their phone syncs (open the app on it).';
+    $('#myCode').textContent = sync.settings().code;
+    if (got) setTimeout(() => location.reload(), 600);
+  } catch (err) {
+    $('#joinStatus').textContent = err.message;
+  }
+};
 $('#partnerBack').onclick = () => { setActiveProfile(ownerId()); location.reload(); };
 $('#partnerClose').onclick = () => $('#partnerDialog').close();
 
@@ -1650,8 +1678,9 @@ function renderViewOnly() {
     $('#viewBanner').innerHTML = seen
       ? `Viewing <b>${esc(name)}</b>'s day · updated ${ago(seen)} · <button class="linkish" id="refreshPartner">Refresh</button>`
       : sync.enabled()
-        ? `<b>${esc(name)}</b> hasn't synced yet. Once ${esc(name)} sets up the app and sharing on their own phone, their day shows up here. <button class="linkish" id="refreshPartner">Check now</button>`
-        : `<b>${esc(name)}</b>'s profile isn't set up on this phone. ${esc(name)} sets it up on their own phone; turn on sharing (Devices) on both phones to see each other's day.`;
+        ? `<b>${esc(name)}</b>'s day isn't here yet. <button class="linkish" id="linkPartner">Link phones</button> · <button class="linkish" id="refreshPartner">Check now</button>`
+        : `<b>${esc(name)}</b>'s profile isn't set up on this phone. ${esc(name)} sets it up on their own phone; link your phones to see each other's day.`;
+    if ($('#linkPartner')) $('#linkPartner').onclick = () => openPartnerNotice();
     if ($('#refreshPartner')) $('#refreshPartner').onclick = async () => {
       $('#refreshPartner').textContent = 'Checking…';
       try { if (await sync.pull()) location.reload(); else $('#refreshPartner').textContent = 'Up to date'; } catch (err) { $('#refreshPartner').textContent = err.message; }
@@ -1662,7 +1691,7 @@ function renderViewOnly() {
 // ---------- HOUSEHOLD SHARING (in Devices) ----------
 function renderSharing() {
   const s = sync.settings() || {};
-  $('#shareUrl').value = s.url || devices.get().server || '';
+  $('#shareUrl').value = s.url || devices.get().server || DEFAULT_CONNECTOR;
   $('#shareCode').value = s.code || '';
   $('#shareMe').textContent = PROFILES.find((p) => p.id === ownerId())?.name || '—';
   $('#shareStatus').textContent = sync.enabled()
@@ -1678,6 +1707,7 @@ $('#shareSave').onclick = async () => {
     return;
   }
   sync.save({ url, code });
+  global.set('shareOff', false);
   $('#shareStatus').textContent = 'Syncing…';
   try {
     await sync.push();
@@ -1687,7 +1717,7 @@ $('#shareSave').onclick = async () => {
     $('#shareStatus').textContent = `Couldn't reach the connector: ${err.message}`;
   }
 };
-$('#shareOff').onclick = () => { sync.save(null); location.reload(); };
+$('#shareOff').onclick = () => { sync.save(null); global.set('shareOff', true); location.reload(); };
 
 initLift();
 // Weigh-ins said on the Lift tab ("weigh in 161.4").
@@ -1722,6 +1752,7 @@ window.addEventListener('lp:assistant', async (e) => {
 $('#dayBar').onclick = () => { document.querySelector('[data-tab=today]').click(); };
 $('#weighDate').value = isoDate();
 const justConnected = devices.takeRedirect();
+sync.ensure(); // household sharing is on by default
 renderWho();
 renderViewOnly();
 if (!ownerId()) openOwnerPicker();

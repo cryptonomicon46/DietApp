@@ -5,8 +5,26 @@ import { PROFILES, global, onChange, exportProfile, importProfile, activeProfile
 // settings = {url, code}: connector URL and shared household code. The phone's owner
 // (storage.ownerId) is the one whose data this phone uploads.
 
+// Your Cloudflare connector. Not secret: data there can only be read with the household code.
+export const DEFAULT_CONNECTOR = 'https://lean-plate-connect.sandman-amani.workers.dev';
+
 export const sync = {
   settings: () => global.get('sync', null),
+  // Sharing is on by default: each phone starts its own private household code, and
+  // linking the two phones is typing one phone's code into the other (join).
+  ensure() {
+    if (this.settings() || !ownerId() || global.get('shareOff', false)) return false;
+    this.save({ url: DEFAULT_CONNECTOR, code: newHouseholdCode() });
+    return true;
+  },
+  async join(code) {
+    code = code.trim().toLowerCase().replace(/\s+/g, '');
+    if (!/^[a-z0-9-]{12,64}$/.test(code)) throw new Error('That code doesn\'t look right — it\'s 3 groups of 4 letters/numbers.');
+    global.set('shareOff', false);
+    this.save({ url: this.settings()?.url || DEFAULT_CONNECTOR, code });
+    await this.push();
+    return this.pull();
+  },
   save(s) { global.set('sync', s); },
   enabled() { const s = this.settings(); return !!(s?.url && s?.code && ownerId()); },
   // Only the phone's owner can edit; anyone else's profile is view-only.
