@@ -22,3 +22,11 @@ test('plan days and upcoming', async () => {
   assert.ok(!isUpcoming({ date: made, when: 'tonight', done: true }, made));
   assert.match(whenText({ date: made, when: 'tonight', time: '19:30' }, made), /^Tonight at 7:30/);
 });
+
+test('board starts fresh at 5 AM', async () => {
+  const { boardStart } = await import('../js/notes.js');
+  const at = (h, m = 0) => new Date(2026, 9, 14, h, m);
+  assert.equal(boardStart(at(8)), new Date(2026, 9, 14, 5).getTime());
+  assert.equal(boardStart(at(23, 30)), new Date(2026, 9, 14, 5).getTime());
+  assert.equal(boardStart(at(2)), new Date(2026, 9, 13, 5).getTime(), 'a 2 AM note still belongs to last night');
+});

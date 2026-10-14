@@ -19,6 +19,17 @@ const notesOf = (id) => profileStore(id).get('notes', []);
 
 let color = 'yellow';
 let replyTo = null; // the note you're answering, if any
+const carried = new Set(); // unread notes from before this morning, kept on the board until you leave the tab
+
+// The board starts fresh every morning at 5 AM (late-night notes stay up until then).
+export const MORNING_HOUR = 5;
+export function boardStart(now = new Date()) {
+  const d = new Date(now);
+  d.setHours(MORNING_HOUR, 0, 0, 0);
+  if (d > now) d.setDate(d.getDate() - 1);
+  return d.getTime();
+}
+const key = (n) => `${n.from}:${n.id}`;
 
 // All notes from both people, newest first.
 export function allNotes() {
@@ -68,6 +79,9 @@ export function renderNotes() {
   $('#usPages').innerHTML = [['notes', '💌 Notes', n], ['plans', '✨ Feeling like', pl]].map(([k, label, c]) =>
     `<button type="button" class="${k === page ? 'on' : ''}" data-page="${k}" aria-pressed="${k === page}">${label}${c && k !== page ? ` <b class="dot">${c}</b>` : ''}</button>`).join('');
   if (page === 'plans') { renderPlans(el); updateNotesBadge(); return; }
+  const start = boardStart();
+  const prevSeen = global.get('notesSeenAt', 0);
+  for (const x of allNotes()) if (x.from !== me() && x.at > prevSeen && x.at < start) carried.add(key(x));
   global.set('notesSeenAt', Date.now());
   updateNotesBadge();
   const p = partner();
@@ -80,12 +94,15 @@ export function renderNotes() {
   const linked = global.get(`seen.${p.id}`, 0) > 0;
   const wroteToday = mine.some((n) => n.date === today);
 
+  const recent = allNotes().filter((x) => x.at >= Date.now() - 60 * 86400000);
+  const board = recent.filter((x) => x.at >= start || carried.has(key(x)));
+  const earlier = recent.filter((x) => !board.includes(x));
   const byDay = {};
-  for (const n of allNotes().filter((x) => x.date >= isoDate(new Date(Date.now() - 60 * 86400000)))) (byDay[n.date] ||= []).push(n);
+  for (const x of earlier) (byDay[x.date] ||= []).push(x);
   const dayLabel = (d) => {
-    if (d === today) return 'Today';
     const y = new Date(); y.setDate(y.getDate() - 1);
     if (d === isoDate(y)) return 'Yesterday';
+    if (d === today) return 'Earlier today';
     return new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
   };
 
@@ -111,25 +128,29 @@ export function renderNotes() {
       </form>
       ${linked ? '' : `<p class="small muted">${esc(pName)} sees your notes once your phones are linked (tap ${esc(pName)} at the top → Link).</p>`}
     </div>
-    ${Object.keys(byDay).length ? Object.entries(byDay).map(([d, notes]) => `
-      <h3 class="note-day">${dayLabel(d)}</h3>
-      <div class="note-grid">
-        ${notes.map((n, i) => {
-          const own = n.from === me();
-          const heart = own ? theirHearts[n.id] : hearts[n.id];
-          const re = n.replyTo && allNotes().find((x) => x.id === n.replyTo.id && x.from === n.replyTo.from);
-          return `<figure class="postit note-${NOTE_COLORS[n.color] ? n.color : 'yellow'}" style="--tilt:${((n.at % 7) - 3) * 0.6}deg">
-            ${re ? `<div class="postit-quote">↩ “${esc(re.text.slice(0, 50))}${re.text.length > 50 ? '…' : ''}”</div>` : ''}
-            <blockquote>${esc(n.text)}</blockquote>
-            <figcaption>
-              <span>${own ? 'You' : esc(nameOf(n.from))} · ${new Date(n.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
-              ${own
-                ? `${heart ? `<span class="heart-got" title="${esc(pName)} loved this">${heart}</span>` : ''}<button type="button" class="x" data-delnote="${esc(n.id)}" aria-label="Delete note">✕</button>`
-                : `<button type="button" class="reply" data-reply-note="${esc(n.id)}" aria-label="Reply">↩</button><button type="button" class="heart ${heart ? 'on' : ''}" data-heart="${esc(n.id)}" aria-label="${heart ? 'Remove heart' : 'Heart this note'}">${heart || '🤍'}</button>`}
-            </figcaption>
-          </figure>`;
-        }).join('')}
-      </div>`).join('') : `<p class="muted small center">No notes yet. Leave the first one 💌</p>`}`;
+    <h3 class="note-day">Today's board · ${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
+    ${board.length ? `<div class="note-grid">${board.map((x) => postit(x, { pName, hearts, theirHearts })).join('')}</div>`
+      : `<p class="muted small center">A fresh board for today. Leave the first note 💌</p>`}
+    ${earlier.length ? `<details class="past-notes"><summary class="note-day">Earlier notes</summary>
+      ${Object.entries(byDay).map(([d, notes]) => `<h4 class="note-day small">${dayLabel(d)}</h4>
+        <div class="note-grid">${notes.map((x) => postit(x, { pName, hearts, theirHearts })).join('')}</div>`).join('')}
+    </details>` : ''}`;
+}
+
+function postit(n, { pName, hearts, theirHearts }) {
+  const own = n.from === me();
+  const heart = own ? theirHearts[n.id] : hearts[n.id];
+  const re = n.replyTo && allNotes().find((x) => x.id === n.replyTo.id && x.from === n.replyTo.from);
+  return `<figure class="postit note-${NOTE_COLORS[n.color] ? n.color : 'yellow'}" style="--tilt:${((n.at % 7) - 3) * 0.6}deg">
+    ${re ? `<div class="postit-quote">↩ “${esc(re.text.slice(0, 50))}${re.text.length > 50 ? '…' : ''}”</div>` : ''}
+    <blockquote>${esc(n.text)}</blockquote>
+    <figcaption>
+      <span>${own ? 'You' : esc(nameOf(n.from))} · ${new Date(n.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
+      ${own
+        ? `${heart ? `<span class="heart-got" title="${esc(pName)} loved this">${heart}</span>` : ''}<button type="button" class="x" data-delnote="${esc(n.id)}" aria-label="Delete note">✕</button>`
+        : `<button type="button" class="reply" data-reply-note="${esc(n.id)}" aria-label="Reply">↩</button><button type="button" class="heart ${heart ? 'on' : ''}" data-heart="${esc(n.id)}" aria-label="${heart ? 'Remove heart' : 'Heart this note'}">${heart || '🤍'}</button>`}
+    </figcaption>
+  </figure>`;
 }
 
 export function initNotes() {
