@@ -356,3 +356,8 @@ dialog.review { width: min(520px, calc(100vw - 24px)); }
 .mic { padding: 8px 10px; font-size: 1.1rem; }
 .mic.listening { background: var(--warn); color: #fff; border-color: var(--warn); }
 .cmd-result { margin: 6px 0 4px; min-height: 1em; }
+.lift-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.move-btns { display: flex; gap: 4px; flex-shrink: 0; }
+.move-btns button { min-width: 36px; padding: 4px 8px; }
+.move-btns button:disabled { opacity: .3; }
+.order-bar { background: var(--bg); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }

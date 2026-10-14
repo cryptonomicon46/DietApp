@@ -1,6 +1,6 @@
 import {
   MUSCLES, EXERCISES, DAYS, WEEKS, slotOptions, setsFor, weeklySets, blockPosition, suggestLoad,
-  PLATES, plateTotal, platesFor, platesText, extraSlot, mergeSlots,
+  PLATES, plateTotal, platesFor, platesText, extraSlot, mergeSlots, applyOrder, moveSlot,
 } from './lifting.js';
 import { store } from './storage.js';
 import { parseCommand, describe } from './commands.js';
@@ -11,13 +11,24 @@ const save = () => store.set('lift', lift);
 
 // extraSets: {slotId: +n/−n} sets you added or removed, remembered for next time.
 // kept: {A: [slot, ...]} exercises you added and chose to keep in that day's plan.
-let lift = { block: 1, choices: {}, extraSets: {}, kept: {}, sessions: [], draft: null, ...load() };
+// order: {A: [slotId, ...]} your saved exercise order for a day; draft.order overrides it for today.
+let lift = { block: 1, choices: {}, extraSets: {}, kept: {}, order: {}, sessions: [], draft: null, ...load() };
 lift.extraSets ||= {};
 lift.kept ||= {};
+lift.order ||= {};
 
-// Today's exercises: the plan + exercises you keep + ones added just for today.
+// Today's exercises: the plan + exercises you keep + ones added just for today, in your order.
 function sessionSlots(d = lift.draft) {
-  return mergeSlots(DAYS[d.day].slots, [...(lift.kept[d.day] || []), ...(d.extra || [])]);
+  return applyOrder(mergeSlots(DAYS[d.day].slots, [...(lift.kept[d.day] || []), ...(d.extra || [])]), d.order || lift.order[d.day]);
+}
+const planOrder = (d = lift.draft) => mergeSlots(DAYS[d.day].slots, [...(lift.kept[d.day] || []), ...(d.extra || [])]).map((s) => s.id);
+const sameOrder = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+// Reorder today's session (e.g. the squat rack is taken).
+function moveExercise(id, where) {
+  const d = lift.draft;
+  d.order = moveSlot(sessionSlots().map((s) => s.id), id, where);
+  save();
 }
 const slotById = (id) => sessionSlots().find((s) => s.id === id);
 const slotIndex = (id) => DAYS[lift.draft.day].slots.findIndex((s) => s.id === id); // −1 for added ones
@@ -86,7 +97,8 @@ export function renderLift() {
       <button type="submit" class="small">Log</button>
     </form>
     <div class="small cmd-result" id="cmdResult">${cmdFeedback}</div>
-    ${sessionSlots().map((slot) => {
+    ${orderBar()}
+    ${sessionSlots().map((slot, n, all) => {
       const i = slot.added ? 99 : slotIndex(slot.id);
       const e = d.entries[slot.id] ||= { exercise: lift.choices[slot.id] || slot.default, sets: newSets(lift.choices[slot.id] || slot.default, slot, d.week, i) };
       const kept = (lift.kept[d.day] || []).some((k) => k.id === slot.id);
@@ -98,7 +110,14 @@ export function renderLift() {
       const load = barbell && sug.weight ? platesFor(sug.weight, lift.bar || 45, lift.use35 ? PLATES : PLATES.filter((x) => x !== 35)) : null;
       return `
       <div class="lift" data-slot="${slot.id}">
-        <div class="eyebrow">${MUSCLES[slot.muscle]} · ${ex.kind}${slot.added ? ` · <span class="added-tag">${kept ? `kept in Day ${d.day}` : 'added today'}</span>` : ''}</div>
+        <div class="lift-head">
+          <div class="eyebrow">${n + 1}. ${MUSCLES[slot.muscle]} · ${ex.kind}${slot.added ? ` · <span class="added-tag">${kept ? `kept in Day ${d.day}` : 'added today'}</span>` : ''}</div>
+          <div class="move-btns">
+            <button type="button" class="ghost small" data-move="${slot.id}:up" ${n === 0 ? 'disabled' : ''} aria-label="Move ${esc(ex.name)} earlier">↑</button>
+            <button type="button" class="ghost small" data-move="${slot.id}:down" ${n === all.length - 1 ? 'disabled' : ''} aria-label="Move ${esc(ex.name)} later">↓</button>
+            <button type="button" class="ghost small" data-move="${slot.id}:end" ${n === all.length - 1 ? 'disabled' : ''} title="Equipment busy? Do it last">Later</button>
+          </div>
+        </div>
         <select data-ex="${slot.id}" aria-label="Exercise for ${MUSCLES[slot.muscle]}">
           ${slotOptions(slot).map((k) => `<option value="${k}" ${k === e.exercise ? 'selected' : ''}>${esc(EXERCISES[k].name)} · ${EXERCISES[k].equip}</option>`).join('')}
         </select>
@@ -138,6 +157,21 @@ export function renderLift() {
   renderLibrary();
 }
 
+// Shown when today's order isn't the plan's: keep it for this day, or go back.
+function orderBar() {
+  const d = lift.draft;
+  const now = sessionSlots().map((s) => s.id);
+  const plan = planOrder();
+  const saved = lift.order[d.day];
+  if (sameOrder(now, plan)) return '';
+  const savedNow = saved && !d.order;
+  return `<div class="order-bar small">
+    ${savedNow ? `Your Day ${d.day} order.` : 'Order changed for today.'}
+    ${savedNow ? '' : `<button type="button" class="linkish" data-order="keep">📌 Keep this order for Day ${d.day}</button> ·`}
+    <button type="button" class="linkish" data-order="reset">Back to plan order</button>
+  </div>`;
+}
+
 // ---------- voice / text commands ----------
 const SpeechRec = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
 let cmdFeedback = '';
@@ -148,10 +182,19 @@ let lastSlotId = null;
 export function applyActions(actions) {
   const d = lift.draft;
   const lines = [];
-  undoDraft = JSON.stringify({ draft: d, kept: lift.kept });
+  undoDraft = JSON.stringify({ draft: d, kept: lift.kept, order: lift.order });
   for (const a of actions) {
     if (a.type === 'weight') {
       window.dispatchEvent(new CustomEvent('lp:weighin', { detail: a.lb }));
+      lines.push(`✓ ${describe(a)}`);
+      continue;
+    }
+    if (a.type === 'move') {
+      const find = (ex) => sessionSlots().find((s) => d.entries[s.id]?.exercise === ex);
+      const slot = find(a.exercise);
+      const other = a.after || a.before ? find(a.after || a.before) : null;
+      if (!slot || ((a.after || a.before) && !other)) { lines.push(`• ${EXERCISES[a.exercise && !slot ? a.exercise : a.after || a.before].name} isn't in today's session`); continue; }
+      moveExercise(slot.id, a.after ? { after: other.id } : a.before ? { before: other.id } : { to: a.to });
       lines.push(`✓ ${describe(a)}`);
       continue;
     }
@@ -355,7 +398,7 @@ export function initLift() {
       renderLift();
     } else if (t.id === 'cmdUndo' && undoDraft) {
       const u = JSON.parse(undoDraft);
-      lift.draft = u.draft; lift.kept = u.kept; undoDraft = null;
+      lift.draft = u.draft; lift.kept = u.kept; lift.order = u.order || {}; undoDraft = null;
       cmdFeedback = 'Undone.';
       save();
       renderLift();
@@ -369,6 +412,18 @@ export function initLift() {
       rec.onerror = (ev) => setCommandFeedback(ev.error === 'not-allowed' ? 'Microphone access is off. Use the 🎤 on your keyboard instead.' : 'Didn\'t hear anything — try again or type it.');
       rec.onend = () => t.classList.remove('listening');
       rec.start();
+    } else if (t.dataset.move) {
+      const [id, to] = t.dataset.move.split(':');
+      moveExercise(id, { to });
+      renderLift();
+      document.querySelector(`.lift[data-slot="${id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else if (t.dataset.order) {
+      const d = lift.draft;
+      if (t.dataset.order === 'keep') lift.order[d.day] = sessionSlots().map((s) => s.id);
+      else delete lift.order[d.day];
+      delete d.order;
+      save();
+      renderLift();
     } else if (t.dataset.addex) {
       addingAfter = addingAfter === t.dataset.addex ? null : t.dataset.addex;
       addMuscle = null;
@@ -422,7 +477,7 @@ export function initLift() {
       renderLibrary();
     } else if (t.id === 'finishLift') {
       const d = lift.draft;
-      const entries = Object.entries(d.entries).map(([slot, e]) => ({
+      const entries = sessionSlots().filter((s) => d.entries[s.id]).map((s) => [s.id, d.entries[s.id]]).map(([slot, e]) => ({
         slot, exercise: e.exercise, sets: e.sets.filter((s) => +s.r > 0).map((s) => ({ w: +s.w || 0, r: +s.r })),
       }));
       if (!entries.some((e) => e.sets.length)) { t.textContent = 'Log at least one set first'; return; }

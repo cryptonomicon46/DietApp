@@ -45,3 +45,13 @@ test('weigh-in and nonsense', () => {
   assert.deepEqual(one('weigh in 161.4')[0], { type: 'weight', lb: 161.4 });
   assert.equal(parseCommand('how was my week').understood, false);
 });
+
+test('reorder commands', () => {
+  const ids = ['backSquat', 'bench', 'bbRow', 'rdl'];
+  assert.deepEqual(parseCommand('move rows after squats', ids).actions, [{ type: 'move', exercise: 'bbRow', after: 'backSquat' }]);
+  assert.deepEqual(parseCommand('do RDLs before bench', ids).actions, [{ type: 'move', exercise: 'rdl', before: 'bench' }]);
+  assert.deepEqual(parseCommand('do squats last', ids).actions, [{ type: 'move', exercise: 'backSquat', to: 'end' }]);
+  assert.deepEqual(parseCommand('bench first', ids).actions, [{ type: 'move', exercise: 'bench', to: 'start' }]);
+  // Logging sets still works when "after" appears with numbers.
+  assert.equal(parseCommand('squats 3 sets of 5 at 185', ids).actions[0].type, 'sets');
+});

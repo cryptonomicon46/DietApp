@@ -232,3 +232,34 @@ export function mergeSlots(planSlots, added = []) {
   }
   return out;
 }
+
+// Put a session's exercises in your chosen order (list of slot ids). Exercises not in
+// the list (e.g. added later) stay right after the one they followed before.
+export function applyOrder(slots, order) {
+  if (!order?.length) return slots;
+  const ids = new Set(slots.map((s) => s.id));
+  const out = order.filter((id) => ids.has(id)).map((id) => slots.find((s) => s.id === id));
+  slots.forEach((s, i) => {
+    if (out.includes(s)) return;
+    const prev = slots.slice(0, i).reverse().find((p) => out.includes(p));
+    out.splice(prev ? out.indexOf(prev) + 1 : 0, 0, s);
+  });
+  return out;
+}
+
+// Move one exercise: to:'up'|'down'|'start'|'end', or after/before another slot id.
+export function moveSlot(ids, id, { to, after, before } = {}) {
+  const from = ids.indexOf(id);
+  if (from < 0) return ids;
+  const out = ids.filter((x) => x !== id);
+  let at;
+  if (to === 'up') at = Math.max(0, from - 1);
+  else if (to === 'down') at = Math.min(out.length, from + 1);
+  else if (to === 'start') at = 0;
+  else if (to === 'end') at = out.length;
+  else if (after && out.includes(after)) at = out.indexOf(after) + 1;
+  else if (before && out.includes(before)) at = out.indexOf(before);
+  else return ids;
+  out.splice(at, 0, id);
+  return out;
+}

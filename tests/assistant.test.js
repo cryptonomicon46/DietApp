@@ -20,11 +20,13 @@ test('response → app actions', () => {
       { type: 'text', text: 'Logged it.' },
       { type: 'tool_use', name: 'log_sets', input: { exercise_id: 'splitSquat', after_exercise_id: 'backSquat', sets: [{ reps: 10, weight_lb: 40 }, { reps: 8, weight_lb: null }] } },
       { type: 'tool_use', name: 'add_exercise', input: { exercise_id: 'legCurlNope' } },
+      { type: 'tool_use', name: 'move_exercise', input: { exercise_id: 'bbRow', position: 'after', other_exercise_id: 'backSquat' } },
       { type: 'tool_use', name: 'log_weight', input: { pounds: 160.84 } },
     ],
   });
   assert.deepEqual(actions, [
     { type: 'sets', exercise: 'splitSquat', sets: [{ r: 10, w: 40 }, { r: 8, w: null }], add: true, after: 'backSquat' },
+    { type: 'move', exercise: 'bbRow', after: 'backSquat' },
     { type: 'weight', lb: 160.8 },
   ]);
   assert.equal(note, 'Logged it.');

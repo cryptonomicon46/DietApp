@@ -52,6 +52,21 @@ export const TOOLS = [
     },
   },
   {
+    name: 'move_exercise',
+    description: 'Reorder today\'s session, e.g. when equipment is busy. Give exactly one of: another exercise to go after or before, or start/end.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        exercise_id: { type: 'string', enum: IDS, description: 'Exercise to move (must be in today\'s session).' },
+        position: { type: 'string', enum: ['after', 'before', 'start', 'end'] },
+        other_exercise_id: { type: ['string', 'null'], enum: [...IDS, null], description: 'For after/before: the session exercise it moves next to. null for start/end.' },
+      },
+      required: ['exercise_id', 'position', 'other_exercise_id'],
+    },
+  },
+  {
     name: 'log_weight',
     description: 'Record today\'s body-weight weigh-in.',
     strict: true,
@@ -100,6 +115,10 @@ export function toActions(response) {
     const input = block.input || {};
     if (block.name === 'log_weight' && input.pounds > 50 && input.pounds < 700) {
       actions.push({ type: 'weight', lb: Math.round(input.pounds * 10) / 10 });
+    } else if (block.name === 'move_exercise' && EXERCISES[input.exercise_id]) {
+      const rel = input.position === 'after' || input.position === 'before';
+      if (rel && EXERCISES[input.other_exercise_id]) actions.push({ type: 'move', exercise: input.exercise_id, [input.position]: input.other_exercise_id });
+      else if (!rel) actions.push({ type: 'move', exercise: input.exercise_id, to: input.position });
     } else if (block.name === 'add_exercise' && EXERCISES[input.exercise_id]) {
       actions.push({ type: 'add', exercise: input.exercise_id, ...afterOf(input) });
     } else if (block.name === 'log_sets' && EXERCISES[input.exercise_id] && Array.isArray(input.sets)) {

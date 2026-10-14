@@ -4,6 +4,7 @@
 //   "add bulgarian split squats 3x10 at 40"
 //   "curls 30 pounds 12 reps"            → 1 set
 //   "weigh in 161.4"                      → today's weigh-in
+//   "move rows after squats", "do RDLs last", "bench first" → reorder today's session
 // Several commands can be joined with "and", "then", commas before a new exercise, or periods.
 import { EXERCISES } from './lifting.js';
 
@@ -114,6 +115,8 @@ export function parseCommand(input, sessionIds = []) {
   const clauses = text.split(/\s(?:and then|then|and|also|next)\s|[;.\n]+|,(?=\s*[a-z])/).map((c) => c.trim()).filter(Boolean);
   let lastExercise = null;
   for (const clause of clauses) {
+    const move = parseMove(clause, sessionIds);
+    if (move) { actions.push(move); lastExercise = move.exercise; continue; }
     const adding = /\b(add|include|throw in)\b/.test(clause);
     const exercise = matchExercise(clause, sessionIds) || null;
     const sets = parseSets(clause);
@@ -124,10 +127,32 @@ export function parseCommand(input, sessionIds = []) {
   return { actions, understood: actions.length > 0 };
 }
 
+// "move rows after squats" / "do lunges before bench" / "RDLs last" / "move curls to the end"
+function parseMove(clause, sessionIds) {
+  const rel = clause.match(/^(?:move|do|put|switch)?\s*(.+?)\s+(after|before)\s+(?:the\s+)?(.+)$/);
+  if (rel && /^(move|do|put|switch)\b/.test(clause) && !/\d/.test(clause)) {
+    const exercise = matchExercise(rel[1], sessionIds);
+    const other = matchExercise(rel[3], sessionIds);
+    if (exercise && other && exercise !== other) return { type: 'move', exercise, [rel[2]]: other };
+  }
+  const end = clause.match(/^(?:move|do|put|save)?\s*(.+?)\s+(?:to the end|to the bottom|last|at the end|later)$/);
+  const start = clause.match(/^(?:move|do|put)?\s*(.+?)\s+(?:to the top|to the start|first|next|now)$/);
+  const m = end || start;
+  if (m && !/\d/.test(clause)) {
+    const exercise = matchExercise(m[1], sessionIds);
+    if (exercise) return { type: 'move', exercise, to: end ? 'end' : 'start' };
+  }
+  return null;
+}
+
 export function describe(a) {
   if (a.type === 'weight') return `Weigh-in ${a.lb} lb`;
   const name = a.exercise ? EXERCISES[a.exercise].name : 'Current exercise';
   if (a.type === 'add') return `Added ${name}`;
+  if (a.type === 'move') {
+    if (a.after || a.before) return `Moved ${name} ${a.after ? 'after' : 'before'} ${EXERCISES[a.after || a.before].name}`;
+    return `Moved ${name} to the ${a.to === 'end' ? 'end' : 'start'}`;
+  }
   const ws = [...new Set(a.sets.map((s) => s.w))];
   const reps = a.sets.map((s) => s.r).join(', ');
   return `${name}: ${a.sets.length} set${a.sets.length > 1 ? 's' : ''} × ${reps}${ws.length === 1 && ws[0] != null ? ` @ ${ws[0]} lb` : ''}`;

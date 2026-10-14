@@ -89,3 +89,16 @@ test('added exercises slot in right after the chosen one', async () => {
   assert.deepEqual(order.slice(0, 4), ['A1', 'X1', 'X2', 'A2']);
   assert.equal(extraSlot('X3', 'lateralRaise', 'A2').reps[0], 10, 'isolation → 10–15');
 });
+
+test('exercise order: apply and move', async () => {
+  const { applyOrder, moveSlot } = await import('../js/lifting.js');
+  const slots = ['A1', 'A2', 'X1', 'A3'].map((id) => ({ id }));
+  assert.deepEqual(applyOrder(slots, ['A3', 'A1', 'A2']).map((s) => s.id), ['A3', 'A1', 'A2', 'X1'], 'unlisted ones follow their predecessor');
+  assert.deepEqual(applyOrder(slots, null).map((s) => s.id), ['A1', 'A2', 'X1', 'A3']);
+  const ids = ['A1', 'A2', 'A3', 'A4'];
+  assert.deepEqual(moveSlot(ids, 'A1', { to: 'down' }), ['A2', 'A1', 'A3', 'A4']);
+  assert.deepEqual(moveSlot(ids, 'A1', { to: 'up' }), ids);
+  assert.deepEqual(moveSlot(ids, 'A2', { to: 'end' }), ['A1', 'A3', 'A4', 'A2']);
+  assert.deepEqual(moveSlot(ids, 'A4', { after: 'A1' }), ['A1', 'A4', 'A2', 'A3']);
+  assert.deepEqual(moveSlot(ids, 'A1', { before: 'A4' }), ['A2', 'A3', 'A1', 'A4']);
+});
