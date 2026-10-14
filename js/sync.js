@@ -21,8 +21,9 @@ export const sync = {
   // code gets a forwarding note so a phone still on it follows. If both phones enter each
   // other's code, the later link wins (notes older than this phone's own link are ignored).
   async join(code) {
-    code = code.trim().toLowerCase().replace(/\s+/g, '');
-    if (!/^[a-z0-9-]{12,64}$/.test(code)) throw new Error('That code doesn\'t look right — it\'s 3 groups of 4 letters/numbers.');
+    // Accepts the other phone's code or a private phrase you both type ("Sunset Tacos 4821").
+    code = code.trim().toLowerCase().replace(/[\s_]+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-');
+    if (!/^[a-z0-9-]{12,64}$/.test(code)) throw new Error('Use the code from the other phone, or a private phrase of at least 12 letters/numbers (both phones type the same one).');
     global.set('shareOff', false);
     const url = this.settings()?.url || DEFAULT_CONNECTOR;
     const old = this.settings()?.code;

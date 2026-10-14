@@ -44,8 +44,11 @@ code can't read it. Treat the code like a password.
 3. **Household sharing** is on by default (the app has this worker's URL built in, in
    `js/sync.js`). Each phone starts with its own private code. To link the phones once:
    on Sandman's phone tap **Amani** at the top, and enter the code shown in the same box on
-   Amani's phone (or tap **Send** to text yours to her and she enters it). If you host your
-   own worker, change `DEFAULT_CONNECTOR` or set the URL under **Devices → Share with your household**.
+   Amani's phone (or tap **Send** to text yours to her and she enters it).
+   Or both phones type the same private phrase (12+ letters/numbers, e.g. “sunset tacos 4821”)
+   into that box; each phone switches to exactly what it was given. Chrome, Safari and a
+   home-screen icon keep separate app data, so link the one you actually use on each phone.
+   If you host your own worker, change `DEFAULT_CONNECTOR` or set the URL under **Devices → Share with your household**.
 4. **WHOOP / Garmin (optional):** in **Devices**, paste the worker URL and tap
    **Connect WHOOP** / **Connect Garmin (Strava)**. Sharing alone needs only `APP_ORIGIN`;
    the WHOOP/Strava secrets are only needed for those connections.
