@@ -141,3 +141,13 @@ test('no check-in cut below the calorie floor', async () => {
   assert.equal(r.id, 'keep');
   assert.match(r.why, /safe minimum/);
 });
+
+test('broccoli and cauliflower swap in for mixed veggies', async () => {
+  const { portionMeal } = await import('../js/plan.js');
+  const { MAIN_MEAL, FOODS } = await import('../js/foods.js');
+  const m = portionMeal(MAIN_MEAL, { kcal: 600, p: 45, f: 15, c: 60 }, { picks: { protein: 'chicken', veggies: 'broccoli' } });
+  const veg = m.portions.find((x) => x.slot === 'veggies');
+  assert.equal(veg.food, 'broccoli');
+  assert.deepEqual(veg.options, ['veggies', 'broccoli', 'cauliflower']);
+  assert.ok(FOODS.cauliflower.kcal < FOODS.broccoli.kcal);
+});

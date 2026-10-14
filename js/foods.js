@@ -34,6 +34,8 @@ export const FOODS = {
   potato:     { name: 'Potato (baked)',           kcal: 93,  p: 2.5, f: 0.1,  c: 21.2, unit: { label: 'medium', grams: 170 }, range: [0, 600, 10] },
   quinoa:     { name: 'Quinoa',                   kcal: 120, p: 4.4, f: 1.9,  c: 21.3, unit: { label: 'cup', grams: 185 }, range: [0, 450, 10] },
   veggies:    { name: 'Mixed veggies',            kcal: 35,  p: 2.5, f: 0.3,  c: 7.0,  unit: { label: 'cup', grams: 100 }, range: [0, 400, 25] },
+  broccoli:   { name: 'Broccoli',                 kcal: 35,  p: 2.4, f: 0.4,  c: 7.2,  unit: { label: 'cup', grams: 156 }, range: [0, 400, 25] },
+  cauliflower:{ name: 'Cauliflower',              kcal: 23,  p: 1.8, f: 0.5,  c: 4.1,  unit: { label: 'cup', grams: 124 }, range: [0, 400, 25] },
   oliveOil:   { name: 'Olive oil',                kcal: 884, p: 0,   f: 100,  c: 0,    unit: { label: 'tsp', grams: 4.5 }, range: [0, 31.5, 4.5] },
 };
 
@@ -41,7 +43,7 @@ export const FOODS = {
 export const FOOD_GROUPS = {
   Protein: ['whey', 'eggWhites', 'egg', 'chicken', 'thigh', 'beef', 'steak', 'salmon', 'cod', 'trout', 'cheddar'],
   Carbs: ['oats', 'sourdough', 'wheatBread', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'banana'],
-  'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'avocado'],
+  'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'cauliflower', 'avocado'],
   Fats: ['almondButter', 'pb', 'walnuts', 'butter', 'oliveOil'],
 };
 
@@ -74,11 +76,11 @@ export const BREAKFASTS = {
 };
 
 export const MAIN_MEAL = {
-  title: (f) => `${FOODS[f.protein].name.replace(/ \(.*\)/, '')}, ${FOODS[f.carb].name.replace(/ \(.*\)/, '').toLowerCase()} & veggies`,
+  title: (f) => `${FOODS[f.protein].name.replace(/ \(.*\)/, '')}, ${FOODS[f.carb].name.replace(/ \(.*\)/, '').toLowerCase()} & ${f.veggies && f.veggies !== 'veggies' ? FOODS[f.veggies].name.toLowerCase() : 'veggies'}`,
   items: [
     { slot: 'protein', options: PROTEIN_OPTIONS, drives: 'p', min: 60, max: 260 },
     { slot: 'carb', options: ['rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa'], drives: 'c', max: 450 },
-    { slot: 'veggies', options: ['veggies'], fixed: 200 },
+    { slot: 'veggies', options: ['veggies', 'broccoli', 'cauliflower'], fixed: 200 },
     { slot: 'fat', options: ['oliveOil', 'butter', 'avocado'], drives: 'f', max: 27 },
   ],
 };
@@ -99,7 +101,9 @@ export const STORES = {
   cod:       { store: 'Sprouts', tip: 'Seafood counter or frozen wild cod fillets (Safeway too)', packGrams: 454, packLabel: 'lb' },
   trout:     { store: 'Sprouts', tip: 'Rainbow trout fillets at the seafood counter', packGrams: 454, packLabel: 'lb' },
   rice:      { store: 'Costco',  tip: 'Jasmine rice bag (1 cup dry ≈ 3 cups cooked)', packGrams: 454 * 2.8, packLabel: 'lb dry' },
-  veggies:   { store: 'Costco',  tip: 'Frozen stir-fry / broccoli florets; fresh at Sprouts', packGrams: 454, packLabel: 'lb' },
+  veggies:   { store: 'Costco',  tip: 'Frozen stir-fry / mixed vegetables; fresh at Sprouts', packGrams: 454, packLabel: 'lb' },
+  broccoli:  { store: 'Costco',  tip: 'Kirkland frozen broccoli florets, or fresh crowns at Sprouts', packGrams: 454, packLabel: 'lb' },
+  cauliflower:{ store: 'Sprouts', tip: 'Fresh cauliflower head or frozen florets (Costco, Safeway too)', packGrams: 454, packLabel: 'lb' },
   oliveOil:  { store: 'Costco',  tip: 'Kirkland extra virgin olive oil', packGrams: 1000, packLabel: 'bottle' },
   wheatBread:  { store: 'Safeway', tip: 'Whole-wheat sandwich bread', packGrams: 680, packLabel: '24 oz loaf' },
   butter:      { store: 'Costco',  tip: 'Kirkland butter (freeze extra sticks)', packGrams: 454, packLabel: '1 lb' },
@@ -116,3 +120,11 @@ export const STORES = {
   potato:      { store: 'Safeway', tip: 'Russet or Yukon gold potatoes', packGrams: 454, packLabel: 'lb' },
   quinoa:      { store: 'Costco',  tip: 'Organic quinoa bag (1 cup dry ≈ 3 cups cooked)', packGrams: 454 * 2.7, packLabel: 'lb dry' },
 };
+
+// Foods you scanned (per 100 g), saved per profile and usable in any meal.
+export function addScannedFoods(list) {
+  const ids = Object.keys(list || {});
+  Object.assign(FOODS, list);
+  FOOD_GROUPS.Scanned = ids;
+  if (!ids.length) delete FOOD_GROUPS.Scanned;
+}

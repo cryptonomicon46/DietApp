@@ -1,4 +1,4 @@
-import { FOODS, STORES, FOOD_GROUPS } from './foods.js';
+import { FOODS, STORES, FOOD_GROUPS, addScannedFoods } from './foods.js';
 import {
   ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
@@ -20,6 +20,8 @@ import { programReview } from './review.js';
 
 // ---------- storage ----------
 // Each person's data is kept separately (see storage.js); `store` reads/writes the open profile.
+addScannedFoods(store.get('scannedFoods', {}));
+
 const state = {
   profile: store.get('profile', null),
   weights: store.get('weights', []),   // [{date: 'YYYY-MM-DD', weight}]
@@ -190,6 +192,7 @@ function amountLabel(food, grams) {
   if (!grams) return { main: 'none', sub: '0 g' };
   if (d.oz) return { main: `${Math.round(grams / 28.35 * 10) / 10} oz`, sub: `${grams} g cooked` };
   const u = d.unit;
+  if (!u) return { main: `${Math.round(grams)} g`, sub: '' };
   const n = grams / u.grams;
   const plural = Math.round(n * 4) / 4 > 1 ? 's' : '';
   let main;
@@ -351,6 +354,20 @@ function refreshCustom(meal) {
 
 function editCustom(meal, fn) {
   editMeal(meal, (c) => { c.items = c.items || []; fn(c); });
+}
+
+// Add a food to a meal: a planned meal turns into your own version (its current foods
+// plus this one), so nothing you were going to eat disappears.
+function addToMeal(meal, food, grams) {
+  const m = todayPlan()[meal];
+  editMeal(meal, (c) => {
+    if (!c.items) {
+      if (meal === 'breakfast') c.template = m.template;
+      c.items = m.portions.filter((x) => x.grams > 0).map((x) => ({ food: x.food, grams: x.grams }));
+    }
+    c.items.push({ food, grams });
+  });
+  resnap(meal);
 }
 
 $('#meals').addEventListener('click', (e) => {
@@ -1194,6 +1211,7 @@ function renderGroceries() {
   const byStore = {};
   for (const [food, grams] of Object.entries(totals)) {
     const s = STORES[food];
+    if (!s) continue;
     (byStore[s.store] ||= []).push({ food, grams, s });
   }
   const custom = store.get('customGrocery', []);
@@ -1364,19 +1382,45 @@ function renderProduct(code, p) {
         <li><span>Per 100 g</span><span class="amt meal-macros">${fmt(per100)}</span></li>
       </ul>
       ${proteinNote ? `<p class="small">${proteinNote}</p>` : ''}
+      <div class="add-to-meal">
+        <label class="small">How much
+          <div class="row" style="margin-top:4px">
+            <input id="scanAmount" type="number" inputmode="decimal" step="any" min="0" value="${serving ? 1 : 100}">
+            <select id="scanUnit">${serving ? `<option value="${sq}">serving${p.serving_size ? ` (${esc(p.serving_size)})` : ''}</option>` : ''}<option value="1">g</option></select>
+          </div>
+        </label>
+        <div class="small" style="margin-top:8px">Add to</div>
+        <div class="row" style="margin-top:4px">
+          ${['breakfast', 'lunch', 'dinner'].map((m) => `<button type="button" class="small" data-addto="${m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}
+          <button type="button" class="ghost small" data-addto="snack">Snack</button>
+        </div>
+        <p class="small" id="addToStatus"></p>
+      </div>
       <div class="row">
-        ${serving ? '<button id="logServing">+ Log 1 serving to today</button>' : ''}
         <button id="addGrocery" class="ghost">+ Add to grocery list</button>
       </div>
     </div>`;
 
-  if ($('#logServing')) $('#logServing').onclick = () => {
-    todaysLog().extras.push({ title: name, kcal: serving.kcal, p: Math.round(serving.p), f: Math.round(serving.f), c: Math.round(serving.c) });
-    saveLog();
+  $('#scanResult').querySelectorAll('[data-addto]').forEach((b) => b.onclick = () => {
+    const grams = Math.round((+$('#scanAmount').value || 0) * +$('#scanUnit').value);
+    if (!grams) { $('#addToStatus').textContent = 'Enter how much you had.'; return; }
+    const meal = b.dataset.addto;
+    if (meal === 'snack') {
+      const m = { kcal: Math.round(per100.kcal * grams / 100), p: Math.round(per100.p * grams / 100), f: Math.round(per100.f * grams / 100), c: Math.round(per100.c * grams / 100) };
+      todaysLog().extras.push({ title: `${name} (${grams} g)`, ...m });
+      saveLog();
+    } else {
+      // Save the product as a food so it can sit in a meal (and be picked again later).
+      const id = `sc${code}`;
+      const foods = { ...store.get('scannedFoods', {}), [id]: { name: name.slice(0, 60), ...per100, ...(sq > 0 ? { unit: { label: 'serving', grams: sq } } : {}), range: [0, Math.max(500, Math.ceil((sq || 100) * 4)), 1], scanned: true } };
+      store.set('scannedFoods', foods);
+      addScannedFoods(foods);
+      addToMeal(meal, id, grams);
+    }
     renderToday();
-    $('#logServing').textContent = '✓ Logged';
-    $('#logServing').disabled = true;
-  };
+    $('#addToStatus').innerHTML = `<span class="tone-good">✓ Added ${grams} g to ${meal === 'snack' ? 'snacks' : meal}.</span> <button type="button" class="linkish" id="scanSeeToday">See Today</button>`;
+    $('#scanSeeToday').onclick = () => document.querySelector('[data-tab=today]').click();
+  });
   $('#addGrocery').onclick = () => {
     const list = store.get('customGrocery', []).filter((c) => c.code !== code);
     list.push({ code, name, brand: p.brands || '' });
