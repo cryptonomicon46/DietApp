@@ -11,6 +11,7 @@ test('intra-workout carbs follow Jeukendrup duration bands', () => {
   assert.equal(intraWorkoutCarbs('strength', 120), null, 'not for lifting');
   assert.equal(intraWorkoutCarbs('easy', 60), null);
   assert.equal(intraWorkoutCarbs('hard', 60).perHour, 30);
+  assert.equal(intraWorkoutCarbs('moderate', 60), null, 'no fuel for a moderate hour on a cut');
   assert.equal(intraWorkoutCarbs('moderate', 120).grams, 80);
   assert.equal(intraWorkoutCarbs('hard', 120).perHour, 60);
   const ultra = intraWorkoutCarbs('hard', 180);

@@ -11,14 +11,21 @@ export const MILESTONES = [
   { days: 30, coins: 250, badge: 'Month of discipline' },
 ];
 
-// day = {eaten, burned, target, plannedDeficit, protein, proteinTarget, floor}
+// day = {eaten, burned, target, plannedDeficit, protein, proteinTarget, floor, meals}
+// A day only scores once it's fully logged (all three meals, or at least 60% of the
+// target eaten), so skipping the log can't look like a deficit.
 export function scoreDay(day) {
   if (!day || !(day.eaten > 0)) return { coins: 0, cookies: 0, deficit: 0, status: 'unlogged', notes: ['Log your meals to earn coins.'] };
   const deficit = Math.round(day.burned - day.eaten);
+  const complete = (day.meals ?? 3) >= 3 || day.eaten >= day.target * 0.6;
+  if (!complete) return { coins: 0, cookies: 0, deficit, status: 'incomplete', notes: ['Log all your meals to earn coins.'] };
   const notes = [];
   let coins = 0, cookies = 0;
   let status = 'surplus';
-  if (deficit > 0) {
+  // At goal weight the job is holding steady: within 200 kcal of what you burned.
+  if ((day.plannedDeficit ?? 1) <= 0) {
+    if (Math.abs(deficit) <= 200) { coins += COINS.deficit + COINS.sustainable; status = 'maintained'; notes.push(`Held steady +${COINS.deficit + COINS.sustainable}`); }
+  } else if (deficit > 0) {
     coins += COINS.deficit;
     status = 'deficit';
     notes.push(`Deficit day +${COINS.deficit}`);
@@ -38,6 +45,9 @@ export function scoreDay(day) {
   return { coins, cookies, deficit, status, notes };
 }
 
+// Days that keep a streak going.
+const OK = /^(deficit|too-big|maintained)$/;
+
 const prevDate = (iso) => {
   const d = new Date(iso + 'T12:00');
   d.setDate(d.getDate() - 1);
@@ -54,7 +64,7 @@ export function tally(days, today) {
     const s = scoreDay(days[date]);
     coins += s.coins;
     cookies += s.cookies;
-    const ok = s.status === 'deficit' || s.status === 'too-big';
+    const ok = OK.test(s.status);
     run = ok ? (prev && prevDate(date) === prev ? run + 1 : 1) : 0;
     prev = ok ? date : null;
     best = Math.max(best, run);
@@ -63,8 +73,8 @@ export function tally(days, today) {
   }
   // Current streak: count back from today (or yesterday if today isn't a deficit yet).
   let streak = 0;
-  let cursor = scoreDay(days[today]).status.match(/deficit|too-big/) ? today : prevDate(today);
-  while (days[cursor] && /deficit|too-big/.test(scoreDay(days[cursor]).status)) { streak++; cursor = prevDate(cursor); }
+  let cursor = OK.test(scoreDay(days[today]).status) ? today : prevDate(today);
+  while (days[cursor] && OK.test(scoreDay(days[cursor]).status)) { streak++; cursor = prevDate(cursor); }
   const next = MILESTONES.find((m) => m.days > streak);
   return { coins, cookies, streak, best, badges, next };
 }

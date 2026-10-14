@@ -97,10 +97,14 @@ function burnedToday() {
 
 function recordDay() {
   const t = targets(), base = baseTargets(), ate = consumed();
+  const burned = burnedToday().kcal;
   state.days[isoDate()] = {
-    eaten: Math.round(ate.kcal), burned: burnedToday().kcal, target: t.kcal,
-    plannedDeficit: base.tdee - base.kcal, protein: Math.round(ate.p), proteinTarget: t.p,
+    eaten: Math.round(ate.kcal), burned, target: t.kcal,
+    // The plan's deficit for today includes the share of training calories it doesn't
+    // add back to food, so eating to target on a big training day isn't "too big".
+    plannedDeficit: base.tdee - base.kcal <= 0 ? 0 : Math.max(base.tdee - base.kcal, burned - t.kcal), protein: Math.round(ate.p), proteinTarget: t.p,
     floor: state.profile.sex === 'male' ? 1500 : 1200,
+    meals: Object.keys(todaysLog().meals).length,
   };
   store.set('days', state.days);
 }
@@ -120,7 +124,8 @@ function renderDayBar() {
   const ate = consumed();
   const left = t.kcal - Math.round(ate.kcal);
   const pct = Math.min(100, Math.round((ate.kcal / t.kcal) * 100));
-  const mLeft = (k) => Math.round(t[k] - ate[k]);
+  // Over a macro shows as "+12 over" in the warning color instead of a negative number.
+  const mLeft = (k) => { const v = Math.round(t[k] - ate[k]); return v >= 0 ? `${v}` : `<span class="over">+${-v}</span>`; };
   bar.hidden = false;
   const g = pastTally();
   bar.innerHTML = `
@@ -203,6 +208,7 @@ function renderToday() {
 
   const name = firstName();
   $('#greeting').textContent = name ? `${greetingWord()}, ${name}` : '';
+  renderWeighStatus();
   renderDayBar();
   renderDeficit();
   renderCheckin();
@@ -274,7 +280,7 @@ function customBody(meal, m) {
             <button class="x" data-cremove="${i}" aria-label="Remove ${esc(FOODS[x.food].name)}">✕</button>
           </div>
           <div class="item-slider">
-            <input type="number" class="grams" data-cgrams="${i}" min="0" max="2000" step="1" inputmode="decimal" value="${x.grams}" aria-label="Grams">
+            <input type="number" class="grams" data-cgrams="${i}" min="0" max="2000" step="any" inputmode="decimal" value="${x.grams}" aria-label="Grams">
             <span class="small muted">g</span>
             <span class="amt" data-role="amt">${a.main}</span>
           </div>
@@ -555,19 +561,25 @@ function renderDeficit() {
   if (g.streak >= 1) kudos = `${name ? `${esc(name)}, ` : ''}${g.streak}-day deficit streak 🔥${g.next ? ` — ${g.next.days - g.streak} more for “${g.next.badge}” (+${g.next.coins} 🪙)` : ''}`;
   else kudos = `${name ? `${esc(name)}, s` : 'S'}tart a streak today: finish in a deficit to earn 🪙 ${projected.coins || 15}.`;
 
-  const status = !eaten
+  const atGoal = d.plannedDeficit <= 0;
+  const loggedMeals = Object.keys(todaysLog().meals).length;
+  const status = atGoal
+    ? `You're at your goal, so today's aim is holding steady: finish within 200 kcal of what you burn (now ${burned.kcal}) for 🪙 15.`
+    : !eaten
     ? `Log your meals as you eat. Finish at your target (${t.kcal}) for about a <b>${burned.kcal - t.kcal} kcal</b> deficit and 🪙 ${projected.coins}${projected.cookies ? ' + 🍪' : ''}.`
     : now <= 0
       ? `You're <b>${-now} kcal over</b> what you've burned today. Some extra activity could still flip it to a deficit.`
       : eaten < t.kcal
         ? `${t.kcal - eaten} kcal left in your plan. Finish there for a <b>${burned.kcal - t.kcal} kcal</b> deficit → 🪙 ${projected.coins}${projected.cookies ? ' + 🍪' : ''}.`
-        : `Deficit locked in so far: 🪙 ${actual.coins}${actual.cookies ? ' + 🍪' : ''} if you stop here.`;
+        : loggedMeals < 3
+          ? `Log the rest of your meals to lock in today's coins.`
+          : `Deficit locked in so far: 🪙 ${actual.coins}${actual.cookies ? ' + 🍪' : ''} if you stop here.`;
 
   const last7 = Array.from({ length: 7 }, (_, i) => {
     const dt = new Date(); dt.setDate(dt.getDate() - (6 - i));
     const key = isoDate(dt);
     const s = key === today ? null : scoreDay(state.days[key]);
-    const icon = key === today ? '⏳' : s.status === 'deficit' ? '🪙' : s.status === 'too-big' ? '⚠️' : s.status === 'surplus' ? '▲' : '·';
+    const icon = key === today ? '⏳' : s.status === 'deficit' || s.status === 'maintained' ? '🪙' : s.status === 'too-big' ? '⚠️' : s.status === 'surplus' ? '▲' : s.status === 'incomplete' ? '½' : '·';
     return `<span class="d7 ${s?.status || 'today'}" title="${key}"><b>${icon}</b><small>${dt.toLocaleDateString(undefined, { weekday: 'narrow' })}</small></span>`;
   }).join('');
 
@@ -583,7 +595,7 @@ function renderDeficit() {
       <p class="small">${status}</p>
       <label for="whoopTotalInput" class="small">Total calories burned today (from the WHOOP app)</label>
       <form id="whoopTotalForm" class="row" style="margin-top:4px">
-        <input id="whoopTotalInput" type="number" inputmode="numeric" min="800" max="8000" placeholder="e.g. 2650 — optional" value="${state.whoopTotal[today] ?? ''}">
+        <input id="whoopTotalInput" type="number" inputmode="numeric" min="0" max="10000" placeholder="e.g. 2650 — optional" value="${state.whoopTotal[today] ?? ''}">
         <button class="small" type="submit">Save</button>
         ${state.whoopTotal[today] ? '<button class="ghost small" type="button" id="clearWhoopTotal">Use estimate</button>' : ''}
       </form>
@@ -591,7 +603,7 @@ function renderDeficit() {
       <div class="d7row" aria-label="Last 7 days">${last7}</div>
       ${g.badges.length ? `<p class="small muted">Badges: ${[...new Set(g.badges.map((b) => b.badge))].map(esc).join(' · ')}</p>` : ''}
       <details class="small"><summary>How scoring works</summary>
-        <p>Each day you log meals and finish under the calories you burned earns 🪙 10, plus 🪙 5 if the deficit stays sustainable (under ~${Math.max(750, Math.round((d.plannedDeficit || 500) * 1.5))} kcal and not below ${d.floor} kcal eaten). Hitting 90% of your protein earns a 🍪. Streaks of ${MILESTONES.map((m) => `${m.days}`).join(', ')} days pay ${MILESTONES.map((m) => `+${m.coins}`).join(', ')} 🪙. Today's coins are added after midnight.</p>
+        <p>A day counts once all three meals are logged. Each counted day that finishes under the calories you burned earns 🪙 10, plus 🪙 5 if the deficit stays sustainable (under ~${Math.max(750, Math.round((d.plannedDeficit || 500) * 1.5))} kcal and not below ${d.floor} kcal eaten). Hitting 90% of your protein earns a 🍪. Streaks of ${MILESTONES.map((m) => `${m.days}`).join(', ')} days pay ${MILESTONES.map((m) => `+${m.coins}`).join(', ')} 🪙. Once you reach your goal weight, finishing within 200 kcal of what you burned earns 🪙 15 instead. Today's coins are added after midnight. Legend: 🪙 earned · ▲ over · ⚠️ too big · ½ not fully logged.</p>
       </details>
     </div>`;
 
@@ -772,7 +784,7 @@ function renderTraining(t) {
         </select>
         <div class="row" style="margin-top:0">
           <select id="planIntensity" aria-label="Intensity">${Object.entries(INTENSITY).map(([k, v]) => `<option value="${k}" ${k === 'moderate' ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
-          <input id="planMin" type="number" min="5" max="600" step="5" inputmode="numeric" placeholder="min" style="flex:0 0 72px" aria-label="Minutes">
+          <input id="planMin" type="number" min="1" max="600" step="1" inputmode="numeric" placeholder="min" style="flex:0 0 72px" aria-label="Minutes">
           <input id="planKcal" type="number" min="0" max="5000" inputmode="numeric" placeholder="kcal" style="flex:0 0 84px" aria-label="Calories burned (from WHOOP)">
           <button type="submit" class="small">Add</button>
         </div>
@@ -941,46 +953,107 @@ function renderWeight() {
   const trend = weeklyTrend(w);
   $('#trendNote').textContent = trend ? `${trend.lbPerWeek <= 0 ? '−' : '+'}${Math.abs(trend.lbPerWeek).toFixed(1)} lb/wk (3-wk trend)` : '';
   $('#weightStats').innerHTML = `
-    <div><b>${(start - now).toFixed(1)}</b><span>lb lost</span></div>
+    <div><b>${Math.abs(start - now).toFixed(1)}</b><span>lb ${start - now >= 0 ? 'lost' : 'gained'}</span></div>
     <div><b>${now.toFixed(1)}</b><span>current</span></div>
     <div><b>${Math.max(now - state.profile.goalLb, 0).toFixed(1)}</b><span>lb to goal</span></div>`;
   drawChart();
 }
 
+let chartRange = '90';
+$('#chartRange').onclick = (e) => {
+  const b = e.target.closest('[data-range]');
+  if (!b) return;
+  chartRange = b.dataset.range;
+  $('#chartRange').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+  drawChart();
+};
+
+// Weight line graph: daily weigh-ins, 7-day average, goal, and the planned path.
 function drawChart() {
   const svg = $('#chart');
-  const w = state.weights.slice(-60);
+  const all = state.weights;
+  const cutoff = chartRange === 'all' ? '' : isoDate(new Date(Date.now() - (+chartRange - 1) * DAY));
+  const w = all.filter((e) => e.date >= cutoff);
+  $('#chartTip').hidden = true;
   if (w.length < 2) {
-    svg.innerHTML = `<text x="160" y="80" text-anchor="middle">Log 2+ weigh-ins to see your chart</text>`;
+    svg.innerHTML = `<text class="empty" x="170" y="110" text-anchor="middle">Log 2+ weigh-ins to see your graph</text>`;
     return;
   }
-  const W = 320, H = 160, pad = { l: 34, r: 8, t: 10, b: 20 };
-  const t0 = new Date(w[0].date).getTime();
-  const t1 = new Date(w[w.length - 1].date).getTime();
+  const W = 340, H = 220, pad = { l: 36, r: 46, t: 12, b: 24 };
+  const day = (d) => new Date(d + 'T12:00').getTime();
+  const t0 = day(w[0].date), t1 = Math.max(day(w[w.length - 1].date), t0 + DAY);
   const goal = state.profile.goalLb;
-  const ys = w.map((e) => e.weight);
-  let lo = Math.min(...ys), hi = Math.max(...ys);
-  if (goal >= lo - 5) lo = Math.min(lo, goal);
-  lo = Math.floor(lo - 1); hi = Math.ceil(hi + 1);
-  const x = (d) => pad.l + ((new Date(d).getTime() - t0) / Math.max(t1 - t0, 1)) * (W - pad.l - pad.r);
-  const y = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b);
-
   // 7-day moving average smooths out water-weight noise.
   const avg = w.map((e) => {
-    const t = new Date(e.date).getTime();
-    const win = w.filter((o) => { const ot = new Date(o.date).getTime(); return ot <= t && ot > t - 7 * 86400000; });
-    return { date: e.date, v: win.reduce((s, o) => s + o.weight, 0) / win.length };
+    const t = day(e.date);
+    const win = all.filter((o) => day(o.date) <= t && day(o.date) > t - 7 * DAY);
+    return { date: e.date, v: win.reduce((a, o) => a + o.weight, 0) / win.length };
   });
+  // Planned path from the first point in view at the plan's weekly rate.
+  const rate = baseTargets().lbPerWeek;
+  const planEnd = Math.max(goal, w[0].weight - rate * ((t1 - t0) / (7 * DAY)));
+  const ys = [...w.map((e) => e.weight), planEnd];
+  let lo = Math.min(...ys), hi = Math.max(...ys);
+  if (goal >= lo - 4) lo = Math.min(lo, goal);
+  lo = Math.floor(lo - 0.5); hi = Math.ceil(hi + 0.5);
+  const step = hi - lo > 12 ? 5 : hi - lo > 5 ? 2 : 1;
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  const x = (d) => pad.l + ((day(d) - t0) / (t1 - t0)) * (W - pad.l - pad.r);
+  const xt = (t) => pad.l + ((t - t0) / (t1 - t0)) * (W - pad.l - pad.r);
+  const y = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b);
+  const ticks = []; for (let v = lo; v <= hi; v += step) ticks.push(v);
+  const fmt = (d) => new Date(d + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const mid = w[Math.floor(w.length / 2)].date;
+  const last = avg[avg.length - 1];
+  const path = (pts) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join('');
 
-  const ticks = [lo, Math.round((lo + hi) / 2), hi];
   svg.innerHTML = `
-    ${ticks.map((v) => `<line class="grid" x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"/><text x="${pad.l - 4}" y="${y(v) + 3}" text-anchor="end">${v}</text>`).join('')}
-    ${goal >= lo && goal <= hi ? `<line class="goal" x1="${pad.l}" x2="${W - pad.r}" y1="${y(goal)}" y2="${y(goal)}"/>` : ''}
-    ${w.map((e) => `<circle class="raw" r="2.5" cx="${x(e.date)}" cy="${y(e.weight)}"/>`).join('')}
-    <polyline class="trend" points="${avg.map((a) => `${x(a.date)},${y(a.v)}`).join(' ')}"/>
-    <text x="${pad.l}" y="${H - 4}">${new Date(w[0].date + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</text>
-    <text x="${W - pad.r}" y="${H - 4}" text-anchor="end">${new Date(w[w.length - 1].date + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</text>`;
+    ${ticks.map((v) => `<line class="grid" x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"/><text class="tick" x="${pad.l - 6}" y="${y(v) + 3.5}" text-anchor="end">${v}</text>`).join('')}
+    ${goal >= lo && goal <= hi ? `<line class="goal" x1="${pad.l}" x2="${W - pad.r}" y1="${y(goal)}" y2="${y(goal)}"/><text class="lbl" x="${W - pad.r + 4}" y="${y(goal) + 3.5}">Goal ${goal}</text>` : ''}
+    <line class="plan" x1="${xt(t0)}" y1="${y(w[0].weight)}" x2="${xt(t1)}" y2="${y(planEnd)}"/>
+    <path class="raw-line" d="${path(w.map((e) => [x(e.date), y(e.weight)]))}"/>
+    ${w.map((e) => `<circle class="raw" r="3" cx="${x(e.date)}" cy="${y(e.weight)}"/>`).join('')}
+    <path class="trend" d="${path(avg.map((a) => [x(a.date), y(a.v)]))}"/>
+    <circle class="trend-end" r="4.5" cx="${x(last.date)}" cy="${y(last.v)}"/>
+    <text class="lbl strong" x="${W - pad.r + 4}" y="${y(last.v) + (Math.abs(y(last.v) - y(goal)) < 12 ? -8 : 3.5)}">${last.v.toFixed(1)}</text>
+    <text class="tick" x="${pad.l}" y="${H - 6}">${fmt(w[0].date)}</text>
+    ${w.length > 6 ? `<text class="tick" x="${x(mid)}" y="${H - 6}" text-anchor="middle">${fmt(mid)}</text>` : ''}
+    <text class="tick" x="${W - pad.r}" y="${H - 6}" text-anchor="end">${fmt(w[w.length - 1].date)}</text>
+    <line class="cross" id="cross" x1="0" x2="0" y1="${pad.t}" y2="${H - pad.b}" visibility="hidden"/>
+    <rect class="hit" x="${pad.l}" y="${pad.t}" width="${W - pad.l - pad.r}" height="${H - pad.t - pad.b}"/>`;
+
+  // Hover / tap: nearest day's weigh-in and average.
+  const tip = $('#chartTip');
+  const hit = svg.querySelector('.hit');
+  const show = (ev) => {
+    const r = svg.getBoundingClientRect();
+    const px = ((ev.clientX - r.left) / r.width) * W;
+    let best = 0;
+    w.forEach((e, i) => { if (Math.abs(x(e.date) - px) < Math.abs(x(w[best].date) - px)) best = i; });
+    const e = w[best];
+    const cx = x(e.date);
+    const cross = svg.querySelector('#cross');
+    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.setAttribute('visibility', 'visible');
+    tip.innerHTML = `<b>${fmt(e.date)}</b><span><i class="key key-raw"></i>${e.weight.toFixed(1)} lb</span><span><i class="key key-avg"></i>${avg[best].v.toFixed(1)} avg</span>`;
+    tip.hidden = false;
+    const left = (cx / W) * r.width;
+    tip.style.left = `${Math.min(Math.max(left - 60, 0), r.width - 124)}px`;
+  };
+  hit.addEventListener('pointermove', show);
+  hit.addEventListener('pointerdown', show);
+  hit.addEventListener('pointerleave', () => { tip.hidden = true; svg.querySelector('#cross').setAttribute('visibility', 'hidden'); });
 }
+
+function renderWeighStatus() {
+  const today = isoDate();
+  const t = state.weights.find((x) => x.date === today);
+  const prev = [...state.weights].reverse().find((x) => x.date < today);
+  $('#weighStatus').innerHTML = t
+    ? `✓ <b>${t.weight.toFixed(1)} lb</b> today${prev ? ` · ${t.weight <= prev.weight ? '−' : '+'}${Math.abs(t.weight - prev.weight).toFixed(1)} since ${fmtShort(prev.date)}` : ''}`
+    : `Not logged yet today${prev ? ` · last ${prev.weight.toFixed(1)} lb on ${fmtShort(prev.date)}` : ''}`;
+  $('#weighForm').classList.toggle('done', !!t);
+}
+const fmtShort = (d) => new Date(d + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
 $('#weighForm').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -1363,7 +1436,7 @@ function renderStats() {
   $('#statsGrid').innerHTML = [
     tile(s.mealsLogged, 'meals logged'),
     tile(pctOf(s.mealsOnTarget, s.mealsJudged), `meals on target (${s.mealsOnTarget}/${s.mealsJudged})`),
-    tile(`${s.deficitDays}/${s.daysLogged}`, 'logged days in a deficit'),
+    tile(`${s.deficitDays}/${s.daysLogged}`, 'days on track (deficit, or steady at goal)'),
     tile(`${s.proteinDays}/${s.daysLogged}`, 'days protein goal hit'),
     tile(s.liftSessions, 'lifting workouts finished'),
     tile(`${s.activities}`, `activities · ${Math.round(s.activityMinutes / 60 * 10) / 10} h`),

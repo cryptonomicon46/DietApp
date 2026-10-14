@@ -33,3 +33,15 @@ test('streaks and milestones', () => {
   assert.equal(t3.streak, 7);
   assert.equal(t3.next.days, 14);
 });
+
+test('incomplete logging earns nothing; at goal, holding steady earns coins', () => {
+  const partial = scoreDay({ eaten: 500, burned: 2300, target: 1650, plannedDeficit: 550, protein: 40, proteinTarget: 156, floor: 1500, meals: 1 });
+  assert.equal(partial.status, 'incomplete');
+  assert.equal(partial.coins, 0);
+  const allMeals = scoreDay({ eaten: 1000, burned: 2300, target: 1650, plannedDeficit: 550, protein: 140, proteinTarget: 156, floor: 1500, meals: 3 });
+  assert.equal(allMeals.status, 'too-big');
+  const steady = scoreDay({ eaten: 2050, burned: 2150, target: 2100, plannedDeficit: 0, protein: 140, proteinTarget: 132, floor: 1200, meals: 3 });
+  assert.deepEqual([steady.status, steady.coins], ['maintained', 15]);
+  const overAtGoal = scoreDay({ eaten: 2600, burned: 2150, target: 2100, plannedDeficit: 0, protein: 140, proteinTarget: 132, floor: 1200, meals: 3 });
+  assert.equal(overAtGoal.coins, 0);
+});

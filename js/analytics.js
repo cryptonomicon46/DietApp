@@ -119,7 +119,7 @@ export function summary(data, today, n = 30) {
     mealsOnTarget: judged.filter((m) => m.on_target === 'yes').length,
     mealsJudged: judged.length,
     daysLogged: logged.length,
-    deficitDays: logged.filter((d) => d.result === 'deficit' || d.result === 'too-big').length,
+    deficitDays: logged.filter((d) => ['deficit', 'too-big', 'maintained'].includes(d.result)).length,
     proteinDays: logged.filter((d) => d.protein_g >= d.protein_target_g * 0.9).length,
     liftSessions: t.lifting_sessions.filter(inRange).length,
     activities: t.activities.filter(inRange).length,

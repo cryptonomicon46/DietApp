@@ -105,7 +105,8 @@ export function intraWorkoutCarbs(type, minutes) {
   if (!SESSION_TYPES[type]?.cardio || minutes < 45) return null;
   const hard = type === 'hard';
   let perHour;
-  if (minutes < 75) perHour = hard ? 30 : type === 'moderate' ? 20 : 0;
+  // Under 75 min only hard sessions get a little (a mouth rinse works too); on a cut, skip it otherwise.
+  if (minutes < 75) perHour = hard ? 30 : 0;
   else if (minutes <= 150) perHour = hard ? 60 : type === 'moderate' ? 40 : 30;
   else perHour = hard ? 90 : 60;
   if (!perHour) return null;

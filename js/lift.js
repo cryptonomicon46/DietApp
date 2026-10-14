@@ -77,7 +77,7 @@ export function renderLift() {
           ${e.sets.map((s, j) => `
             <div class="setrow ${s.done ? 'done' : ''}">
               <span class="small muted">Set ${j + 1}</span>
-              <input type="number" inputmode="decimal" step="2.5" min="0" data-w="${slot.id}:${j}" value="${s.w}" placeholder="lb" aria-label="Set ${j + 1} weight">
+              <input type="number" inputmode="decimal" step="any" min="0" data-w="${slot.id}:${j}" value="${s.w}" placeholder="lb" aria-label="Set ${j + 1} weight">
               <span class="muted">×</span>
               <input type="number" inputmode="numeric" min="0" max="100" data-r="${slot.id}:${j}" value="${s.r}" placeholder="${hi}" aria-label="Set ${j + 1} reps">
               <button type="button" class="tick" data-done="${slot.id}:${j}" aria-label="Mark set ${j + 1} done">${s.done ? '✓' : '○'}</button>
