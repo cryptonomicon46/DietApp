@@ -103,7 +103,7 @@ export const MAIN_MEAL = {
   title: (f) => `${FOODS[f.protein].name.replace(/ \(.*\)/, '')}, ${FOODS[f.carb].name.replace(/ \(.*\)/, '').toLowerCase()} & ${f.veggies && f.veggies !== 'veggies' ? FOODS[f.veggies].name.toLowerCase() : 'veggies'}`,
   items: [
     { slot: 'protein', options: PROTEIN_OPTIONS, drives: 'p', min: 60, max: 260 },
-    { slot: 'carb', options: ['rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa'], drives: 'c', max: 450 },
+    { slot: 'carb', options: ['rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'sourdough'], drives: 'c', max: 450 },
     { slot: 'veggies', options: ['veggies', 'broccoli', 'cauliflower'], fixed: 200 },
     { slot: 'fat', options: ['oliveOil', 'butter', 'avocado'], drives: 'f', max: 27 },
   ],
