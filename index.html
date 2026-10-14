@@ -301,6 +301,25 @@
     </form>
   </dialog>
 
+  <div class="boot-fail" id="bootFail" hidden>
+    <p><b>Lean Plate didn't finish loading.</b> This can happen right after an update, when your browser still has an older copy of some files.</p>
+    <button type="button" id="bootReload">Reload the latest version</button>
+  </div>
+  <script>
+    // Safety net: if the app hasn't started in a few seconds (usually old and new files mixed
+    // after an update), offer a reload that clears the offline copies first.
+    (function () {
+      var shown = false;
+      function show() { if (shown || window.__leanPlateBooted) return; shown = true; document.getElementById('bootFail').hidden = false; }
+      setTimeout(show, 6000);
+      window.addEventListener('error', function (e) { if (!window.__leanPlateBooted && /module|import|export|Failed to fetch/i.test(String(e.message || ''))) setTimeout(show, 500); });
+      document.getElementById('bootReload').onclick = function () {
+        var clear = window.caches ? caches.keys().then(function (k) { return Promise.all(k.map(function (n) { return caches.delete(n); })); }) : Promise.resolve();
+        var unreg = navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (r) { return Promise.all(r.map(function (x) { return x.unregister(); })); }) : Promise.resolve();
+        Promise.all([clear, unreg]).catch(function () {}).then(function () { location.reload(); });
+      };
+    })();
+  </script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

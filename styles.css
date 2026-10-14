@@ -457,3 +457,6 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .add-snack { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .snack-picks { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .snack-picks .chip { background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; font-size: .85rem; font-weight: 600; }
+.boot-fail { position: fixed; inset: auto 16px 90px 16px; z-index: 50; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+.boot-fail[hidden] { display: none; }
+.boot-fail p { margin: 0 0 10px; }

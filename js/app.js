@@ -2378,3 +2378,6 @@ if (sync.enabled()) {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+// Tells the loading safety net in index.html that the app started.
+window.__leanPlateBooted = true;
+document.getElementById('bootFail')?.setAttribute('hidden', '');

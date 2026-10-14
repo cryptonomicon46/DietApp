@@ -1,5 +1,5 @@
 // Offline cache for the app shell. Barcode lookups always go to the network.
-const CACHE = 'lean-plate-v59';
+const CACHE = 'lean-plate-v60';
 const SHELL = ['./', 'index.html', 'styles.css', 'js/app.js', 'js/plan.js', 'js/foods.js', 'js/activity.js', 'js/devices.js', 'js/research.js', 'js/lifting.js', 'js/lift.js', 'js/rewards.js', 'js/storage.js', 'js/sync.js', 'js/analytics.js', 'js/zip.js', 'js/review.js', 'js/commands.js', 'js/notes.js', 'js/plans.js', 'js/poster.js', 'js/share.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png'];
 
 self.addEventListener('install', (e) => {
@@ -17,7 +17,8 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    // Always revalidate with the server so an update never mixes new and old files.
+    fetch(e.request, { cache: 'no-cache' })
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));
