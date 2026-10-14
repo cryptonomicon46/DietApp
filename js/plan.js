@@ -187,7 +187,8 @@ export function portionMeal(template, target, custom = {}) {
     options: it.options,
     range: [it.lo, it.hi, it.step],
     locked: it.locked,
-    grams: +(roundTo(grams[i], it.step)).toFixed(1),
+    // Amounts you set yourself stay exact; auto-sized ones snap to the slider's step.
+    grams: +(it.locked ? grams[i] : roundTo(grams[i], it.step)).toFixed(1),
   }));
 
   const totals = sum(portions);

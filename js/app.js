@@ -937,7 +937,7 @@ function eatButton(meal) {
   const e = todaysLog().meals[meal];
   return e
     ? `<div class="eat-row"><span class="tone-good">✓ Eaten at ${e.at} · ${e.kcal} kcal</span><button class="ghost small" data-uneat>Undo</button></div>`
-    : `<div class="eat-row"><button class="eat" data-eat>✓ I ate this</button></div>`;
+    : `<div class="eat-row"><button class="eat" data-eat>${meal === 'snack' ? '✓ Log snack' : '✓ I ate this'}</button></div>`;
 }
 
 function snapshot(m) {
@@ -965,7 +965,8 @@ function itemRow(x) {
     <li data-slot="${x.slot}" class="${x.locked ? 'locked' : ''}">
       <div class="item-top">${name}<span class="amt" data-role="amt">${a.main}<small>${a.sub}</small></span></div>
       <div class="item-slider">
-        <input type="range" id="r-${x.slot}" data-slide="${x.slot}" min="${lo}" max="${hi}" step="${step}" value="${x.grams}" aria-label="${esc(FOODS[x.food].name)} grams">
+        <input type="range" id="r-${x.slot}" data-slide="${x.slot}" min="${lo}" max="${hi}" step="${step}" value="${x.grams}" aria-label="${esc(FOODS[x.food].name)} amount">
+        <input type="number" class="grams gbox" data-gbox="${x.slot}" min="${lo}" max="${hi}" step="any" inputmode="decimal" value="${x.grams}" aria-label="${esc(FOODS[x.food].name)} grams"><span class="small muted">g</span>
         <button class="lock" data-unlock="${x.slot}" title="${x.locked ? 'Locked — tap to let the app size this' : 'Auto-sized'}">${x.locked ? '🔒' : 'auto'}</button>
       </div>
     </li>`;
@@ -995,6 +996,8 @@ function refreshMeal(meal, active) {
     lock.textContent = x.locked ? '🔒' : 'auto';
     const r = li.querySelector('input[type=range]');
     if (r !== active) r.value = x.grams;
+    const g = li.querySelector('[data-gbox]');
+    if (g && g !== active) g.value = x.grams;
   }
 }
 
@@ -1005,16 +1008,27 @@ function editMeal(meal, fn) {
   saveCustom();
 }
 
+// Slider or grams box: either one sets that food's amount (and locks it 🔒).
 $('#meals').addEventListener('input', (e) => {
-  const slot = e.target.dataset.slide;
+  const slot = e.target.dataset.slide || e.target.dataset.gbox;
   if (!slot) return;
+  if (e.target.dataset.gbox && e.target.value === '') return; // still typing
   const meal = e.target.closest('.meal').dataset.meal;
   const plan = todayPlan()[meal];
+  const max = +e.target.max || Infinity;
+  const grams = Math.min(Math.max(+e.target.value || 0, 0), max);
   editMeal(meal, (c) => {
     if (meal === 'breakfast') c.template = plan.template;
-    c.grams = { ...c.grams, [slot]: +e.target.value };
+    c.grams = { ...c.grams, [slot]: grams };
   });
   refreshMeal(meal, e.target);
+});
+// Show the real amount once you leave the box (e.g. it was above the slider's range).
+$('#meals').addEventListener('change', (e) => {
+  if (!e.target.dataset.gbox) return;
+  const meal = e.target.closest('.meal').dataset.meal;
+  const x = todayPlan()[meal].portions.find((p) => p.slot === e.target.dataset.gbox);
+  if (x) e.target.value = x.grams;
 });
 
 $('#meals').addEventListener('change', (e) => {
