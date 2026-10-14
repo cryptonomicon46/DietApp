@@ -19,6 +19,7 @@ import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setO
 import { sync, newHouseholdCode, DEFAULT_CONNECTOR } from './sync.js';
 import { buildTables, toCsv, summary } from './analytics.js';
 import { makeZip } from './zip.js';
+import { drawPoster, planCsvRows } from './poster.js';
 import { programReview } from './review.js';
 
 // ---------- storage ----------
@@ -276,6 +277,71 @@ $('#dayNav').addEventListener('change', (e) => {
   renderToday();
 });
 
+// ---- share the day's meals as a poster or CSV ----
+function shareRow() {
+  return `<div class="card share-plan">
+    <div class="row" style="margin-top:0">
+      <button type="button" data-shareposter>📤 Share as poster</button>
+      <button type="button" class="ghost" data-plancsv>⬇ CSV</button>
+    </div>
+    <p class="small muted" id="posterStatus">A picture of this day's breakfast, lunch and dinner with amounts and macros. The CSV adds your saved combos.</p>
+  </div>`;
+}
+const foodRow = (food, grams) => {
+  const f = FOODS[food];
+  const a = amountLabel(food, grams);
+  const r = (k) => Math.round((f[k] * grams) / 100);
+  return { name: f.name, amount: a.main, grams: Math.round(grams), kcal: r('kcal'), p: r('p'), f: r('f'), c: r('c') };
+};
+// The day being shown, in the poster/CSV shape.
+function dayForSharing() {
+  const day = viewDay();
+  const label = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
+  let meals, target;
+  if (day < isoDate()) {
+    const log = state.mealLog[day] || { meals: {} };
+    meals = ['breakfast', 'lunch', 'dinner'].filter((k) => log.meals?.[k]).map((k) => {
+      const m = log.meals[k];
+      return { key: k, label: label[k], title: m.title, totals: { kcal: Math.round(m.kcal), p: Math.round(m.p), f: Math.round(m.f), c: Math.round(m.c) },
+        items: (m.foods || '').split(';').map((x) => x.trim()).filter(Boolean).map((x) => { const g = x.match(/^(.*?)\s+([\d.]+)g$/); return g ? { name: g[1], grams: +g[2] } : { name: x }; }) };
+    });
+    const rec = state.days[day];
+    const sum = (k) => meals.reduce((a, m) => a + m.totals[k], 0);
+    target = { kcal: rec?.target || sum('kcal'), p: rec?.proteinTarget || sum('p'), f: sum('f'), c: sum('c') };
+  } else {
+    const plan = todayPlan();
+    meals = ['breakfast', 'lunch', 'dinner'].map((k) => {
+      const m = plan[k];
+      return { key: k, label: label[k], title: m.title, totals: m.totals, items: m.portions.filter((x) => x.grams > 0).map((x) => foodRow(x.food, x.grams)) };
+    });
+    const t = viewingToday() ? targets() : baseTargets();
+    target = { kcal: t.kcal, p: t.p, f: t.f, c: t.c };
+  }
+  const total = { kcal: 0, p: 0, f: 0, c: 0 };
+  for (const m of meals) for (const k in total) total[k] += m.totals[k] || 0;
+  const name = firstName();
+  const dateLabel = dateOf(day).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  return { date: day, dateLabel, heading: name ? `${name}'s meal plan` : 'My meal plan', target, total, meals };
+}
+$('#meals').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-shareposter], [data-plancsv]');
+  if (!b) return;
+  const status = $('#posterStatus');
+  const d = dayForSharing();
+  const base = `meal-plan-${d.date}`;
+  try {
+    if (b.dataset.shareposter != null) {
+      status.textContent = 'Making your poster…';
+      status.textContent = await deliver(await drawPoster(d), `${base}.png`);
+    } else {
+      const combos = state.combos.map((c) => ({ ...c, items: c.items.filter((x) => FOODS[x.food]).map((x) => foodRow(x.food, x.grams)) }));
+      status.textContent = await deliver(new Blob([toCsv(planCsvRows(d, combos))], { type: 'text/csv' }), `${base}.csv`);
+    }
+  } catch (err) {
+    status.textContent = `Couldn't make it: ${err.message}`;
+  }
+});
+
 // A past day: what you logged against that day's targets.
 function renderPastDay(day) {
   const log = state.mealLog[day] || { meals: {}, extras: [] };
@@ -324,9 +390,10 @@ function renderToday() {
     $('#todayMacros').innerHTML = past ? '' : [['p', 'Protein', t.p], ['f', 'Fat', t.f], ['c', 'Carbs', t.c]]
       .map(([k, label, g]) => `<div class="macro ${k}"><b>${g} g</b><span>${label}</span></div>`).join('');
     renderDayBar();
-    if (past) { $('#meals').innerHTML = renderPastDay(day); return; }
+    if (past) { $('#meals').innerHTML = renderPastDay(day) + shareRow(); return; }
     const plan = todayPlan(t);
     $('#meals').innerHTML = ['breakfast', 'lunch', 'dinner'].map((meal) => mealCard(meal, plan[meal])).join('')
+      + shareRow()
       + `<p class="muted small">Changes here are saved for ${esc(dateOf(day).toLocaleDateString(undefined, { weekday: 'long' }))} and show up on Today when the day comes. Tap Reset on a meal to go back to the plan.</p>`;
     return;
   }
@@ -358,6 +425,7 @@ function renderToday() {
   const plan = todayPlan(t);
   $('#meals').innerHTML = ['breakfast', 'lunch', 'dinner'].map((meal) => mealCard(meal, plan[meal])).join('')
     + extrasCard()
+    + shareRow()
     + `<p class="muted small">Pick a food from any menu to swap it. Drag a slider to set that portion yourself (🔒) — the other items re-balance to keep the meal on target. Weigh oats dry; weigh meat, fish, eggs, rice and veggies cooked.</p>`;
 }
 
