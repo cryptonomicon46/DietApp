@@ -522,15 +522,15 @@ function extrasCard() {
   return `<div class="card"><div class="eyebrow">Snacks & extras</div>
     ${extras.length ? `<ul class="list">${extras.map((x, i) => `<li><span>${esc(x.title)}<small class="muted"> · ${x.p}P ${x.f}F ${x.c}C</small></span>
       <span>${x.kcal} kcal <button class="x" data-unextra="${i}" aria-label="Remove">✕</button></span></li>`).join('')}</ul>` : ''}
-    ${quickPicker('data-quicksnack', '➕ Snack: bar or shake')}
+    ${quickPicker('data-quicksnack', '➕ Add a snack: fruit, nuts, yogurt, bar…', true)}
   </div>`;
 }
 $('#meals').addEventListener('change', (e) => {
   const food = e.target.dataset.quicksnack != null && e.target.value;
   if (!food) return;
-  const f = FOODS[food], g = f.unit.grams;
+  const f = FOODS[food], g = f.unit?.grams || 100;
   const r = (k) => Math.round((f[k] * g) / 100);
-  todaysLog().extras.push({ title: f.name, kcal: r('kcal'), p: r('p'), f: r('f'), c: r('c') });
+  todaysLog().extras.push({ title: `${f.name}${f.unit ? ` (1 ${f.unit.label})` : ''}`, kcal: r('kcal'), p: r('p'), f: r('f'), c: r('c') });
   saveLog();
   renderToday();
 });
@@ -665,11 +665,16 @@ function comboRow(meal, m) {
 }
 // Bars and shakes, for swapping out a meal or adding a snack in one tap.
 const QUICK = () => Object.keys(FOODS).filter((k) => FOODS[k].quick);
-function quickPicker(attr, label) {
-  return `<select ${attr} aria-label="${esc(label)}"><option value="">${esc(label)}</option>${QUICK().map((k) => {
-    const f = FOODS[k], g = f.unit.grams;
-    return `<option value="${k}">${esc(f.name)} · ${Math.round(f.kcal * g / 100)} kcal · ${Math.round(f.p * g / 100)}g protein</option>`;
-  }).join('')}</select>`;
+function quickPicker(attr, label, withSnacks = false) {
+  const opt = (k) => {
+    const f = FOODS[k], g = f.unit?.grams || 100;
+    const unit = f.unit ? `1 ${f.unit.label}` : '100 g';
+    return `<option value="${k}">${esc(f.name)} · ${unit} · ${Math.round(f.kcal * g / 100)} kcal · ${Math.round(f.p * g / 100)}g protein</option>`;
+  };
+  const snacks = withSnacks ? (FOOD_GROUPS.Snacks || []).filter((k) => FOODS[k]) : [];
+  return `<select ${attr} aria-label="${esc(label)}"><option value="">${esc(label)}</option>
+    ${snacks.length ? `<optgroup label="Fruit, nuts & yogurt">${snacks.map(opt).join('')}</optgroup><optgroup label="Bars & shakes">${QUICK().map(opt).join('')}</optgroup>` : QUICK().map(opt).join('')}
+  </select>`;
 }
 function useQuick(meal, food) {
   const m = todayPlan()[meal];
