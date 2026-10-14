@@ -446,3 +446,9 @@ html { overflow-x: clip; }
 .combo-row select { flex: 1 1 100%; min-width: 0; }
 .combo-list { margin: 6px 0; }
 .portions.custom .item-slider input[type=range] { width: 100%; }
+/* Share panel */
+.share-dialog { max-width: 520px; width: calc(100% - 32px); }
+.share-dialog .share-seg { display: flex; width: 100%; margin: 4px 0 10px; }
+.share-dialog .share-seg button { flex: 1; padding: 7px 4px; }
+.share-preview { white-space: pre-wrap; font: .82rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; max-height: 40vh; overflow: auto; margin: 6px 0; }
+#shareRangeWrap[hidden] { display: none; }

@@ -15,11 +15,12 @@ import { initNotes, renderNotes, updateNotesBadge, openUs } from './notes.js';
 import { syncLine } from './plans.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
-import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile } from './storage.js';
+import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
 import { sync, newHouseholdCode, DEFAULT_CONNECTOR } from './sync.js';
 import { buildTables, toCsv, summary } from './analytics.js';
 import { makeZip } from './zip.js';
-import { drawPoster, planCsvRows } from './poster.js';
+import { drawPoster, planCsvRows, drawReportPoster } from './poster.js';
+import { RANGES, PHASE_NAMES, buildReport, reportText, reportCsvRows, weeklyRows, rangeTitle, combosText, combosCsvRows } from './share.js';
 import { programReview } from './review.js';
 
 // ---------- storage ----------
@@ -280,11 +281,8 @@ $('#dayNav').addEventListener('change', (e) => {
 // ---- share the day's meals as a poster or CSV ----
 function shareRow() {
   return `<div class="card share-plan">
-    <div class="row" style="margin-top:0">
-      <button type="button" data-shareposter>📤 Share as poster</button>
-      <button type="button" class="ghost" data-plancsv>⬇ CSV</button>
-    </div>
-    <p class="small muted" id="posterStatus">A picture of this day's breakfast, lunch and dinner with amounts and macros. The CSV adds your saved combos.</p>
+    <button type="button" data-openshare>📤 Share…</button>
+    <p class="small muted">This day's meals, your combos, or your progress over a day, a week, two weeks or the whole program — as text, a poster or a CSV.</p>
   </div>`;
 }
 const foodRow = (food, grams) => {
@@ -323,23 +321,113 @@ function dayForSharing() {
   const dateLabel = dateOf(day).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   return { date: day, dateLabel, heading: name ? `${name}'s meal plan` : 'My meal plan', target, total, meals };
 }
-$('#meals').addEventListener('click', async (e) => {
-  const b = e.target.closest('[data-shareposter], [data-plancsv]');
-  if (!b) return;
-  const status = $('#posterStatus');
-  const d = dayForSharing();
-  const base = `meal-plan-${d.date}`;
-  try {
-    if (b.dataset.shareposter != null) {
-      status.textContent = 'Making your poster…';
-      status.textContent = await deliver(await drawPoster(d), `${base}.png`);
-    } else {
-      const combos = state.combos.map((c) => ({ ...c, items: c.items.filter((x) => FOODS[x.food]).map((x) => foodRow(x.food, x.grams)) }));
-      status.textContent = await deliver(new Blob([toCsv(planCsvRows(d, combos))], { type: 'text/csv' }), `${base}.csv`);
-    }
-  } catch (err) {
-    status.textContent = `Couldn't make it: ${err.message}`;
+// ---- the Share panel ----
+const SHARE_WHAT = { day: "This day's meals", combos: 'My combos', progress: 'My progress' };
+const SHARE_FORMAT = { text: 'Text', poster: 'Poster', csv: 'CSV' };
+const share = { what: 'day', range: 'week', format: 'text' };
+const MEAL_NAMES = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
+
+function comboGroups() {
+  return ['breakfast', 'lunch', 'dinner'].map((meal) => ({
+    meal,
+    combos: state.combos.filter((c) => comboMeal(c) === meal).map((c) => {
+      const items = c.items.filter((x) => FOODS[x.food]).map((x) => foodRow(x.food, x.grams));
+      const sum = (k) => items.reduce((a, x) => a + x[k], 0);
+      const totals = c.manual?.kcal ? { kcal: Math.round(+c.manual.kcal), p: Math.round(+c.manual.p || 0), f: Math.round(+c.manual.f || 0), c: Math.round(+c.manual.c || 0) }
+        : { kcal: sum('kcal'), p: sum('p'), f: sum('f'), c: sum('c') };
+      return { name: c.name, totals, items };
+    }),
+  }));
+}
+function progressReport() {
+  const p = state.profile;
+  return buildReport({
+    today: isoDate(), mealLog: state.mealLog, todayLog: todaysLog(), days: state.days, weights: state.weights,
+    programStart: p.phaseStart || p.createdOn || firstLoggedDay(), phase: PHASES[p.phase] ? p.phase : 'cut',
+  }, share.range);
+}
+function dayText(d) {
+  const lines = [`🍽️ ${d.heading} · ${d.dateLabel}`, `Target: ${d.target.kcal} kcal · ${d.target.p}P ${d.target.f}F ${d.target.c}C`, ''];
+  for (const m of d.meals) {
+    lines.push(`${{ breakfast: '☀️', lunch: '🥗', dinner: '🍽️' }[m.key]} ${m.label.toUpperCase()}: ${m.title} (${m.totals.kcal} kcal · ${m.totals.p}P ${m.totals.f}F ${m.totals.c}C)`);
+    for (const it of m.items) lines.push(`  – ${it.name}${it.amount ? `: ${it.amount}` : ''}${it.grams != null ? ` (${it.grams} g)` : ''}`);
   }
+  lines.push('', `Day total: ${d.total.kcal} kcal · ${d.total.p}P ${d.total.f}F ${d.total.c}C`, 'Oats weighed dry; meat, fish, rice and veggies cooked.', '— Lean Plate');
+  return lines.join('\n');
+}
+// What the panel would share right now: {text?, blob?, filename}.
+async function shareContent(preview = false) {
+  const name = firstName();
+  const stamp = isoDate();
+  if (share.what === 'day') {
+    const d = dayForSharing();
+    if (share.format === 'text') return { text: dayText(d) };
+    if (share.format === 'csv') return { blob: new Blob([toCsv(planCsvRows(d))], { type: 'text/csv' }), filename: `meal-plan-${d.date}.csv`, text: `${d.meals.length} meals, one row per food.` };
+    return { blob: preview ? null : await drawPoster(d), filename: `meal-plan-${d.date}.png`, text: `A poster of ${d.dateLabel}: each meal with its foods, amounts and macros.` };
+  }
+  if (share.what === 'combos') {
+    const groups = comboGroups();
+    const count = groups.reduce((a, g) => a + g.combos.length, 0);
+    if (!count) return { text: 'No saved combos yet. Tap ☆ Save combo on a meal first.', empty: true };
+    if (share.format === 'text') return { text: combosText(groups, name) };
+    if (share.format === 'csv') return { blob: new Blob([toCsv(combosCsvRows(groups))], { type: 'text/csv' }), filename: `meal-combos-${stamp}.csv`, text: `${count} combos, one row per food.` };
+    const poster = {
+      date: stamp, dateLabel: `${count} saved combo${count > 1 ? 's' : ''}`, heading: name ? `${name}'s meal combos` : 'My meal combos',
+      subtitle: 'Breakfast, lunch and dinner combos with amounts', target: { kcal: 0, p: 0, f: 0, c: 0 }, total: null,
+      meals: groups.flatMap((g) => g.combos.map((c) => ({ key: g.meal, label: `${MEAL_NAMES[g.meal]} combo`, title: c.name, totals: c.totals, items: c.items }))),
+    };
+    return { blob: preview ? null : await drawPoster(poster), filename: `meal-combos-${stamp}.png`, text: `A poster of your ${count} combos.` };
+  }
+  const r = progressReport();
+  if (share.format === 'text') return { text: reportText(r, name) };
+  if (share.format === 'csv') return { blob: new Blob([toCsv(reportCsvRows(r))], { type: 'text/csv' }), filename: `progress-${r.from}-to-${r.to}.csv`, text: `${r.totalDays} days, one row each: macros eaten, targets, weigh-ins and meals.` };
+  const weekly = r.totalDays > 14;
+  const fmt = (d) => dateOf(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  const rows = weekly
+    ? weeklyRows(r).map((w) => ({ label: w.label, kcal: w.logged ? w.kcal : null, p: w.p, f: w.f, c: w.c, note: w.logged ? `${w.logged} of ${w.of} days logged` : '' }))
+    : r.days.map((d) => ({ label: fmt(d.date), kcal: d.logged ? d.kcal : null, p: d.p, f: d.f, c: d.c, note: d.meals.map((m) => m.title).concat(d.extras).join(' · ') }));
+  const heading = `${name ? `${name}'s ` : 'My '}${(PHASE_NAMES[r.phase] || 'Cut').toLowerCase()}`;
+  return { blob: preview ? null : await drawReportPoster({ heading, period: rangeTitle(r), report: r, rows, weekly }), filename: `progress-${r.from}-to-${r.to}.png`,
+    text: `A poster of ${rangeTitle(r)}: average macros, your weight chart and ${weekly ? 'week-by-week' : 'day-by-day'} totals.` };
+}
+function renderSharePanel() {
+  const seg = (el, options, value, field) => { $(el).innerHTML = Object.entries(options).map(([k, v]) => `<button type="button" class="${k === value ? 'on' : ''}" data-${field}="${k}">${esc(v.label || v)}</button>`).join(''); };
+  seg('#shareWhat', SHARE_WHAT, share.what, 'what');
+  seg('#shareRange', RANGES, share.range, 'range');
+  seg('#shareFormat', SHARE_FORMAT, share.format, 'format');
+  $('#shareRangeWrap').hidden = share.what !== 'progress';
+  $('#shareMsg').textContent = '';
+  shareContent(true).then((c) => { $('#sharePreview').textContent = c.text || ''; $('#shareGo').disabled = !!c.empty; });
+  $('#shareGo').textContent = share.format === 'text' ? 'Share text' : share.format === 'poster' ? 'Share poster' : 'Download CSV';
+}
+$('#shareDialog').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-what], [data-range], [data-format]');
+  if (!b) return;
+  if (b.dataset.what) share.what = b.dataset.what;
+  if (b.dataset.range) share.range = b.dataset.range;
+  if (b.dataset.format) share.format = b.dataset.format;
+  renderSharePanel();
+});
+$('#shareClose').onclick = () => $('#shareDialog').close();
+$('#shareGo').onclick = async () => {
+  const msg = $('#shareMsg');
+  msg.textContent = 'Preparing…';
+  try {
+    const c = await shareContent();
+    if (c.blob) { msg.textContent = await deliver(c.blob, c.filename); return; }
+    if (navigator.share && /iphone|ipad|android/i.test(navigator.userAgent)) {
+      try { await navigator.share({ text: c.text }); msg.textContent = 'Shared.'; return; } catch (err) { if (err.name === 'AbortError') { msg.textContent = 'Cancelled.'; return; } }
+    }
+    await navigator.clipboard.writeText(c.text);
+    msg.textContent = 'Copied. Paste it into a message.';
+  } catch (err) {
+    msg.textContent = `Couldn't share: ${err.message}`;
+  }
+};
+$('#meals').addEventListener('click', (e) => {
+  if (!e.target.closest('[data-openshare]')) return;
+  renderSharePanel();
+  $('#shareDialog').showModal();
 });
 
 // A past day: what you logged against that day's targets.
@@ -497,21 +585,35 @@ function eatOutBody(meal, m) {
     </div>`;
 }
 
-// ---- saved combos (breakfast ones for breakfast; lunch and dinner share theirs) ----
+// ---- saved combos: Breakfast / Lunch / Dinner combos. Lunch and dinner offer each other's
+// combos too, and the other person's combos show up as well (copied in when you pick one). ----
 const comboKind = (meal) => (meal === 'breakfast' ? 'breakfast' : 'main');
+// Combos saved before they remembered their meal count as lunch ones.
+const comboMeal = (c) => c.meal || (c.kind === 'breakfast' ? 'breakfast' : 'lunch');
+const partnerId = () => PROFILES.find((p) => p.id !== ownerId())?.id;
+const partnerName = () => { const id = partnerId(); return profileStore(id).get('profile', null)?.name?.split(/\s+/)[0] || PROFILES.find((p) => p.id === id)?.name || ''; };
+const partnerCombos = () => (sync.readOnly() ? [] : profileStore(partnerId()).get('combos', []));
 let managingCombos = null; // meal whose combo list is open for deleting
 function comboRow(meal, m) {
-  const list = state.combos.filter((c) => c.kind === comboKind(meal));
-  const pick = list.length ? `<select data-combo aria-label="Use a saved combo">
-      <option value="">⭐ My combos (${list.length})</option>
-      ${list.map((c) => `<option value="${esc(c.id)}">${esc(c.name)} · ${comboKcal(c)} kcal</option>`).join('')}
+  const label = MEAL_NAMES[meal];
+  const mine = state.combos.filter((c) => c.kind === comboKind(meal));
+  const theirs = partnerCombos().filter((c) => c.kind === comboKind(meal));
+  const opt = (c, prefix = '') => `<option value="${prefix}${esc(c.id)}">${esc(c.name)} · ${comboKcal(c)} kcal</option>`;
+  const here = mine.filter((c) => comboMeal(c) === meal), other = mine.filter((c) => comboMeal(c) !== meal);
+  const pName = partnerName();
+  const total = mine.length + theirs.length;
+  const pick = total ? `<select data-combo aria-label="Use a saved ${label.toLowerCase()} combo">
+      <option value="">⭐ ${label} combos (${here.length + other.length})${theirs.length ? ` · ${esc(pName)}'s (${theirs.length})` : ''}</option>
+      ${here.length ? `<optgroup label="Your ${label.toLowerCase()} combos">${here.map((c) => opt(c)).join('')}</optgroup>` : ''}
+      ${other.length ? `<optgroup label="From your ${meal === 'lunch' ? 'dinner' : 'lunch'} combos">${other.map((c) => opt(c)).join('')}</optgroup>` : ''}
+      ${theirs.length ? `<optgroup label="${esc(pName)}'s ${meal === 'breakfast' ? 'breakfast' : 'lunch & dinner'} combos">${theirs.map((c) => opt(c, 'p:')).join('')}</optgroup>` : ''}
     </select>` : '';
   return `<div class="combo-row">
       ${pick}
-      ${m.eatout ? '' : '<button type="button" class="ghost small" data-savecombo>☆ Save combo</button>'}
-      ${list.length ? `<button type="button" class="linkish small" data-managecombos>${managingCombos === meal ? 'Done' : 'Edit list'}</button>` : ''}
+      ${m.eatout ? '' : `<button type="button" class="ghost small" data-savecombo>☆ Save ${label.toLowerCase()} combo</button>`}
+      ${mine.length ? `<button type="button" class="linkish small" data-managecombos>${managingCombos === meal ? 'Done' : 'Edit list'}</button>` : ''}
     </div>
-    ${managingCombos === meal ? `<ul class="list combo-list">${list.map((c) => `<li><span>${esc(c.name)}<small class="muted"> · ${c.items.map((x) => FOODS[x.food]?.name).filter(Boolean).join(', ')}</small></span>
+    ${managingCombos === meal ? `<ul class="list combo-list">${mine.map((c) => `<li><span>${esc(c.name)} <small class="muted">${MEAL_NAMES[comboMeal(c)]} · ${c.items.map((x) => FOODS[x.food]?.name).filter(Boolean).join(', ')}</small></span>
       <button type="button" class="x" data-delcombo="${esc(c.id)}" aria-label="Delete ${esc(c.name)}">✕</button></li>`).join('')}</ul>` : ''}`;
 }
 function comboKcal(c) {
@@ -523,18 +625,18 @@ function saveCombo(meal) {
   const c = todaysCustom()[meal] || {};
   const items = (c.items && m.custom ? c.items : m.portions).filter((x) => x.grams > 0 && FOODS[x.food]).map((x) => ({ food: x.food, grams: x.grams }));
   if (!items.length && !c.manual) { alert('Add some foods to this meal first.'); return; }
-  const name = (prompt('Name this combo', c.title || m.title) || '').trim().slice(0, 60);
+  const name = (prompt(`Name this ${MEAL_NAMES[meal].toLowerCase()} combo`, c.title || m.title) || '').trim().slice(0, 60);
   if (!name) return;
   const kind = comboKind(meal);
-  const same = state.combos.find((x) => x.kind === kind && x.name.toLowerCase() === name.toLowerCase());
+  const same = state.combos.find((x) => x.kind === kind && comboMeal(x) === meal && x.name.toLowerCase() === name.toLowerCase());
   if (same && !confirm(`Replace your combo “${same.name}”?`)) return;
-  const combo = { id: same?.id || `c${Date.now().toString(36)}`, name, kind, items, ...(c.manual && Object.values(c.manual).some((v) => v !== '' && v != null) ? { manual: { ...c.manual } } : {}) };
+  const combo = { id: same?.id || `c${Date.now().toString(36)}`, name, kind, meal, items, ...(c.manual && Object.values(c.manual).some((v) => v !== '' && v != null) ? { manual: { ...c.manual } } : {}) };
   state.combos = [...state.combos.filter((x) => x.id !== combo.id), combo];
   store.set('combos', state.combos);
   renderToday();
 }
 function useCombo(meal, id) {
-  const combo = state.combos.find((x) => x.id === id);
+  const combo = id.startsWith('p:') ? partnerCombos().find((x) => x.id === id.slice(2)) : state.combos.find((x) => x.id === id);
   if (!combo) return;
   const m = todayPlan()[meal];
   editMeal(meal, (c) => {

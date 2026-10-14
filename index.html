@@ -266,6 +266,25 @@
   </dialog>
 
   <!-- PROGRAM REVIEW -->
+  <!-- SHARE: day's meals, combos or progress as text / poster / CSV -->
+  <dialog id="shareDialog" class="share-dialog">
+    <h2>Share</h2>
+    <div class="small muted">What</div>
+    <div class="seg share-seg" id="shareWhat"></div>
+    <div id="shareRangeWrap">
+      <div class="small muted">How long</div>
+      <div class="seg share-seg" id="shareRange"></div>
+    </div>
+    <div class="small muted">As</div>
+    <div class="seg share-seg" id="shareFormat"></div>
+    <pre class="share-preview" id="sharePreview"></pre>
+    <p class="small" id="shareMsg"></p>
+    <div class="row end">
+      <button type="button" class="ghost" id="shareClose">Close</button>
+      <button type="button" id="shareGo">Share</button>
+    </div>
+  </dialog>
+
   <dialog id="reviewDialog" class="review">
     <div id="reviewBody"></div>
     <div class="row end"><button type="button" class="ghost" id="reviewClose">Close</button></div>
