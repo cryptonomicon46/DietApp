@@ -22,8 +22,8 @@ export const sync = {
   // other's code, the later link wins (notes older than this phone's own link are ignored).
   async join(code) {
     // Accepts the other phone's code or a private phrase you both type ("Sunset Tacos 4821").
-    code = code.trim().toLowerCase().replace(/[\s_]+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-');
-    if (!/^[a-z0-9-]{12,64}$/.test(code)) throw new Error('Use the code from the other phone, or a private phrase of at least 12 letters/numbers (both phones type the same one).');
+    code = householdCode(code);
+    if (!code) throw new Error('Use the code from the other phone, or a phrase of at least 6 letters/numbers (both phones type the same one).');
     global.set('shareOff', false);
     const url = this.settings()?.url || DEFAULT_CONNECTOR;
     const old = this.settings()?.code;
@@ -39,8 +39,10 @@ export const sync = {
     });
     if (!res.ok) throw new Error(`link failed (${res.status})`);
   },
-  // If the other phone moved our household (a newer link than ours), follow it.
+  // If the other phone moved our household (a newer link than ours), follow it. A phone you
+  // linked yourself (code or phrase typed / link opened) stays put, so codes can't drift apart.
   async follow() {
+    if (this.settings()?.linkedAt) return false;
     let moved = false;
     for (let i = 0; i < 3; i++) {
       const s = this.settings();
@@ -112,6 +114,15 @@ export async function pushNow() {
   clearTimeout(timer); timer = null;
   try { await sync.push(); global.set('pushError', null); return true; }
   catch (err) { global.set('pushError', err.message); return false; }
+}
+
+// A typed code or phrase → the household code both phones use. Short phrases get a fixed
+// prefix so they meet the connector's 12-character minimum ("Nallanis" → "household-nallanis").
+export function householdCode(input) {
+  let code = String(input || '').trim().toLowerCase().replace(/[\s_]+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  if (code.replace(/-/g, '').length < 6) return null;
+  if (code.length < 12) code = `household-${code}`;
+  return code.length <= 64 ? code : null;
 }
 
 export function newHouseholdCode() {
