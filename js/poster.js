@@ -19,7 +19,7 @@ export function planCsvRows(day, combos = []) {
 
 const W = 1080, PAD = 64;
 const COLORS = { bg: '#f7f3ea', card: '#ffffff', ink: '#1f2a24', muted: '#6b756f', brand: '#2e7d5b', line: '#e6e0d4', p: '#c2563a', f: '#b8860b', c: '#3c6fb5' };
-const ICONS = { breakfast: '☀️', lunch: '🥗', dinner: '🍽️' };
+const ICONS = { breakfast: '☀️', lunch: '🥗', snack: '🍎', dinner: '🍽️' };
 const FONT = '-apple-system, "SF Pro Text", "Segoe UI", Roboto, system-ui, sans-serif';
 
 function wrap(ctx, text, width) {

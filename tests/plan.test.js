@@ -173,3 +173,18 @@ test('fitting a saved combo to a meal target', async () => {
   for (const x of fit) assert.equal(x.grams % FOODS[x.food].range[2], 0, `${x.food} on its slider step`);
   assert.deepEqual(fitItems([], 400), []);
 });
+
+test('an afternoon snack comes out of lunch and dinner', async () => {
+  const { planForDay } = await import('../js/plan.js');
+  const day = { kcal: 1800, p: 160, f: 55, c: 160 };
+  const date = new Date('2026-10-14T12:00:00');
+  const without = planForDay(day, date, {}, {});
+  const withSnack = planForDay(day, date, { snack: { on: true, items: [{ food: 'apple', grams: 182 }, { food: 'almonds', grams: 28 }] } }, {});
+  assert.equal(without.snack, undefined);
+  const s = withSnack.snack.totals.kcal;
+  assert.ok(s > 200 && s < 300, `apple + almonds ≈ 257 kcal, got ${s}`);
+  const drop = (without.lunch.target.kcal + without.dinner.target.kcal) - (withSnack.lunch.target.kcal + withSnack.dinner.target.kcal);
+  assert.ok(Math.abs(drop - s) <= 2, `lunch+dinner targets drop by the snack (${drop} vs ${s})`);
+  assert.equal(withSnack.breakfast.target.kcal, without.breakfast.target.kcal);
+  assert.equal(planForDay(day, date, { snack: { on: true, items: [] } }, {}).snack.title, 'Afternoon snack');
+});

@@ -28,7 +28,7 @@ export function buildReport(data, range) {
       date: d, logged: items.length > 0,
       kcal: r(ate.kcal), p: r(ate.p), f: r(ate.f), c: r(ate.c),
       target: rec?.target ?? null, proteinTarget: rec?.proteinTarget ?? null, burned: rec?.burned ?? null,
-      meals: ['breakfast', 'lunch', 'dinner'].filter((k) => log?.meals?.[k]).map((k) => ({ meal: k, title: log.meals[k].title, kcal: r(log.meals[k].kcal) })),
+      meals: ['breakfast', 'lunch', 'snack', 'dinner'].filter((k) => log?.meals?.[k]).map((k) => ({ meal: k, title: log.meals[k].title, kcal: r(log.meals[k].kcal) })),
       extras: (log?.extras || []).map((x) => x.title),
     });
   }
@@ -93,7 +93,7 @@ export function reportText(report, name) {
     for (const d of report.days) {
       if (!d.logged) { lines.push(`${fmtDay(d.date)}: not logged`); continue; }
       lines.push(`${fmtDay(d.date)}: ${d.kcal} kcal · ${d.p}P ${d.f}F ${d.c}C`);
-      for (const m of d.meals) lines.push(`  ${{ breakfast: '☀️', lunch: '🥗', dinner: '🍽️' }[m.meal]} ${m.title} (${m.kcal})`);
+      for (const m of d.meals) lines.push(`  ${{ breakfast: '☀️', lunch: '🥗', snack: '🍎', dinner: '🍽️' }[m.meal]} ${m.title} (${m.kcal})`);
       for (const x of d.extras) lines.push(`  ➕ ${x}`);
     }
   }
@@ -112,7 +112,7 @@ export function reportCsvRows(report) {
 }
 
 // groups = [{ meal: 'breakfast'|'lunch'|'dinner', combos: [{ name, totals, items: [{name, amount, grams, kcal, p, f, c}] }] }]
-const MEAL_ICON = { breakfast: '☀️', lunch: '🥗', dinner: '🍽️' };
+const MEAL_ICON = { breakfast: '☀️', lunch: '🥗', snack: '🍎', dinner: '🍽️' };
 export function combosText(groups, name) {
   const lines = [`🍳 ${name ? `${name}'s ` : 'My '}meal combos`];
   for (const g of groups) {

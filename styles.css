@@ -453,3 +453,7 @@ html { overflow-x: clip; }
 .share-preview { white-space: pre-wrap; font: .82rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; max-height: 40vh; overflow: auto; margin: 6px 0; }
 #shareRangeWrap[hidden] { display: none; }
 select[data-quicksnack] { width: 100%; margin-top: 6px; }
+/* Afternoon snack */
+.add-snack { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.snack-picks { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.snack-picks .chip { background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; font-size: .85rem; font-weight: 600; }

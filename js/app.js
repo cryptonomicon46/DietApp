@@ -294,11 +294,11 @@ const foodRow = (food, grams) => {
 // The day being shown, in the poster/CSV shape.
 function dayForSharing() {
   const day = viewDay();
-  const label = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
+  const label = { breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Afternoon snack', dinner: 'Dinner' };
   let meals, target;
   if (day < isoDate()) {
     const log = state.mealLog[day] || { meals: {} };
-    meals = ['breakfast', 'lunch', 'dinner'].filter((k) => log.meals?.[k]).map((k) => {
+    meals = ['breakfast', 'lunch', 'snack', 'dinner'].filter((k) => log.meals?.[k]).map((k) => {
       const m = log.meals[k];
       return { key: k, label: label[k], title: m.title, totals: { kcal: Math.round(m.kcal), p: Math.round(m.p), f: Math.round(m.f), c: Math.round(m.c) },
         items: (m.foods || '').split(';').map((x) => x.trim()).filter(Boolean).map((x) => { const g = x.match(/^(.*?)\s+([\d.]+)g$/); return g ? { name: g[1], grams: +g[2] } : { name: x }; }) };
@@ -308,7 +308,7 @@ function dayForSharing() {
     target = { kcal: rec?.target || sum('kcal'), p: rec?.proteinTarget || sum('p'), f: sum('f'), c: sum('c') };
   } else {
     const plan = todayPlan();
-    meals = ['breakfast', 'lunch', 'dinner'].map((k) => {
+    meals = mealOrder(plan).filter((k) => k !== 'snack' || plan.snack.portions.length).map((k) => {
       const m = plan[k];
       return { key: k, label: label[k], title: m.title, totals: m.totals, items: m.portions.filter((x) => x.grams > 0).map((x) => foodRow(x.food, x.grams)) };
     });
@@ -325,10 +325,10 @@ function dayForSharing() {
 const SHARE_WHAT = { day: "This day's meals", combos: 'My combos', progress: 'My progress' };
 const SHARE_FORMAT = { text: 'Text', poster: 'Poster', csv: 'CSV' };
 const share = { what: 'day', range: 'week', format: 'text' };
-const MEAL_NAMES = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
+const MEAL_NAMES = { breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Snack', dinner: 'Dinner' };
 
 function comboGroups() {
-  return ['breakfast', 'lunch', 'dinner'].map((meal) => ({
+  return ['breakfast', 'lunch', 'snack', 'dinner'].map((meal) => ({
     meal,
     combos: state.combos.filter((c) => comboMeal(c) === meal).map((c) => {
       const items = c.items.filter((x) => FOODS[x.food]).map((x) => foodRow(x.food, x.grams));
@@ -349,7 +349,7 @@ function progressReport() {
 function dayText(d) {
   const lines = [`🍽️ ${d.heading} · ${d.dateLabel}`, `Target: ${d.target.kcal} kcal · ${d.target.p}P ${d.target.f}F ${d.target.c}C`, ''];
   for (const m of d.meals) {
-    lines.push(`${{ breakfast: '☀️', lunch: '🥗', dinner: '🍽️' }[m.key]} ${m.label.toUpperCase()}: ${m.title} (${m.totals.kcal} kcal · ${m.totals.p}P ${m.totals.f}F ${m.totals.c}C)`);
+    lines.push(`${{ breakfast: '☀️', lunch: '🥗', snack: '🍎', dinner: '🍽️' }[m.key]} ${m.label.toUpperCase()}: ${m.title} (${m.totals.kcal} kcal · ${m.totals.p}P ${m.totals.f}F ${m.totals.c}C)`);
     for (const it of m.items) lines.push(`  – ${it.name}${it.amount ? `: ${it.amount}` : ''}${it.grams != null ? ` (${it.grams} g)` : ''}`);
   }
   lines.push('', `Day total: ${d.total.kcal} kcal · ${d.total.p}P ${d.total.f}F ${d.total.c}C`, 'Oats weighed dry; meat, fish, rice and veggies cooked.', '— Lean Plate');
@@ -444,7 +444,7 @@ function renderPastDay(day) {
   const burned = rec?.burned;
   const cell = (k, label) => `<div class="macro ${k}"><b>${Math.round(ate[k])}${k === 'kcal' ? '' : 'g'}</b><span>${label}</span>${target[k] ? `<small>of ${Math.round(target[k])}${k === 'kcal' ? '' : 'g'}</small>` : ''}</div>`;
   const status = rec ? scoreDay(rec) : null;
-  const order = { breakfast: 0, lunch: 1, dinner: 2, fuel: 3, extra: 4 };
+  const order = { breakfast: 0, lunch: 1, snack: 2, dinner: 3, fuel: 4, extra: 5 };
   return `
     <div class="card past-day">
       <div class="macros">${cell('kcal', 'kcal')}${cell('p', 'Protein')}${cell('f', 'Fat')}${cell('c', 'Carbs')}</div>
@@ -456,7 +456,7 @@ function renderPastDay(day) {
     </div>
     ${items.length ? items.sort((a, b) => order[a.slot] - order[b.slot]).map((m) => `
       <div class="card meal past">
-        <div class="eyebrow">${m.slot === 'extra' ? 'Snack / extra' : m.slot === 'fuel' ? 'Workout fuel' : m.slot}${m.at ? ` · ${esc(m.at)}` : ''}</div>
+        <div class="eyebrow">${m.slot === 'extra' ? 'Snack / extra' : m.slot === 'fuel' ? 'Workout fuel' : m.slot === 'snack' ? 'Afternoon snack' : m.slot}${m.at ? ` · ${esc(m.at)}` : ''}</div>
         <h3>${esc(m.title || 'Meal')}</h3>
         <div class="meal-macros">${macroLine({ kcal: Math.round(m.kcal || 0), p: Math.round(m.p || 0), f: Math.round(m.f || 0), c: Math.round(m.c || 0) })}${m.target ? ` <small class="muted">· target ${m.target.kcal} kcal</small>` : ''}</div>
         ${m.foods ? `<p class="small muted">${esc(m.foods)}</p>` : ''}
@@ -480,7 +480,7 @@ function renderToday() {
     renderDayBar();
     if (past) { $('#meals').innerHTML = renderPastDay(day) + shareRow(); return; }
     const plan = todayPlan(t);
-    $('#meals').innerHTML = ['breakfast', 'lunch', 'dinner'].map((meal) => mealCard(meal, plan[meal])).join('')
+    $('#meals').innerHTML = mealCardsWithAdd(plan)
       + shareRow()
       + `<p class="muted small">Changes here are saved for ${esc(dateOf(day).toLocaleDateString(undefined, { weekday: 'long' }))} and show up on Today when the day comes. Tap Reset on a meal to go back to the plan.</p>`;
     return;
@@ -511,7 +511,7 @@ function renderToday() {
   renderTraining(t);
 
   const plan = todayPlan(t);
-  $('#meals').innerHTML = ['breakfast', 'lunch', 'dinner'].map((meal) => mealCard(meal, plan[meal])).join('')
+  $('#meals').innerHTML = mealCardsWithAdd(plan)
     + extrasCard()
     + shareRow()
     + `<p class="muted small">Pick a food from any menu to swap it. Drag a slider to set that portion yourself (🔒) — the other items re-balance to keep the meal on target. Weigh oats dry; weigh meat, fish, eggs, rice and veggies cooked.</p>`;
@@ -544,7 +544,43 @@ $('#meals').addEventListener('click', (e) => {
 
 const MEAL_TEMPLATES = { eggs: 'Switch: eggs', oatmeal: 'Switch: oatmeal' };
 
+// Order of the day's cards; the afternoon snack sits between lunch and dinner when it's on.
+const mealOrder = (plan) => ['breakfast', 'lunch', ...(plan.snack ? ['snack'] : []), 'dinner'];
+const SNACK_PICKS = [['apple', '🍎'], ['banana', '🍌'], ['orange', '🍊'], ['grapes', '🍇'], ['strawberries', '🍓'], ['berries', '🫐'], ['mixedNuts', '🥜'], ['almonds', '🌰'], ['greekYogurt', '🥛'], ['premierShake', '🥤'], ['barebells', '🍫']];
+function mealCardsWithAdd(plan) {
+  return mealOrder(plan).map((meal) => mealCard(meal, plan[meal]) + (meal === 'lunch' && !plan.snack ? addSnackCard() : '')).join('');
+}
+function addSnackCard() {
+  return `<div class="card add-snack"><button type="button" class="ghost" data-addsnack>＋ Add an afternoon snack</button>
+    <span class="small muted">Fruit, nuts, yogurt, a shake… lunch and dinner shrink to make room.</span></div>`;
+}
+$('#meals').addEventListener('click', (e) => {
+  if (!e.target.closest('[data-addsnack]')) return;
+  editMeal('snack', (c) => { c.on = true; c.items ||= []; });
+  renderToday();
+});
+function snackCard(m) {
+  return `
+    <div class="card meal snack ${viewLog().meals.snack ? 'eaten' : ''}" data-meal="snack">
+      <div class="meal-head">
+        <div>
+          <div class="eyebrow">Afternoon snack · ~3 PM</div>
+          <h3 data-role="title">${esc(m.title)}</h3>
+        </div>
+        <button class="ghost small" data-reset>✕ No snack</button>
+      </div>
+      <div class="meal-macros" data-role="totals">${macroLine(m.totals)}${m.portions.length ? ` <small class="muted">· lunch & dinner make room</small>` : ''}</div>
+      <div class="snack-picks" role="group" aria-label="Add to your snack">
+        ${SNACK_PICKS.filter(([k]) => FOODS[k]).map(([k, icon]) => `<button type="button" class="chip" data-snackadd="${k}">${icon} ${esc(FOODS[k].name.replace(/ \(.*\)/, '').replace(' protein bar', '').replace(' Protein shake', ' shake'))}</button>`).join('')}
+      </div>
+      ${comboRow('snack', m)}
+      ${m.portions.length ? customBody('snack', m) : '<p class="small muted">Tap what you had. Tap again for another one, or use the slider.</p>'}
+      ${m.portions.length ? eatButton('snack') : ''}
+    </div>`;
+}
+
 function mealCard(meal, m) {
+  if (meal === 'snack') return snackCard(m);
   const edited = !!todaysCustom()[meal];
   return `
     <div class="card meal ${viewLog().meals[meal] ? 'eaten' : ''}" data-meal="${meal}">
@@ -597,9 +633,9 @@ function eatOutBody(meal, m) {
 
 // ---- saved combos: Breakfast / Lunch / Dinner combos. Lunch and dinner offer each other's
 // combos too, and the other person's combos show up as well (copied in when you pick one). ----
-const comboKind = (meal) => (meal === 'breakfast' ? 'breakfast' : 'main');
+const comboKind = (meal) => (meal === 'breakfast' || meal === 'snack' ? meal : 'main');
 // Combos saved before they remembered their meal count as lunch ones.
-const comboMeal = (c) => c.meal || (c.kind === 'breakfast' ? 'breakfast' : 'lunch');
+const comboMeal = (c) => c.meal || (c.kind === 'breakfast' || c.kind === 'snack' ? c.kind : 'lunch');
 const partnerId = () => PROFILES.find((p) => p.id !== ownerId())?.id;
 const partnerName = () => { const id = partnerId(); return profileStore(id).get('profile', null)?.name?.split(/\s+/)[0] || PROFILES.find((p) => p.id === id)?.name || ''; };
 const partnerCombos = () => (sync.readOnly() ? [] : profileStore(partnerId()).get('combos', []));
@@ -616,11 +652,11 @@ function comboRow(meal, m) {
       <option value="">⭐ ${label} combos (${here.length + other.length})${theirs.length ? ` · ${esc(pName)}'s (${theirs.length})` : ''}</option>
       ${here.length ? `<optgroup label="Your ${label.toLowerCase()} combos">${here.map((c) => opt(c)).join('')}</optgroup>` : ''}
       ${other.length ? `<optgroup label="From your ${meal === 'lunch' ? 'dinner' : 'lunch'} combos">${other.map((c) => opt(c)).join('')}</optgroup>` : ''}
-      ${theirs.length ? `<optgroup label="${esc(pName)}'s ${meal === 'breakfast' ? 'breakfast' : 'lunch & dinner'} combos">${theirs.map((c) => opt(c, 'p:')).join('')}</optgroup>` : ''}
+      ${theirs.length ? `<optgroup label="${esc(pName)}'s ${meal === 'breakfast' || meal === 'snack' ? meal : 'lunch & dinner'} combos">${theirs.map((c) => opt(c, 'p:')).join('')}</optgroup>` : ''}
     </select>` : '';
   return `<div class="combo-row">
       ${pick}
-      ${quickPicker('data-quick', '⚡ Quick swap: bar or shake')}
+      ${meal === 'snack' ? '' : quickPicker('data-quick', '⚡ Quick swap: bar or shake')}
       ${m.eatout ? '' : `<button type="button" class="ghost small" data-savecombo>☆ Save ${label.toLowerCase()} combo</button>`}
       ${mine.length ? `<button type="button" class="linkish small" data-managecombos>${managingCombos === meal ? 'Done' : 'Edit list'}</button>` : ''}
     </div>
@@ -712,7 +748,7 @@ function customBody(meal, m) {
     </ul>
     <div class="row" style="margin-top:6px">
       <select data-cadd aria-label="Add a food">${foodOptions('', '+ Add a food…')}</select>
-      ${m.portions.length && !m.manual ? `<button type="button" class="ghost small" data-fit title="Scale every food so the meal hits its calorie target">⚖️ Fit to ${m.target.kcal} kcal</button>` : ''}
+      ${meal !== 'snack' && m.portions.length && !m.manual ? `<button type="button" class="ghost small" data-fit title="Scale every food so the meal hits its calorie target">⚖️ Fit to ${m.target.kcal} kcal</button>` : ''}
     </div>
     <details class="manual" ${m.manual ? 'open' : ''}>
       <summary>Enter macros yourself</summary>
@@ -735,7 +771,15 @@ function refreshCustom(meal) {
   const m = todayPlan()[meal];
   const card = document.querySelector(`.meal[data-meal="${meal}"]`);
   card.querySelector('[data-role="title"]').textContent = m.title;
-  card.querySelector('[data-role="totals"]').innerHTML = totalsLine(m) + (m.manual ? ' <small class="muted">(your numbers)</small>' : '');
+  card.querySelector('[data-role="totals"]').innerHTML = meal === 'snack' ? macroLine(m.totals) : totalsLine(m) + (m.manual ? ' <small class="muted">(your numbers)</small>' : '');
+  // Lunch and dinner resize around the snack.
+  if (meal === 'snack') {
+    const plan = todayPlan();
+    for (const other of ['lunch', 'dinner']) {
+      const el = document.querySelector(`.meal[data-meal="${other}"]`);
+      if (el) el.outerHTML = mealCard(other, plan[other]);
+    }
+  }
   m.portions.forEach((x, i) => {
     const el = card.querySelector(`li[data-ci="${i}"] [data-role="amt"]`);
     if (el) el.textContent = amountLabel(x.food, x.grams).main;
@@ -772,6 +816,19 @@ $('#meals').addEventListener('click', (e) => {
   const card = e.target.closest('.meal');
   if (!card) return;
   const meal = card.dataset.meal;
+  if (e.target.closest('[data-snackadd]')) {
+    const food = e.target.closest('[data-snackadd]').dataset.snackadd;
+    const unit = FOODS[food].unit?.grams || 100;
+    editMeal('snack', (c) => {
+      c.on = true; c.items ||= [];
+      const same = c.items.find((x) => x.food === food);
+      if (same) same.grams += unit; else c.items.push({ food, grams: unit });
+      delete c.title;
+    });
+    resnap('snack');
+    renderToday();
+    return;
+  }
   if (e.target.closest('[data-savecombo]')) {
     saveCombo(meal);
   } else if (e.target.closest('[data-managecombos]')) {
@@ -1000,6 +1057,11 @@ $('#meals').addEventListener('click', (e) => {
     saveLog();
     renderToday();
   } else if (e.target.closest('[data-reset]')) {
+    if (meal === 'snack' && viewLog().meals.snack) {
+      if (!confirm('Remove the snack you logged today?')) return;
+      delete todaysLog().meals.snack;
+      saveLog();
+    }
     delete todaysCustom()[meal];
     saveCustom();
     renderToday();

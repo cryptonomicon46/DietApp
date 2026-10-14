@@ -286,7 +286,25 @@ export function planForDay(dayTargets, date, custom = {}, prefs = {}) {
   const rotate = (offset) => ({ protein: PROTEINS[(n + offset) % PROTEINS.length] });
   const build = (name, auto) => (custom[name]?.eatout ? eatOutMeal(custom[name], meals[name])
     : custom[name]?.items ? customMeal(custom[name], meals[name]) : auto());
+  // Optional afternoon snack: its calories come out of lunch and dinner, from whichever has
+  // more carbs (rice, potato) to give — meals you built or ate out keep their size.
+  let snack = null;
+  if (custom.snack?.on) {
+    const sm = customMeal(custom.snack, null);
+    snack = { ...sm, title: custom.snack.items?.length ? sm.title : 'Afternoon snack', target: sm.totals, snack: true };
+    const auto = { lunch: () => portionMeal(MAIN_MEAL, meals.lunch, merge('main', custom.lunch, rotate(0))), dinner: () => portionMeal(MAIN_MEAL, meals.dinner, merge('main', custom.dinner, rotate(2))) };
+    const room = Object.fromEntries(['lunch', 'dinner'].map((m) => [m, custom[m]?.items || custom[m]?.eatout ? 0 : auto[m]().totals.c * 4]));
+    const total = room.lunch + room.dinner;
+    for (const m of ['lunch', 'dinner']) {
+      const share = total ? room[m] / total : 0.5;
+      const t = meals[m];
+      const kcal = Math.max(t.kcal - sm.totals.kcal * share, 150);
+      const p = Math.max(t.p - sm.totals.p * share, 15);
+      meals[m] = { kcal: Math.round(kcal), p: Math.round(p), f: t.f, c: Math.round(Math.max((kcal - p * 4 - t.f * 9) / 4, 0)) };
+    }
+  }
   return {
+    ...(snack ? { snack } : {}),
     breakfast: { template: bKey, target: meals.breakfast, ...build('breakfast', () => portionMeal(BREAKFASTS[bKey], meals.breakfast, merge(bKey, custom.breakfast))) },
     lunch: { target: meals.lunch, ...build('lunch', () => portionMeal(MAIN_MEAL, meals.lunch, merge('main', custom.lunch, rotate(0)))) },
     dinner: { target: meals.dinner, ...build('dinner', () => portionMeal(MAIN_MEAL, meals.dinner, merge('main', custom.dinner, rotate(2)))) },

@@ -30,7 +30,7 @@ export function buildTables(data) {
   const meals = [];
   for (const date of Object.keys(logs).sort()) {
     const log = logs[date];
-    for (const name of ['breakfast', 'lunch', 'dinner']) {
+    for (const name of ['breakfast', 'lunch', 'snack', 'dinner']) {
       const m = log.meals?.[name];
       if (!m) continue;
       const t = m.target || {};
