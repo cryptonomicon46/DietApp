@@ -10,6 +10,7 @@ import {
 } from './activity.js';
 import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
+import { initNotes, renderNotes, updateNotesBadge } from './notes.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile } from './storage.js';
@@ -1604,6 +1605,10 @@ document.querySelectorAll('.tabs button').forEach((btn) => {
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${btn.dataset.tab}`));
     if (btn.dataset.tab !== 'scan') stopScan();
     if (btn.dataset.tab === 'lift') renderLift();
+    if (btn.dataset.tab === 'notes') {
+      renderNotes();
+      if (sync.enabled()) sync.pull().then((changed) => changed && renderNotes()).catch(() => {});
+    }
     if (btn.dataset.tab === 'weight' && state.profile) renderStats();
     window.scrollTo(0, 0);
   };
@@ -1718,7 +1723,8 @@ function ago(ms) {
 // On a synced phone your partner's profile is view-only; their phone is the source.
 function renderViewOnly() {
   const ro = sync.readOnly();
-  $('main').inert = ro;
+  // Notes are always yours to write, even while viewing the other person's day.
+  document.querySelectorAll('main > .tab:not(#tab-notes)').forEach((t) => { t.inert = ro; });
   document.body.classList.toggle('readonly', ro);
   $('#restoreLabel').hidden = ro;
   const name = state.profile?.name || activeProfile().name;
@@ -1770,6 +1776,8 @@ $('#shareSave').onclick = async () => {
 $('#shareOff').onclick = () => { sync.save(null); global.set('shareOff', true); location.reload(); };
 
 initLift();
+initNotes();
+updateNotesBadge();
 // Weigh-ins said on the Lift tab ("weigh in 161.4").
 window.addEventListener('lp:weighin', (e) => {
   const date = isoDate();
@@ -1814,8 +1822,13 @@ if (!sync.readOnly() && (justConnected || Date.now() - store.get('lastSync', 0) 
 // Household: upload my latest, then fetch my partner's; reload if I'm looking at fresh data.
 if (sync.enabled()) {
   sync.push().catch(() => {});
-  sync.pull().then((changed) => { if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
-  const refresh = () => sync.pull().then((changed) => { if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
+  sync.pull().then((changed) => { updateNotesBadge(); if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
+  const onNotes = () => document.querySelector('#tab-notes').classList.contains('active');
+  const refresh = () => sync.pull().then((changed) => {
+    updateNotesBadge();
+    if (changed && onNotes()) renderNotes();
+    else if (changed && sync.readOnly()) location.reload();
+  }).catch(() => {});
   setInterval(refresh, 5 * 60000);
   // A home-screen app resumes without reloading: catch up when it comes back.
   document.addEventListener('visibilitychange', () => {

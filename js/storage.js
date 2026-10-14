@@ -59,6 +59,14 @@ export const store = {
   },
 };
 
+// Storage for one specific person, whichever profile is open (e.g. notes on the shared board).
+export function profileStore(id) {
+  return {
+    get: (key, fallback) => raw.get(`lp.p.${id}.${key}`) ?? fallback,
+    set(key, value) { raw.set(`lp.p.${id}.${key}`, value); listeners.forEach((fn) => fn(id, key)); },
+  };
+}
+
 // Everything one person has saved, as a single object (for household sync).
 export function exportProfile(id) {
   const prefix = `lp.p.${id}.`;
