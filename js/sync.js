@@ -17,13 +17,39 @@ export const sync = {
     this.save({ url: DEFAULT_CONNECTOR, code: newHouseholdCode() });
     return true;
   },
+  // Link with another phone's code. Both phones settle on the alphabetically first of the
+  // two codes, and the other code gets a forwarding note, so it doesn't matter which phone
+  // enters which code (or if both do).
   async join(code) {
     code = code.trim().toLowerCase().replace(/\s+/g, '');
     if (!/^[a-z0-9-]{12,64}$/.test(code)) throw new Error('That code doesn\'t look right — it\'s 3 groups of 4 letters/numbers.');
     global.set('shareOff', false);
-    this.save({ url: this.settings()?.url || DEFAULT_CONNECTOR, code });
+    const url = this.settings()?.url || DEFAULT_CONNECTOR;
+    const mine = this.settings()?.code;
+    const target = mine && mine < code ? mine : code;
+    const other = target === code ? mine : code;
+    this.save({ url, code: target });
+    if (other && other !== target) await this.forward(other, target);
     await this.push();
     return this.pull();
+  },
+  async forward(from, to) {
+    const res = await fetch(`${this.settings().url}/household/${encodeURIComponent(from)}/link`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ movedTo: to, savedAt: Date.now() }),
+    });
+    if (!res.ok) throw new Error(`link failed (${res.status})`);
+  },
+  // If the other phone linked us into its household, follow the forwarding note.
+  async follow() {
+    const s = this.settings();
+    for (let i = 0; i < 3; i++) {
+      const res = await fetch(`${s.url}/household/${encodeURIComponent(this.settings().code)}/link`);
+      if (!res.ok) return i > 0;
+      const { movedTo } = await res.json().catch(() => ({}));
+      if (!movedTo || movedTo === this.settings().code || !/^[a-z0-9-]{12,64}$/.test(movedTo)) return i > 0;
+      this.save({ ...this.settings(), code: movedTo });
+    }
+    return true;
   },
   save(s) { global.set('sync', s); },
   enabled() { const s = this.settings(); return !!(s?.url && s?.code && ownerId()); },
@@ -46,9 +72,10 @@ export const sync = {
   async pull() {
     const s = this.settings();
     if (!this.enabled()) return false;
+    if (await this.follow()) await this.push();
     let changed = false;
     for (const p of PROFILES.filter((x) => x.id !== ownerId())) {
-      const res = await fetch(`${s.url}/household/${encodeURIComponent(s.code)}/${p.id}`);
+      const res = await fetch(`${s.url}/household/${encodeURIComponent(this.settings().code)}/${p.id}`);
       if (res.status === 404) continue;
       if (!res.ok) throw new Error(`download failed (${res.status})`);
       const body = await res.json();

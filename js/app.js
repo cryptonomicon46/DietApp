@@ -1470,8 +1470,12 @@ $('#profileClose').onclick = () => dialog.close();
 function openPartnerNotice() {
   const name = activeProfile().name;
   const owner = PROFILES.find((p) => p.id === ownerId());
-  $('#partnerTitle').textContent = `${name}'s day isn't on this phone yet`;
-  $('#partnerText').textContent = `${name} sets up and edits ${name}'s profile on ${name}'s own phone. Once your phones are linked, ${name}'s day shows up here to view, and updates every few minutes.`;
+  const has = !!state.profile;
+  $('#partnerTitle').textContent = has ? `Linked with ${name}` : `${name}'s day isn't on this phone yet`;
+  $('#partnerText').textContent = has
+    ? `Both phones should show the same code below. If ${name} can't see your day, enter the code from ${name}'s phone here (or yours on ${name}'s phone).`
+    : `${name} sets up and edits ${name}'s profile on ${name}'s own phone. Once your phones are linked, ${name}'s day shows up here to view, and updates every few minutes.`;
+  $('#partnerBack').hidden = has;
   $('#partnerBack').textContent = `Back to ${owner?.name || 'my profile'}`;
   renderLinkBox(name);
   $('#partnerDialog').showModal();
@@ -1481,7 +1485,9 @@ function openPartnerNotice() {
 function renderLinkBox(name) {
   $('#partnerName2').textContent = name;
   $('#myCode').textContent = sync.settings()?.code || '—';
-  $('#joinStatus').textContent = '';
+  const seen = global.get(`seen.${activeProfile().id}`, 0);
+  const pushed = global.get('pushedAt', 0);
+  $('#joinStatus').textContent = `Last update from ${name}: ${seen ? ago(seen) : 'none yet'} · this phone last uploaded: ${pushed ? ago(pushed) : 'not yet'}.`;
 }
 $('#sendCode').onclick = async () => {
   const code = sync.settings()?.code;
@@ -1496,7 +1502,7 @@ $('#joinBtn').onclick = async () => {
   $('#joinStatus').textContent = 'Linking…';
   try {
     const got = await sync.join($('#joinCode').value);
-    $('#joinStatus').textContent = got ? 'Linked! Loading…' : 'Linked. Their day shows up once their phone syncs (open the app on it).';
+    $('#joinStatus').textContent = got ? 'Linked! Loading…' : `Linked. Make sure the other phone shows this same code (${sync.settings().code}) after reopening the app.`;
     $('#myCode').textContent = sync.settings().code;
     if (got) setTimeout(() => location.reload(), 600);
   } catch (err) {
@@ -1676,7 +1682,7 @@ function renderViewOnly() {
   if (ro) {
     const seen = global.get(`seen.${activeProfile().id}`, 0);
     $('#viewBanner').innerHTML = seen
-      ? `Viewing <b>${esc(name)}</b>'s day · updated ${ago(seen)} · <button class="linkish" id="refreshPartner">Refresh</button>`
+      ? `Viewing <b>${esc(name)}</b>'s day · updated ${ago(seen)} · <button class="linkish" id="refreshPartner">Refresh</button> · <button class="linkish" id="linkPartner">Link</button>`
       : sync.enabled()
         ? `<b>${esc(name)}</b>'s day isn't here yet. <button class="linkish" id="linkPartner">Link phones</button> · <button class="linkish" id="refreshPartner">Check now</button>`
         : `<b>${esc(name)}</b>'s profile isn't set up on this phone. ${esc(name)} sets it up on their own phone; link your phones to see each other's day.`;
@@ -1765,7 +1771,12 @@ if (!sync.readOnly() && (justConnected || Date.now() - store.get('lastSync', 0) 
 if (sync.enabled()) {
   sync.push().catch(() => {});
   sync.pull().then((changed) => { if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
-  setInterval(() => sync.pull().then((changed) => { if (changed && sync.readOnly()) location.reload(); }).catch(() => {}), 5 * 60000);
+  const refresh = () => sync.pull().then((changed) => { if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
+  setInterval(refresh, 5 * 60000);
+  // A home-screen app resumes without reloading: catch up when it comes back.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && Date.now() - global.get('pulledAt', 0) > 30000) { sync.push().catch(() => {}); refresh(); }
+  });
 }
 
 if ('serviceWorker' in navigator) {
