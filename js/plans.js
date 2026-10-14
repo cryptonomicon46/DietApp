@@ -26,7 +26,7 @@ const nameOf = (id) => profileStore(id).get('profile', null)?.name || PROFILES.f
 const plansOf = (id) => profileStore(id).get('plans', []);
 
 // The day a plan is for: tonight/today = the day it was made; weekend = that Saturday.
-export function feelDay(p) {
+export function planDay(p) {
   const d = new Date(`${p.date}T12:00:00`);
   if (p.when === 'tomorrow') d.setDate(d.getDate() + 1);
   else if (p.when === 'weekend') d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7));
@@ -37,13 +37,13 @@ export function feelDay(p) {
 // A plan stays "upcoming" through its day (weekend plans through Sunday).
 export function isUpcoming(p, today = isoDate()) {
   if (p.done) return false;
-  const day = feelDay(p);
+  const day = planDay(p);
   if (p.when === 'weekend') { const sun = new Date(`${day}T12:00:00`); sun.setDate(sun.getDate() + 1); return isoDate(sun) >= today; }
   return day >= today;
 }
 
 export function whenText(p, today = isoDate()) {
-  const day = feelDay(p);
+  const day = planDay(p);
   const time = p.time ? ` at ${new Date(`2000-01-01T${p.time}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : '';
   if (p.when === 'tonight' && day === today) return `Tonight${time}`;
   if (p.when === 'weekend') return `This weekend${time}`;
@@ -74,7 +74,7 @@ export function renderPlans(el) {
   const myReplies = profileStore(me()).get('planReplies', {});
   const theirReplies = profileStore(p.id).get('planReplies', {});
   const all = PROFILES.flatMap((x) => plansOf(x.id).map((pl) => ({ ...pl, from: x.id }))).sort((a, b) => b.at - a.at);
-  const upcoming = all.filter((x) => isUpcoming(x)).sort((a, b) => feelDay(a).localeCompare(feelDay(b)) || (a.time || '').localeCompare(b.time || ''));
+  const upcoming = all.filter((x) => isUpcoming(x)).sort((a, b) => planDay(a).localeCompare(planDay(b)) || (a.time || '').localeCompare(b.time || ''));
   const past = all.filter((x) => !isUpcoming(x)).slice(0, 12);
   const linked = global.get(`seen.${p.id}`, 0) > 0;
 
