@@ -162,3 +162,14 @@ test('eating out: estimates and menu numbers', async () => {
   assert.equal(menu.totals.p, 45);
   assert.equal(menu.totals.f, Math.round(800 * 0.4 / 9));
 });
+
+test('fitting a saved combo to a meal target', async () => {
+  const { fitItems } = await import('../js/plan.js');
+  const { FOODS } = await import('../js/foods.js');
+  const items = [{ food: 'whey', grams: 30 }, { food: 'oatMilk', grams: 240 }, { food: 'frozenBerries', grams: 140 }];
+  const kcal = (xs) => xs.reduce((a, x) => a + FOODS[x.food].kcal * x.grams / 100, 0);
+  const fit = fitItems(items, 450);
+  assert.ok(Math.abs(kcal(fit) - 450) < 40, `fitted to ${kcal(fit)}`);
+  for (const x of fit) assert.equal(x.grams % FOODS[x.food].range[2], 0, `${x.food} on its slider step`);
+  assert.deepEqual(fitItems([], 400), []);
+});

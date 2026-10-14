@@ -3,7 +3,7 @@ import {
   ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
   FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek,
-  EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE,
+  EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE, fitItems,
 } from './plan.js';
 import {
   SESSION_TYPES, SPORTS, INTENSITY, trainingDay, applyTraining, parseGarminCsv, parseWhoopCsv,
@@ -30,7 +30,8 @@ const state = {
   weights: store.get('weights', []),   // [{date: 'YYYY-MM-DD', weight}]
   adjust: store.get('adjust', 0),      // kcal tweak from check-ins
   custom: store.get('custom', {}),     // today's meal edits: {date, meals: {breakfast: {template, picks, grams}}}
-  planned: store.get('planned', {}),   // meal edits made ahead for future days: {date: {breakfast: {...}}}
+  planned: store.get('planned', {}),
+  combos: store.get('combos', []),     // saved meal combos: [{id, name, kind: 'breakfast'|'main', items: [{food, grams}], manual?}]   // meal edits made ahead for future days: {date: {breakfast: {...}}}
   viewDate: null,                      // the day shown on Today (null = today)
   prefs: store.get('prefs', {}),       // sticky swaps: {oatmeal: {fat: 'almondButter'}, main: {carb: 'quinoa'}}
   macroAdjust: store.get('macroAdjust', { p: 0, f: 0, c: 0 }), // grams, from weekly check-ins
@@ -395,6 +396,7 @@ function mealCard(meal, m) {
         </div>
       </div>
       <div class="meal-macros" data-role="totals">${totalsLine(m)}${m.manual ? ' <small class="muted">(your numbers)</small>' : ''}</div>
+      ${comboRow(meal, m)}
       ${m.eatout ? eatOutBody(meal, m) : m.custom ? customBody(meal, m) : `<ul class="portions editable">${m.portions.map((x) => itemRow(x)).join('')}</ul>`}
       ${eatButton(meal)}
     </div>`;
@@ -427,6 +429,57 @@ function eatOutBody(meal, m) {
     </div>`;
 }
 
+// ---- saved combos (breakfast ones for breakfast; lunch and dinner share theirs) ----
+const comboKind = (meal) => (meal === 'breakfast' ? 'breakfast' : 'main');
+let managingCombos = null; // meal whose combo list is open for deleting
+function comboRow(meal, m) {
+  const list = state.combos.filter((c) => c.kind === comboKind(meal));
+  const pick = list.length ? `<select data-combo aria-label="Use a saved combo">
+      <option value="">⭐ My combos (${list.length})</option>
+      ${list.map((c) => `<option value="${esc(c.id)}">${esc(c.name)} · ${comboKcal(c)} kcal</option>`).join('')}
+    </select>` : '';
+  return `<div class="combo-row">
+      ${pick}
+      ${m.eatout ? '' : '<button type="button" class="ghost small" data-savecombo>☆ Save combo</button>'}
+      ${list.length ? `<button type="button" class="linkish small" data-managecombos>${managingCombos === meal ? 'Done' : 'Edit list'}</button>` : ''}
+    </div>
+    ${managingCombos === meal ? `<ul class="list combo-list">${list.map((c) => `<li><span>${esc(c.name)}<small class="muted"> · ${c.items.map((x) => FOODS[x.food]?.name).filter(Boolean).join(', ')}</small></span>
+      <button type="button" class="x" data-delcombo="${esc(c.id)}" aria-label="Delete ${esc(c.name)}">✕</button></li>`).join('')}</ul>` : ''}`;
+}
+function comboKcal(c) {
+  if (c.manual?.kcal) return Math.round(+c.manual.kcal);
+  return Math.round(c.items.reduce((a, x) => a + (FOODS[x.food]?.kcal || 0) * x.grams / 100, 0));
+}
+function saveCombo(meal) {
+  const m = todayPlan()[meal];
+  const c = todaysCustom()[meal] || {};
+  const items = (c.items && m.custom ? c.items : m.portions).filter((x) => x.grams > 0 && FOODS[x.food]).map((x) => ({ food: x.food, grams: x.grams }));
+  if (!items.length && !c.manual) { alert('Add some foods to this meal first.'); return; }
+  const name = (prompt('Name this combo', c.title || m.title) || '').trim().slice(0, 60);
+  if (!name) return;
+  const kind = comboKind(meal);
+  const same = state.combos.find((x) => x.kind === kind && x.name.toLowerCase() === name.toLowerCase());
+  if (same && !confirm(`Replace your combo “${same.name}”?`)) return;
+  const combo = { id: same?.id || `c${Date.now().toString(36)}`, name, kind, items, ...(c.manual && Object.values(c.manual).some((v) => v !== '' && v != null) ? { manual: { ...c.manual } } : {}) };
+  state.combos = [...state.combos.filter((x) => x.id !== combo.id), combo];
+  store.set('combos', state.combos);
+  renderToday();
+}
+function useCombo(meal, id) {
+  const combo = state.combos.find((x) => x.id === id);
+  if (!combo) return;
+  const m = todayPlan()[meal];
+  editMeal(meal, (c) => {
+    for (const k of ['eatout', 'picks', 'grams', 'manual']) delete c[k];
+    if (meal === 'breakfast') c.template = m.template;
+    c.items = combo.items.map((x) => ({ ...x }));
+    if (combo.manual) c.manual = { ...combo.manual };
+    c.title = combo.name;
+  });
+  resnap(meal);
+  renderToday();
+}
+
 // ---- meals you build yourself ----
 function foodOptions(selected, placeholder) {
   return (placeholder ? `<option value="">${placeholder}</option>` : '')
@@ -446,6 +499,9 @@ function customBody(meal, m) {
             <button class="x" data-cremove="${i}" aria-label="Remove ${esc(FOODS[x.food].name)}">✕</button>
           </div>
           <div class="item-slider">
+            <input type="range" data-cslide="${i}" min="0" max="${Math.max(x.range?.[1] ?? 500, x.grams)}" step="${x.range?.[2] ?? 1}" value="${x.grams}" aria-label="${esc(FOODS[x.food].name)} amount">
+          </div>
+          <div class="item-slider">
             <input type="number" class="grams" data-cgrams="${i}" min="0" max="2000" step="any" inputmode="decimal" value="${x.grams}" aria-label="Grams">
             <span class="small muted">g</span>
             <span class="amt" data-role="amt">${a.main}</span>
@@ -453,7 +509,10 @@ function customBody(meal, m) {
         </li>`;
       }).join('')}
     </ul>
-    <select data-cadd aria-label="Add a food">${foodOptions('', '+ Add a food…')}</select>
+    <div class="row" style="margin-top:6px">
+      <select data-cadd aria-label="Add a food">${foodOptions('', '+ Add a food…')}</select>
+      ${m.portions.length && !m.manual ? `<button type="button" class="ghost small" data-fit title="Scale every food so the meal hits its calorie target">⚖️ Fit to ${m.target.kcal} kcal</button>` : ''}
+    </div>
     <details class="manual" ${m.manual ? 'open' : ''}>
       <summary>Enter macros yourself</summary>
       <p class="small muted">Use numbers from a label or another app. Leave a box blank to use the foods above.</p>
@@ -512,7 +571,26 @@ $('#meals').addEventListener('click', (e) => {
   const card = e.target.closest('.meal');
   if (!card) return;
   const meal = card.dataset.meal;
-  if (e.target.closest('[data-eatout]')) {
+  if (e.target.closest('[data-savecombo]')) {
+    saveCombo(meal);
+  } else if (e.target.closest('[data-managecombos]')) {
+    managingCombos = managingCombos === meal ? null : meal;
+    renderToday();
+  } else if (e.target.closest('[data-delcombo]')) {
+    const id = e.target.closest('[data-delcombo]').dataset.delcombo;
+    const c = state.combos.find((x) => x.id === id);
+    if (c && confirm(`Delete the combo “${c.name}”?`)) {
+      state.combos = state.combos.filter((x) => x.id !== id);
+      store.set('combos', state.combos);
+      if (!state.combos.some((x) => x.kind === comboKind(meal))) managingCombos = null;
+      renderToday();
+    }
+  } else if (e.target.closest('[data-fit]')) {
+    const m = todayPlan()[meal];
+    editCustom(meal, (c) => { c.items = fitItems(c.items, m.target.kcal); });
+    resnap(meal);
+    renderToday();
+  } else if (e.target.closest('[data-eatout]')) {
     editMeal(meal, (c) => { delete c.items; delete c.manual; c.eatout = { mode: 'estimate', dish: meal === 'breakfast' ? 'brunch' : 'plate', size: 'regular', ate: 1 }; });
     resnap(meal);
     renderToday();
@@ -540,7 +618,10 @@ $('#meals').addEventListener('change', (e) => {
   const card = e.target.closest('.meal');
   if (!card) return;
   const meal = card.dataset.meal;
-  if (e.target.dataset.eo === 'dish') {
+  if (e.target.dataset.combo != null) {
+    if (e.target.value) useCombo(meal, e.target.value);
+    return;
+  } else if (e.target.dataset.eo === 'dish') {
     editMeal(meal, (c) => { c.eatout = { ...c.eatout, dish: e.target.value }; });
   } else if (e.target.dataset.cfood != null) {
     const i = +e.target.dataset.cfood;
@@ -564,9 +645,14 @@ $('#meals').addEventListener('input', (e) => {
   } else if (e.target.dataset.eomenu) {
     const k = e.target.dataset.eomenu;
     editMeal(meal, (c) => { c.eatout = { ...c.eatout, menu: { ...c.eatout.menu, [k]: e.target.value === '' ? '' : +e.target.value } }; });
-  } else if (e.target.dataset.cgrams != null) {
-    const i = +e.target.dataset.cgrams;
-    editCustom(meal, (c) => { c.items[i].grams = Math.max(0, +e.target.value || 0); });
+  } else if (e.target.dataset.cgrams != null || e.target.dataset.cslide != null) {
+    const i = +(e.target.dataset.cgrams ?? e.target.dataset.cslide);
+    const grams = Math.max(0, +e.target.value || 0);
+    editCustom(meal, (c) => { c.items[i].grams = grams; });
+    // Keep the slider and the grams box together.
+    const li = e.target.closest('li');
+    const other = li.querySelector(e.target.dataset.cslide != null ? '[data-cgrams]' : '[data-cslide]');
+    if (other) { if (other.type === 'range' && grams > +other.max) other.max = grams; other.value = grams; }
   } else if (e.target.dataset.manual) {
     const k = e.target.dataset.manual;
     editCustom(meal, (c) => { c.manual = { ...c.manual, [k]: e.target.value === '' ? '' : +e.target.value }; });

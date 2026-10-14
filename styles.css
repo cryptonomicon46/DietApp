@@ -441,3 +441,8 @@ html { overflow-x: clip; }
 .past-day .macro b { font-size: 1.1rem; }
 .past-day .macro span, .past-day .macro small { display: block; font-size: .72rem; }
 .past-day .macro small { color: var(--muted); }
+/* Saved meal combos */
+.combo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 2px; }
+.combo-row select { flex: 1 1 100%; min-width: 0; }
+.combo-list { margin: 6px 0; }
+.portions.custom .item-slider input[type=range] { width: 100%; }

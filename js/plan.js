@@ -207,8 +207,23 @@ export function customMeal(c, target) {
   const manual = c.manual && Object.values(c.manual).some((v) => v !== '' && v != null);
   if (manual) for (const k of ['kcal', 'p', 'f', 'c']) if (c.manual[k] !== '' && c.manual[k] != null) totals[k] = Math.round(+c.manual[k]);
   const names = portions.filter((x) => x.grams > 0).map((x) => FOODS[x.food].name.replace(/ \(.*\)/, '').toLowerCase());
-  const title = names.length ? names.slice(0, 3).join(', ').replace(/^./, (ch) => ch.toUpperCase()) + (names.length > 3 ? '…' : '') : 'Your meal';
+  const title = c.title || (names.length ? names.slice(0, 3).join(', ').replace(/^./, (ch) => ch.toUpperCase()) + (names.length > 3 ? '…' : '') : 'Your meal');
   return { title, portions, totals, custom: true, manual: !!manual };
+}
+
+// Scale a list of {food, grams} so its calories land on `kcal`, rounding each to its slider
+// step and keeping it inside the slider's range.
+export function fitItems(items, kcal) {
+  const total = items.reduce((a, x) => a + (FOODS[x.food]?.kcal || 0) * x.grams / 100, 0);
+  if (!total || !kcal) return items.map((x) => ({ ...x }));
+  const k = kcal / total;
+  return items.map((x) => {
+    const f = FOODS[x.food];
+    if (!f) return { ...x };
+    const [lo, hi, step] = f.range || [0, 2000, 1];
+    const g = Math.round((x.grams * k) / step) * step;
+    return { ...x, grams: Math.min(Math.max(g, x.grams > 0 ? Math.max(lo, step) : 0), Math.max(hi, x.grams)) };
+  });
 }
 
 // Eating out: typical restaurant portions (regular size). Restaurant meals run large —

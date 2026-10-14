@@ -17,6 +17,9 @@ export const FOODS = {
   strawberries:{ name: 'Strawberries',            kcal: 32,  p: 0.7,  f: 0.3,  c: 7.7,  unit: { label: 'cup', grams: 152 },     range: [0, 250, 25] },
   banana:     { name: 'Banana',                   kcal: 89,  p: 1.1,  f: 0.3,  c: 22.8, unit: { label: 'banana', grams: 118 },  range: [0, 240, 20] },
   pb:         { name: 'Peanut butter',            kcal: 588, p: 25,   f: 50,   c: 20,   unit: { label: 'tbsp', grams: 16 },     range: [0, 48, 4] },
+  oatMilk:    { name: 'Oat milk',                 kcal: 50,  p: 1.3,  f: 2.9,  c: 6.7,  unit: { label: 'cup', grams: 240 },     range: [0, 480, 20] },
+  almondMilk: { name: 'Almond milk (unsweetened)', kcal: 15, p: 0.6,  f: 1.2,  c: 0.3,  unit: { label: 'cup', grams: 240 },     range: [0, 480, 20] },
+  milk2:      { name: '2% milk',                  kcal: 50,  p: 3.3,  f: 2.0,  c: 4.8,  unit: { label: 'cup', grams: 244 },     range: [0, 480, 20] },
   almondButter:{ name: 'Almond butter',           kcal: 614, p: 21,   f: 55.5, c: 18.8, unit: { label: 'tbsp', grams: 16 },     range: [0, 48, 4] },
   walnuts:    { name: 'Walnuts',                  kcal: 654, p: 15.2, f: 65.2, c: 13.7, unit: { label: 'oz', grams: 28 },       range: [0, 42, 3.5] },
   // Lunch & dinner proteins (cooked)
@@ -44,6 +47,7 @@ export const FOOD_GROUPS = {
   Protein: ['whey', 'eggWhites', 'egg', 'chicken', 'thigh', 'beef', 'steak', 'salmon', 'cod', 'trout', 'cheddar'],
   Carbs: ['oats', 'sourdough', 'wheatBread', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'banana'],
   'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'cauliflower', 'avocado'],
+  Milk: ['oatMilk', 'almondMilk', 'milk2'],
   Fats: ['almondButter', 'pb', 'walnuts', 'butter', 'oliveOil'],
 };
 
@@ -111,6 +115,9 @@ export const STORES = {
   frozenBerries:{ store: 'Costco', tip: 'Kirkland frozen organic mixed berries (unsweetened)', packGrams: 1810, packLabel: '4 lb bag' },
   strawberries:{ store: 'Sprouts', tip: 'Fresh or frozen strawberries', packGrams: 454, packLabel: '1 lb' },
   banana:      { store: 'Costco',  tip: 'Bananas (3 lb bunch)', packGrams: 1360, packLabel: 'bunch' },
+  oatMilk:     { store: 'Costco',  tip: 'Oatly or Califia oat milk (Costco multipacks)', packGrams: 1890, packLabel: 'half gallon' },
+  almondMilk:  { store: 'Costco',  tip: 'Kirkland unsweetened almond milk', packGrams: 946, packLabel: 'quart' },
+  milk2:       { store: 'Safeway', tip: '2% milk', packGrams: 1890, packLabel: 'half gallon' },
   almondButter:{ store: 'Costco',  tip: 'Kirkland almond butter', packGrams: 765, packLabel: '27 oz jar' },
   walnuts:     { store: 'Costco',  tip: 'Kirkland walnuts', packGrams: 1360, packLabel: '3 lb bag' },
   thigh:       { store: 'Costco',  tip: 'Kirkland boneless skinless chicken thighs', packGrams: 454, packLabel: 'lb' },
