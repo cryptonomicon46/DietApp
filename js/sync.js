@@ -14,7 +14,7 @@ export const sync = {
   // linking the two phones is typing one phone's code into the other (join).
   ensure() {
     if (this.settings() || !ownerId() || global.get('shareOff', false)) return false;
-    this.save({ url: DEFAULT_CONNECTOR, code: newHouseholdCode() });
+    this.save({ url: DEFAULT_CONNECTOR, code: householdCode(newHouseholdCode()) });
     return true;
   },
   // Link with another phone's code: this phone switches to exactly that code, and its old
@@ -116,14 +116,24 @@ export async function pushNow() {
   catch (err) { global.set('pushError', err.message); return false; }
 }
 
-// A typed code or phrase → the household code both phones use. Short phrases get a fixed
-// prefix so they meet the connector's 12-character minimum ("Nallanis" → "household-nallanis").
+// A typed code or phrase → the household code both phones use. Only letters and digits
+// count, so "The Nallanis", "the-nallanis" and "thenallanis" are the same household. Short
+// phrases get a fixed prefix to meet the connector's 12-character minimum.
 export function householdCode(input) {
-  let code = String(input || '').trim().toLowerCase().replace(/[\s_]+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
-  if (code.replace(/-/g, '').length < 6) return null;
-  if (code.length < 12) code = `household-${code}`;
+  let code = String(input || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (code.startsWith('household') && code.length > 'household'.length) code = code.slice('household'.length);
+  if (code.length < 6) return null;
+  if (code.length < 12) code = `household${code}`;
   return code.length <= 64 ? code : null;
 }
+
+// Codes saved by older versions (with hyphens) move to the same form, so two phones that
+// typed the same phrase differently end up together.
+(function normalizeSavedCode() {
+  const s = global.get('sync', null);
+  const code = s?.code && householdCode(s.code);
+  if (code && code !== s.code) global.set('sync', { ...s, code });
+})();
 
 export function newHouseholdCode() {
   const a = new Uint8Array(12);
