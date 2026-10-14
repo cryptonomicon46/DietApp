@@ -10,7 +10,7 @@ import {
 } from './activity.js';
 import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
-import { initNotes, renderNotes, updateNotesBadge } from './notes.js';
+import { initNotes, renderNotes, updateNotesBadge, openUs } from './notes.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile } from './storage.js';
@@ -1606,7 +1606,7 @@ document.querySelectorAll('.tabs button').forEach((btn) => {
     if (btn.dataset.tab !== 'scan') stopScan();
     if (btn.dataset.tab === 'lift') renderLift();
     if (btn.dataset.tab === 'notes') {
-      renderNotes();
+      openUs();
       if (sync.enabled()) sync.pull().then((changed) => changed && renderNotes()).catch(() => {});
     }
     if (btn.dataset.tab === 'weight' && state.profile) renderStats();

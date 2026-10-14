@@ -2,6 +2,7 @@
 // Each person's notes live in their own profile (so household sync carries them);
 // hearts you give the other person's notes live in yours.
 import { PROFILES, ownerId, profileStore, global } from './storage.js';
+import { renderPlans, initPlans, unreadPlans } from './plans.js';
 
 export const NOTE_EMOJI = ['❤️', '😘', '🥰', '😍', '💕', '🤗', '💪', '🔥', '🌟', '🎉', '☀️', '🌙', '🌸', '🍳', '🥗', '🍓', '☕', '😂', '🙏', '👏'];
 export const NOTE_COLORS = { yellow: 'Yellow', pink: 'Pink', blue: 'Blue', green: 'Green' };
@@ -33,11 +34,22 @@ export function noteStreak(notes, today = isoDate()) {
   return n;
 }
 
-export function unreadCount() {
+function unreadNotes() {
   const p = partner();
   if (!me() || !p) return 0;
   const seen = global.get('notesSeenAt', 0);
   return notesOf(p.id).filter((n) => n.at > seen).length;
+}
+export const unreadCount = () => unreadNotes() + unreadPlans();
+
+// The tab has two pages: notes and "feeling like" plans.
+let page = 'notes';
+
+// Opening the tab: jump to whichever page has something new.
+export function openUs() {
+  if (unreadPlans() && !unreadNotes()) page = 'plans';
+  else if (unreadNotes()) page = 'notes';
+  renderNotes();
 }
 
 export function updateNotesBadge() {
@@ -51,6 +63,10 @@ export function updateNotesBadge() {
 export function renderNotes() {
   const el = $('#notesBoard');
   if (!el || !me()) return;
+  const n = unreadNotes(), pl = unreadPlans();
+  $('#usPages').innerHTML = [['notes', '💌 Notes', n], ['plans', '✨ Feeling like', pl]].map(([k, label, c]) =>
+    `<button type="button" class="${k === page ? 'on' : ''}" data-page="${k}" aria-pressed="${k === page}">${label}${c && k !== page ? ` <b class="dot">${c}</b>` : ''}</button>`).join('');
+  if (page === 'plans') { renderPlans(el); updateNotesBadge(); return; }
   global.set('notesSeenAt', Date.now());
   updateNotesBadge();
   const p = partner();
@@ -114,6 +130,11 @@ export function renderNotes() {
 
 export function initNotes() {
   const root = $('#tab-notes');
+  initPlans(root, () => renderNotes());
+  $('#usPages').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-page]');
+    if (b) { page = b.dataset.page; renderNotes(); }
+  });
   root.addEventListener('click', (e) => {
     const t = e.target.closest('button');
     if (!t) return;
