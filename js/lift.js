@@ -161,7 +161,8 @@ export function applyActions(actions) {
       slot = (lastSlotId && slotById(lastSlotId)) || sessionSlots().find((s) => d.entries[s.id]?.sets.some((x) => x.r === ''));
     }
     if (!slot && a.exercise) {
-      const id = addExercise(a.exercise, lastSlotId || undefined, false);
+      const afterSlot = a.after && sessionSlots().find((s) => d.entries[s.id]?.exercise === a.after);
+      const id = addExercise(a.exercise, afterSlot?.id || lastSlotId || undefined, false);
       slot = slotById(id);
       if (a.type === 'add') { lines.push(`✓ ${describe(a)}`); lastSlotId = id; continue; }
     } else if (a.type === 'add') {
@@ -193,7 +194,7 @@ function runCommand(text) {
   const { actions, understood } = parseCommand(text, ids);
   if (!understood) {
     cmdFeedback = `<span class="tone-warn">Didn't catch that.</span> Try “bench 3 sets of 8 at 135” or “split squats 40 for 10, 10, 8”.`;
-    window.dispatchEvent(new CustomEvent('lp:assistant', { detail: { text, context: { exercises: ids, day: lift.draft.day } } }));
+    window.dispatchEvent(new CustomEvent('lp:assistant', { detail: { text, message: cmdFeedback, context: { exercises: ids, day: lift.draft.day } } }));
   } else {
     cmdFeedback = `${applyActions(actions).map(esc).join('<br>')} <button type="button" class="linkish" id="cmdUndo">Undo</button>`;
   }

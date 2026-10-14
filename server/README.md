@@ -31,6 +31,7 @@ code can't read it. Treat the code like a password.
 2. **Deploy the worker**
    ```sh
    cd server
+   npm install                                   # bundles the Claude SDK (used only by "Ask Claude")
    npx wrangler login
    npx wrangler kv namespace create HOUSEHOLD     # paste the printed id into wrangler.toml
    npx wrangler deploy
@@ -46,3 +47,28 @@ code can't read it. Treat the code like a password.
 4. **WHOOP / Garmin (optional):** in **Devices**, paste the worker URL and tap
    **Connect WHOOP** / **Connect Garmin (Strava)**. Sharing alone needs only `APP_ORIGIN`;
    the WHOOP/Strava secrets are only needed for those connections.
+
+## Ask Claude (optional)
+
+The Lift tab understands commands like "squats 3 sets of 5 at 185" on the phone itself.
+When it can't parse a sentence ("after the squats I did the rear-foot-elevated thing, ten,
+ten, eight with forties"), it sends the sentence and today's exercise list to this worker's
+`/assistant` route, which asks Claude (`claude-opus-5-5`, low effort) to turn it into sets,
+added exercises or a weigh-in. You get an **Undo** button as with any command.
+
+```sh
+cd server
+npm install
+npx wrangler secret put ANTHROPIC_API_KEY --name lean-plate-connect   # paste the key only into this prompt
+npx wrangler deploy
+```
+
+- Get a key at <https://console.anthropic.com> → API keys. It lives only in Cloudflare's
+  secret store, never in the app or the repo.
+- Only phones with household sharing turned on can use it: the worker checks that your
+  household code already has data, so strangers can't spend your credit.
+- Cost: roughly 1–3¢ per command, and only for commands the phone couldn't parse itself.
+  Set a monthly spend limit in the Anthropic console if you want a hard cap.
+- Refusal fallback is on (`fallbacks: "default"`): if Claude's safety filters ever decline
+  a request, the API retries it on Anthropic's recommended fallback model automatically.
+- Without the key, everything else works; unparsed commands just show a hint.

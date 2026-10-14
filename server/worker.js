@@ -7,7 +7,10 @@
 //
 // Env vars: APP_ORIGIN (e.g. https://you.github.io/DietApp/),
 //           WHOOP_CLIENT_ID, WHOOP_CLIENT_SECRET,
-//           STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET
+//           STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET,
+//           ANTHROPIC_API_KEY (optional: "Ask Claude" for workout commands)
+
+import { assist } from './assistant.js';
 
 const WHOOP = {
   auth: 'https://api.prod.whoop.com/oauth/oauth2/auth',
@@ -53,6 +56,21 @@ export default {
           return json({ ok: true });
         }
         return json({ error: 'method not allowed' }, 405);
+      }
+
+      // ---- Ask Claude: POST /assistant {code, text, context} ----
+      // Only households that already share data can use it, so a stranger can't spend your API credit.
+      if (url.pathname === '/assistant') {
+        if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+        if (!env.ANTHROPIC_API_KEY) return json({ error: 'Claude is not set up on your connector — see server/README.md' }, 501);
+        const body = await req.json().catch(() => ({}));
+        const code = String(body.code || '');
+        const text = String(body.text || '').trim();
+        if (!text || text.length > 500) return json({ error: 'say a short command' }, 400);
+        const known = /^[a-z0-9-]{12,64}$/.test(code) && env.HOUSEHOLD
+          && (await env.HOUSEHOLD.list({ prefix: `${code}:`, limit: 1 })).keys.length > 0;
+        if (!known) return json({ error: 'turn on household sharing first' }, 403);
+        return json(await assist(env, { text, context: body.context || {} }));
       }
 
       switch (url.pathname) {

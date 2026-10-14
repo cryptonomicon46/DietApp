@@ -10,7 +10,7 @@ import {
 } from './activity.js';
 import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
-import { initLift, renderLift } from './lift.js';
+import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile } from './storage.js';
 import { sync, newHouseholdCode } from './sync.js';
@@ -1696,6 +1696,28 @@ window.addEventListener('lp:weighin', (e) => {
   state.weights = state.weights.filter((x) => x.date !== date).concat({ date, weight: +e.detail }).sort((a, b) => a.date.localeCompare(b.date));
   store.set('weights', state.weights);
   renderAll();
+});
+// Commands the phone couldn't parse go to Claude through the connector (needs household sharing).
+window.addEventListener('lp:assistant', async (e) => {
+  const s = sync.settings();
+  if (!sync.enabled()) {
+    setCommandFeedback(`${e.detail.message}<br><span class="muted">Turn on household sharing in Devices to let Claude handle commands like this.</span>`);
+    return;
+  }
+  setCommandFeedback('<span class="muted">Asking Claude…</span>');
+  try {
+    const res = await fetch(`${s.url}/assistant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: s.code, text: e.detail.text, context: e.detail.context }),
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || `Claude request failed (${res.status})`);
+    if (out.actions?.length) applyAssistantActions(out.actions, out.note ? `Claude: ${out.note}` : 'via Claude');
+    else setCommandFeedback(`<span class="tone-warn">${esc(out.note || 'Claude didn\'t find anything to log.')}</span>`);
+  } catch (err) {
+    setCommandFeedback(`<span class="tone-warn">${esc(err.message)}</span> Try “bench 3 sets of 8 at 135”.`);
+  }
 });
 $('#dayBar').onclick = () => { document.querySelector('[data-tab=today]').click(); };
 $('#weighDate').value = isoDate();
