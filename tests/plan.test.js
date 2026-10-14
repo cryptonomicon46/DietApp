@@ -151,3 +151,14 @@ test('broccoli and cauliflower swap in for mixed veggies', async () => {
   assert.deepEqual(veg.options, ['veggies', 'broccoli', 'cauliflower']);
   assert.ok(FOODS.cauliflower.kcal < FOODS.broccoli.kcal);
 });
+
+test('eating out: estimates and menu numbers', async () => {
+  const { eatOutMeal, EAT_OUT } = await import('../js/plan.js');
+  const est = eatOutMeal({ eatout: { mode: 'estimate', dish: 'burger', size: 'large', ate: 0.5, place: 'Five Guys' } });
+  assert.equal(est.totals.kcal, Math.round(EAT_OUT.burger.kcal * 1.3 * 0.5));
+  assert.match(est.title, /Ate out at Five Guys: burger & fries/);
+  const menu = eatOutMeal({ eatout: { mode: 'menu', menu: { kcal: 800, p: 45, f: '', c: '' } } });
+  assert.equal(menu.totals.kcal, 800);
+  assert.equal(menu.totals.p, 45);
+  assert.equal(menu.totals.f, Math.round(800 * 0.4 / 9));
+});

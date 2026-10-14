@@ -211,6 +211,49 @@ export function customMeal(c, target) {
   return { title, portions, totals, custom: true, manual: !!manual };
 }
 
+// Eating out: typical restaurant portions (regular size). Restaurant meals run large —
+// non-chain meals average ~1,200 kcal (Urban 2016) — so these lean generous on oil/butter.
+export const EAT_OUT = {
+  grilled:   { label: 'Grilled protein & veggies',          kcal: 650,  p: 50, f: 35, c: 30 },
+  plate:     { label: 'Protein, rice/potato & veggies',      kcal: 900,  p: 50, f: 35, c: 90 },
+  steak:     { label: 'Steak dinner with a side',            kcal: 1200, p: 70, f: 70, c: 60 },
+  salad:     { label: 'Entrée salad with protein & dressing', kcal: 700, p: 40, f: 45, c: 30 },
+  bowl:      { label: 'Burrito or rice bowl',                kcal: 1000, p: 45, f: 35, c: 120 },
+  asian:     { label: 'Stir-fry or curry with rice',         kcal: 1000, p: 40, f: 40, c: 115 },
+  sushi:     { label: 'Sushi (about 3 rolls)',               kcal: 900,  p: 35, f: 20, c: 140 },
+  sandwich:  { label: 'Sandwich or wrap & a side',           kcal: 900,  p: 40, f: 40, c: 90 },
+  burger:    { label: 'Burger & fries',                      kcal: 1300, p: 45, f: 65, c: 130 },
+  pizza:     { label: 'Pizza (3 slices)',                    kcal: 900,  p: 40, f: 35, c: 105 },
+  pasta:     { label: 'Pasta dish',                          kcal: 1100, p: 40, f: 45, c: 130 },
+  brunch:    { label: 'Brunch plate (eggs, toast, potatoes)', kcal: 900, p: 35, f: 50, c: 75 },
+};
+export const EAT_OUT_SIZE = { light: { label: 'Light', x: 0.75 }, regular: { label: 'Regular', x: 1 }, large: { label: 'Large', x: 1.3 } };
+export const EAT_OUT_ATE = { 1: 'All of it', 0.75: 'Most', 0.5: 'Half' };
+
+// c.eatout = {place, mode: 'estimate'|'menu', dish, size, ate, menu: {kcal, p, f, c}}
+export function eatOutMeal(c, target) {
+  const e = c.eatout || {};
+  let totals;
+  if (e.mode === 'menu') {
+    const m = e.menu || {};
+    const kcal = +m.kcal || 0;
+    // Only calories known: assume a typical restaurant split (25% protein, 40% fat, 35% carbs).
+    totals = {
+      kcal,
+      p: m.p !== '' && m.p != null ? +m.p : kcal * 0.25 / 4,
+      f: m.f !== '' && m.f != null ? +m.f : kcal * 0.40 / 9,
+      c: m.c !== '' && m.c != null ? +m.c : kcal * 0.35 / 4,
+    };
+  } else {
+    const d = EAT_OUT[e.dish] || EAT_OUT.plate;
+    const x = (EAT_OUT_SIZE[e.size] || EAT_OUT_SIZE.regular).x * (+e.ate || 1);
+    totals = { kcal: d.kcal * x, p: d.p * x, f: d.f * x, c: d.c * x };
+  }
+  for (const k in totals) totals[k] = Math.round(totals[k]);
+  const what = e.mode === 'menu' ? (e.dishName || 'from the menu') : (EAT_OUT[e.dish] || EAT_OUT.plate).label.toLowerCase();
+  return { title: `Ate out${e.place ? ` at ${e.place}` : ''}: ${what}`, portions: [], totals, custom: true, eatout: true };
+}
+
 // Deterministic rotation so each day looks different.
 export function dayIndex(date) {
   const d = new Date(date);
@@ -226,7 +269,8 @@ export function planForDay(dayTargets, date, custom = {}, prefs = {}) {
   const bKey = BREAKFASTS[custom.breakfast?.template] ? custom.breakfast.template : bKeys[n % bKeys.length];
   const merge = (prefKey, c = {}, extra = {}) => ({ picks: { ...extra, ...prefs[prefKey], ...c.picks }, grams: c.grams });
   const rotate = (offset) => ({ protein: PROTEINS[(n + offset) % PROTEINS.length] });
-  const build = (name, auto) => (custom[name]?.items ? customMeal(custom[name], meals[name]) : auto());
+  const build = (name, auto) => (custom[name]?.eatout ? eatOutMeal(custom[name], meals[name])
+    : custom[name]?.items ? customMeal(custom[name], meals[name]) : auto());
   return {
     breakfast: { template: bKey, target: meals.breakfast, ...build('breakfast', () => portionMeal(BREAKFASTS[bKey], meals.breakfast, merge(bKey, custom.breakfast))) },
     lunch: { target: meals.lunch, ...build('lunch', () => portionMeal(MAIN_MEAL, meals.lunch, merge('main', custom.lunch, rotate(0)))) },

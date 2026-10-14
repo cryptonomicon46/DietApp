@@ -412,3 +412,12 @@ dialog.review { width: min(520px, calc(100vw - 24px)); }
 .plan-note { margin-top: 4px; font-style: italic; }
 .plan-reply { margin-top: 6px; }
 .past-plans summary { cursor: pointer; }
+/* Eating out */
+.eatout { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.eatout > input, .eatout > select { width: 100%; }
+.eo-seg { display: flex; width: 100%; }
+.eo-seg button { flex: 1; }
+.eatout p { margin: 2px 0; }
+.reply-to { background: var(--bg); border-radius: 8px; padding: 6px 8px; margin-top: 8px; }
+.postit-quote { font-size: .75rem; opacity: .75; margin-bottom: 6px; font-style: italic; overflow-wrap: anywhere; }
+.postit .reply { background: none; border: none; padding: 2px 4px; color: var(--note-ink); font-size: 1rem; font-weight: 700; }

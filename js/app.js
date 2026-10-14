@@ -3,6 +3,7 @@ import {
   ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
   FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek,
+  EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE,
 } from './plan.js';
 import {
   SESSION_TYPES, SPORTS, INTENSITY, trainingDay, applyTraining, parseGarminCsv, parseWhoopCsv,
@@ -280,13 +281,40 @@ function mealCard(meal, m) {
           ${meal === 'breakfast' ? `<select class="small-select" data-template aria-label="Breakfast type">
             ${Object.entries(MEAL_TEMPLATES).map(([k, v]) => `<option value="${k}" ${m.template === k ? 'selected' : ''}>${v}</option>`).join('')}
           </select>` : ''}
-          ${m.custom ? '' : '<button class="ghost small" data-customize title="Build this meal yourself">✎ Customize</button>'}
+          ${m.custom ? '' : '<button class="ghost small" data-customize title="Build this meal yourself">✎ Customize</button><button class="ghost small" data-eatout title="Log a restaurant meal">🍴 Ate out</button>'}
           <button class="ghost small" data-reset ${edited ? '' : 'hidden'}>${m.custom ? 'Back to plan' : 'Reset'}</button>
         </div>
       </div>
       <div class="meal-macros" data-role="totals">${totalsLine(m)}${m.manual ? ' <small class="muted">(your numbers)</small>' : ''}</div>
-      ${m.custom ? customBody(meal, m) : `<ul class="portions editable">${m.portions.map((x) => itemRow(x)).join('')}</ul>`}
+      ${m.eatout ? eatOutBody(meal, m) : m.custom ? customBody(meal, m) : `<ul class="portions editable">${m.portions.map((x) => itemRow(x)).join('')}</ul>`}
       ${eatButton(meal)}
+    </div>`;
+}
+
+// ---- eating out ----
+function eatOutBody(meal, m) {
+  const e = todaysCustom()[meal]?.eatout || {};
+  const menu = e.mode === 'menu';
+  const seg = (field, options, value) => `<div class="seg eo-seg">${Object.entries(options).map(([k, v]) =>
+    `<button type="button" class="${String(k) === String(value) ? 'on' : ''}" data-eoset="${field}:${k}">${esc(v.label || v)}</button>`).join('')}</div>`;
+  const over = m.totals.kcal - m.target.kcal;
+  return `
+    <div class="eatout">
+      <input data-eo="place" maxlength="60" placeholder="Restaurant (optional)" value="${esc(e.place || '')}" aria-label="Restaurant">
+      ${seg('mode', { estimate: 'Estimate it', menu: 'Menu lists calories' }, e.mode || 'estimate')}
+      ${menu ? `
+        <input data-eo="dishName" maxlength="60" placeholder="What you ordered (optional)" value="${esc(e.dishName || '')}" aria-label="Dish">
+        <div class="manual-grid">
+          ${[['kcal', 'Calories'], ['p', 'Protein g'], ['f', 'Fat g'], ['c', 'Carbs g']].map(([k, label]) =>
+            `<label>${label}<input type="number" min="0" inputmode="decimal" data-eomenu="${k}" value="${e.menu?.[k] ?? ''}" placeholder="${k === 'kcal' ? 'e.g. 850' : 'optional'}"></label>`).join('')}
+        </div>
+        <p class="small muted">Chains post calories on the menu or their website. Only know calories? The macros are filled in with a typical restaurant split.</p>`
+      : `
+        <select data-eo="dish" aria-label="What you had">${Object.entries(EAT_OUT).map(([k, v]) => `<option value="${k}" ${k === (e.dish || 'plate') ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select>
+        <div class="small muted" style="margin-top:6px">Portion</div>${seg('size', EAT_OUT_SIZE, e.size || 'regular')}
+        <div class="small muted" style="margin-top:6px">How much you ate</div>${seg('ate', EAT_OUT_ATE, e.ate || 1)}
+        <p class="small muted">Restaurant food usually has more oil and butter than it looks, so these estimates lean generous.</p>`}
+      ${over > 100 ? `<p class="small">That's about <b>${over} kcal</b> over this meal's target. No stress: one meal doesn't make or break a week. Keep the rest of today light and protein-first.</p>` : ''}
     </div>`;
 }
 
@@ -375,7 +403,16 @@ $('#meals').addEventListener('click', (e) => {
   const card = e.target.closest('.meal');
   if (!card) return;
   const meal = card.dataset.meal;
-  if (e.target.closest('[data-customize]')) {
+  if (e.target.closest('[data-eatout]')) {
+    editMeal(meal, (c) => { delete c.items; delete c.manual; c.eatout = { mode: 'estimate', dish: meal === 'breakfast' ? 'brunch' : 'plate', size: 'regular', ate: 1 }; });
+    resnap(meal);
+    renderToday();
+  } else if (e.target.closest('[data-eoset]')) {
+    const [field, value] = e.target.closest('[data-eoset]').dataset.eoset.split(':');
+    editMeal(meal, (c) => { c.eatout = { ...c.eatout, [field]: field === 'ate' ? +value : value }; });
+    resnap(meal);
+    renderToday();
+  } else if (e.target.closest('[data-customize]')) {
     const m = todayPlan()[meal];
     editMeal(meal, (c) => {
       if (meal === 'breakfast') c.template = m.template;
@@ -394,7 +431,9 @@ $('#meals').addEventListener('change', (e) => {
   const card = e.target.closest('.meal');
   if (!card) return;
   const meal = card.dataset.meal;
-  if (e.target.dataset.cfood != null) {
+  if (e.target.dataset.eo === 'dish') {
+    editMeal(meal, (c) => { c.eatout = { ...c.eatout, dish: e.target.value }; });
+  } else if (e.target.dataset.cfood != null) {
     const i = +e.target.dataset.cfood;
     editCustom(meal, (c) => { c.items[i].food = e.target.value; });
   } else if (e.target.dataset.cadd != null) {
@@ -410,7 +449,13 @@ $('#meals').addEventListener('input', (e) => {
   const card = e.target.closest('.meal');
   if (!card) return;
   const meal = card.dataset.meal;
-  if (e.target.dataset.cgrams != null) {
+  if (e.target.dataset.eo === 'place' || e.target.dataset.eo === 'dishName') {
+    const k = e.target.dataset.eo;
+    editMeal(meal, (c) => { c.eatout = { ...c.eatout, [k]: e.target.value }; });
+  } else if (e.target.dataset.eomenu) {
+    const k = e.target.dataset.eomenu;
+    editMeal(meal, (c) => { c.eatout = { ...c.eatout, menu: { ...c.eatout.menu, [k]: e.target.value === '' ? '' : +e.target.value } }; });
+  } else if (e.target.dataset.cgrams != null) {
     const i = +e.target.dataset.cgrams;
     editCustom(meal, (c) => { c.items[i].grams = Math.max(0, +e.target.value || 0); });
   } else if (e.target.dataset.manual) {

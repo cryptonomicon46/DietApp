@@ -18,6 +18,7 @@ const nameOf = (id) => profileStore(id).get('profile', null)?.name || PROFILES.f
 const notesOf = (id) => profileStore(id).get('notes', []);
 
 let color = 'yellow';
+let replyTo = null; // the note you're answering, if any
 
 // All notes from both people, newest first.
 export function allNotes() {
@@ -95,6 +96,7 @@ export function renderNotes() {
         ${streak ? `<span class="pill">💌 ${streak} day${streak > 1 ? 's' : ''}</span>` : ''}
       </div>
       <form id="noteForm">
+        ${replyTo ? `<div class="reply-to small">↩ Replying to ${esc(nameOf(replyTo.from))}: “${esc(replyTo.text.slice(0, 60))}${replyTo.text.length > 60 ? '…' : ''}” <button type="button" class="linkish" data-cancelreply>Cancel</button></div>` : ''}
         <textarea id="noteText" maxlength="${MAX}" rows="3" placeholder="Proud of you for hitting your protein today 💪" aria-label="Your note"></textarea>
         <div class="emoji-row" role="group" aria-label="Add an emoji">
           ${NOTE_EMOJI.map((e) => `<button type="button" class="emoji" data-emoji="${e}" aria-label="Add ${e}">${e}</button>`).join('')}
@@ -115,13 +117,15 @@ export function renderNotes() {
         ${notes.map((n, i) => {
           const own = n.from === me();
           const heart = own ? theirHearts[n.id] : hearts[n.id];
+          const re = n.replyTo && allNotes().find((x) => x.id === n.replyTo.id && x.from === n.replyTo.from);
           return `<figure class="postit note-${NOTE_COLORS[n.color] ? n.color : 'yellow'}" style="--tilt:${((n.at % 7) - 3) * 0.6}deg">
+            ${re ? `<div class="postit-quote">↩ “${esc(re.text.slice(0, 50))}${re.text.length > 50 ? '…' : ''}”</div>` : ''}
             <blockquote>${esc(n.text)}</blockquote>
             <figcaption>
               <span>${own ? 'You' : esc(nameOf(n.from))} · ${new Date(n.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
               ${own
                 ? `${heart ? `<span class="heart-got" title="${esc(pName)} loved this">${heart}</span>` : ''}<button type="button" class="x" data-delnote="${esc(n.id)}" aria-label="Delete note">✕</button>`
-                : `<button type="button" class="heart ${heart ? 'on' : ''}" data-heart="${esc(n.id)}" aria-label="${heart ? 'Remove heart' : 'Heart this note'}">${heart || '🤍'}</button>`}
+                : `<button type="button" class="reply" data-reply-note="${esc(n.id)}" aria-label="Reply">↩</button><button type="button" class="heart ${heart ? 'on' : ''}" data-heart="${esc(n.id)}" aria-label="${heart ? 'Remove heart' : 'Heart this note'}">${heart || '🤍'}</button>`}
             </figcaption>
           </figure>`;
         }).join('')}
@@ -148,6 +152,15 @@ export function initNotes() {
     } else if (t.dataset.color) {
       color = t.dataset.color;
       root.querySelectorAll('[data-color]').forEach((b) => { b.classList.toggle('on', b === t); b.setAttribute('aria-checked', b === t); });
+    } else if (t.dataset.replyNote) {
+      const n = allNotes().find((x) => x.id === t.dataset.replyNote && x.from !== me());
+      replyTo = n ? { id: n.id, from: n.from, text: n.text } : null;
+      renderNotes();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      $('#noteText')?.focus();
+    } else if (t.dataset.cancelreply != null) {
+      replyTo = null;
+      renderNotes();
     } else if (t.dataset.delnote) {
       const s = profileStore(me());
       s.set('notes', s.get('notes', []).filter((n) => n.id !== t.dataset.delnote));
@@ -171,7 +184,8 @@ export function initNotes() {
     const s = profileStore(me());
     const now = Date.now();
     // Keep the last ~200 notes so synced data stays small.
-    s.set('notes', [...s.get('notes', []), { id: now.toString(36), text, color, at: now, date: isoDate() }].slice(-200));
+    s.set('notes', [...s.get('notes', []), { id: now.toString(36), text, color, at: now, date: isoDate(), ...(replyTo ? { replyTo: { id: replyTo.id, from: replyTo.from } } : {}) }].slice(-200));
+    replyTo = null;
     renderNotes();
   });
 }
