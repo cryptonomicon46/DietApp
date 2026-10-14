@@ -80,3 +80,14 @@ test('check commands', () => {
   assert.deepEqual(one('check everything'), { type: 'check', all: true });
   assert.equal(one('squats 3 sets of 5 at 185').type, 'sets');
 });
+
+test('move up and down', () => {
+  const ids = ['legPress', 'standingCalf', 'cableCrunch'];
+  const one = (t) => parseCommand(t, ids).actions[0];
+  assert.deepEqual(one('move calves up'), { type: 'move', muscle: 'calves', to: 'up', steps: 1 });
+  assert.deepEqual(one('move calves up two spots'), { type: 'move', muscle: 'calves', to: 'up', steps: 2 });
+  assert.deepEqual(one('move exercise 4 down'), { type: 'move', index: 4, to: 'down', steps: 1 });
+  assert.deepEqual(one('move the last one up'), { type: 'move', index: -1, to: 'up', steps: 1 });
+  assert.deepEqual(one('move exercise 3 before exercise 1'), { type: 'move', index: 3, before: { index: 1 } });
+  assert.deepEqual(one('move leg press down'), { type: 'move', exercise: 'legPress', to: 'down', steps: 1 });
+});

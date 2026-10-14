@@ -227,12 +227,22 @@ export function applyActions(actions) {
       continue;
     }
     if (a.type === 'move') {
-      const find = (ex) => sessionSlots().find((s) => d.entries[s.id]?.exercise === ex);
-      const slot = find(a.exercise);
+      const all = sessionSlots();
+      // A target is an exercise id, or {exercise} / {muscle} / {index} from the parser.
+      const find = (t) => {
+        if (typeof t === 'string') t = { exercise: t };
+        if (t.index) return t.index === -1 ? all.at(-1) : all[t.index - 1];
+        if (t.muscle) return all.find((x) => EXERCISES[d.entries[x.id]?.exercise]?.muscle === t.muscle);
+        return all.find((x) => d.entries[x.id]?.exercise === t.exercise);
+      };
+      const slot = find(a);
       const other = a.after || a.before ? find(a.after || a.before) : null;
-      if (!slot || ((a.after || a.before) && !other)) { lines.push(`• ${EXERCISES[a.exercise && !slot ? a.exercise : a.after || a.before].name} isn't in today's session`); continue; }
-      moveExercise(slot.id, a.after ? { after: other.id } : a.before ? { before: other.id } : { to: a.to });
-      lines.push(`✓ ${describe(a)}`);
+      if (!slot || ((a.after || a.before) && !other)) { lines.push(`• Couldn't find ${!slot ? 'that exercise' : 'where to put it'} in today's session`); continue; }
+      if (a.to === 'up' || a.to === 'down') for (let k = 0; k < (a.steps || 1); k++) moveExercise(slot.id, { to: a.to });
+      else moveExercise(slot.id, a.after ? { after: other.id } : a.before ? { before: other.id } : { to: a.to });
+      const pos = sessionSlots().findIndex((x) => x.id === slot.id) + 1;
+      lines.push(`✓ ${describe(a)}: ${EXERCISES[d.entries[slot.id].exercise].name} is now #${pos}`);
+      lastSlotId = slot.id;
       continue;
     }
     let slot = a.exercise ? sessionSlots().find((s) => d.entries[s.id]?.exercise === a.exercise) : null;

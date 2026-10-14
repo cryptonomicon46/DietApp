@@ -76,7 +76,7 @@ export const TOOLS = [
       additionalProperties: false,
       properties: {
         exercise_id: { type: 'string', enum: IDS, description: 'Exercise to move (must be in today\'s session).' },
-        position: { type: 'string', enum: ['after', 'before', 'start', 'end'] },
+        position: { type: 'string', enum: ['after', 'before', 'start', 'end', 'up', 'down'], description: 'up/down move one place.' },
         other_exercise_id: { type: ['string', 'null'], enum: [...IDS, null], description: 'For after/before: the session exercise it moves next to. null for start/end.' },
       },
       required: ['exercise_id', 'position', 'other_exercise_id'],

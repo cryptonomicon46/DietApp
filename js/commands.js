@@ -135,42 +135,57 @@ export function parseCommand(input, sessionIds = []) {
 // Muscle words people say → muscle keys.
 const MUSCLE_WORDS = [
   [/\b(quads?|quadriceps|legs?)\b/, 'quads'], [/\b(hamstrings?|hams|glutes?)\b/, 'hams'], [/\b(chest|pecs?)\b/, 'chest'],
-  [/\b(lats?)\b/, 'lats'], [/\b(back|rows?)\b/, 'back'], [/\b(shoulders?|delts?)\b/, 'shoulders'],
+  [/\b(lats?)\b/, 'lats'], [/\b(back)\b/, 'back'], [/\b(shoulders?|delts?)\b/, 'shoulders'],
   [/\b(biceps?|bis)\b/, 'biceps'], [/\b(triceps?|tris)\b/, 'triceps'], [/\b(calf|calves)\b/, 'calves'], [/\b(abs|core)\b/, 'abs'],
 ];
 const ORDINALS = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10, last: -1 };
+
+// Which exercise a phrase means: {index} ("exercise 3", "the last one"), {muscle} ("calves"),
+// or {exercise} ("calf raises", "back squats").
+const FILLER = /\b(check|tick|mark|complete|completed|done|finished|finish|move|shift|bump|push|put|do|all|my|sets?|the|for|with|off|as|of|i|did|am|i'm)\b/g;
+function parseTarget(text, sessionIds) {
+  const num = text.match(/(?:exercise|number|no\.?|#)\s*(\d+)|(\d+)(?:st|nd|rd|th)\s+(?:exercise|one|1)\b|\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last)\s+(?:exercise|one|1)\b/);
+  if (num) return { index: num[3] ? ORDINALS[num[3]] : +(num[1] || num[2]) };
+  const muscle = MUSCLE_WORDS.find(([re]) => re.test(text));
+  const rest = text.replace(FILLER, ' ');
+  const exercise = matchExercise(rest, sessionIds);
+  // "calves" alone means every calf exercise; "calf raises" or "back squats" names one exercise.
+  const extra = muscle ? rest.replace(muscle[0], ' ').trim() : 'x';
+  if (exercise && extra) return { exercise };
+  if (muscle) return { muscle: muscle[1] };
+  return null;
+}
 
 // "check all my sets for calves" / "done with exercise 3" / "tick squats" / "check everything"
 function parseCheck(clause, sessionIds) {
   if (!/\b(check|tick|mark|complete|completed|done|finished|finish)\b/.test(clause)) return null;
   if (/\b(sets? of|reps?\b.*\d|\d+\s*x\s*\d)/.test(clause) && !/\ball\b/.test(clause)) return null;
-  const num = clause.match(/(?:exercise|number|no\.?|#)\s*(\d+)|(\d+)(?:st|nd|rd|th)\s+exercise|\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last)\s+(?:exercise|one)/);
-  if (num) return { type: 'check', index: num[3] ? ORDINALS[num[3]] : +(num[1] || num[2]) };
-  const muscle = MUSCLE_WORDS.find(([re]) => re.test(clause));
-  const rest = clause.replace(/\b(check|tick|mark|complete|completed|done|finished|finish|all|my|sets?|the|for|with|off|as|of|i|did|am|i'm)\b/g, ' ');
-  const exercise = matchExercise(rest, sessionIds);
-  // "calves" alone ticks every calf exercise; "calf raises" or "back squats" names one exercise.
-  const extra = muscle ? rest.replace(muscle[0], ' ').trim() : 'x';
-  if (exercise && extra) return { type: 'check', exercise };
-  if (muscle) return { type: 'check', muscle: muscle[1] };
+  const target = parseTarget(clause, sessionIds);
+  if (target) return { type: 'check', ...target };
   if (/\b(all|everything|every set|whole workout)\b/.test(clause)) return { type: 'check', all: true };
   return null;
 }
 
-// "move rows after squats" / "do lunges before bench" / "RDLs last" / "move curls to the end"
+// "move calves up" / "move exercise 4 down 2" / "move rows after squats" / "do RDLs last" / "bench first"
 function parseMove(clause, sessionIds) {
-  const rel = clause.match(/^(?:move|do|put|switch)?\s*(.+?)\s+(after|before)\s+(?:the\s+)?(.+)$/);
-  if (rel && /^(move|do|put|switch)\b/.test(clause) && !/\d/.test(clause)) {
-    const exercise = matchExercise(rel[1], sessionIds);
-    const other = matchExercise(rel[3], sessionIds);
-    if (exercise && other && exercise !== other) return { type: 'move', exercise, [rel[2]]: other };
+  if (/\b(sets? of|reps?\b|\d+\s*x\s*\d|at \d)/.test(clause)) return null;
+  const verb = /^(move|shift|bump|push|put|do|switch|swap)\b/.test(clause);
+  const rel = clause.match(/^(?:move|do|put|switch|shift)\s+(.+?)\s+(after|before)\s+(.+)$/);
+  if (rel) {
+    const t = parseTarget(rel[1], sessionIds), o = parseTarget(rel[3], sessionIds);
+    if (t && o) return { type: 'move', ...t, [rel[2]]: o.exercise || o };
   }
-  const end = clause.match(/^(?:move|do|put|save)?\s*(.+?)\s+(?:to the end|to the bottom|last|at the end|later)$/);
+  const ud = clause.match(/^(?:move|shift|bump|push)\s+(.+?)\s+(up|down|earlier|higher|lower)(?:\s+(?:by\s+)?(\d+)(?:\s+(?:spots?|places?|positions?|slots?))?)?$/);
+  if (ud) {
+    const t = parseTarget(ud[1], sessionIds);
+    if (t) return { type: 'move', ...t, to: /up|earlier|higher/.test(ud[2]) ? 'up' : 'down', steps: Math.min(+(ud[3] || 1), 20) };
+  }
+  const end = clause.match(/^(?:move|do|put|save|push)?\s*(.+?)\s+(?:to the end|to the bottom|last|at the end|later)$/);
   const start = clause.match(/^(?:move|do|put)?\s*(.+?)\s+(?:to the top|to the start|first|next|now)$/);
   const m = end || start;
-  if (m && !/\d/.test(clause)) {
-    const exercise = matchExercise(m[1], sessionIds);
-    if (exercise) return { type: 'move', exercise, to: end ? 'end' : 'start' };
+  if (m && (verb || !/\d/.test(clause))) {
+    const t = parseTarget(m[1], sessionIds);
+    if (t) return { type: 'move', ...t, to: end ? 'end' : 'start' };
   }
   return null;
 }
@@ -184,8 +199,11 @@ export function describe(a) {
     return `Checked ${what}`;
   }
   if (a.type === 'move') {
-    if (a.after || a.before) return `Moved ${name} ${a.after ? 'after' : 'before'} ${EXERCISES[a.after || a.before].name}`;
-    return `Moved ${name} to the ${a.to === 'end' ? 'end' : 'start'}`;
+    const label = (t) => (typeof t === 'string' ? EXERCISES[t].name : t.index ? `exercise ${t.index === -1 ? '(last)' : t.index}` : t.muscle ? MUSCLES[t.muscle] : EXERCISES[t.exercise].name);
+    const what = label(a.exercise ? a.exercise : a);
+    if (a.after || a.before) return `Moved ${what} ${a.after ? 'after' : 'before'} ${label(a.after || a.before)}`;
+    if (a.to === 'up' || a.to === 'down') return `Moved ${what} ${a.to}${a.steps > 1 ? ` ${a.steps} places` : ''}`;
+    return `Moved ${what} to the ${a.to === 'end' ? 'end' : 'start'}`;
   }
   const ws = [...new Set(a.sets.map((s) => s.w))];
   const reps = a.sets.map((s) => s.r).join(', ');
