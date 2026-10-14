@@ -7,7 +7,9 @@ import { store } from './storage.js';
 const load = () => store.get('lift', {});
 const save = () => store.set('lift', lift);
 
-let lift = { block: 1, choices: {}, sessions: [], draft: null, ...load() };
+// extraSets: {slotId: +n/−n} sets you added or removed, remembered for next time.
+let lift = { block: 1, choices: {}, extraSets: {}, sessions: [], draft: null, ...load() };
+lift.extraSets ||= {};
 let libraryMuscle = 'quads';
 
 const $ = (sel) => document.querySelector(sel);
@@ -30,7 +32,7 @@ function startDraft(day, week) {
 
 function newSets(exercise, slot, week, index) {
   const s = suggestLoad(exercise, slot, lift.sessions, week);
-  return Array.from({ length: setsFor(slot, week, index) }, () => ({ w: s.weight ?? '', r: '', done: false }));
+  return Array.from({ length: setsFor(slot, week, index, lift.extraSets[slot.id] || 0) }, () => ({ w: s.weight ?? '', r: '', done: false }));
 }
 
 export function renderLift() {
@@ -38,7 +40,7 @@ export function renderLift() {
   if (!lift.draft) startDraft(pos.day, pos.week);
   const d = lift.draft;
   const wk = WEEKS[d.week - 1];
-  const vol = weeklySets(d.week);
+  const vol = weeklySets(d.week, lift.extraSets);
 
   $('#liftPlan').innerHTML = `
     <div class="row between" style="margin-top:0">
@@ -82,6 +84,11 @@ export function renderLift() {
               <input type="number" inputmode="numeric" min="0" max="100" data-r="${slot.id}:${j}" value="${s.r}" placeholder="${hi}" aria-label="Set ${j + 1} reps">
               <button type="button" class="tick" data-done="${slot.id}:${j}" aria-label="Mark set ${j + 1} done">${s.done ? '✓' : '○'}</button>
             </div>`).join('')}
+        </div>
+        <div class="set-tools">
+          <button type="button" class="ghost small" data-addset="${slot.id}">+ Add set</button>
+          <button type="button" class="ghost small" data-rmset="${slot.id}" ${e.sets.length <= 1 ? 'disabled' : ''}>− Remove set</button>
+          ${lift.extraSets[slot.id] ? `<span class="small muted">Plan: ${setsFor(slot, d.week, i)} sets · <button type="button" class="linkish" data-resetsets="${slot.id}">Back to plan</button></span>` : ''}
         </div>
       </div>`;
     }).join('')}
@@ -146,6 +153,27 @@ export function initLift() {
       const set = lift.draft.entries[slotId].sets[+j];
       set.done = !set.done;
       if (set.done && set.r === '') set.r = DAYS[lift.draft.day].slots.find((s) => s.id === slotId).reps[1];
+      save();
+      renderLift();
+    } else if (t.dataset.addset || t.dataset.rmset || t.dataset.resetsets) {
+      const slotId = t.dataset.addset || t.dataset.rmset || t.dataset.resetsets;
+      const day = DAYS[lift.draft.day];
+      const i = day.slots.findIndex((s) => s.id === slotId);
+      const plan = setsFor(day.slots[i], lift.draft.week, i);
+      const sets = lift.draft.entries[slotId].sets;
+      const lastW = [...sets].reverse().find((x) => x.w !== '')?.w ?? '';
+      if (t.dataset.addset) {
+        // A new set starts at the last weight you entered.
+        sets.push({ w: lastW, r: '', done: false });
+      } else if (t.dataset.rmset) {
+        if (sets.length > 1) sets.pop();
+      } else {
+        while (sets.length > plan) sets.pop();
+        while (sets.length < plan) sets.push({ w: lastW, r: '', done: false });
+      }
+      // Remember the change for this exercise slot in future sessions.
+      const delta = sets.length - plan;
+      if (delta) lift.extraSets[slotId] = delta; else delete lift.extraSets[slotId];
       save();
       renderLift();
     } else if (t.dataset.muscle) {

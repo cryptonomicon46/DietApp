@@ -131,18 +131,20 @@ export const WEEKS = [
   { week: 6, label: 'Week 6 · Deload',    rir: '4+',    note: 'Half the sets at ~85% of last week\'s weights. Recover, then start a new block.' },
 ];
 
-export function setsFor(slot, week, index) {
-  const base = slot.sets;
+// extra = sets you added (+) or removed (−) for this exercise slot; it carries through
+// the block's progression and is halved on the deload like everything else.
+export function setsFor(slot, week, index, extra = 0) {
+  const base = slot.sets + extra;
   if (week >= 6) return Math.max(1, Math.ceil(base / 2));
-  if (week === 5) return base + 1;
-  if (week >= 3 && index < 2) return base + 1;
-  return base;
+  if (week === 5) return Math.max(1, base + 1);
+  if (week >= 3 && index < 2) return Math.max(1, base + 1);
+  return Math.max(1, base);
 }
 
-export function weeklySets(week) {
+export function weeklySets(week, extras = {}) {
   const totals = {};
   for (const day of Object.values(DAYS)) {
-    day.slots.forEach((s, i) => { totals[s.muscle] = (totals[s.muscle] || 0) + setsFor(s, week, i); });
+    day.slots.forEach((s, i) => { totals[s.muscle] = (totals[s.muscle] || 0) + setsFor(s, week, i, extras[s.id] || 0); });
   }
   return totals;
 }

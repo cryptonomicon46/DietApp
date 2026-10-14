@@ -54,3 +54,10 @@ test('after a deload, loads go back to the last working weights', () => {
   assert.match(s.text, /pre-deload/);
   assert.equal(suggestLoad('backSquat', slot, hist, 6).weight, 190, 'deload again → 85% of 225');
 });
+
+test('extra sets carry through progression and deload', () => {
+  const squat = DAYS.A.slots[0]; // 3 sets, first lift of the day
+  assert.deepEqual([1, 3, 5, 6].map((w) => setsFor(squat, w, 0, 2)), [5, 6, 6, 3]);
+  assert.equal(setsFor(squat, 1, 0, -5), 1, 'never below one set');
+  assert.ok(weeklySets(1, { A1: 2 }).quads === weeklySets(1).quads + 2);
+});

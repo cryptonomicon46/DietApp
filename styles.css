@@ -332,3 +332,5 @@ dialog.review { width: min(520px, calc(100vw - 24px)); }
 .next-opt { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .next-opt.rec { border-color: var(--brand); background: var(--bg); }
 .next-opt p { margin: 4px 0 8px; }
+.set-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.set-tools button:disabled { opacity: .4; }
