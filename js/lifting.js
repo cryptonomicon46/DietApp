@@ -211,3 +211,24 @@ export const platesText = (counts) => {
   const parts = PLATES.filter((p) => counts[p]).map((p) => (counts[p] > 1 ? `${counts[p]}×${p}` : `${p}`));
   return parts.length ? parts.join(' + ') : 'empty bar';
 };
+
+// ---------- exercises you add yourself ----------
+// A slot for an extra exercise: 3 sets, 8–12 reps for compounds, 10–15 for isolations.
+export function extraSlot(id, exerciseId, after) {
+  const ex = EXERCISES[exerciseId];
+  const compound = ex.kind === 'compound';
+  return { id, muscle: ex.muscle, default: exerciseId, reps: compound ? [8, 12] : [10, 15], sets: 3, rest: compound ? '2 min' : '1–2 min', after, added: true };
+}
+
+// The plan's slots with your added ones placed right after the exercise you chose.
+export function mergeSlots(planSlots, added = []) {
+  const out = [...planSlots];
+  for (const a of added) {
+    // Place after its anchor, after anything already added behind that anchor.
+    let i = out.findIndex((s) => s.id === a.after);
+    if (i < 0) { out.push(a); continue; }
+    while (out[i + 1]?.added && out[i + 1].after === a.after) i++;
+    out.splice(i + 1, 0, a);
+  }
+  return out;
+}

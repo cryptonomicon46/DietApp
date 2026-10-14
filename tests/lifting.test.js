@@ -80,3 +80,12 @@ test('plate hints without 35s', async () => {
   assert.deepEqual(platesFor(215, 45, PLATES.filter((p) => p !== 35)), { 45: 1, 25: 1, 15: 1 });
   assert.deepEqual(platesFor(200, 45, PLATES.filter((p) => p !== 35)), { 45: 1, 25: 1, 5: 1, 2.5: 1 });
 });
+
+test('added exercises slot in right after the chosen one', async () => {
+  const { extraSlot, mergeSlots } = await import('../js/lifting.js');
+  const bss = extraSlot('X1', 'splitSquat', 'A1');
+  assert.deepEqual([bss.muscle, bss.reps, bss.sets], ['quads', [8, 12], 3]);
+  const order = mergeSlots(DAYS.A.slots, [bss, extraSlot('X2', 'legExtension', 'A1')]).map((s) => s.id);
+  assert.deepEqual(order.slice(0, 4), ['A1', 'X1', 'X2', 'A2']);
+  assert.equal(extraSlot('X3', 'lateralRaise', 'A2').reps[0], 10, 'isolation → 10–15');
+});

@@ -1,6 +1,6 @@
 import {
   MUSCLES, EXERCISES, DAYS, WEEKS, slotOptions, setsFor, weeklySets, blockPosition, suggestLoad,
-  PLATES, plateTotal, platesFor, platesText,
+  PLATES, plateTotal, platesFor, platesText, extraSlot, mergeSlots,
 } from './lifting.js';
 import { store } from './storage.js';
 
@@ -9,8 +9,17 @@ const load = () => store.get('lift', {});
 const save = () => store.set('lift', lift);
 
 // extraSets: {slotId: +n/−n} sets you added or removed, remembered for next time.
-let lift = { block: 1, choices: {}, extraSets: {}, sessions: [], draft: null, ...load() };
+// kept: {A: [slot, ...]} exercises you added and chose to keep in that day's plan.
+let lift = { block: 1, choices: {}, extraSets: {}, kept: {}, sessions: [], draft: null, ...load() };
 lift.extraSets ||= {};
+lift.kept ||= {};
+
+// Today's exercises: the plan + exercises you keep + ones added just for today.
+function sessionSlots(d = lift.draft) {
+  return mergeSlots(DAYS[d.day].slots, [...(lift.kept[d.day] || []), ...(d.extra || [])]);
+}
+const slotById = (id) => sessionSlots().find((s) => s.id === id);
+const slotIndex = (id) => DAYS[lift.draft.day].slots.findIndex((s) => s.id === id); // −1 for added ones
 let libraryMuscle = 'quads';
 
 const $ = (sel) => document.querySelector(sel);
@@ -20,15 +29,22 @@ const isoDate = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset()
 const blockSessions = () => lift.sessions.filter((s) => s.block === lift.block);
 
 function startDraft(day, week) {
-  const slots = DAYS[day].slots;
-  lift.draft = {
-    day, week,
-    entries: Object.fromEntries(slots.map((slot, i) => {
-      const exercise = lift.choices[slot.id] || slot.default;
-      return [slot.id, { exercise, sets: newSets(exercise, slot, week, i) }];
-    })),
-  };
+  lift.draft = { day, week, extra: [], entries: {} };
+  sessionSlots().forEach((slot, i) => {
+    const exercise = lift.choices[slot.id] || slot.default;
+    lift.draft.entries[slot.id] = { exercise, sets: newSets(exercise, slot, week, slot.added ? 99 : i) };
+  });
   save();
+}
+
+export function addExercise(exerciseId, after, keep = false) {
+  const d = lift.draft;
+  const id = `X${Date.now().toString(36)}`;
+  const slot = extraSlot(id, exerciseId, after || sessionSlots().at(-1).id);
+  if (keep) (lift.kept[d.day] ||= []).push(slot); else (d.extra ||= []).push(slot);
+  d.entries[id] = { exercise: exerciseId, sets: newSets(exerciseId, slot, d.week, 99) };
+  save();
+  return id;
 }
 
 function newSets(exercise, slot, week, index) {
@@ -63,8 +79,10 @@ export function renderLift() {
   $('#liftSession').innerHTML = `
     <div class="row between" style="margin-top:0"><h2>${day.title}</h2></div>
     <p class="small muted">${esc(day.note)}</p>
-    ${day.slots.map((slot, i) => {
-      const e = d.entries[slot.id];
+    ${sessionSlots().map((slot) => {
+      const i = slot.added ? 99 : slotIndex(slot.id);
+      const e = d.entries[slot.id] ||= { exercise: lift.choices[slot.id] || slot.default, sets: newSets(lift.choices[slot.id] || slot.default, slot, d.week, i) };
+      const kept = (lift.kept[d.day] || []).some((k) => k.id === slot.id);
       const ex = EXERCISES[e.exercise];
       const sug = suggestLoad(e.exercise, slot, lift.sessions, d.week);
       const [lo, hi] = slot.reps;
@@ -73,7 +91,7 @@ export function renderLift() {
       const load = barbell && sug.weight ? platesFor(sug.weight, lift.bar || 45, lift.use35 ? PLATES : PLATES.filter((x) => x !== 35)) : null;
       return `
       <div class="lift" data-slot="${slot.id}">
-        <div class="eyebrow">${MUSCLES[slot.muscle]} · ${ex.kind}</div>
+        <div class="eyebrow">${MUSCLES[slot.muscle]} · ${ex.kind}${slot.added ? ` · <span class="added-tag">${kept ? `kept in Day ${d.day}` : 'added today'}</span>` : ''}</div>
         <select data-ex="${slot.id}" aria-label="Exercise for ${MUSCLES[slot.muscle]}">
           ${slotOptions(slot).map((k) => `<option value="${k}" ${k === e.exercise ? 'selected' : ''}>${esc(EXERCISES[k].name)} · ${EXERCISES[k].equip}</option>`).join('')}
         </select>
@@ -96,6 +114,12 @@ export function renderLift() {
           <button type="button" class="ghost small" data-rmset="${slot.id}" ${e.sets.length <= 1 ? 'disabled' : ''}>− Remove set</button>
           ${lift.extraSets[slot.id] ? `<span class="small muted">Plan: ${setsFor(slot, d.week, i)} sets · <button type="button" class="linkish" data-resetsets="${slot.id}">Back to plan</button></span>` : ''}
         </div>
+        <div class="set-tools">
+          <button type="button" class="ghost small" data-addex="${slot.id}">+ Add exercise after</button>
+          ${slot.added ? `${kept ? `<button type="button" class="ghost small" data-unkeep="${slot.id}">Remove from Day ${d.day}</button>` : `<button type="button" class="ghost small" data-keep="${slot.id}">📌 Keep in Day ${d.day}</button>`}
+            <button type="button" class="ghost small" data-rmex="${slot.id}">✕ Remove</button>` : ''}
+        </div>
+        ${addingAfter === slot.id ? addPanel(slot) : ''}
       </div>`;
     }).join('')}
     <div class="row">
@@ -105,6 +129,23 @@ export function renderLift() {
 
   renderHistory();
   renderLibrary();
+}
+
+// Picker for a new exercise: muscle group, then exercise.
+let addingAfter = null;
+let addMuscle = null;
+function addPanel(slot) {
+  const m = addMuscle || slot.muscle;
+  return `<div class="add-panel">
+    <div class="small"><b>Add an exercise after this one</b></div>
+    <select data-addmuscle aria-label="Muscle group">${Object.entries(MUSCLES).map(([k, v]) => `<option value="${k}" ${k === m ? 'selected' : ''}>${v}</option>`).join('')}</select>
+    <select data-addpick aria-label="Exercise">${Object.entries(EXERCISES).filter(([, e]) => e.muscle === m).map(([k, e]) => `<option value="${k}">${esc(e.name)} · ${e.equip}</option>`).join('')}</select>
+    <div class="row" style="margin-top:0">
+      <button type="button" class="small" data-addtoday="${slot.id}">Add for today</button>
+      <button type="button" class="ghost small" data-addkeep="${slot.id}">Add & keep in Day ${lift.draft.day}</button>
+      <button type="button" class="ghost small" data-addcancel>Cancel</button>
+    </div>
+  </div>`;
 }
 
 function renderHistory() {
@@ -191,15 +232,22 @@ export function initLift() {
   const root = $('#tab-lift');
   root.addEventListener('change', (e) => {
     const t = e.target;
+    if (t.dataset.addmuscle != null) {
+      addMuscle = t.value;
+      renderLift();
+      return;
+    }
+    if (t.dataset.addpick != null) return;
     if (t.id === 'liftDay' || t.id === 'liftWeek') {
       startDraft($('#liftDay').value, +$('#liftWeek').value);
       renderLift();
     } else if (t.dataset.ex) {
       const slotId = t.dataset.ex;
-      const day = DAYS[lift.draft.day];
-      const i = day.slots.findIndex((s) => s.id === slotId);
-      lift.choices[slotId] = t.value;
-      lift.draft.entries[slotId] = { exercise: t.value, sets: newSets(t.value, day.slots[i], lift.draft.week, i) };
+      const slot = slotById(slotId);
+      const i = slot.added ? 99 : slotIndex(slotId);
+      if (!slot.added) lift.choices[slotId] = t.value;
+      else slot.default = t.value;
+      lift.draft.entries[slotId] = { exercise: t.value, sets: newSets(t.value, slot, lift.draft.week, i) };
       save();
       renderLift();
     }
@@ -219,16 +267,41 @@ export function initLift() {
       const [slotId, j] = t.dataset.done.split(':');
       const set = lift.draft.entries[slotId].sets[+j];
       set.done = !set.done;
-      if (set.done && set.r === '') set.r = DAYS[lift.draft.day].slots.find((s) => s.id === slotId).reps[1];
+      if (set.done && set.r === '') set.r = slotById(slotId).reps[1];
+      save();
+      renderLift();
+    } else if (t.dataset.addex) {
+      addingAfter = addingAfter === t.dataset.addex ? null : t.dataset.addex;
+      addMuscle = null;
+      renderLift();
+    } else if (t.dataset.addcancel != null) {
+      addingAfter = null;
+      renderLift();
+    } else if (t.dataset.addtoday || t.dataset.addkeep) {
+      const pick = t.closest('.add-panel').querySelector('[data-addpick]').value;
+      addExercise(pick, t.dataset.addtoday || t.dataset.addkeep, !!t.dataset.addkeep);
+      addingAfter = null;
+      renderLift();
+    } else if (t.dataset.keep || t.dataset.unkeep || t.dataset.rmex) {
+      const id = t.dataset.keep || t.dataset.unkeep || t.dataset.rmex;
+      const d = lift.draft;
+      const kept = (lift.kept[d.day] ||= []);
+      const slot = slotById(id);
+      if (t.dataset.keep) { d.extra = d.extra.filter((x) => x.id !== id); kept.push(slot); }
+      if (t.dataset.unkeep) { lift.kept[d.day] = kept.filter((x) => x.id !== id); (d.extra ||= []).push(slot); }
+      if (t.dataset.rmex) {
+        d.extra = (d.extra || []).filter((x) => x.id !== id);
+        lift.kept[d.day] = kept.filter((x) => x.id !== id);
+        delete d.entries[id];
+      }
       save();
       renderLift();
     } else if (t.dataset.plates) {
       openPlates(t.dataset.plates);
     } else if (t.dataset.addset || t.dataset.rmset || t.dataset.resetsets) {
       const slotId = t.dataset.addset || t.dataset.rmset || t.dataset.resetsets;
-      const day = DAYS[lift.draft.day];
-      const i = day.slots.findIndex((s) => s.id === slotId);
-      const plan = setsFor(day.slots[i], lift.draft.week, i);
+      const slot = slotById(slotId);
+      const plan = setsFor(slot, lift.draft.week, slot.added ? 99 : slotIndex(slotId));
       const sets = lift.draft.entries[slotId].sets;
       const lastW = [...sets].reverse().find((x) => x.w !== '')?.w ?? '';
       if (t.dataset.addset) {
