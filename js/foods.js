@@ -1,6 +1,7 @@
 // Macros per 100 g as weighed: oats dry, everything cooked (USDA FoodData Central).
 // `unit` lets the UI show a friendlier amount next to grams.
-// `range` = slider limits in grams; `yield` = cooked / raw weight for the shopping list.
+// `range` = slider limits in grams; `yield` = cooked / raw weight for the shopping list;
+// `raw` = cooked / raw (or dry) weight for weighing before cooking (meat and fish use `yield`).
 export const FOODS = {
   // Breakfast
   egg:        { name: 'Whole eggs',               kcal: 143, p: 12.6, f: 9.5,  c: 0.7,  unit: { label: 'egg', grams: 50 },      range: [50, 250, 50] },
@@ -49,14 +50,14 @@ export const FOODS = {
   cod:        { name: 'Cod',                         kcal: 105, p: 22.8, f: 0.9,  c: 0, oz: true, yield: 0.8,  range: [0, 340, 5] },
   trout:      { name: 'Rainbow trout',               kcal: 168, p: 23.8, f: 7.4,  c: 0, oz: true, yield: 0.8,  range: [0, 340, 5] },
   // Sides (cooked)
-  rice:       { name: 'White/jasmine rice',       kcal: 130, p: 2.7, f: 0.3,  c: 28.2, unit: { label: 'cup', grams: 158 }, range: [0, 450, 10] },
-  brownRice:  { name: 'Brown rice',               kcal: 112, p: 2.3, f: 0.8,  c: 23.5, unit: { label: 'cup', grams: 195 }, range: [0, 450, 10] },
-  sweetPotato:{ name: 'Sweet potato (baked)',     kcal: 90,  p: 2.0, f: 0.2,  c: 20.7, unit: { label: 'medium', grams: 150 }, range: [0, 600, 10] },
-  potato:     { name: 'Potato (baked)',           kcal: 93,  p: 2.5, f: 0.1,  c: 21.2, unit: { label: 'medium', grams: 170 }, range: [0, 600, 10] },
-  quinoa:     { name: 'Quinoa',                   kcal: 120, p: 4.4, f: 1.9,  c: 21.3, unit: { label: 'cup', grams: 185 }, range: [0, 450, 10] },
-  veggies:    { name: 'Mixed veggies',            kcal: 35,  p: 2.5, f: 0.3,  c: 7.0,  unit: { label: 'cup', grams: 100 }, range: [0, 400, 25] },
-  broccoli:   { name: 'Broccoli',                 kcal: 35,  p: 2.4, f: 0.4,  c: 7.2,  unit: { label: 'cup', grams: 156 }, range: [0, 400, 25] },
-  cauliflower:{ name: 'Cauliflower',              kcal: 23,  p: 1.8, f: 0.5,  c: 4.1,  unit: { label: 'cup', grams: 124 }, range: [0, 400, 25] },
+  rice:       { name: 'White/jasmine rice',       kcal: 130, p: 2.7, f: 0.3,  c: 28.2, unit: { label: 'cup', grams: 158 }, raw: 2.8, range: [0, 450, 10] },
+  brownRice:  { name: 'Brown rice',               kcal: 112, p: 2.3, f: 0.8,  c: 23.5, unit: { label: 'cup', grams: 195 }, raw: 2.6, range: [0, 450, 10] },
+  sweetPotato:{ name: 'Sweet potato (baked)',     kcal: 90,  p: 2.0, f: 0.2,  c: 20.7, unit: { label: 'medium', grams: 150 }, raw: 0.8, range: [0, 600, 10] },
+  potato:     { name: 'Potato (baked)',           kcal: 93,  p: 2.5, f: 0.1,  c: 21.2, unit: { label: 'medium', grams: 170 }, raw: 0.8, range: [0, 600, 10] },
+  quinoa:     { name: 'Quinoa',                   kcal: 120, p: 4.4, f: 1.9,  c: 21.3, unit: { label: 'cup', grams: 185 }, raw: 2.75, range: [0, 450, 10] },
+  veggies:    { name: 'Mixed veggies',            kcal: 35,  p: 2.5, f: 0.3,  c: 7.0,  unit: { label: 'cup', grams: 100 }, raw: 0.9, range: [0, 400, 25] },
+  broccoli:   { name: 'Broccoli',                 kcal: 35,  p: 2.4, f: 0.4,  c: 7.2,  unit: { label: 'cup', grams: 156 }, raw: 0.9, range: [0, 400, 25] },
+  cauliflower:{ name: 'Cauliflower',              kcal: 23,  p: 1.8, f: 0.5,  c: 4.1,  unit: { label: 'cup', grams: 124 }, raw: 0.9, range: [0, 400, 25] },
   oliveOil:   { name: 'Olive oil',                kcal: 884, p: 0,   f: 100,  c: 0,    unit: { label: 'tsp', grams: 4.5 }, range: [0, 31.5, 4.5] },
 };
 
