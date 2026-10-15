@@ -220,18 +220,29 @@ function targets() {
 // ---------- formatting ----------
 // Weighing raw/dry vs cooked. Meals are always stored as cooked (or as-eaten) grams; in raw
 // mode the grams you see and type are converted with each food's cooked÷raw ratio.
-const weighRaw = () => !!store.get('weighRaw', false);
+// The top switch sets the default; tapping a food's "g cooked / g raw" label overrides just that food.
+const weighDefault = () => !!store.get('weighRaw', false);
 const rawRatio = (food) => FOODS[food]?.raw ?? FOODS[food]?.yield ?? null;
+function weighRaw(food) {
+  if (!food) return weighDefault();
+  if (!rawRatio(food)) return false;
+  const m = store.get('weighModes', {})[food];
+  return m ? m === 'raw' : weighDefault();
+}
 const rawWord = (food) => (rawRatio(food) > 1.5 ? 'dry' : 'raw');
-function shownG(food, cooked) { const r = rawRatio(food); return weighRaw() && r ? Math.round(cooked / r) : cooked; }
-function cookedG(food, shown) { const r = rawRatio(food); return weighRaw() && r ? shown * r : shown; }
-const gramsUnit = (food) => (weighRaw() && rawRatio(food) ? `g ${rawWord(food)}` : 'g');
+function shownG(food, cooked) { const r = rawRatio(food); return weighRaw(food) && r ? Math.round(cooked / r) : cooked; }
+function cookedG(food, shown) { const r = rawRatio(food); return weighRaw(food) && r ? shown * r : shown; }
+// The unit next to a grams box; for foods that change weight when cooked it's a tap-to-switch button.
+function gramsUnit(food) {
+  if (!rawRatio(food)) return '<span class="small muted">g</span>';
+  return `<button type="button" class="unit-toggle" data-weighfood="${food}" title="Tap to switch between cooked and ${rawWord(food)} weight">g ${weighRaw(food) ? rawWord(food) : 'cooked'} ⇄</button>`;
+}
 
 function amountLabel(food, grams) {
   const d = FOODS[food];
   if (!grams) return { main: 'none', sub: '0 g' };
   const r = rawRatio(food);
-  if (weighRaw() && r) {
+  if (weighRaw(food) && r) {
     const g = Math.round(grams / r);
     return { main: d.oz ? `${Math.round(g / 28.35 * 10) / 10} oz ${rawWord(food)}` : `${g} g ${rawWord(food)}`, sub: `${Math.round(grams)} g cooked` };
   }
@@ -529,7 +540,7 @@ function renderToday() {
   $('#meals').innerHTML = mealCardsWithAdd(plan)
     + extrasCard()
     + shareRow()
-    + `<p class="muted small">Pick a food from any menu to swap it. Drag a slider to set that portion yourself (🔒) — the other items re-balance to keep the meal on target. ${weighRaw() ? 'Showing raw weights for meat and fish, dry for rice and quinoa (oats are always dry); macros are the same either way.' : 'Weights are cooked for meat, fish, eggs, rice and veggies; oats are dry. Switch to Raw / dry above if you weigh before cooking.'} A logged meal is locked so it can't change by accident — tap Unlog to edit.</p>`;
+    + `<p class="muted small">Pick a food from any menu to swap it. Drag a slider to set that portion yourself (🔒) — the other items re-balance to keep the meal on target. Tap a food's “g cooked ⇄” to weigh just that food raw or dry (or switch all above); macros are the same either way. Oats are always dry. A logged meal is locked so it can't change by accident — tap Unlog to edit.</p>`;
 }
 
 function extrasCard() {
@@ -563,14 +574,23 @@ const MEAL_TEMPLATES = { eggs: 'Switch: eggs', oatmeal: 'Switch: oatmeal' };
 const mealOrder = (plan) => ['breakfast', 'lunch', ...(plan.snack ? ['snack'] : []), 'dinner'];
 const SNACK_PICKS = [['apple', '🍎'], ['banana', '🍌'], ['orange', '🍊'], ['grapes', '🍇'], ['strawberries', '🍓'], ['berries', '🫐'], ['mixedNuts', '🥜'], ['cashews', '🥜'], ['almonds', '🌰'], ['greekYogurt', '🥛'], ['premierShake', '🥤'], ['barebells', '🍫']];
 function weighSwitch() {
-  const raw = weighRaw();
-  return `<div class="weigh-switch"><span class="small muted">I weigh meat, rice & veggies</span>
-    <div class="seg"><button type="button" class="${raw ? '' : 'on'}" data-weigh="cooked">Cooked</button><button type="button" class="${raw ? 'on' : ''}" data-weigh="raw">Raw / dry</button></div></div>`;
+  const raw = weighDefault();
+  const mixed = Object.keys(store.get('weighModes', {})).length > 0;
+  return `<div class="weigh-switch"><span class="small muted">I weigh meat, rice & veggies${mixed ? ' <b>· mixed</b>' : ''}</span>
+    <div class="seg"><button type="button" class="${raw || mixed ? '' : 'on'}" data-weigh="cooked">All cooked</button><button type="button" class="${raw && !mixed ? 'on' : ''}" data-weigh="raw">All raw / dry</button></div></div>`;
 }
 $('#meals').addEventListener('click', (e) => {
   const b = e.target.closest('[data-weigh]');
   if (!b) return;
   store.set('weighRaw', b.dataset.weigh === 'raw');
+  store.set('weighModes', {}); // the top switch sets every food
+  renderToday();
+});
+$('#meals').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-weighfood]');
+  if (!b) return;
+  const food = b.dataset.weighfood;
+  store.set('weighModes', { ...store.get('weighModes', {}), [food]: weighRaw(food) ? 'cooked' : 'raw' });
   renderToday();
 });
 function mealCardsWithAdd(plan) {
@@ -776,7 +796,7 @@ function customBody(meal, m) {
           </div>
           <div class="item-slider">
             <input type="number" class="grams" data-cgrams="${i}" data-food="${x.food}" min="0" max="2000" step="any" inputmode="decimal" value="${shownG(x.food, x.grams)}" aria-label="Grams">
-            <span class="small muted">${gramsUnit(x.food)}</span>
+            ${gramsUnit(x.food)}
             <span class="amt" data-role="amt">${a.main}</span>
           </div>
         </li>`;
@@ -1001,7 +1021,7 @@ function itemRow(x) {
       <div class="item-top">${name}<span class="amt" data-role="amt">${a.main}<small>${a.sub}</small></span></div>
       <div class="item-slider">
         <input type="range" id="r-${x.slot}" data-slide="${x.slot}" min="${lo}" max="${hi}" step="${step}" value="${x.grams}" aria-label="${esc(FOODS[x.food].name)} amount">
-        <input type="number" class="grams gbox" data-gbox="${x.slot}" data-food="${x.food}" min="0" step="any" inputmode="decimal" value="${shownG(x.food, x.grams)}" aria-label="${esc(FOODS[x.food].name)} grams ${weighRaw() && rawRatio(x.food) ? rawWord(x.food) : ''}"><span class="small muted">${gramsUnit(x.food)}</span>
+        <input type="number" class="grams gbox" data-gbox="${x.slot}" data-food="${x.food}" min="0" step="any" inputmode="decimal" value="${shownG(x.food, x.grams)}" aria-label="${esc(FOODS[x.food].name)} grams ${weighRaw(x.food) ? rawWord(x.food) : 'cooked'}">${gramsUnit(x.food)}
         <button class="lock" data-unlock="${x.slot}" title="${x.locked ? 'Locked — tap to let the app size this' : 'Auto-sized'}">${x.locked ? '🔒' : 'auto'}</button>
       </div>
     </li>`;

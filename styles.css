@@ -497,3 +497,4 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .weigh-switch { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 2px 10px; }
 .meal.eaten .meal-lock { opacity: .72; }
 .meal.eaten .meal-lock input[type=range] { filter: grayscale(1); }
+.unit-toggle { background: var(--bg); color: var(--brand); border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px; font-size: .74rem; font-weight: 700; white-space: nowrap; }
