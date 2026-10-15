@@ -11,6 +11,7 @@
   --c: #3a6fb0;
   --good: #2f7d5b;
   --warn: #b5562f;
+  --alert: #d0221b;
   --radius: 14px;
   color-scheme: light;
 }
@@ -28,6 +29,7 @@
     --c: #6c9be0;
     --good: #4fae84;
     --warn: #e2845b;
+    --alert: #ff6b5e;
     color-scheme: dark;
   }
 }
@@ -140,8 +142,8 @@ label > input, label > select { margin-top: 4px; }
 }
 .tabs button span { font-size: 1.2rem; line-height: 1; }
 .tabs button.active { color: var(--brand); font-weight: 700; }
-/* 🐕 tab: orange until the dogs are fed for this meal, green once they are */
-.tabs button.dogs-hungry { background: color-mix(in srgb, var(--warn) 32%, transparent); color: var(--warn); font-weight: 700; }
+/* 🐕 tab: red until the dogs are fed for this meal, green once they are */
+.tabs button.dogs-hungry { background: color-mix(in srgb, var(--alert) 18%, transparent); color: var(--alert); font-weight: 800; }
 .tabs button.dogs-fed { background: color-mix(in srgb, var(--good) 26%, transparent); color: var(--good); }
 
 dialog {

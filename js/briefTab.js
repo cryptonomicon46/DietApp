@@ -171,7 +171,7 @@ export function renderFeed() {
   if (!el || !ownerId()) return;
   const slot = feedingSlot();
   const fed = whoFed(feedRecords(), slot.key);
-  // The 🐕 tab itself shows it from anywhere in the app: orange = still to feed, green = fed.
+  // The 🐕 tab itself shows it from anywhere in the app: red = still to feed, green = fed.
   const tab = document.querySelector('.tabs [data-tab="brief"]');
   if (tab) {
     tab.classList.toggle('dogs-hungry', !fed);
