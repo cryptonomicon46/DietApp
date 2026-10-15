@@ -57,6 +57,7 @@ export const FOODS = {
   quinoa:     { name: 'Quinoa',                   kcal: 120, p: 4.4, f: 1.9,  c: 21.3, unit: { label: 'cup', grams: 185 }, raw: 2.75, range: [0, 450, 10] },
   veggies:    { name: 'Mixed veggies',            kcal: 35,  p: 2.5, f: 0.3,  c: 7.0,  unit: { label: 'cup', grams: 100 }, raw: 0.9, range: [0, 400, 25] },
   broccoli:   { name: 'Broccoli',                 kcal: 35,  p: 2.4, f: 0.4,  c: 7.2,  unit: { label: 'cup', grams: 156 }, raw: 0.9, range: [0, 400, 25] },
+  salad:      { name: 'Salad (butter lettuce & cucumber)', kcal: 14, p: 1.0, f: 0.2, c: 2.9, unit: { label: 'bowl', grams: 150 }, range: [0, 400, 25] },
   cauliflower:{ name: 'Cauliflower',              kcal: 23,  p: 1.8, f: 0.5,  c: 4.1,  unit: { label: 'cup', grams: 124 }, raw: 0.9, range: [0, 400, 25] },
   oliveOil:   { name: 'Olive oil',                kcal: 884, p: 0,   f: 100,  c: 0,    unit: { label: 'tsp', grams: 4.5 }, range: [0, 31.5, 4.5] },
 };
@@ -65,7 +66,7 @@ export const FOODS = {
 export const FOOD_GROUPS = {
   Protein: ['whey', 'eggWhites', 'egg', 'chicken', 'thigh', 'beef', 'steak', 'salmon', 'cod', 'trout', 'cheddar'],
   Carbs: ['oats', 'sourdough', 'wheatBread', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'banana'],
-  'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'cauliflower', 'avocado'],
+  'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'cauliflower', 'salad', 'avocado'],
   Milk: ['oatMilk', 'almondMilk', 'milk2'],
   Snacks: ['apple', 'banana', 'orange', 'pear', 'grapes', 'strawberries', 'berries', 'mixedNuts', 'cashews', 'almonds', 'greekYogurt'],
   'Bars & shakes': ['clifBar', 'clifBuilders', 'barebells', 'questBar', 'rxBar', 'kirklandBar', 'premierShake', 'corePower'],
@@ -101,11 +102,11 @@ export const BREAKFASTS = {
 };
 
 export const MAIN_MEAL = {
-  title: (f) => `${FOODS[f.protein].name.replace(/ \(.*\)/, '')}, ${FOODS[f.carb].name.replace(/ \(.*\)/, '').toLowerCase()} & ${f.veggies && f.veggies !== 'veggies' ? FOODS[f.veggies].name.toLowerCase() : 'veggies'}`,
+  title: (f) => `${FOODS[f.protein].name.replace(/ \(.*\)/, '')}, ${FOODS[f.carb].name.replace(/ \(.*\)/, '').toLowerCase()} & ${f.veggies && f.veggies !== 'veggies' ? FOODS[f.veggies].name.replace(/ \(.*\)/, '').toLowerCase() : 'veggies'}`,
   items: [
     { slot: 'protein', options: PROTEIN_OPTIONS, drives: 'p', min: 60, max: 260 },
     { slot: 'carb', options: ['rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'sourdough'], drives: 'c', max: 450 },
-    { slot: 'veggies', options: ['veggies', 'broccoli', 'cauliflower'], fixed: 200 },
+    { slot: 'veggies', options: ['veggies', 'broccoli', 'cauliflower', 'salad'], fixed: 200 },
     { slot: 'fat', options: ['oliveOil', 'butter', 'avocado', 'mixedNuts', 'cashews'], drives: 'f' },
   ],
 };
@@ -128,6 +129,7 @@ export const STORES = {
   rice:      { store: 'Costco',  tip: 'Jasmine rice bag (1 cup dry ≈ 3 cups cooked)', packGrams: 454 * 2.8, packLabel: 'lb dry' },
   veggies:   { store: 'Costco',  tip: 'Frozen stir-fry / mixed vegetables; fresh at Sprouts', packGrams: 454, packLabel: 'lb' },
   broccoli:  { store: 'Costco',  tip: 'Kirkland frozen broccoli florets, or fresh crowns at Sprouts', packGrams: 454, packLabel: 'lb' },
+  salad:       { store: 'Sprouts', tip: 'Butter lettuce (living heads or clamshell) + cucumbers — half and half by weight', packGrams: 454, packLabel: 'lb' },
   cauliflower:{ store: 'Sprouts', tip: 'Fresh cauliflower head or frozen florets (Costco, Safeway too)', packGrams: 454, packLabel: 'lb' },
   oliveOil:  { store: 'Costco',  tip: 'Kirkland extra virgin olive oil', packGrams: 1000, packLabel: 'bottle' },
   wheatBread:  { store: 'Safeway', tip: 'Whole-wheat sandwich bread', packGrams: 680, packLabel: '24 oz loaf' },

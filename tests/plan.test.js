@@ -148,7 +148,7 @@ test('broccoli and cauliflower swap in for mixed veggies', async () => {
   const m = portionMeal(MAIN_MEAL, { kcal: 600, p: 45, f: 15, c: 60 }, { picks: { protein: 'chicken', veggies: 'broccoli' } });
   const veg = m.portions.find((x) => x.slot === 'veggies');
   assert.equal(veg.food, 'broccoli');
-  assert.deepEqual(veg.options, ['veggies', 'broccoli', 'cauliflower']);
+  assert.deepEqual(veg.options, ['veggies', 'broccoli', 'cauliflower', 'salad']);
   assert.ok(FOODS.cauliflower.kcal < FOODS.broccoli.kcal);
 });
 
