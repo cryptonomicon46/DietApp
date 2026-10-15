@@ -499,3 +499,16 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .wseg { display: inline-flex; flex: none; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--bg); }
 .wseg button { background: none; color: var(--muted); border: 0; border-radius: 0; padding: 5px 8px; font-size: .72rem; font-weight: 600; min-height: 30px; }
 .wseg button.on { background: var(--brand); color: var(--brand-ink); font-weight: 700; }
+
+/* − / + portion steppers: [auto/🔒] [cooked|raw  120 g] [− +] */
+.stepper { gap: 6px; }
+.stepper .lock { min-width: 44px; min-height: 40px; border-radius: 10px; }
+.gfield { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 3px 8px 3px 4px; min-height: 40px; }
+.gfield .wseg { background: var(--card); }
+.gfield input.grams, .stepper .gfield input.gbox { flex: 1; min-width: 0; width: auto; border: 0; background: none; text-align: right; font-size: 1.05rem; font-weight: 600; padding: 4px 0; }
+.gfield .g { color: var(--muted); font-size: .9rem; }
+.steps { display: inline-flex; flex: none; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); }
+.steps button { background: none; color: var(--ink); border: 0; border-radius: 0; width: 44px; min-height: 40px; padding: 0; font-size: 1.35rem; font-weight: 500; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.steps button + button { border-left: 1px solid var(--line); }
+.steps button:active { background: var(--line); }
+.portions.custom .stepper .amt { flex: none; min-width: 64px; font-size: .85rem; }

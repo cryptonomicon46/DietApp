@@ -785,13 +785,10 @@ function customBody(meal, m) {
             <select data-cfood="${i}" aria-label="Food">${foodOptions(x.food)}</select>
             <button class="x" data-cremove="${i}" aria-label="Remove ${esc(FOODS[x.food].name)}">✕</button>
           </div>
-          <div class="item-slider">
-            <input type="range" data-cslide="${i}" min="0" max="${Math.max(x.range?.[1] ?? 500, x.grams)}" step="${x.range?.[2] ?? 1}" value="${x.grams}" aria-label="${esc(FOODS[x.food].name)} amount">
-          </div>
-          <div class="item-slider">
-            <input type="number" class="grams" data-cgrams="${i}" data-food="${x.food}" min="0" max="2000" step="any" inputmode="decimal" value="${shownG(x.food, x.grams, meal)}" aria-label="Grams">
-            ${gramsUnit(x.food, meal)}
+          <div class="item-slider stepper">
             <span class="amt" data-role="amt">${a.main}</span>
+            <span class="gfield">${weighWays(x.food) ? gramsUnit(x.food, meal) : ''}<input type="number" class="grams gbox" data-cgrams="${i}" data-food="${x.food}" min="0" max="2000" step="any" inputmode="decimal" value="${shownG(x.food, x.grams, meal)}" aria-label="${esc(FOODS[x.food].name)} grams ${weighWord(x.food, meal)}"><span class="g">g</span></span>
+            ${stepButtons(x, meal)}
           </div>
         </li>`;
       }).join('')}
@@ -956,18 +953,12 @@ $('#meals').addEventListener('input', (e) => {
   } else if (e.target.dataset.eomenu) {
     const k = e.target.dataset.eomenu;
     editMeal(meal, (c) => { c.eatout = { ...c.eatout, menu: { ...c.eatout.menu, [k]: e.target.value === '' ? '' : +e.target.value } }; });
-  } else if (e.target.dataset.cgrams != null || e.target.dataset.cslide != null) {
-    const i = +(e.target.dataset.cgrams ?? e.target.dataset.cslide);
-    const li = e.target.closest('li');
-    const food = li.querySelector('[data-cgrams]')?.dataset.food;
-    const typed = Math.max(0, +e.target.value || 0);
-    const grams = e.target.dataset.cgrams != null ? cookedG(food, typed, meal) : typed;
+  } else if (e.target.dataset.cgrams != null) {
+    const i = +e.target.dataset.cgrams;
+    const food = e.target.dataset.food;
+    // The box may be in raw/dry (or cooked oats) grams; the meal stores base grams.
+    const grams = cookedG(food, Math.max(0, +e.target.value || 0), meal);
     editCustom(meal, (c) => { c.items[i].grams = grams; });
-    // Keep the slider (cooked grams) and the grams box (cooked or raw) together.
-    const other = li.querySelector(e.target.dataset.cslide != null ? '[data-cgrams]' : '[data-cslide]');
-    if (other) {
-      if (other.type === 'range') { if (grams > +other.max) other.max = grams; other.value = grams; } else other.value = shownG(food, grams, meal);
-    }
   } else if (e.target.dataset.manual) {
     const k = e.target.dataset.manual;
     editCustom(meal, (c) => { c.manual = { ...c.manual, [k]: e.target.value === '' ? '' : +e.target.value }; });
@@ -1006,22 +997,61 @@ function totalsLine(m) {
 
 function itemRow(x, meal) {
   const a = amountLabel(x.food, x.grams, meal);
-  const [lo, hi, step] = x.range;
   const name = x.options.length > 1
     ? `<select data-pick="${x.slot}" aria-label="Swap ${esc(FOODS[x.food].name)}">${x.options.map((o) => `<option value="${o}" ${o === x.food ? 'selected' : ''}>${esc(FOODS[o].name)}</option>`).join('')}</select>`
     : `<span>${esc(FOODS[x.food].name)}</span>`;
   return `
     <li data-slot="${x.slot}" class="${x.locked ? 'locked' : ''}">
       <div class="item-top">${name}<span class="amt" data-role="amt">${a.main}<small>${a.sub}</small></span></div>
-      <div class="item-slider">
-        <input type="range" id="r-${x.slot}" data-slide="${x.slot}" min="${lo}" max="${hi}" step="${step}" value="${x.grams}" aria-label="${esc(FOODS[x.food].name)} amount">
-        <input type="number" class="grams gbox" data-gbox="${x.slot}" data-food="${x.food}" min="0" step="any" inputmode="decimal" value="${shownG(x.food, x.grams, meal)}" aria-label="${esc(FOODS[x.food].name)} grams ${weighWord(x.food, meal)}">${gramsUnit(x.food, meal)}
+      <div class="item-slider stepper">
         <button class="lock" data-unlock="${x.slot}" title="${x.locked ? 'Locked — tap to let the app size this' : 'Auto-sized'}">${x.locked ? '🔒' : 'auto'}</button>
+        <span class="gfield">${weighWays(x.food) ? gramsUnit(x.food, meal) : ''}<input type="number" class="grams gbox" data-gbox="${x.slot}" data-food="${x.food}" min="0" step="any" inputmode="decimal" value="${shownG(x.food, x.grams, meal)}" aria-label="${esc(FOODS[x.food].name)} grams ${weighWord(x.food, meal)}"><span class="g">g</span></span>
+        ${stepButtons(x, meal)}
       </div>
     </li>`;
 }
 
-// Live-update one meal card while a slider moves, without re-rendering the slider being dragged.
+// − / + next to the grams box: one step is the food's usual increment (5 g meat, 10 g rice,
+// 25 g veggies…), converted to the weight shown, so it nudges by a sensible amount either way.
+function stepSize(x, meal) {
+  const base = x.range?.[2] ?? 5;
+  const s = weighAlt(x.food, meal) ? base * weighWays(x.food).k : base;
+  return s >= 5 ? Math.round(s / 5) * 5 : Math.max(1, Math.round(s));
+}
+function stepButtons(x, meal) {
+  const n = esc(FOODS[x.food].name);
+  return `<span class="steps"><button type="button" data-step="-1" data-size="${stepSize(x, meal)}" aria-label="Less ${n}">−</button><button type="button" data-step="1" data-size="${stepSize(x, meal)}" aria-label="More ${n}">+</button></span>`;
+}
+// A step snaps to the step grid, then goes through the grams box's own input handling.
+function stepGrams(btn) {
+  const box = btn.closest('.stepper').querySelector('input.grams');
+  const size = +btn.dataset.size;
+  const cur = +box.value || 0;
+  const next = +btn.dataset.step > 0 ? Math.floor(cur / size + 1e-9) * size + size : Math.ceil(cur / size - 1e-9) * size - size;
+  box.value = Math.max(0, Math.round(next * 10) / 10);
+  box.dispatchEvent(new Event('input', { bubbles: true }));
+}
+// Tap to step once; press and hold to keep going.
+let stepHold = null;
+const stopHold = () => { clearTimeout(stepHold?.t); clearInterval(stepHold?.i); };
+$('#meals').addEventListener('pointerdown', (e) => {
+  const b = e.target.closest('[data-step]');
+  if (!b) return;
+  stopHold();
+  stepHold = { b, held: false };
+  stepHold.t = setTimeout(() => { stepHold.held = true; stepHold.i = setInterval(() => stepGrams(b), 110); }, 450);
+});
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('#meals').addEventListener(ev, stopHold, true);
+$('#meals').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-step]');
+  if (!b) return;
+  const held = stepHold?.b === b && stepHold.held;
+  stopHold();
+  stepHold = null;
+  if (!held) stepGrams(b);
+});
+
+// Live-update one meal card while you type or step, without re-rendering the box being edited.
 function refreshMeal(meal, active) {
   const m = todayPlan()[meal];
   const card = document.querySelector(`.meal[data-meal="${meal}"]`);
@@ -1043,8 +1073,6 @@ function refreshMeal(meal, active) {
     li.classList.toggle('locked', x.locked);
     const lock = li.querySelector('.lock');
     lock.textContent = x.locked ? '🔒' : 'auto';
-    const r = li.querySelector('input[type=range]');
-    if (r !== active) r.value = x.grams;
     const g = li.querySelector('[data-gbox]');
     if (g && g !== active) g.value = shownG(x.food, x.grams, meal);
   }
@@ -1057,17 +1085,15 @@ function editMeal(meal, fn) {
   saveCustom();
 }
 
-// Slider or grams box: either one sets that food's amount (and locks it 🔒).
+// The grams box (typed or stepped with − / +) sets that food's amount (and locks it 🔒).
 $('#meals').addEventListener('input', (e) => {
-  const slot = e.target.dataset.slide || e.target.dataset.gbox;
+  const slot = e.target.dataset.gbox;
   if (!slot) return;
-  if (e.target.dataset.gbox && e.target.value === '') return; // still typing
+  if (e.target.value === '') return; // still typing
   const meal = e.target.closest('.meal').dataset.meal;
   const plan = todayPlan()[meal];
-  // The box may be in raw/dry grams; the slider and the meal use cooked grams.
-  const food = e.target.dataset.food;
-  const raw = Math.max(+e.target.value || 0, 0);
-  const grams = e.target.dataset.gbox ? cookedG(food, raw, meal) : raw;
+  // The box may be in raw/dry (or cooked oats) grams; the meal stores base grams.
+  const grams = cookedG(e.target.dataset.food, Math.max(+e.target.value || 0, 0), meal);
   editMeal(meal, (c) => {
     if (meal === 'breakfast') c.template = plan.template;
     c.grams = { ...c.grams, [slot]: grams };
