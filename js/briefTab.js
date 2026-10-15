@@ -137,17 +137,18 @@ const nameOf = (id) => profileStore(id).get('profile', null)?.name?.split(/\s+/)
 function feedRecords(key = 'dogFed') {
   return PROFILES.map((p) => ({ person: p.id, name: nameOf(p.id), fed: profileStore(p.id).get(key, {}) }));
 }
-// The once-a-day "walked" box under the feeding button. The 🐕 tab colour stays on feeding.
-function walkBox() {
-  const day = walkDay();
-  const done = whoFed(feedRecords('dogWalked'), day);
+// The once-a-day walk button, next to the feeding button.
+function walkButton() {
+  const done = whoFed(feedRecords('dogWalked'), walkDay());
   const who = done && (done.person === ownerId() ? 'You' : esc(done.name));
-  return `<button type="button" class="walk-box ${done ? 'done' : ''}" data-walk aria-pressed="${!!done}">
-      <span class="walk-check">${done ? '✓' : ''}</span>
-      <span class="walk-text"><b>${done ? 'Dogs walked today' : 'Walk the dogs'}</b>
-        <small>${done ? `${who} · ${clock(new Date(done.at))}` : 'Once a day · tap when walked'}</small></span>
-      <span class="walk-icon">🐾</span>
-    </button>`;
+  return `<div class="feed-col">
+      <button type="button" class="feed-btn walk ${done ? 'fed' : 'unwalked'}" data-walk aria-pressed="${!!done}">
+        <span class="feed-icon">${done ? '✓' : '🐾'}</span>
+        <span class="feed-title">${done ? 'Walked' : 'Walk the dogs'}</span>
+        <span class="feed-sub">${done ? `${who} · ${clock(new Date(done.at))}` : 'Once a day'}</span>
+      </button>
+      <p class="small muted center">Resets at 6 AM.</p>
+    </div>`;
 }
 function toggleWalk() {
   const day = walkDay();
@@ -171,24 +172,31 @@ export function renderFeed() {
   if (!el || !ownerId()) return;
   const slot = feedingSlot();
   const fed = whoFed(feedRecords(), slot.key);
-  // The 🐕 tab itself shows it from anywhere in the app: red = still to feed, green = fed.
+  const walked = whoFed(feedRecords('dogWalked'), walkDay());
+  // The 🐕 tab shows it from anywhere in the app: red = still to feed,
+  // green = fed but not walked yet, bright green = fed and walked.
   const tab = document.querySelector('.tabs [data-tab="brief"]');
   if (tab) {
     tab.classList.toggle('dogs-hungry', !fed);
-    tab.classList.toggle('dogs-fed', !!fed);
-    tab.title = fed ? `Dogs fed (${slot.meal})` : `Dogs still need ${slot.meal}`;
+    tab.classList.toggle('dogs-fed', !!fed && !walked);
+    tab.classList.toggle('dogs-done', !!fed && !!walked);
+    tab.title = !fed ? `Dogs still need ${slot.meal}` : walked ? `Dogs fed (${slot.meal}) and walked` : `Dogs fed (${slot.meal}) — not walked yet`;
   }
   const other = slot.meal === 'breakfast' ? null : whoFed(feedRecords(), slot.key.replace('dinner', 'breakfast'));
   const meal = slot.meal === 'breakfast' ? 'Breakfast' : 'Dinner';
   const mine = fed?.person === ownerId();
   el.innerHTML = `
-    <button type="button" class="feed-btn ${fed ? 'fed' : 'hungry'}" data-feed aria-pressed="${!!fed}">
-      <span class="feed-icon">${fed ? '✓' : '🦴'}</span>
-      <span class="feed-title">${fed ? `${meal} done` : `Feed the dogs`}</span>
-      <span class="feed-sub">${fed ? `${esc(mine ? 'You' : fed.name)} · ${clock(new Date(fed.at))}` : `${meal} · tap when fed`}</span>
-    </button>
-    <p class="small muted center">${fed ? `Resets ${slot.resets} for ${slot.meal === 'breakfast' ? 'dinner' : 'breakfast'}.` : `Resets ${slot.resets}.`}${other ? ` Breakfast: ${esc(other.person === ownerId() ? 'you' : other.name)} at ${clock(new Date(other.at))}.` : ''}</p>
-    ${walkBox()}`;
+    <div class="feed-pair">
+      <div class="feed-col">
+        <button type="button" class="feed-btn ${fed ? 'fed' : 'hungry'}" data-feed aria-pressed="${!!fed}">
+          <span class="feed-icon">${fed ? '✓' : '🦴'}</span>
+          <span class="feed-title">${fed ? `${meal} done` : 'Feed the dogs'}</span>
+          <span class="feed-sub">${fed ? `${esc(mine ? 'You' : fed.name)} · ${clock(new Date(fed.at))}` : `${meal} · tap when fed`}</span>
+        </button>
+        <p class="small muted center">${fed ? `Resets ${slot.resets} for ${slot.meal === 'breakfast' ? 'dinner' : 'breakfast'}.` : `Resets ${slot.resets}.`}${other ? ` Breakfast: ${esc(other.person === ownerId() ? 'you' : other.name)} at ${clock(new Date(other.at))}.` : ''}</p>
+      </div>
+      ${walkButton()}
+    </div>`;
 }
 function toggleFeed() {
   const slot = feedingSlot();

@@ -142,9 +142,9 @@ label > input, label > select { margin-top: 4px; }
 }
 .tabs button span { font-size: 1.2rem; line-height: 1; }
 .tabs button.active { color: var(--brand); font-weight: 700; }
-/* 🐕 tab: red until the dogs are fed for this meal, green once they are */
+/* 🐕 tab: red until the dogs are fed for this meal, green once fed, bright green once fed and walked */
 .tabs button.dogs-hungry { background: color-mix(in srgb, var(--alert) 18%, transparent); color: var(--alert); font-weight: 800; }
-.tabs button.dogs-fed { background: color-mix(in srgb, var(--good) 26%, transparent); color: var(--good); }
+.tabs button.dogs-fed { background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); font-weight: 700; }
 
 dialog {
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--ink);
@@ -491,12 +491,12 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 /* Dogs: feeding button */
 .brief-title { margin: 4px 4px 10px; font-size: 1.25rem; }
 .feed-card { display: flex; flex-direction: column; align-items: center; padding: 18px 12px 10px; }
-.feed-btn { width: 200px; height: 200px; border-radius: 50%; border: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #fff; box-shadow: 0 10px 24px rgba(0,0,0,.18), inset 0 -6px 0 rgba(0,0,0,.12); transition: transform .08s; }
+.feed-btn { width: min(165px, 41vw); height: min(165px, 41vw); border-radius: 50%; border: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #fff; box-shadow: 0 10px 24px rgba(0,0,0,.18), inset 0 -6px 0 rgba(0,0,0,.12); transition: transform .08s; }
 .feed-btn:active { transform: scale(.96); }
 .feed-btn.hungry { background: radial-gradient(circle at 35% 30%, #f0a35a, #d9692b); }
 .feed-btn.fed { background: radial-gradient(circle at 35% 30%, #4fbf8a, #2e7d5b); }
-.feed-icon { font-size: 3rem; line-height: 1; }
-.feed-title { font-size: 1.25rem; font-weight: 800; }
+.feed-icon { font-size: 2.6rem; line-height: 1; }
+.feed-title { font-size: 1.05rem; text-align: center; line-height: 1.15; font-weight: 800; }
 .feed-sub { font-size: .85rem; opacity: .95; }
 /* Per-item cooked / raw switch; logged meals are locked */
 .meal.eaten .meal-lock { opacity: .72; }
@@ -518,12 +518,10 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .steps button:active { background: var(--line); }
 .portions.custom .stepper .amt { flex: none; min-width: 64px; font-size: .85rem; }
 
-/* Dogs: once-a-day walk box under the feeding button */
-.walk-box { width: 100%; max-width: 340px; margin-top: 12px; display: flex; align-items: center; gap: 12px; text-align: left; background: var(--bg); color: var(--ink); border: 2px dashed var(--line); border-radius: 14px; padding: 12px 14px; font-weight: 400; }
-.walk-box .walk-check { flex: none; width: 30px; height: 30px; border-radius: 8px; border: 2px solid var(--muted); display: grid; place-items: center; font-size: 1.1rem; font-weight: 800; }
-.walk-box .walk-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.walk-box .walk-text b { font-size: 1.05rem; }
-.walk-box .walk-text small { color: var(--muted); }
-.walk-box .walk-icon { font-size: 1.8rem; }
-.walk-box.done { border-style: solid; border-color: var(--good); background: color-mix(in srgb, var(--good) 14%, var(--card)); }
-.walk-box.done .walk-check { background: var(--good); border-color: var(--good); color: #fff; }
+/* Dogs: feed and walk buttons side by side */
+.feed-pair { display: flex; justify-content: center; align-items: flex-start; gap: 14px; width: 100%; }
+.feed-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.feed-col p { margin: 8px 0 0; }
+.feed-btn.unwalked { background: radial-gradient(circle at 35% 30%, #6fa3e6, #3a6cc0); }
+.feed-sub { text-align: center; padding: 0 8px; }
+.tabs button.dogs-done { background: #1fbf5a; color: #fff; font-weight: 800; }
