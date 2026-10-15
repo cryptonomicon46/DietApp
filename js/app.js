@@ -2462,7 +2462,7 @@ if (sync.enabled()) {
   const onBrief = () => document.querySelector('#tab-brief').classList.contains('active');
   const refresh = () => sync.pull().then((changed) => {
     updateNotesBadge();
-    if (onBrief()) renderFeed();
+    renderFeed(); // also colours the 🐕 tab
     if (onNotes() && changed) renderNotes();
     else if (onNotes()) { const l = document.querySelector('#tab-notes .sync-line'); if (l) l.outerHTML = syncLine(); }
     else if (changed && sync.readOnly()) location.reload();
@@ -2470,8 +2470,6 @@ if (sync.enabled()) {
   setInterval(refresh, 5 * 60000);
   // While the Us tab is open, check for new notes and plans often.
   setInterval(() => { if ((onNotes() || onBrief()) && document.visibilityState === 'visible') refresh(); }, 10000);
-  // The feeding button flips at noon and 4 AM even if nothing syncs.
-  setInterval(() => { if (onBrief()) renderFeed(); }, 60000);
   // A home-screen app resumes without reloading: catch up when it comes back.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && Date.now() - global.get('pulledAt', 0) > 30000) { sync.push().catch(() => {}); refresh(); }

@@ -142,6 +142,13 @@ export function renderFeed() {
   if (!el || !ownerId()) return;
   const slot = feedingSlot();
   const fed = whoFed(feedRecords(), slot.key);
+  // The 🐕 tab itself shows it from anywhere in the app: orange = still to feed, green = fed.
+  const tab = document.querySelector('.tabs [data-tab="brief"]');
+  if (tab) {
+    tab.classList.toggle('dogs-hungry', !fed);
+    tab.classList.toggle('dogs-fed', !!fed);
+    tab.title = fed ? `Dogs fed (${slot.meal})` : `Dogs still need ${slot.meal}`;
+  }
   const other = slot.meal === 'breakfast' ? null : whoFed(feedRecords(), slot.key.replace('dinner', 'breakfast'));
   const meal = slot.meal === 'breakfast' ? 'Breakfast' : 'Dinner';
   const mine = fed?.person === ownerId();
@@ -216,6 +223,9 @@ export async function renderBrief(force = false) {
 
 export function initBrief() {
   const root = $('#tab-brief');
+  // Keep the tab's colour right as the 4 AM / 4 PM resets pass, on any tab.
+  renderFeed();
+  setInterval(renderFeed, 60000);
   root.addEventListener('click', (e) => {
     const t = e.target.closest('button');
     if (!t) return;

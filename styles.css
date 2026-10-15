@@ -140,6 +140,9 @@ label > input, label > select { margin-top: 4px; }
 }
 .tabs button span { font-size: 1.2rem; line-height: 1; }
 .tabs button.active { color: var(--brand); font-weight: 700; }
+/* 🐕 tab: orange until the dogs are fed for this meal, green once they are */
+.tabs button.dogs-hungry { background: color-mix(in srgb, var(--warn) 32%, transparent); color: var(--warn); font-weight: 700; }
+.tabs button.dogs-fed { background: color-mix(in srgb, var(--good) 26%, transparent); color: var(--good); }
 
 dialog {
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--ink);
@@ -466,7 +469,7 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .brief-now .big small { font-size: .8rem; color: var(--muted); font-weight: 500; }
 .brief-card .brief-when { font-size: 1.35rem; font-weight: 800; margin: 2px 0 4px; }
 .brief-card .score { min-width: 40px; text-align: center; border-radius: 999px; padding: 2px 8px; font-weight: 800; font-size: .85rem; }
-.score.good, .hr.good { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+.score.good, .hr.good { background: color-mix(in srgb, var(--good) 26%, transparent); color: var(--good); }
 .score.ok, .hr.ok { background: color-mix(in srgb, #c99a1a 18%, transparent); color: #9a7410; }
 .score.bad, .hr.bad { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
 .paw { font-size: .78rem; font-weight: 700; white-space: nowrap; }
