@@ -218,31 +218,29 @@ function targets() {
 }
 
 // ---------- formatting ----------
-// Weighing raw/dry vs cooked. Meals are always stored as cooked (or as-eaten) grams; in raw
-// mode the grams you see and type are converted with each food's cooked÷raw ratio.
-// The top switch sets the default; tapping a food's "g cooked / g raw" label overrides just that food.
-const weighDefault = () => !!store.get('weighRaw', false);
+// Weighing raw/dry vs cooked. Meals are always stored as cooked (or as-eaten) grams; each
+// item in each meal can be switched to raw/dry, and then the grams you see and type are
+// converted with that food's cooked÷raw ratio. Everything starts as cooked.
 const rawRatio = (food) => FOODS[food]?.raw ?? FOODS[food]?.yield ?? null;
-function weighRaw(food) {
-  if (!food) return weighDefault();
+function weighRaw(food, meal) {
   if (!rawRatio(food)) return false;
-  const m = store.get('weighModes', {})[food];
-  return m ? m === 'raw' : weighDefault();
+  return store.get('weighModes', {})[`${meal}:${food}`] === 'raw';
 }
 const rawWord = (food) => (rawRatio(food) > 1.5 ? 'dry' : 'raw');
-function shownG(food, cooked) { const r = rawRatio(food); return weighRaw(food) && r ? Math.round(cooked / r) : cooked; }
-function cookedG(food, shown) { const r = rawRatio(food); return weighRaw(food) && r ? shown * r : shown; }
-// The unit next to a grams box; for foods that change weight when cooked it's a tap-to-switch button.
-function gramsUnit(food) {
+function shownG(food, cooked, meal) { const r = rawRatio(food); return weighRaw(food, meal) && r ? Math.round(cooked / r) : cooked; }
+function cookedG(food, shown, meal) { const r = rawRatio(food); return weighRaw(food, meal) && r ? shown * r : shown; }
+// The unit next to a grams box; for foods that change weight when cooked it's a cooked | raw switch.
+function gramsUnit(food, meal) {
   if (!rawRatio(food)) return '<span class="small muted">g</span>';
-  return `<button type="button" class="unit-toggle" data-weighfood="${food}" title="Tap to switch between cooked and ${rawWord(food)} weight">g ${weighRaw(food) ? rawWord(food) : 'cooked'} ⇄</button>`;
+  const raw = weighRaw(food, meal);
+  return `<span class="wseg" role="group" aria-label="Weighed cooked or ${rawWord(food)}"><button type="button" class="${raw ? '' : 'on'}" data-weighfood="${food}" data-weighmeal="${meal}" data-mode="cooked" aria-pressed="${!raw}">cooked</button><button type="button" class="${raw ? 'on' : ''}" data-weighfood="${food}" data-weighmeal="${meal}" data-mode="raw" aria-pressed="${raw}">${rawWord(food)}</button></span>`;
 }
 
-function amountLabel(food, grams) {
+function amountLabel(food, grams, meal) {
   const d = FOODS[food];
   if (!grams) return { main: 'none', sub: '0 g' };
   const r = rawRatio(food);
-  if (weighRaw(food) && r) {
+  if (weighRaw(food, meal) && r) {
     const g = Math.round(grams / r);
     return { main: d.oz ? `${Math.round(g / 28.35 * 10) / 10} oz ${rawWord(food)}` : `${g} g ${rawWord(food)}`, sub: `${Math.round(grams)} g cooked` };
   }
@@ -311,9 +309,9 @@ function shareRow() {
     <p class="small muted">This day's meals, your combos, or your progress over a day, a week, two weeks or the whole program — as text, a poster or a CSV.</p>
   </div>`;
 }
-const foodRow = (food, grams) => {
+const foodRow = (food, grams, meal) => {
   const f = FOODS[food];
-  const a = amountLabel(food, grams);
+  const a = amountLabel(food, grams, meal);
   const r = (k) => Math.round((f[k] * grams) / 100);
   return { name: f.name, amount: a.main, grams: Math.round(grams), kcal: r('kcal'), p: r('p'), f: r('f'), c: r('c') };
 };
@@ -336,7 +334,7 @@ function dayForSharing() {
     const plan = todayPlan();
     meals = mealOrder(plan).filter((k) => k !== 'snack' || plan.snack.portions.length).map((k) => {
       const m = plan[k];
-      return { key: k, label: label[k], title: m.title, totals: m.totals, items: m.portions.filter((x) => x.grams > 0).map((x) => foodRow(x.food, x.grams)) };
+      return { key: k, label: label[k], title: m.title, totals: m.totals, items: m.portions.filter((x) => x.grams > 0).map((x) => foodRow(x.food, x.grams, k)) };
     });
     const t = viewingToday() ? targets() : baseTargets();
     target = { kcal: t.kcal, p: t.p, f: t.f, c: t.c };
@@ -357,7 +355,7 @@ function comboGroups() {
   return ['breakfast', 'lunch', 'snack', 'dinner'].map((meal) => ({
     meal,
     combos: state.combos.filter((c) => comboMeal(c) === meal).map((c) => {
-      const items = c.items.filter((x) => FOODS[x.food]).map((x) => foodRow(x.food, x.grams));
+      const items = c.items.filter((x) => FOODS[x.food]).map((x) => foodRow(x.food, x.grams, meal));
       const sum = (k) => items.reduce((a, x) => a + x[k], 0);
       const totals = c.manual?.kcal ? { kcal: Math.round(+c.manual.kcal), p: Math.round(+c.manual.p || 0), f: Math.round(+c.manual.f || 0), c: Math.round(+c.manual.c || 0) }
         : { kcal: sum('kcal'), p: sum('p'), f: sum('f'), c: sum('c') };
@@ -573,28 +571,17 @@ const MEAL_TEMPLATES = { eggs: 'Switch: eggs', oatmeal: 'Switch: oatmeal' };
 // Order of the day's cards; the afternoon snack sits between lunch and dinner when it's on.
 const mealOrder = (plan) => ['breakfast', 'lunch', ...(plan.snack ? ['snack'] : []), 'dinner'];
 const SNACK_PICKS = [['apple', '🍎'], ['banana', '🍌'], ['orange', '🍊'], ['grapes', '🍇'], ['strawberries', '🍓'], ['berries', '🫐'], ['mixedNuts', '🥜'], ['cashews', '🥜'], ['almonds', '🌰'], ['greekYogurt', '🥛'], ['premierShake', '🥤'], ['barebells', '🍫']];
-function weighSwitch() {
-  const raw = weighDefault();
-  const mixed = Object.keys(store.get('weighModes', {})).length > 0;
-  return `<div class="weigh-switch"><span class="small muted">I weigh meat, rice & veggies${mixed ? ' <b>· mixed</b>' : ''}</span>
-    <div class="seg"><button type="button" class="${raw || mixed ? '' : 'on'}" data-weigh="cooked">All cooked</button><button type="button" class="${raw && !mixed ? 'on' : ''}" data-weigh="raw">All raw / dry</button></div></div>`;
-}
-$('#meals').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-weigh]');
-  if (!b) return;
-  store.set('weighRaw', b.dataset.weigh === 'raw');
-  store.set('weighModes', {}); // the top switch sets every food
-  renderToday();
-});
 $('#meals').addEventListener('click', (e) => {
   const b = e.target.closest('[data-weighfood]');
   if (!b) return;
-  const food = b.dataset.weighfood;
-  store.set('weighModes', { ...store.get('weighModes', {}), [food]: weighRaw(food) ? 'cooked' : 'raw' });
+  const key = `${b.dataset.weighmeal}:${b.dataset.weighfood}`;
+  const modes = { ...store.get('weighModes', {}) };
+  if (b.dataset.mode === 'raw') modes[key] = 'raw'; else delete modes[key];
+  store.set('weighModes', modes);
   renderToday();
 });
 function mealCardsWithAdd(plan) {
-  return weighSwitch() + mealOrder(plan).map((meal) => mealCard(meal, plan[meal]) + (meal === 'lunch' && !plan.snack ? addSnackCard() : '')).join('');
+  return mealOrder(plan).map((meal) => mealCard(meal, plan[meal]) + (meal === 'lunch' && !plan.snack ? addSnackCard() : '')).join('');
 }
 function addSnackCard() {
   return `<div class="card add-snack"><button type="button" class="ghost" data-addsnack>＋ Add an afternoon snack</button>
@@ -649,7 +636,7 @@ function mealCard(meal, m) {
       </div>
       <div class="meal-macros" data-role="totals">${totalsLine(m)}${m.manual ? ' <small class="muted">(your numbers)</small>' : ''}</div>
       ${comboRow(meal, m)}
-      ${m.eatout ? eatOutBody(meal, m) : m.custom ? customBody(meal, m) : `<ul class="portions editable">${m.portions.map((x) => itemRow(x)).join('')}</ul>`}
+      ${m.eatout ? eatOutBody(meal, m) : m.custom ? customBody(meal, m) : `<ul class="portions editable">${m.portions.map((x) => itemRow(x, meal)).join('')}</ul>`}
       </div>
       ${eatButton(meal)}
     </div>`;
@@ -785,7 +772,7 @@ function customBody(meal, m) {
   return `
     <ul class="portions editable custom">
       ${m.portions.map((x, i) => {
-        const a = amountLabel(x.food, x.grams);
+        const a = amountLabel(x.food, x.grams, meal);
         return `<li data-ci="${i}">
           <div class="item-top">
             <select data-cfood="${i}" aria-label="Food">${foodOptions(x.food)}</select>
@@ -795,8 +782,8 @@ function customBody(meal, m) {
             <input type="range" data-cslide="${i}" min="0" max="${Math.max(x.range?.[1] ?? 500, x.grams)}" step="${x.range?.[2] ?? 1}" value="${x.grams}" aria-label="${esc(FOODS[x.food].name)} amount">
           </div>
           <div class="item-slider">
-            <input type="number" class="grams" data-cgrams="${i}" data-food="${x.food}" min="0" max="2000" step="any" inputmode="decimal" value="${shownG(x.food, x.grams)}" aria-label="Grams">
-            ${gramsUnit(x.food)}
+            <input type="number" class="grams" data-cgrams="${i}" data-food="${x.food}" min="0" max="2000" step="any" inputmode="decimal" value="${shownG(x.food, x.grams, meal)}" aria-label="Grams">
+            ${gramsUnit(x.food, meal)}
             <span class="amt" data-role="amt">${a.main}</span>
           </div>
         </li>`;
@@ -838,7 +825,7 @@ function refreshCustom(meal) {
   }
   m.portions.forEach((x, i) => {
     const el = card.querySelector(`li[data-ci="${i}"] [data-role="amt"]`);
-    if (el) el.textContent = amountLabel(x.food, x.grams).main;
+    if (el) el.textContent = amountLabel(x.food, x.grams, meal).main;
   });
   const log = viewLog();
   if (log.meals[meal]) {
@@ -967,12 +954,12 @@ $('#meals').addEventListener('input', (e) => {
     const li = e.target.closest('li');
     const food = li.querySelector('[data-cgrams]')?.dataset.food;
     const typed = Math.max(0, +e.target.value || 0);
-    const grams = e.target.dataset.cgrams != null ? cookedG(food, typed) : typed;
+    const grams = e.target.dataset.cgrams != null ? cookedG(food, typed, meal) : typed;
     editCustom(meal, (c) => { c.items[i].grams = grams; });
     // Keep the slider (cooked grams) and the grams box (cooked or raw) together.
     const other = li.querySelector(e.target.dataset.cslide != null ? '[data-cgrams]' : '[data-cslide]');
     if (other) {
-      if (other.type === 'range') { if (grams > +other.max) other.max = grams; other.value = grams; } else other.value = shownG(food, grams);
+      if (other.type === 'range') { if (grams > +other.max) other.max = grams; other.value = grams; } else other.value = shownG(food, grams, meal);
     }
   } else if (e.target.dataset.manual) {
     const k = e.target.dataset.manual;
@@ -1010,8 +997,8 @@ function totalsLine(m) {
   return `${cell('kcal', ' kcal')} · ${cell('p', 'P')} · ${cell('f', 'F')} · ${cell('c', 'C')}`;
 }
 
-function itemRow(x) {
-  const a = amountLabel(x.food, x.grams);
+function itemRow(x, meal) {
+  const a = amountLabel(x.food, x.grams, meal);
   const [lo, hi, step] = x.range;
   const name = x.options.length > 1
     ? `<select data-pick="${x.slot}" aria-label="Swap ${esc(FOODS[x.food].name)}">${x.options.map((o) => `<option value="${o}" ${o === x.food ? 'selected' : ''}>${esc(FOODS[o].name)}</option>`).join('')}</select>`
@@ -1021,7 +1008,7 @@ function itemRow(x) {
       <div class="item-top">${name}<span class="amt" data-role="amt">${a.main}<small>${a.sub}</small></span></div>
       <div class="item-slider">
         <input type="range" id="r-${x.slot}" data-slide="${x.slot}" min="${lo}" max="${hi}" step="${step}" value="${x.grams}" aria-label="${esc(FOODS[x.food].name)} amount">
-        <input type="number" class="grams gbox" data-gbox="${x.slot}" data-food="${x.food}" min="0" step="any" inputmode="decimal" value="${shownG(x.food, x.grams)}" aria-label="${esc(FOODS[x.food].name)} grams ${weighRaw(x.food) ? rawWord(x.food) : 'cooked'}">${gramsUnit(x.food)}
+        <input type="number" class="grams gbox" data-gbox="${x.slot}" data-food="${x.food}" min="0" step="any" inputmode="decimal" value="${shownG(x.food, x.grams, meal)}" aria-label="${esc(FOODS[x.food].name)} grams ${weighRaw(x.food, meal) ? rawWord(x.food) : 'cooked'}">${gramsUnit(x.food, meal)}
         <button class="lock" data-unlock="${x.slot}" title="${x.locked ? 'Locked — tap to let the app size this' : 'Auto-sized'}">${x.locked ? '🔒' : 'auto'}</button>
       </div>
     </li>`;
@@ -1044,7 +1031,7 @@ function refreshMeal(meal, active) {
   card.querySelector('[data-reset]').hidden = !todaysCustom()[meal];
   for (const x of m.portions) {
     const li = card.querySelector(`li[data-slot="${x.slot}"]`);
-    const a = amountLabel(x.food, x.grams);
+    const a = amountLabel(x.food, x.grams, meal);
     li.querySelector('[data-role="amt"]').innerHTML = `${a.main}<small>${a.sub}</small>`;
     li.classList.toggle('locked', x.locked);
     const lock = li.querySelector('.lock');
@@ -1052,7 +1039,7 @@ function refreshMeal(meal, active) {
     const r = li.querySelector('input[type=range]');
     if (r !== active) r.value = x.grams;
     const g = li.querySelector('[data-gbox]');
-    if (g && g !== active) g.value = shownG(x.food, x.grams);
+    if (g && g !== active) g.value = shownG(x.food, x.grams, meal);
   }
 }
 
@@ -1073,7 +1060,7 @@ $('#meals').addEventListener('input', (e) => {
   // The box may be in raw/dry grams; the slider and the meal use cooked grams.
   const food = e.target.dataset.food;
   const raw = Math.max(+e.target.value || 0, 0);
-  const grams = e.target.dataset.gbox ? cookedG(food, raw) : raw;
+  const grams = e.target.dataset.gbox ? cookedG(food, raw, meal) : raw;
   editMeal(meal, (c) => {
     if (meal === 'breakfast') c.template = plan.template;
     c.grams = { ...c.grams, [slot]: grams };
@@ -1085,7 +1072,7 @@ $('#meals').addEventListener('change', (e) => {
   if (!e.target.dataset.gbox) return;
   const meal = e.target.closest('.meal').dataset.meal;
   const x = todayPlan()[meal].portions.find((p) => p.slot === e.target.dataset.gbox);
-  if (x) e.target.value = shownG(x.food, x.grams);
+  if (x) e.target.value = shownG(x.food, x.grams, meal);
 });
 
 $('#meals').addEventListener('change', (e) => {
