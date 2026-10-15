@@ -1,7 +1,8 @@
 // Macros per 100 g as weighed: oats dry, everything cooked (USDA FoodData Central).
 // `unit` lets the UI show a friendlier amount next to grams.
 // `range` = slider limits in grams; `yield` = cooked / raw weight for the shopping list;
-// `raw` = cooked / raw (or dry) weight for weighing before cooking (meat and fish use `yield`).
+// `raw` = cooked / raw (or dry) weight for weighing before cooking (meat and fish use `yield`);
+// `cooked` = cooked / dry weight for foods stored dry (oats cooked in water: USDA 379 vs 71 kcal per 100 g).
 export const FOODS = {
   // Breakfast
   egg:        { name: 'Whole eggs',               kcal: 143, p: 12.6, f: 9.5,  c: 0.7,  unit: { label: 'egg', grams: 50 },      range: [50, 250, 50] },
@@ -11,7 +12,7 @@ export const FOODS = {
   avocado:    { name: 'Avocado',                  kcal: 160, p: 2.0,  f: 14.7, c: 8.5,  unit: { label: 'avocado', grams: 136 }, range: [0, 150, 5] },
   butter:     { name: 'Butter',                   kcal: 717, p: 0.9,  f: 81.1, c: 0.1,  unit: { label: 'tbsp', grams: 14 },     range: [0, 28, 3.5] },
   cheddar:    { name: 'Cheddar cheese',           kcal: 403, p: 24.9, f: 33.1, c: 1.3,  unit: { label: 'oz', grams: 28 },       range: [0, 56, 7] },
-  oats:       { name: 'Rolled oats (dry)',        kcal: 379, p: 13.2, f: 6.5,  c: 67.7, unit: { label: 'cup', grams: 80 },      range: [20, 160, 5] },
+  oats:       { name: 'Rolled oats',              kcal: 379, p: 13.2, f: 6.5,  c: 67.7, unit: { label: 'cup', grams: 80 }, cooked: 5.3, range: [20, 160, 5] },
   whey:       { name: 'Whey protein',             kcal: 400, p: 80,   f: 5,    c: 10,   unit: { label: 'scoop', grams: 30 },    range: [0, 75, 5] },
   berries:    { name: 'Blueberries',              kcal: 57,  p: 0.7,  f: 0.3,  c: 14.5, unit: { label: 'cup', grams: 148 },     range: [0, 200, 25] },
   frozenBerries:{ name: 'Frozen mixed berries',  kcal: 50,  p: 0.7,  f: 0.4,  c: 12.0, unit: { label: 'cup', grams: 140 },     range: [0, 300, 10] },

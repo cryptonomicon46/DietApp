@@ -218,31 +218,38 @@ function targets() {
 }
 
 // ---------- formatting ----------
-// Weighing raw/dry vs cooked. Meals are always stored as cooked (or as-eaten) grams; each
-// item in each meal can be switched to raw/dry, and then the grams you see and type are
-// converted with that food's cooked÷raw ratio. Everything starts as cooked.
-const rawRatio = (food) => FOODS[food]?.raw ?? FOODS[food]?.yield ?? null;
-function weighRaw(food, meal) {
-  if (!rawRatio(food)) return false;
-  return store.get('weighModes', {})[`${meal}:${food}`] === 'raw';
+// Weighing raw/dry vs cooked. Meals are stored in each food's base weight — cooked (or as
+// eaten), except oats, which are dry. Each item in each meal can be switched to the other
+// way (raw/dry, or cooked for oats); the grams you see and type are then converted.
+function weighWays(food) {
+  const d = FOODS[food];
+  const r = d?.raw ?? d?.yield; // cooked ÷ raw
+  if (r) return { base: 'cooked', alt: r > 1.5 ? 'dry' : 'raw', k: 1 / r };
+  if (d?.cooked) return { base: 'dry', alt: 'cooked', k: d.cooked }; // cooked ÷ dry
+  return null;
 }
-const rawWord = (food) => (rawRatio(food) > 1.5 ? 'dry' : 'raw');
-function shownG(food, cooked, meal) { const r = rawRatio(food); return weighRaw(food, meal) && r ? Math.round(cooked / r) : cooked; }
-function cookedG(food, shown, meal) { const r = rawRatio(food); return weighRaw(food, meal) && r ? shown * r : shown; }
-// The unit next to a grams box; for foods that change weight when cooked it's a cooked | raw switch.
+function weighAlt(food, meal) {
+  return !!weighWays(food) && ['alt', 'raw'].includes(store.get('weighModes', {})[`${meal}:${food}`]);
+}
+const weighWord = (food, meal) => { const w = weighWays(food); return w ? (weighAlt(food, meal) ? w.alt : w.base) : ''; };
+function shownG(food, stored, meal) { return weighAlt(food, meal) ? Math.round(stored * weighWays(food).k) : stored; }
+function cookedG(food, shown, meal) { return weighAlt(food, meal) ? shown / weighWays(food).k : shown; }
+// The unit next to a grams box; for foods that change weight when cooked it's a two-way switch.
 function gramsUnit(food, meal) {
-  if (!rawRatio(food)) return '<span class="small muted">g</span>';
-  const raw = weighRaw(food, meal);
-  return `<span class="wseg" role="group" aria-label="Weighed cooked or ${rawWord(food)}"><button type="button" class="${raw ? '' : 'on'}" data-weighfood="${food}" data-weighmeal="${meal}" data-mode="cooked" aria-pressed="${!raw}">cooked</button><button type="button" class="${raw ? 'on' : ''}" data-weighfood="${food}" data-weighmeal="${meal}" data-mode="raw" aria-pressed="${raw}">${rawWord(food)}</button></span>`;
+  const w = weighWays(food);
+  if (!w) return '<span class="small muted">g</span>';
+  const alt = weighAlt(food, meal);
+  const btn = (mode, label, on) => `<button type="button" class="${on ? 'on' : ''}" data-weighfood="${food}" data-weighmeal="${meal}" data-mode="${mode}" aria-pressed="${on}">${label}</button>`;
+  return `<span class="wseg" role="group" aria-label="Weighed ${w.base} or ${w.alt}">${btn('base', w.base, !alt)}${btn('alt', w.alt, alt)}</span>`;
 }
 
 function amountLabel(food, grams, meal) {
   const d = FOODS[food];
   if (!grams) return { main: 'none', sub: '0 g' };
-  const r = rawRatio(food);
-  if (weighRaw(food, meal) && r) {
-    const g = Math.round(grams / r);
-    return { main: d.oz ? `${Math.round(g / 28.35 * 10) / 10} oz ${rawWord(food)}` : `${g} g ${rawWord(food)}`, sub: `${Math.round(grams)} g cooked` };
+  const w = weighWays(food);
+  if (weighAlt(food, meal)) {
+    const g = Math.round(grams * w.k);
+    return { main: d.oz ? `${Math.round(g / 28.35 * 10) / 10} oz ${w.alt}` : `${g} g ${w.alt}`, sub: `${Math.round(grams)} g ${w.base}` };
   }
   if (d.oz) return { main: `${Math.round(grams / 28.35 * 10) / 10} oz`, sub: `${grams} g cooked` };
   const u = d.unit;
@@ -255,7 +262,7 @@ function amountLabel(food, grams, meal) {
   else if (u.label === 'scoop') main = `${fraction(n)} scoop${plural}`;
   else if (u.label === 'slice') main = `${fraction(n)} slice${plural}`;
   else main = `${fraction(n)} ${u.label}${u.label === 'tsp' || u.label === 'tbsp' ? '' : plural}`;
-  return { main, sub: `${Math.round(grams)} g` };
+  return { main, sub: `${Math.round(grams)} g${w?.base === 'dry' ? ' dry' : ''}` };
 }
 
 function fraction(n) {
@@ -576,7 +583,7 @@ $('#meals').addEventListener('click', (e) => {
   if (!b) return;
   const key = `${b.dataset.weighmeal}:${b.dataset.weighfood}`;
   const modes = { ...store.get('weighModes', {}) };
-  if (b.dataset.mode === 'raw') modes[key] = 'raw'; else delete modes[key];
+  if (b.dataset.mode === 'alt') modes[key] = 'alt'; else delete modes[key];
   store.set('weighModes', modes);
   renderToday();
 });
@@ -1008,7 +1015,7 @@ function itemRow(x, meal) {
       <div class="item-top">${name}<span class="amt" data-role="amt">${a.main}<small>${a.sub}</small></span></div>
       <div class="item-slider">
         <input type="range" id="r-${x.slot}" data-slide="${x.slot}" min="${lo}" max="${hi}" step="${step}" value="${x.grams}" aria-label="${esc(FOODS[x.food].name)} amount">
-        <input type="number" class="grams gbox" data-gbox="${x.slot}" data-food="${x.food}" min="0" step="any" inputmode="decimal" value="${shownG(x.food, x.grams, meal)}" aria-label="${esc(FOODS[x.food].name)} grams ${weighRaw(x.food, meal) ? rawWord(x.food) : 'cooked'}">${gramsUnit(x.food, meal)}
+        <input type="number" class="grams gbox" data-gbox="${x.slot}" data-food="${x.food}" min="0" step="any" inputmode="decimal" value="${shownG(x.food, x.grams, meal)}" aria-label="${esc(FOODS[x.food].name)} grams ${weighWord(x.food, meal)}">${gramsUnit(x.food, meal)}
         <button class="lock" data-unlock="${x.slot}" title="${x.locked ? 'Locked — tap to let the app size this' : 'Auto-sized'}">${x.locked ? '🔒' : 'auto'}</button>
       </div>
     </li>`;
