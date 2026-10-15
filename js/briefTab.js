@@ -3,7 +3,7 @@ import { store, global, PROFILES, ownerId, profileStore } from './storage.js';
 import { pushNow } from './sync.js';
 import {
   PLACE, weatherUrls, parseWeather, scoreHour, bestWindow, dogWalks, hottestPavement, asphaltF, pawRisk,
-  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, feedingSlot, whoFed,
+  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, feedingSlot, whoFed, walkDay,
 } from './brief.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -134,8 +134,37 @@ function classesCard(today) {
 
 // ---- 🐕 the big "dogs fed?" button, shared by both phones ----
 const nameOf = (id) => profileStore(id).get('profile', null)?.name?.split(/\s+/)[0] || PROFILES.find((p) => p.id === id)?.name || id;
-function feedRecords() {
-  return PROFILES.map((p) => ({ person: p.id, name: nameOf(p.id), fed: profileStore(p.id).get('dogFed', {}) }));
+function feedRecords(key = 'dogFed') {
+  return PROFILES.map((p) => ({ person: p.id, name: nameOf(p.id), fed: profileStore(p.id).get(key, {}) }));
+}
+// The once-a-day "walked" box under the feeding button. The 🐕 tab colour stays on feeding.
+function walkBox() {
+  const day = walkDay();
+  const done = whoFed(feedRecords('dogWalked'), day);
+  const who = done && (done.person === ownerId() ? 'You' : esc(done.name));
+  return `<button type="button" class="walk-box ${done ? 'done' : ''}" data-walk aria-pressed="${!!done}">
+      <span class="walk-check">${done ? '✓' : ''}</span>
+      <span class="walk-text"><b>${done ? 'Dogs walked today' : 'Walk the dogs'}</b>
+        <small>${done ? `${who} · ${clock(new Date(done.at))}` : 'Once a day · tap when walked'}</small></span>
+      <span class="walk-icon">🐾</span>
+    </button>`;
+}
+function toggleWalk() {
+  const day = walkDay();
+  const done = whoFed(feedRecords('dogWalked'), day);
+  const s = profileStore(ownerId());
+  const mine = s.get('dogWalked', {});
+  if (done) {
+    if (done.person !== ownerId()) { alert(`${done.name} already walked them at ${clock(new Date(done.at))}.`); return; }
+    if (!confirm('Undo — the dogs haven\'t been walked today?')) return;
+    delete mine[day];
+  } else {
+    mine[day] = { at: Date.now() };
+  }
+  const keep = Object.keys(mine).sort().slice(-14);
+  s.set('dogWalked', Object.fromEntries(keep.map((k) => [k, mine[k]])));
+  renderFeed();
+  pushNow().then(renderFeed);
 }
 export function renderFeed() {
   const el = $('#feedDogs');
@@ -158,7 +187,8 @@ export function renderFeed() {
       <span class="feed-title">${fed ? `${meal} done` : `Feed the dogs`}</span>
       <span class="feed-sub">${fed ? `${esc(mine ? 'You' : fed.name)} · ${clock(new Date(fed.at))}` : `${meal} · tap when fed`}</span>
     </button>
-    <p class="small muted center">${fed ? `Resets ${slot.resets} for ${slot.meal === 'breakfast' ? 'dinner' : 'breakfast'}.` : `Resets ${slot.resets}.`}${other ? ` Breakfast: ${esc(other.person === ownerId() ? 'you' : other.name)} at ${clock(new Date(other.at))}.` : ''}${fed && !mine ? '' : ''}</p>`;
+    <p class="small muted center">${fed ? `Resets ${slot.resets} for ${slot.meal === 'breakfast' ? 'dinner' : 'breakfast'}.` : `Resets ${slot.resets}.`}${other ? ` Breakfast: ${esc(other.person === ownerId() ? 'you' : other.name)} at ${clock(new Date(other.at))}.` : ''}</p>
+    ${walkBox()}`;
 }
 function toggleFeed() {
   const slot = feedingSlot();
@@ -230,6 +260,7 @@ export function initBrief() {
     const t = e.target.closest('button');
     if (!t) return;
     if (t.dataset.feed != null) { toggleFeed(); return; }
+    if (t.dataset.walk != null) { toggleWalk(); return; }
     if (t.dataset.briefrefresh != null) { renderBrief(true); return; }
     if (t.dataset.addclass != null) { adding = true; renderBrief(); return; }
     if (t.dataset.cancelclass != null) { adding = false; renderBrief(); return; }

@@ -148,6 +148,10 @@ export function feedingSlot(date = new Date()) {
   const prev = ptParts(new Date(date.getTime() - 5 * 3600000)).date; // before 4 AM: still last night's dinner
   return { key: `${prev}:dinner`, meal: 'dinner', resets: 'at 4 AM' };
 }
+// One walk a day: the walking day runs 4 AM to 4 AM Pacific, like the feedings.
+export function walkDay(date = new Date()) {
+  return ptParts(new Date(date.getTime() - (ptParts(date).hour < 4 ? 5 * 3600000 : 0))).date;
+}
 // records: [{ person, name, fed: {slotKey: {at}} }] → who fed for this slot (earliest), if anyone.
 export function whoFed(records, key) {
   const hits = records.flatMap((r) => (r.fed?.[key] ? [{ person: r.person, name: r.name, at: r.fed[key].at }] : []));

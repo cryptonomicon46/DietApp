@@ -69,3 +69,11 @@ test('feeding slots follow Pacific time and reset at 4 PM and 4 AM', async () =>
   assert.equal(whoFed(recs, '2026-10-15:breakfast').name, 'Amani', 'first one counts');
   assert.equal(whoFed(recs, '2026-10-15:dinner'), null);
 });
+
+test('one walk a day, from 4 AM to 4 AM Pacific', async () => {
+  const { walkDay } = await import('../js/brief.js');
+  assert.equal(walkDay(new Date('2026-10-15T14:00:00Z')), '2026-10-15', '7 AM PT');
+  assert.equal(walkDay(new Date('2026-10-16T04:00:00Z')), '2026-10-15', '9 PM PT');
+  assert.equal(walkDay(new Date('2026-10-16T09:30:00Z')), '2026-10-15', '2:30 AM PT is still yesterday');
+  assert.equal(walkDay(new Date('2026-10-16T11:00:00Z')), '2026-10-16', '4 AM PT starts a new day');
+});
