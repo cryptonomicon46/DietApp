@@ -13,7 +13,7 @@ import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
 import { initNotes, renderNotes, updateNotesBadge, openUs } from './notes.js';
 import { syncLine } from './plans.js';
-import { initBrief, renderBrief } from './briefTab.js';
+import { initBrief, renderBrief, renderFeed } from './briefTab.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
@@ -2382,15 +2382,19 @@ if (sync.enabled()) {
   sync.push().catch(() => {});
   sync.pull().then((changed) => { updateNotesBadge(); if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
   const onNotes = () => document.querySelector('#tab-notes').classList.contains('active');
+  const onBrief = () => document.querySelector('#tab-brief').classList.contains('active');
   const refresh = () => sync.pull().then((changed) => {
     updateNotesBadge();
+    if (onBrief()) renderFeed();
     if (onNotes() && changed) renderNotes();
     else if (onNotes()) { const l = document.querySelector('#tab-notes .sync-line'); if (l) l.outerHTML = syncLine(); }
     else if (changed && sync.readOnly()) location.reload();
   }).catch(() => {});
   setInterval(refresh, 5 * 60000);
   // While the Us tab is open, check for new notes and plans often.
-  setInterval(() => { if (onNotes() && document.visibilityState === 'visible') refresh(); }, 10000);
+  setInterval(() => { if ((onNotes() || onBrief()) && document.visibilityState === 'visible') refresh(); }, 10000);
+  // The feeding button flips at noon and 4 AM even if nothing syncs.
+  setInterval(() => { if (onBrief()) renderFeed(); }, 60000);
   // A home-screen app resumes without reloading: catch up when it comes back.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && Date.now() - global.get('pulledAt', 0) > 30000) { sync.push().catch(() => {}); refresh(); }

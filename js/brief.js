@@ -132,3 +132,23 @@ export function classesOn(classes, date) {
   const d = date.getDay();
   return classes.filter((c) => c.days.includes(d)).sort((a, b) => a.time.localeCompare(b.time));
 }
+
+// ---------- feeding the dogs ----------
+// Two feedings a day on Pacific time: breakfast from 4 AM to noon, dinner from noon to 4 AM.
+export function ptParts(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' })
+    .formatToParts(date).map((x) => [x.type, x.value]));
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: +parts.hour };
+}
+export function feedingSlot(date = new Date()) {
+  const { date: d, hour } = ptParts(date);
+  if (hour >= 4 && hour < 12) return { key: `${d}:breakfast`, meal: 'breakfast', resets: 'at noon' };
+  if (hour >= 12) return { key: `${d}:dinner`, meal: 'dinner', resets: 'at 4 AM' };
+  const prev = ptParts(new Date(date.getTime() - 5 * 3600000)).date; // before 4 AM: still last night's dinner
+  return { key: `${prev}:dinner`, meal: 'dinner', resets: 'at 4 AM' };
+}
+// records: [{ person, name, fed: {slotKey: {at}} }] → who fed for this slot (earliest), if anyone.
+export function whoFed(records, key) {
+  const hits = records.flatMap((r) => (r.fed?.[key] ? [{ person: r.person, name: r.name, at: r.fed[key].at }] : []));
+  return hits.sort((a, b) => a.at - b.at)[0] || null;
+}

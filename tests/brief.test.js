@@ -55,3 +55,17 @@ test('your classes on a given day', () => {
   assert.deepEqual(classesOn(classes, wed).map((c) => c.name), ['Core Fit', 'Power Flow']);
   assert.equal(classesOn(classes, new Date(2026, 9, 15)).length, 0);
 });
+
+test('feeding slots follow Pacific time and reset at noon and 4 AM', async () => {
+  const { feedingSlot, whoFed } = await import('../js/brief.js');
+  // October = PDT (UTC−7). 7 AM PT = 14:00 UTC.
+  const at = (utc) => feedingSlot(new Date(utc));
+  assert.deepEqual([at('2026-10-15T14:00:00Z').key, at('2026-10-15T14:00:00Z').meal], ['2026-10-15:breakfast', 'breakfast']);
+  assert.equal(at('2026-10-15T18:59:00Z').meal, 'breakfast', '11:59 AM PT');
+  assert.equal(at('2026-10-15T19:00:00Z').key, '2026-10-15:dinner', 'noon PT resets for dinner');
+  assert.equal(at('2026-10-16T09:30:00Z').key, '2026-10-15:dinner', '2:30 AM PT is still last night');
+  assert.equal(at('2026-10-16T11:00:00Z').key, '2026-10-16:breakfast', '4 AM PT resets for breakfast');
+  const recs = [{ person: 'sandman', name: 'Sandman', fed: { '2026-10-15:breakfast': { at: 200 } } }, { person: 'amani', name: 'Amani', fed: { '2026-10-15:breakfast': { at: 100 } } }];
+  assert.equal(whoFed(recs, '2026-10-15:breakfast').name, 'Amani', 'first one counts');
+  assert.equal(whoFed(recs, '2026-10-15:dinner'), null);
+});

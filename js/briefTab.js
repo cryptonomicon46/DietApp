@@ -1,8 +1,9 @@
 // The Brief tab: today's best windows to run, ride and walk the dogs, plus Movement classes.
-import { store, global } from './storage.js';
+import { store, global, PROFILES, ownerId, profileStore } from './storage.js';
+import { pushNow } from './sync.js';
 import {
   PLACE, weatherUrls, parseWeather, scoreHour, bestWindow, dogWalks, hottestPavement, asphaltF, pawRisk,
-  GYMS, CLASS_TYPES, WEEKDAYS, classesOn,
+  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, feedingSlot, whoFed,
 } from './brief.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -131,9 +132,50 @@ function classesCard(today) {
   </div>`;
 }
 
+// ---- 🐕 the big "dogs fed?" button, shared by both phones ----
+const nameOf = (id) => profileStore(id).get('profile', null)?.name?.split(/\s+/)[0] || PROFILES.find((p) => p.id === id)?.name || id;
+function feedRecords() {
+  return PROFILES.map((p) => ({ person: p.id, name: nameOf(p.id), fed: profileStore(p.id).get('dogFed', {}) }));
+}
+export function renderFeed() {
+  const el = $('#feedDogs');
+  if (!el || !ownerId()) return;
+  const slot = feedingSlot();
+  const fed = whoFed(feedRecords(), slot.key);
+  const other = slot.meal === 'breakfast' ? null : whoFed(feedRecords(), slot.key.replace('dinner', 'breakfast'));
+  const meal = slot.meal === 'breakfast' ? 'Breakfast' : 'Dinner';
+  const mine = fed?.person === ownerId();
+  el.innerHTML = `
+    <button type="button" class="feed-btn ${fed ? 'fed' : 'hungry'}" data-feed aria-pressed="${!!fed}">
+      <span class="feed-icon">${fed ? '✓' : '🦴'}</span>
+      <span class="feed-title">${fed ? `${meal} done` : `Feed the dogs`}</span>
+      <span class="feed-sub">${fed ? `${esc(mine ? 'You' : fed.name)} · ${clock(new Date(fed.at))}` : `${meal} · tap when fed`}</span>
+    </button>
+    <p class="small muted center">${fed ? `Resets ${slot.resets} for ${slot.meal === 'breakfast' ? 'dinner' : 'breakfast'}.` : `Resets ${slot.resets}.`}${other ? ` Breakfast: ${esc(other.person === ownerId() ? 'you' : other.name)} at ${clock(new Date(other.at))}.` : ''}${fed && !mine ? '' : ''}</p>`;
+}
+function toggleFeed() {
+  const slot = feedingSlot();
+  const fed = whoFed(feedRecords(), slot.key);
+  const s = profileStore(ownerId());
+  const mineAll = s.get('dogFed', {});
+  if (fed) {
+    if (fed.person !== ownerId()) { alert(`${fed.name} already fed them at ${clock(new Date(fed.at))}.`); return; }
+    if (!confirm(`Undo — the dogs haven't had ${slot.meal} yet?`)) return;
+    delete mineAll[slot.key];
+  } else {
+    mineAll[slot.key] = { at: Date.now() };
+  }
+  // Keep about two weeks of feedings.
+  const keep = Object.keys(mineAll).sort().slice(-28);
+  s.set('dogFed', Object.fromEntries(keep.map((k) => [k, mineAll[k]])));
+  renderFeed();
+  pushNow().then(renderFeed);
+}
+
 export async function renderBrief(force = false) {
   const el = $('#briefBody');
   if (!el) return;
+  renderFeed();
   if (!weather || force) {
     el.innerHTML = `<p class="muted small">Getting San Jose weather…</p>`;
     try {
@@ -177,6 +219,7 @@ export function initBrief() {
   root.addEventListener('click', (e) => {
     const t = e.target.closest('button');
     if (!t) return;
+    if (t.dataset.feed != null) { toggleFeed(); return; }
     if (t.dataset.briefrefresh != null) { renderBrief(true); return; }
     if (t.dataset.addclass != null) { adding = true; renderBrief(); return; }
     if (t.dataset.cancelclass != null) { adding = false; renderBrief(); return; }

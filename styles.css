@@ -483,3 +483,13 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .day-picks span { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font-size: .75rem; font-weight: 700; }
 .day-picks input:checked + span { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
 .day-plan b { display: inline-block; min-width: 64px; }
+/* Dogs: feeding button */
+.brief-title { margin: 4px 4px 10px; font-size: 1.25rem; }
+.feed-card { display: flex; flex-direction: column; align-items: center; padding: 18px 12px 10px; }
+.feed-btn { width: 200px; height: 200px; border-radius: 50%; border: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #fff; box-shadow: 0 10px 24px rgba(0,0,0,.18), inset 0 -6px 0 rgba(0,0,0,.12); transition: transform .08s; }
+.feed-btn:active { transform: scale(.96); }
+.feed-btn.hungry { background: radial-gradient(circle at 35% 30%, #f0a35a, #d9692b); }
+.feed-btn.fed { background: radial-gradient(circle at 35% 30%, #4fbf8a, #2e7d5b); }
+.feed-icon { font-size: 3rem; line-height: 1; }
+.feed-title { font-size: 1.25rem; font-weight: 800; }
+.feed-sub { font-size: .85rem; opacity: .95; }
