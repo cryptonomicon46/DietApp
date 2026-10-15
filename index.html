@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Lean Plate">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=66">
+  <link rel="stylesheet" href="styles.css?v=69">
 </head>
 <body>
   <header class="top">
@@ -153,6 +153,11 @@
       </div>
       <div id="scanResult"></div>
     </section>
+    <!-- BRIEF: best windows to run, ride, walk the dogs + Movement classes -->
+    <section id="tab-brief" class="tab">
+      <div id="briefBody"></div>
+    </section>
+
     <!-- NOTES -->
     <section id="tab-notes" class="tab">
       <div class="seg us-pages" id="usPages" role="group" aria-label="Notes or plans"></div>
@@ -161,6 +166,7 @@
   </main>
 
   <nav class="tabs">
+    <button data-tab="brief"><span>☀️</span>Brief</button>
     <button data-tab="today" class="active"><span>🍽</span>Today</button>
     <button data-tab="weight"><span>⚖︎</span>Weight</button>
     <button data-tab="lift"><span>🏋︎</span>Lift</button>
@@ -327,28 +333,30 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/activity.js": "./js/activity.js?v=66",
-    "./js/analytics.js": "./js/analytics.js?v=66",
-    "./js/app.js": "./js/app.js?v=66",
-    "./js/commands.js": "./js/commands.js?v=66",
-    "./js/devices.js": "./js/devices.js?v=66",
-    "./js/foods.js": "./js/foods.js?v=66",
-    "./js/lift.js": "./js/lift.js?v=66",
-    "./js/lifting.js": "./js/lifting.js?v=66",
-    "./js/notes.js": "./js/notes.js?v=66",
-    "./js/plan.js": "./js/plan.js?v=66",
-    "./js/plans.js": "./js/plans.js?v=66",
-    "./js/poster.js": "./js/poster.js?v=66",
-    "./js/research.js": "./js/research.js?v=66",
-    "./js/review.js": "./js/review.js?v=66",
-    "./js/rewards.js": "./js/rewards.js?v=66",
-    "./js/share.js": "./js/share.js?v=66",
-    "./js/storage.js": "./js/storage.js?v=66",
-    "./js/sync.js": "./js/sync.js?v=66",
-    "./js/zip.js": "./js/zip.js?v=66"
+    "./js/activity.js": "./js/activity.js?v=69",
+    "./js/analytics.js": "./js/analytics.js?v=69",
+    "./js/app.js": "./js/app.js?v=69",
+    "./js/brief.js": "./js/brief.js?v=69",
+    "./js/briefTab.js": "./js/briefTab.js?v=69",
+    "./js/commands.js": "./js/commands.js?v=69",
+    "./js/devices.js": "./js/devices.js?v=69",
+    "./js/foods.js": "./js/foods.js?v=69",
+    "./js/lift.js": "./js/lift.js?v=69",
+    "./js/lifting.js": "./js/lifting.js?v=69",
+    "./js/notes.js": "./js/notes.js?v=69",
+    "./js/plan.js": "./js/plan.js?v=69",
+    "./js/plans.js": "./js/plans.js?v=69",
+    "./js/poster.js": "./js/poster.js?v=69",
+    "./js/research.js": "./js/research.js?v=69",
+    "./js/review.js": "./js/review.js?v=69",
+    "./js/rewards.js": "./js/rewards.js?v=69",
+    "./js/share.js": "./js/share.js?v=69",
+    "./js/storage.js": "./js/storage.js?v=69",
+    "./js/sync.js": "./js/sync.js?v=69",
+    "./js/zip.js": "./js/zip.js?v=69"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=66"></script>
+  <script type="module" src="js/app.js?v=69"></script>
 </body>
 </html>

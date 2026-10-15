@@ -130,13 +130,13 @@ label > input, label > select { margin-top: 4px; }
 
 .tabs {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 3;
-  display: grid; grid-template-columns: repeat(6, 1fr);
+  display: grid; grid-template-columns: repeat(7, 1fr);
   background: var(--card); border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
 }
 .tabs button {
   background: none; color: var(--muted); border-radius: 0; padding: 8px 0 10px;
-  font-size: .75rem; font-weight: 500; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: .68rem; font-weight: 500; display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
 .tabs button span { font-size: 1.2rem; line-height: 1; }
 .tabs button.active { color: var(--brand); font-weight: 700; }
@@ -461,3 +461,25 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .boot-fail[hidden] { display: none; }
 .boot-fail p { margin: 0 0 10px; }
 .item-slider .gbox { width: 72px; flex: 0 0 72px; text-align: center; padding: 6px 4px; }
+
+/* Brief tab */
+.brief-now .big small { font-size: .8rem; color: var(--muted); font-weight: 500; }
+.brief-card .brief-when { font-size: 1.35rem; font-weight: 800; margin: 2px 0 4px; }
+.brief-card .score { min-width: 40px; text-align: center; border-radius: 999px; padding: 2px 8px; font-weight: 800; font-size: .85rem; }
+.score.good, .hr.good { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+.score.ok, .hr.ok { background: color-mix(in srgb, #c99a1a 18%, transparent); color: #9a7410; }
+.score.bad, .hr.bad { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.paw { font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.paw.ok, .paw-t.ok { color: var(--good); } .paw.caution, .paw-t.caution { color: #9a7410; } .paw.unsafe, .paw-t.unsafe { color: var(--warn); }
+.hour-strip { display: flex; gap: 6px; overflow-x: auto; padding: 6px 0; -webkit-overflow-scrolling: touch; }
+.hour-strip .hr { flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 2px; border-radius: 12px; padding: 6px 2px; font-size: .78rem; }
+.hour-strip .hr b { font-size: .72rem; } .hour-strip .hr span { font-size: 1rem; font-weight: 800; color: var(--ink); } .hour-strip .hr small { color: var(--ink); opacity: .8; }
+.gym { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.class-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.class-form select, .class-form input[name=name] { flex: 1; }
+.day-picks { display: flex; gap: 4px; }
+.day-picks label { display: flex; }
+.day-picks input { display: none; }
+.day-picks span { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font-size: .75rem; font-weight: 700; }
+.day-picks input:checked + span { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+.day-plan b { display: inline-block; min-width: 64px; }

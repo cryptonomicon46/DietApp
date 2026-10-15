@@ -13,6 +13,7 @@ import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
 import { initNotes, renderNotes, updateNotesBadge, openUs } from './notes.js';
 import { syncLine } from './plans.js';
+import { initBrief, renderBrief } from './briefTab.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
@@ -2133,6 +2134,7 @@ document.querySelectorAll('.tabs button').forEach((btn) => {
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${btn.dataset.tab}`));
     if (btn.dataset.tab !== 'scan') stopScan();
     if (btn.dataset.tab === 'lift') renderLift();
+    if (btn.dataset.tab === 'brief') renderBrief();
     if (btn.dataset.tab === 'notes') {
       openUs();
       if (sync.enabled()) sync.pull().then((changed) => changed && renderNotes()).catch(() => {});
@@ -2252,7 +2254,7 @@ function ago(ms) {
 function renderViewOnly() {
   const ro = sync.readOnly();
   // Notes are always yours to write, even while viewing the other person's day.
-  document.querySelectorAll('main > .tab:not(#tab-notes)').forEach((t) => { t.inert = ro; });
+  document.querySelectorAll('main > .tab:not(#tab-notes):not(#tab-brief)').forEach((t) => { t.inert = ro; });
   document.body.classList.toggle('readonly', ro);
   $('#restoreLabel').hidden = ro;
   const name = state.profile?.name || activeProfile().name;
@@ -2305,6 +2307,7 @@ $('#shareOff').onclick = () => { sync.save(null); global.set('shareOff', true); 
 
 initLift();
 initNotes();
+initBrief();
 updateNotesBadge();
 // Weigh-ins said on the Lift tab ("weigh in 161.4").
 window.addEventListener('lp:weighin', (e) => {
