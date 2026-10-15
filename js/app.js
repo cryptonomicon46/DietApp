@@ -1015,7 +1015,8 @@ function itemRow(x, meal) {
 // 25 g veggies…), converted to the weight shown, so it nudges by a sensible amount either way.
 function stepSize(x, meal) {
   const base = x.range?.[2] ?? 5;
-  const s = weighAlt(x.food, meal) ? base * weighWays(x.food).k : base;
+  if (!weighAlt(x.food, meal)) return base; // e.g. ½ apple = 91 g, 12.5 g of some foods
+  const s = base * weighWays(x.food).k;
   return s >= 5 ? Math.round(s / 5) * 5 : Math.max(1, Math.round(s));
 }
 function stepButtons(x, meal) {
