@@ -69,11 +69,11 @@ export const FOODS = {
 export const FOOD_GROUPS = {
   Protein: ['whey', 'eggWhites', 'egg', 'chicken', 'thigh', 'beef', 'steak', 'salmon', 'cod', 'trout', 'tuna', 'cheddar'],
   Carbs: ['oats', 'sourdough', 'wheatBread', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'banana'],
-  'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'cauliflower', 'salad', 'avocado'],
+  'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'cauliflower', 'salad'],
   Milk: ['oatMilk', 'almondMilk', 'milk2'],
   Snacks: ['apple', 'banana', 'orange', 'pear', 'grapes', 'strawberries', 'berries', 'mixedNuts', 'cashews', 'almonds', 'greekYogurt'],
   'Bars & shakes': ['clifBar', 'clifBuilders', 'barebells', 'questBar', 'rxBar', 'kirklandBar', 'premierShake', 'corePower'],
-  Fats: ['almondButter', 'pb', 'walnuts', 'butter', 'oliveOil'],
+  Fats: ['avocado', 'almondButter', 'pb', 'walnuts', 'butter', 'oliveOil'],
 };
 
 // Default protein rotation (one per day); every protein below can be picked.
@@ -99,7 +99,7 @@ export const BREAKFASTS = {
       { slot: 'protein', options: ['whey', 'eggWhites'], drives: 'p', min: 15, max: 60 },
       { slot: 'carb', options: ['oats'], drives: 'c', min: 40, max: 120 },
       { slot: 'fruit', options: ['berries', 'frozenBerries', 'strawberries', 'banana'], fixed: 75 },
-      { slot: 'fat', options: ['pb', 'almondButter', 'walnuts', 'mixedNuts', 'cashews'], drives: 'f' },
+      { slot: 'fat', options: ['pb', 'almondButter', 'walnuts', 'mixedNuts', 'cashews', 'avocado'], drives: 'f' },
     ],
   },
 };
