@@ -80,3 +80,18 @@ npx wrangler deploy
 - Refusal fallback is on (`fallbacks: "default"`): if Claude's safety filters ever decline
   a request, the API retries it on Anthropic's recommended fallback model automatically.
 - Without the key, everything else works; unparsed commands just show a hint.
+
+
+## Dog documents (vaccine records, PDFs, photos)
+
+The app stores dog documents in the same HOUSEHOLD KV namespace, under
+`/household/<code>/file/<id>` (PDF or image, up to 10 MB each). This needs the
+updated worker. Deploy it once:
+
+```
+cd server
+npx wrangler deploy
+```
+
+Until then, documents stay on the phone that added them; the app retries the
+upload automatically after the update.

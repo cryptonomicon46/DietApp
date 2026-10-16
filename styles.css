@@ -656,3 +656,27 @@ details.help summary { cursor: pointer; }
 #tab-today .macro span { font-size: .72rem; }
 #tab-today #adjustBanner .banner { margin-top: 8px; padding: 6px 10px; font-size: .8rem; }
 #tab-today .day-nav { margin-bottom: 8px; }
+
+/* 🐶 Dog profiles */
+.dog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; }
+.dog-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; font-weight: 400; }
+.dog-emoji { font-size: 1.8rem; line-height: 1; }
+.dog-name { font-size: 1.25rem; font-weight: 800; }
+.dog-full h4 { margin: 14px 0 4px; font-size: .9rem; }
+.dog-list li { gap: 8px; }
+.vax { display: inline-block; font-size: .72rem; font-weight: 700; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.vax.ok { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+.vax.soon { background: color-mix(in srgb, #e6a817 25%, transparent); color: #9a6b00; }
+.vax.overdue { background: color-mix(in srgb, var(--alert) 18%, transparent); color: var(--alert); }
+.vax.unknown { background: var(--bg); color: var(--muted); }
+.dog-alerts { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; font-size: .85rem; }
+.dog-alerts .overdue { color: var(--alert); } .dog-alerts .soon { color: #9a6b00; }
+.dog-form { display: grid; gap: 8px; }
+.dog-form h4 { margin: 8px 0 0; font-size: .9rem; }
+.dog-form .row { margin-top: 0; }
+.dog-form label.small { flex: 1; display: grid; gap: 2px; }
+.edit-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px; border: 1px solid var(--line); border-radius: 10px; }
+.edit-row input { flex: 1 1 120px; min-width: 0; }
+.row.wrap { flex-wrap: wrap; gap: 6px; }
+.danger { color: var(--alert); }
+.edit-row .date-lbl { flex: 1 1 140px; display: grid; gap: 2px; color: var(--muted); }

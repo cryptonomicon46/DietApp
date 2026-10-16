@@ -5,6 +5,7 @@ import {
   PLACE, weatherUrls, parseWeather, scoreHour, bestWindow, dogWalks, hottestPavement, asphaltF, pawRisk,
   GYMS, CLASS_TYPES, WEEKDAYS, classesOn, feedingSlot, whoFed, walkDay, choreTimes, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths,
 } from './brief.js';
+import { renderDogs, initDogs, allDogs, dogAlerts, retryUploads } from './dogs.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -73,13 +74,13 @@ function dogCard(hourly, from) {
   </div>`;
 }
 
-function strip(hourly, from) {
+function strip(hourly, from, activity = 'run') {
   // Start at the first waking hour (5 AM) when looking at the night.
   while (from < hourly.length - 1 && hourly[from].time.getHours() < 5) from++;
   return `<div class="hour-strip" role="list">${hourly.slice(from, from + 17).map((h) => {
     const pav = asphaltF(h.temp, h.radiation, h.wind);
-    const run = scoreHour(h, 'run').score;
-    return `<div class="hr ${tone(run)}" role="listitem" title="Run score ${run}">
+    const run = scoreHour(h, activity).score;
+    return `<div class="hr ${tone(run)}" role="listitem" title="${activity === 'dog' ? 'Dog walk' : 'Run'} score ${run}">
       <b>${clock(h.time)}</b><span>${Math.round(h.temp)}°</span><small>${h.rain}% 💧</small><small>${Math.round(h.wind)} mph</small><small class="paw-t ${pawRisk(pav).level}">${pav}° 🐾</small></div>`;
   }).join('')}</div>`;
 }
@@ -236,6 +237,7 @@ export function renderFeed() {
       ${choreButton('park')}
     </div>`;
   renderDuty();
+  renderDogs();
   if ($('#homeDogs')) $('#homeDogs').innerHTML = homeDogs();
 }
 // Home: the same three check-ins as small buttons, and how close today is to golden.
@@ -254,6 +256,7 @@ export function homeDogs() {
       ${chip('data-chore="walk"', walks > 0, '🐾', walks ? `Walked${walks > 1 ? ` ×${walks}` : ''}` : 'Walk', walks ? 'Tap for another' : 'Tap when walked')}
       ${chip('data-chore="park"', park > 0, '🌳', park ? `Park${park > 1 ? ` ×${park}` : ''}` : 'Dog park', park ? 'Tap for another' : 'Tap after')}
     </div>
+    ${dogAlerts(allDogs(), isoDay()).slice(0, 2).map((a) => `<p class="small tone-warn" data-goto="brief">⚠ ${esc(a.dog)}: ${esc(a.text)}</p>`).join('')}
     <p class="small ${outings >= 2 ? 'golden-note' : 'muted'}">${outings >= 2 ? '⭐ Golden day — out twice today!' : outings === 1 ? 'One more outing makes it a ⭐ golden day.' : 'Two outings today make a ⭐ golden day.'}</p>
   </div>`;
 }
@@ -397,17 +400,22 @@ function renderDuty() {
     </div>`;
 }
 
+// Weather-driven cards live in three places: dog walks and paw safety on Dogs, run / ride
+// windows and Movement classes on Train, and the day in order on Home.
 export async function renderBrief(force = false) {
-  const el = $('#briefBody');
-  if (!el) return;
   renderFeed();
+  const dogEl = $('#briefBody'), fitEl = $('#fitBrief'), homeEl = $('#homePlan');
   if (!weather || force) {
-    el.innerHTML = `<p class="muted small">Getting San Jose weather…</p>`;
+    if (dogEl) dogEl.innerHTML = `<p class="muted small">Getting ${PLACE.name} weather…</p>`;
+    if (fitEl) fitEl.innerHTML = `<p class="muted small">Getting ${PLACE.name} weather…</p>`;
     try {
       loading ||= loadWeather(force);
       weather = await loading;
     } catch (err) {
-      el.innerHTML = `<div class="card"><p class="tone-warn">Couldn't get the weather (${esc(err.message)}).</p><button type="button" data-briefrefresh>Try again</button></div>${classesCard(new Date())}`;
+      const fail = `<div class="card"><p class="tone-warn">Couldn't get the weather (${esc(err.message)}).</p><button type="button" data-briefrefresh>Try again</button></div>`;
+      if (dogEl) dogEl.innerHTML = fail;
+      if (fitEl) fitEl.innerHTML = fail + classesCard(new Date());
+      if (homeEl) homeEl.innerHTML = '';
       return;
     } finally { loading = null; }
   }
@@ -424,30 +432,28 @@ export async function renderBrief(force = false) {
   const cur = hourly[Math.max(0, hourly.findIndex((h) => h.time.getTime() + 3600000 > now.getTime()))];
   const target = hourly[from].time;
   const sunIdx = weather.sunrise.findIndex((d) => d.toDateString() === target.toDateString());
-  el.innerHTML = `
-    <div class="card brief-now">
+  const nowCard = `<div class="card brief-now">
       <div class="eyebrow">${late ? 'Tomorrow' : 'Today'} · ${PLACE.name}</div>
       <div class="big">${Math.round(cur.temp)}°F <small>${esc(hourLine(cur).split(' · ').slice(1).join(' · '))}</small></div>
       ${sunIdx >= 0 ? `<div class="small muted">Sunrise ${clock(weather.sunrise[sunIdx])} · sunset ${clock(weather.sunset[sunIdx])} · updated ${clock(new Date(weather.fetchedAt))} <button type="button" class="linkish" data-briefrefresh>Refresh</button></div>` : ''}
-    </div>
-    ${dayPlan(hourly, from, end, target)}
+    </div>`;
+  if (dogEl) dogEl.innerHTML = `${dogCard(hourly, from)}
+    <div class="card"><div class="eyebrow">🐾 Pavement, hour by hour</div>${strip(hourly, from, 'dog')}
+      <p class="small muted">Color = how good each hour is for a dog walk. Weather: Open-Meteo.</p></div>`;
+  if (fitEl) fitEl.innerHTML = `${nowCard}
     ${activityCard('🏃', 'Run 4 miles', '~40 min', hourly, 'run', 1, from, end)}
     ${activityCard('🚴', 'Ride 25–30 miles', '~2½ h, daylight', hourly, 'bike', 3, from, end)}
-    ${dogCard(hourly, from)}
     ${classesCard(target)}
     <div class="card"><div class="eyebrow">Hour by hour</div>${strip(hourly, from)}
-      <p class="small muted">Color = how good each hour is for a run. 🐾 = estimated pavement temperature. Weather and air quality: Open-Meteo.</p></div>`;
+      <p class="small muted">Color = how good each hour is for a run. Weather and air quality: Open-Meteo.</p></div>`;
+  if (homeEl) homeEl.innerHTML = dayPlan(hourly, from, end, target);
 }
 
 export function initBrief() {
-  // Home's dog buttons do the same as the big ones.
-  $('#tab-home')?.addEventListener('click', (e) => {
-    const t = e.target.closest('button');
-    if (!t) return;
-    if (t.dataset.feed != null) toggleFeed();
-    else if (t.dataset.chore) logChore(t.dataset.chore);
-  });
-  const root = $('#tab-brief');
+  // Dog buttons (Dogs and Home), classes and weather (Train) — one listener for all tabs.
+  const root = $('main');
+  initDogs(root);
+  setTimeout(() => retryUploads().catch(() => {}), 8000);
   // Keep the tab's colour right as the 4 AM / 4 PM resets pass, on any tab.
   renderFeed();
   setInterval(renderFeed, 60000);

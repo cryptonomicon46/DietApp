@@ -32,13 +32,41 @@ export default {
     const cors = {
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     };
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
     const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
     const callback = `${url.origin}/${url.pathname.split('/')[1]}/callback`;
 
     try {
+      // ---- Household files (dog vaccine records etc.): /household/<code>/file/<id> ----
+      // Raw bytes in KV with their type; anyone with the household code can read them,
+      // exactly like the household's data.
+      const hf = url.pathname.match(/^\/household\/([a-z0-9-]{12,64})\/file\/([a-z0-9]{6,40})$/);
+      if (hf) {
+        if (!env.HOUSEHOLD) return json({ error: 'HOUSEHOLD storage not set up — see server/README.md' }, 501);
+        const key = `${hf[1]}:file:${hf[2]}`;
+        if (req.method === 'GET') {
+          const { value, metadata } = await env.HOUSEHOLD.getWithMetadata(key, 'arrayBuffer');
+          if (!value) return json({ error: 'not found' }, 404);
+          return new Response(value, { headers: { ...cors, 'Content-Type': metadata?.type || 'application/octet-stream', 'Cache-Control': 'private, max-age=86400' } });
+        }
+        if (req.method === 'PUT') {
+          const type = (req.headers.get('Content-Type') || '').split(';')[0].trim();
+          if (type !== 'application/pdf' && !/^image\/(jpeg|png|heic|heif|webp|gif)$/.test(type)) return json({ error: 'PDF or image only' }, 415);
+          const buf = await req.arrayBuffer();
+          if (!buf.byteLength) return json({ error: 'empty' }, 400);
+          if (buf.byteLength > 10 * 1024 * 1024) return json({ error: 'too large (10 MB max)' }, 413);
+          await env.HOUSEHOLD.put(key, buf, { metadata: { type, size: buf.byteLength } });
+          return json({ ok: true });
+        }
+        if (req.method === 'DELETE') {
+          await env.HOUSEHOLD.delete(key);
+          return json({ ok: true });
+        }
+        return json({ error: 'method not allowed' }, 405);
+      }
+
       // ---- Household sharing: /household/<code>/<person> ----
       const hh = url.pathname.match(/^\/household\/([a-z0-9-]{12,64})\/([a-z]{2,20})$/);
       if (hh) {

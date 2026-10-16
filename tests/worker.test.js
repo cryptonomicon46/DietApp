@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../server/worker.js';
 
-const kv = () => { const m = new Map(); return { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); } }; };
+const kv = () => { const m = new Map(); const meta = new Map(); return { get: async (k) => m.get(k) ?? null, put: async (k, v, o) => { m.set(k, v); meta.set(k, o?.metadata ?? null); }, getWithMetadata: async (k) => ({ value: m.get(k) ?? null, metadata: meta.get(k) ?? null }), delete: async (k) => { m.delete(k); } }; };
 const env = { APP_ORIGIN: 'https://example.github.io/DietApp/', HOUSEHOLD: kv() };
 const call = (path, init) => worker.fetch(new Request(`https://w.test${path}`, init), env);
 
@@ -30,4 +30,21 @@ test('assistant: needs a key and a known household code', async () => {
   assert.equal((await post(keyed, { code: 'zzzz-zzzz-zzzz', text: 'squats' })).status, 403, 'unknown household');
   assert.equal((await post(keyed, { code: 'abcd-efgh-jkmn', text: '' })).status, 400);
   assert.equal((await post(keyed, { code: 'abcd-efgh-jkmn', text: 'x'.repeat(501) })).status, 400);
+});
+
+test('household files: PDFs and images up to 10 MB, readable with the code, deletable', async () => {
+  const path = '/household/abcd-efgh-jkmn/file/vax123abc';
+  const pdf = new Uint8Array([37, 80, 68, 70, 45, 49]); // %PDF-1
+  assert.equal((await call(path)).status, 404);
+  assert.equal((await call(path, { method: 'PUT', body: pdf, headers: { 'Content-Type': 'text/html' } })).status, 415, 'no web pages');
+  assert.equal((await call(path, { method: 'PUT', body: new Uint8Array(0), headers: { 'Content-Type': 'application/pdf' } })).status, 400);
+  assert.equal((await call(path, { method: 'PUT', body: new Uint8Array(10 * 1024 * 1024 + 1), headers: { 'Content-Type': 'application/pdf' } })).status, 413);
+  assert.equal((await call(path, { method: 'PUT', body: pdf, headers: { 'Content-Type': 'application/pdf' } })).status, 200);
+  const got = await call(path);
+  assert.equal(got.headers.get('Content-Type'), 'application/pdf');
+  assert.deepEqual(new Uint8Array(await got.arrayBuffer()), pdf);
+  assert.equal((await call('/household/zzzz-zzzz-zzzz/file/vax123abc')).status, 404, 'other codes see nothing');
+  assert.equal((await call(path, { method: 'DELETE' })).status, 200);
+  assert.equal((await call(path)).status, 404);
+  assert.match((await call(path, { method: 'OPTIONS' })).headers.get('Access-Control-Allow-Methods'), /DELETE/);
 });

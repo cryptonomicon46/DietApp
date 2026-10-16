@@ -2219,8 +2219,8 @@ function showTab(name) {
     el.innerHTML = FOOD_PAGES.map(([k, label]) => `<button type="button" data-sub="${k}" class="${k === name ? 'on' : ''}">${label}</button>`).join('');
   });
   if (name !== 'scan') stopScan();
-  if (name === 'home') renderHome();
-  if (name === 'lift') { renderLift(); if (state.profile) renderTraining(targets()); }
+  if (name === 'home') { renderHome(); renderBrief(); }
+  if (name === 'lift') { renderLift(); if (state.profile) renderTraining(targets()); renderBrief(); }
   if (name === 'brief') renderBrief();
   if (name === 'notes') {
     openUs();
