@@ -383,7 +383,7 @@ function dayText(d) {
     lines.push(`${{ breakfast: '☀️', lunch: '🥗', snack: '🍎', dinner: '🍽️' }[m.key]} ${m.label.toUpperCase()}: ${m.title} (${m.totals.kcal} kcal · ${m.totals.p}P ${m.totals.f}F ${m.totals.c}C)`);
     for (const it of m.items) lines.push(`  – ${it.name}${it.amount ? `: ${it.amount}` : ''}${it.grams != null ? ` (${it.grams} g)` : ''}`);
   }
-  lines.push('', `Day total: ${d.total.kcal} kcal · ${d.total.p}P ${d.total.f}F ${d.total.c}C`, 'Oats weighed dry; meat, fish, rice and veggies cooked.', '— Lean Plate');
+  lines.push('', `Day total: ${d.total.kcal} kcal · ${d.total.p}P ${d.total.f}F ${d.total.c}C`, 'Oats weighed dry; meat, fish, rice and veggies cooked.', '— Our PawMily');
   return lines.join('\n');
 }
 // What the panel would share right now: {text?, blob?, filename}.
@@ -2144,7 +2144,7 @@ $('#sendCode').onclick = async () => {
   const code = sync.settings()?.code;
   if (!code) return;
   const url = `${location.origin}${location.pathname}#link=${encodeURIComponent(code)}`;
-  const text = `Tap to link our Lean Plate apps (open it in the browser you use for Lean Plate): ${url}\nOr enter this code under "Code from my phone": ${code}`;
+  const text = `Tap to link our PawMily apps (open it in the browser you use for Our PawMily): ${url}\nOr enter this code under "Code from my phone": ${code}`;
   try {
     if (navigator.share) await navigator.share({ text });
     else { await navigator.clipboard.writeText(code); $('#joinStatus').textContent = 'Code copied.'; }
@@ -2314,7 +2314,7 @@ $('#exportData').onclick = async () => {
     const tables = buildTables(exportProfile(activeProfile().id));
     const files = Object.entries(tables).filter(([, rows]) => rows.length).map(([name, rows]) => ({ name: `${name}.csv`, text: toCsv(rows) }));
     files.push({ name: 'README.txt', text: [
-      'Lean Plate export — open the CSV files in Excel, Numbers or Google Sheets.',
+      'Our PawMily export — open the CSV files in Excel, Numbers or Google Sheets.',
       'meals.csv: every logged meal with its macros, its target and on_target (yes/no).',
       'days.csv: daily calories eaten vs burned, deficit, protein, coins and weight.',
       'activities.csv: activities you added plus imported WHOOP/Garmin workouts.',
@@ -2338,7 +2338,7 @@ $('#restoreBackup').onchange = async (e) => {
   if (!file) return;
   try {
     const backup = JSON.parse(await file.text());
-    if (backup.app !== 'lean-plate' || !backup.data?.profile) throw new Error('That file isn\'t a Lean Plate backup.');
+    if (backup.app !== 'lean-plate' || !backup.data?.profile) throw new Error('That file isn\'t an Our PawMily backup.');
     if (backup.profile !== ownerId()) throw new Error(`That backup belongs to ${PROFILES.find((p) => p.id === backup.profile)?.name || 'someone else'}. You can only restore your own profile on your phone.`);
     if (!confirm(`Replace everything on this phone for ${state.profile?.name || 'you'} with the backup from ${backup.savedAt.slice(0, 10)}?`)) return;
     importProfile(ownerId(), backup.data);

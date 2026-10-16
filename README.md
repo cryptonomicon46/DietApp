@@ -1,6 +1,6 @@
-# Lean Plate
+# Our PawMily
 
-A simple, phone-friendly diet app for sustainable weight loss.
+A couples app for two people and their dogs: shared dog care, notes and plans, and each partner's diet and lifting.
 
 - **Tabs** – five tabs: **🏠 Home** (greeting, the dog buttons, morning weigh-in, your next meal, your partner's latest note and next plan, today's training), **🐕 Dogs**, **🍽 Food** (a bar at the top switches between Meals, Weight, Groceries and Scan), **🏋︎ Train** (the training card with WHOOP / Strava calories and workout fuel, then the lifting log) and **💞 Us**. On Food › Meals, today's deficit sits at the bottom after dinner.
 - **🐕 Dogs** – a big round **Feed the dogs** button shared by both phones: tap it when you feed them and the other phone shows “Breakfast done · Amani · 7:05 AM”. It resets at 4 PM (Pacific) for dinner and at 4 AM for breakfast; tap again to undo your own. The **🐕 Dogs** tab at the bottom shows it from anywhere: **red** while the dogs still need this meal, **green** once someone has fed them. Next to it, round **🐾 Walk the dogs** and **🌳 Dog park** buttons log a walk or park trip for whoever taps (tap again for another one that day; *Undo my last* takes yours back); they reset at 6 AM. The tab turns **green** once they're fed, **bright green** once they're fed *and* walked, and **gold** on a ⭐ golden day — fed and out twice (two walks, or a walk and the dog park).
@@ -75,7 +75,7 @@ A simple, phone-friendly diet app for sustainable weight loss.
 ## WHOOP & Garmin
 
 - **WHOOP export import** works with no setup: WHOOP app → More → App Settings → Data Export → import `workouts.csv` under Devices.
-- **Garmin CSV import** works with no setup: Garmin Connect → Activities → Export CSV → Lean Plate → Devices → Import.
+- **Garmin CSV import** works with no setup: Garmin Connect → Activities → Export CSV → Our PawMily → Devices → Import.
 - **Automatic sync** for WHOOP and Garmin (through Strava, since Garmin's own API is limited to approved businesses) needs a small free connector — see [`server/README.md`](server/README.md).
 
 This is general guidance, not medical advice — check with a doctor or dietitian if you have health conditions.

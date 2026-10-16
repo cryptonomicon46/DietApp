@@ -96,7 +96,7 @@ function layout(ctx, day, draw) {
     const t = day.total;
     if (t) ctx.fillText(`Day total: ${t.kcal} kcal · ${t.p}P · ${t.f}F · ${t.c}C`, PAD, y + 20);
     font(24, 500); ctx.fillStyle = COLORS.muted;
-    ctx.fillText('Oats weighed dry; meat, fish, eggs, rice and veggies cooked.  ·  Lean Plate', PAD, y + 62);
+    ctx.fillText('Oats weighed dry; meat, fish, eggs, rice and veggies cooked.  ·  Our PawMily', PAD, y + 62);
   }
   return y + 110;
 }
@@ -230,6 +230,6 @@ export async function drawReportPoster({ heading, period, report, rows, weekly }
     y += rowH;
   }
   font(24, 500); ctx.fillStyle = COLORS.muted;
-  ctx.fillText('Blue dots: weigh-ins · green line: 7-day average  ·  Lean Plate', PAD, y + 60);
+  ctx.fillText('Blue dots: weigh-ins · green line: 7-day average  ·  Our PawMily', PAD, y + 60);
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 }
