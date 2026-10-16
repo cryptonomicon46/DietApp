@@ -49,6 +49,8 @@ export const FOODS = {
   steak:      { name: 'Sirloin steak',               kcal: 187, p: 29.5, f: 6.7,  c: 0, oz: true, yield: 0.75, range: [0, 340, 5] },
   salmon:     { name: 'Salmon',                      kcal: 206, p: 22.1, f: 12.4, c: 0, oz: true, yield: 0.8,  range: [0, 340, 5] },
   cod:        { name: 'Cod',                         kcal: 105, p: 22.8, f: 0.9,  c: 0, oz: true, yield: 0.8,  range: [0, 340, 5] },
+  // Canned light tuna in water, drained (USDA): one can = 3 oz (85 g) drained; steps of ½ can.
+  tuna:       { name: 'Canned tuna (in water)',      kcal: 116, p: 25.5, f: 0.8,  c: 0, unit: { label: 'can', grams: 85 }, range: [0, 340, 42.5] },
   trout:      { name: 'Rainbow trout',               kcal: 168, p: 23.8, f: 7.4,  c: 0, oz: true, yield: 0.8,  range: [0, 340, 5] },
   // Sides (cooked)
   rice:       { name: 'White/jasmine rice',       kcal: 130, p: 2.7, f: 0.3,  c: 28.2, unit: { label: 'cup', grams: 158 }, raw: 2.8, range: [0, 450, 10] },
@@ -65,7 +67,7 @@ export const FOODS = {
 
 // Groups for the "add a food" picker when you build a meal yourself.
 export const FOOD_GROUPS = {
-  Protein: ['whey', 'eggWhites', 'egg', 'chicken', 'thigh', 'beef', 'steak', 'salmon', 'cod', 'trout', 'cheddar'],
+  Protein: ['whey', 'eggWhites', 'egg', 'chicken', 'thigh', 'beef', 'steak', 'salmon', 'cod', 'trout', 'tuna', 'cheddar'],
   Carbs: ['oats', 'sourdough', 'wheatBread', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'banana'],
   'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'cauliflower', 'salad', 'avocado'],
   Milk: ['oatMilk', 'almondMilk', 'milk2'],
@@ -76,7 +78,7 @@ export const FOOD_GROUPS = {
 
 // Default protein rotation (one per day); every protein below can be picked.
 export const PROTEINS = ['chicken', 'beef', 'salmon', 'cod', 'trout'];
-const PROTEIN_OPTIONS = ['chicken', 'thigh', 'steak', 'beef', 'salmon', 'cod', 'trout'];
+const PROTEIN_OPTIONS = ['chicken', 'thigh', 'steak', 'beef', 'salmon', 'cod', 'trout', 'tuna'];
 
 // Meal templates. Each item is a slot with swappable `options` (first = default).
 // `drives` = the macro that slot is sized to hit; `fixed` = default grams for a fixed slot.
@@ -126,6 +128,7 @@ export const STORES = {
   beef:      { store: 'Safeway', tip: '95/5 or 96/4 lean ground beef (Sprouts meat counter too)', packGrams: 454, packLabel: 'lb' },
   salmon:    { store: 'Costco',  tip: 'Kirkland Atlantic salmon fillets or frozen wild sockeye', packGrams: 454, packLabel: 'lb' },
   cod:       { store: 'Sprouts', tip: 'Seafood counter or frozen wild cod fillets (Safeway too)', packGrams: 454, packLabel: 'lb' },
+  tuna:      { store: 'Costco',  tip: 'Kirkland or Wild Planet light tuna in water (3 oz drained per can)', packGrams: 85, packLabel: 'can' },
   trout:     { store: 'Sprouts', tip: 'Rainbow trout fillets at the seafood counter', packGrams: 454, packLabel: 'lb' },
   rice:      { store: 'Costco',  tip: 'Jasmine rice bag (1 cup dry ≈ 3 cups cooked)', packGrams: 454 * 2.8, packLabel: 'lb dry' },
   veggies:   { store: 'Costco',  tip: 'Frozen stir-fry / mixed vegetables; fresh at Sprouts', packGrams: 454, packLabel: 'lb' },
