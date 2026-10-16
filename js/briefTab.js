@@ -211,14 +211,14 @@ export function renderFeed() {
   const walked = outings > 0;
   const best = outings >= 2;
   // The 🐕 tab shows it from anywhere in the app: red = still to feed, green = fed but not
-  // out yet, bright green = fed and walked, gold = fed and a best day (2+ walks, or walk + park).
+  // out yet, bright green = fed and walked, gold = fed and a golden day (2+ walks, or walk + park).
   const tab = document.querySelector('.tabs [data-tab="brief"]');
   if (tab) {
     tab.classList.toggle('dogs-hungry', !fed);
     tab.classList.toggle('dogs-fed', !!fed && !walked);
     tab.classList.toggle('dogs-done', !!fed && walked && !best);
     tab.classList.toggle('dogs-best', !!fed && best);
-    tab.title = !fed ? `Dogs still need ${slot.meal}` : best ? 'Best day: fed, and out twice ⭐' : walked ? `Dogs fed (${slot.meal}) and walked` : `Dogs fed (${slot.meal}) — not walked yet`;
+    tab.title = !fed ? `Dogs still need ${slot.meal}` : best ? 'Golden day: fed, and out twice ⭐' : walked ? `Dogs fed (${slot.meal}) and walked` : `Dogs fed (${slot.meal}) — not walked yet`;
   }
   const other = slot.meal === 'breakfast' ? null : whoFed(feedRecords(), slot.key.replace('dinner', 'breakfast'));
   const meal = slot.meal === 'breakfast' ? 'Breakfast' : 'Dinner';
@@ -256,7 +256,7 @@ function toggleFeed() {
   pushNow().then(renderFeed);
 }
 
-// ---- 🐶 happy dog days: a calendar of this month, best days, and the happiest month ----
+// ---- 🐶 happy dog days: a calendar of this month, golden days, and the happiest month ----
 function renderHappy(recs) {
   const el = $('#dogHappy');
   if (!el) return;
@@ -279,18 +279,54 @@ function renderHappy(recs) {
   const top = Math.max(1, ...months.map((x) => x.best));
   el.innerHTML = `
     <div class="eyebrow">🐶 Happy dog days</div>
-    <p class="small muted">A ⭐ best day is two outings — two walks, or a walk and the dog park.</p>
+    <p class="small muted">A ⭐ golden day is two outings — two walks, or a walk and the dog park.</p>
     <div class="happy-stats">
-      <div><b>${m.best}</b><small>best days in ${monthName(month)}</small></div>
+      <div><b>${m.best}</b><small>golden days in ${monthName(month)}</small></div>
       <div><b>${m.out}</b><small>days out</small></div>
       <div><b>${m.streak}</b><small>⭐ streak</small></div>
     </div>
     <div class="cal-grid">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((x) => `<span class="cal-h">${x}</span>`).join('')}${cells.join('')}</div>
-    <div class="cal-key small muted"><span class="cal best">⭐</span> best day <span class="cal out"></span> out once <span class="cal none"></span> no walk</div>
+    <div class="cal-key small muted"><span class="cal best">⭐</span> golden day <span class="cal out"></span> out once <span class="cal none"></span> no walk</div>
     <div class="happy-year">
-      <div class="small"><b>${year}</b>: ${y.best} best days · ${y.out} days out${happiest ? ` · happiest month <b>${monthName(happiest)}</b> 🏆` : ''}</div>
-      <div class="month-bars">${months.map((x) => `<div class="mb${x.month === happiest ? ' mb-top' : ''}" title="${monthName(x.month)}: ${x.best} best days"><span class="mb-n">${x.best || ''}</span><span class="mb-bar" style="height:${Math.round((x.best / top) * 100)}%"></span><span class="mb-l">${monthName(x.month, 'narrow')}</span></div>`).join('')}</div>
+      <div class="small"><b>${year}</b>: ${y.best} golden days · ${y.out} days out${happiest ? ` · happiest month <b>${monthName(happiest)}</b> 🏆` : ''}</div>
+      <div class="month-bars">${months.map((x) => `<div class="mb${x.month === happiest ? ' mb-top' : ''}" title="${monthName(x.month)}: ${x.best} golden days"><span class="mb-n">${x.best || ''}</span><span class="mb-bar" style="height:${Math.round((x.best / top) * 100)}%"></span><span class="mb-l">${monthName(x.month, 'narrow')}</span></div>`).join('')}</div>
     </div>`;
+}
+
+// ---- 🧸 new toys: who brought one home, and how many this month / year ----
+const TOY_EMOJI = ['🧸', '🎾', '🦴', '🥏', '🪢', '🐿️', '🦆', '🍩'];
+let toyAdding = false;
+let toyEmoji = '🧸';
+const shortDate = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+function allToys() {
+  return PROFILES.flatMap((p) => profileStore(p.id).get('dogToys', []).map((t) => ({ ...t, person: p.id, name: nameOf(p.id) })))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.at - a.at);
+}
+function renderToys() {
+  const el = $('#dogToys');
+  if (!el) return;
+  const toys = allToys();
+  const today = walkDay();
+  const month = today.slice(0, 7);
+  const year = today.slice(0, 4);
+  const n = (prefix) => toys.filter((t) => t.date.startsWith(prefix)).length;
+  const form = toyAdding ? `<form id="toyForm" class="toy-form">
+      <div class="toy-emoji">${TOY_EMOJI.map((e) => `<button type="button" class="${e === toyEmoji ? 'on' : ''}" data-toyemoji="${e}">${e}</button>`).join('')}</div>
+      <input id="toyName" maxlength="60" placeholder="What is it? e.g. squeaky duck" autocomplete="off" required>
+      <label class="small">Got it on <input type="date" id="toyDate" value="${isoDay()}" max="${isoDay()}"></label>
+      <div class="row"><button type="submit">Add toy</button><button type="button" class="ghost" data-toycancel>Cancel</button></div>
+    </form>` : '<button type="button" class="ghost" data-toyadd>＋ New toy</button>';
+  el.innerHTML = `
+    <div class="eyebrow">🧸 New toys</div>
+    <div class="happy-stats toy-stats"><div><b>${n(month)}</b><small>in ${monthName(month)}</small></div><div><b>${n(year)}</b><small>in ${year}</small></div><div><b>${toys.length}</b><small>all time</small></div></div>
+    ${form}
+    ${toys.length ? `<ul class="toy-list">${toys.slice(0, 8).map((t) => `<li><span class="toy-e">${esc(t.emoji || '🧸')}</span><span><b>${esc(t.toy)}</b><small class="muted"> · ${shortDate(t.date)} · from ${t.person === ownerId() ? 'you' : esc(t.name)}</small></span>${t.person === ownerId() ? `<button type="button" class="x" data-toydel="${t.id}" aria-label="Remove ${esc(t.toy)}">✕</button>` : ''}</li>`).join('')}</ul>` : '<p class="small muted">Log each new toy and see how spoiled the dogs get this year.</p>'}`;
+}
+const isoDay = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+function saveToys(list) {
+  profileStore(ownerId()).set('dogToys', list.slice(-500));
+  renderToys();
+  pushNow().then(renderToys);
 }
 
 // ---- 🏆 dog duty scoreboard: today / this month / this year, and a 🪙 gold coin each month ----
@@ -302,6 +338,7 @@ function renderDuty() {
   if (!el || !ownerId()) return;
   const recs = dutyRecords();
   renderHappy(recs);
+  renderToys();
   // Me first, then my partner.
   const people = [...recs].sort((a, b) => (a.person === ownerId() ? -1 : b.person === ownerId() ? 1 : 0));
   const today = walkDay();
@@ -393,6 +430,14 @@ export function initBrief() {
     if (t.dataset.chore) { logChore(t.dataset.chore); return; }
     if (t.dataset.undochore) { undoChore(t.dataset.undochore); return; }
     if (t.dataset.dutyview) { dutyView = t.dataset.dutyview; renderDuty(); return; }
+    if (t.dataset.toyadd != null) { toyAdding = true; renderToys(); $('#toyName')?.focus(); return; }
+    if (t.dataset.toycancel != null) { toyAdding = false; renderToys(); return; }
+    if (t.dataset.toyemoji) { const v = $('#toyName')?.value || ''; toyEmoji = t.dataset.toyemoji; renderToys(); if ($('#toyName')) $('#toyName').value = v; return; }
+    if (t.dataset.toydel) {
+      if (!confirm('Remove this toy?')) return;
+      saveToys(profileStore(ownerId()).get('dogToys', []).filter((x) => x.id !== t.dataset.toydel));
+      return;
+    }
     if (t.dataset.briefrefresh != null) { renderBrief(true); return; }
     if (t.dataset.addclass != null) { adding = true; renderBrief(); return; }
     if (t.dataset.cancelclass != null) { adding = false; renderBrief(); return; }
@@ -400,6 +445,17 @@ export function initBrief() {
       store.set('gymClasses', store.get('gymClasses', []).filter((c) => c.id !== t.dataset.delclass));
       renderBrief();
     }
+  });
+  root.addEventListener('submit', (e) => {
+    if (e.target.id !== 'toyForm') return;
+    e.preventDefault();
+    const toy = ($('#toyName')?.value || '').trim();
+    if (!toy) return;
+    const now = Date.now();
+    toyAdding = false;
+    const emoji = toyEmoji;
+    toyEmoji = '🧸';
+    saveToys([...profileStore(ownerId()).get('dogToys', []), { id: now.toString(36), toy, emoji, date: $('#toyDate')?.value || isoDay(), at: now }]);
   });
   root.addEventListener('submit', (e) => {
     if (e.target.id !== 'classForm') return;
