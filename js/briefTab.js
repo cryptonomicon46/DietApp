@@ -278,7 +278,7 @@ function renderHappy(recs) {
   }
   const top = Math.max(1, ...months.map((x) => x.best));
   el.innerHTML = `
-    <div class="eyebrow">🐶 Happy dog days</div>
+    <div class="eyebrow">⭐ Golden days</div>
     <p class="small muted">A ⭐ golden day is two outings — two walks, or a walk and the dog park.</p>
     <div class="happy-stats">
       <div><b>${m.best}</b><small>golden days in ${monthName(month)}</small></div>
