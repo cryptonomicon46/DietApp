@@ -89,11 +89,19 @@ function strip(hourly, from, activity = 'run') {
 function dayPlan(hourly, from, end, today, late = false) {
   const items = [];
   const run = bestWindow(hourly, 'run', 1, from, end);
-  if (run?.score > 0) items.push({ t: hourly[run.start].time, label: '🏃 Run 4 mi' });
   const bike = bestWindow(hourly, 'bike', 3, from, end);
-  if (bike?.score > 0) items.push({ t: hourly[bike.start].time, label: '🚴 Ride 25–30 mi', note: `until ${clock(new Date(hourly[bike.start + 2].time.getTime() + 3600000))}` });
   const walks = dogWalks(hourly, from);
-  for (const w of [walks.morning, walks.evening]) if (w) items.push({ t: hourly[w.index].time, label: '🐕 Walk the dogs' });
+  // A dog walk inside a run or ride window rides along: 🐾 on that line instead of its own.
+  const acts = [];
+  if (run?.score > 0) acts.push({ w: run, item: { t: hourly[run.start].time, label: '🏃 Run 4 mi' } });
+  if (bike?.score > 0) acts.push({ w: bike, item: { t: hourly[bike.start].time, label: '🚴 Ride 25–30 mi', note: `until ${clock(new Date(hourly[bike.start + 2].time.getTime() + 3600000))}` } });
+  for (const walk of [walks.morning, walks.evening]) {
+    if (!walk) continue;
+    const with_ = acts.filter((a) => walk.index >= a.w.start && walk.index < a.w.start + a.w.hours);
+    if (with_.length) for (const a of with_) a.paw = true;
+    else items.push({ t: hourly[walk.index].time, label: '🐕 Walk the dogs' });
+  }
+  for (const a of acts) items.push(a.paw ? { ...a.item, label: `${a.item.label} 🐾` } : a.item);
   for (const c of classesOn(store.get('gymClasses', []), today)) {
     const [hh, mm] = c.time.split(':').map(Number);
     const t = new Date(today); t.setHours(hh, mm, 0, 0);
@@ -103,7 +111,7 @@ function dayPlan(hourly, from, end, today, late = false) {
   items.sort((a, b) => a.t - b.t);
   return `<div class="card brief-card"><div class="eyebrow">${late ? `Tomorrow · ${today.toLocaleDateString(undefined, { weekday: 'long' })}` : 'Your day'}</div>
     <ul class="list day-plan">${items.map((i) => `<li><span><b>${clock(i.t)}</b> ${esc(i.label)}</span>${i.note ? `<small class="muted">${esc(i.note)}</small>` : ''}</li>`).join('')}</ul>
-    <p class="small muted">Run and ride are alternatives — pick whichever fits the day.</p></div>`;
+    <p class="small muted">Run and ride are alternatives — pick whichever fits the day.${items.some((i) => i.label.endsWith('🐾')) ? ' 🐾 = a good time to walk the dogs too.' : ''}</p></div>`;
 }
 
 function classesCard(today) {
