@@ -172,13 +172,25 @@ export function walkDay(date = new Date()) {
   return ptParts(new Date(date.getTime() - (ptParts(date).hour < WALK_HOUR ? (WALK_HOUR + 1) * 3600000 : 0))).date;
 }
 // records: [{ person, name, fed: {slotKey: {at}} }] → who fed for this slot (earliest), if anyone.
+// A check-in credits `who` when it was logged for the other person (from either phone);
+// otherwise the phone's owner. `by` is the phone that logged it (only it can undo it).
 export function whoFed(records, key) {
-  const hits = records.flatMap((r) => (r.fed?.[key] ? [{ person: r.person, name: r.name, at: r.fed[key].at }] : []));
+  const hits = records.flatMap((r) => {
+    const v = r.fed?.[key];
+    if (!v) return [];
+    const person = v.who || r.person;
+    return [{ person, by: r.person, name: records.find((x) => x.person === person)?.name || person, at: v.at }];
+  });
   return hits.sort((a, b) => a.at - b.at)[0] || null;
 }
 
 // ---------- dog duty scoreboard ----------
 // A person's log of one chore: {day: [timestamps]}. Older walk check-ins were {day: {at}}.
+// Walks / park trips: {day: [timestamp | {at, who}]} → {day: [{at, who?}]}.
+export function choreEntries(log) {
+  return Object.fromEntries(Object.entries(log || {}).map(([day, v]) => [day,
+    (Array.isArray(v) ? v : v?.at ? [v] : []).map((e) => (typeof e === 'number' ? { at: e } : { at: e.at, ...(e.who ? { who: e.who } : {}) }))]));
+}
 export function choreTimes(log) {
   return Object.fromEntries(Object.entries(log || {}).map(([day, v]) => [day, Array.isArray(v) ? v : v?.at ? [v.at] : []]));
 }
@@ -191,7 +203,10 @@ export function choreTally(records, prefix) {
   for (const k of slots) { const w = whoFed(records, k); if (w) t[w.person].feed++; }
   for (const r of records) {
     for (const [kind, key] of [['walk', 'walks'], ['park', 'park']]) {
-      for (const [day, times] of Object.entries(choreTimes(r[key]))) if (day.startsWith(prefix)) t[r.person][kind] += times.length;
+      for (const [day, list] of Object.entries(choreEntries(r[key]))) {
+        if (!day.startsWith(prefix)) continue;
+        for (const e of list) { const who = t[e.who] ? e.who : r.person; t[who][kind]++; }
+      }
     }
   }
   for (const p in t) t[p].total = t[p].feed + t[p].walk + t[p].park;

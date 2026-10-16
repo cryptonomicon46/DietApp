@@ -693,3 +693,21 @@ body[data-tab="notes"] .daybar-wrap { display: none; }
 /* The tab you're on gets an outline */
 .tabs button { border-radius: 12px; margin: 4px 2px; padding: 4px 0 6px; }
 .tabs button.active { outline: 2px solid var(--brand); outline-offset: -2px; background: color-mix(in srgb, var(--brand) 10%, transparent); }
+
+/* Round buttons split in two: left half = first person, right half = second */
+.feed-btn.split { position: relative; overflow: hidden; padding: 0; }
+.feed-btn.split .feed-face { position: relative; z-index: 1; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 2px; transform: translateY(-22%); }
+.feed-btn.split .feed-icon { font-size: 2rem; }
+.feed-btn.split .feed-title { font-size: .98rem; }
+.feed-btn.split .feed-sub { font-size: .74rem; }
+.feed-btn.split .halves { position: absolute; inset: 0; display: flex; }
+.feed-btn.split .half { flex: 1; background: transparent; border: 0; border-radius: 0; color: #fff; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 4px 10%; gap: 1px; min-width: 0; }
+.feed-btn.split .half:first-child { align-items: flex-end; }
+.feed-btn.split .half:last-child { align-items: flex-start; }
+.feed-btn.split .half + .half { border-left: 2px solid rgba(255, 255, 255, .6); }
+.feed-btn.split .half b { font-size: .66rem; font-weight: 800; background: rgba(0, 0, 0, .2); border-radius: 999px; padding: 2px 6px; white-space: nowrap; }
+.feed-btn.split .half small { padding: 0 8px; font-size: .68rem; font-weight: 700; line-height: 1.2; }
+.feed-btn.split .half small { font-size: .7rem; opacity: .95; }
+.feed-btn.split .half:active { background: rgba(0, 0, 0, .14); }
+.mini-halves { display: flex; gap: 2px; margin-top: 4px; width: 100%; }
+.mini-halves button { flex: 1; min-width: 0; padding: 4px 0; font-size: .56rem; letter-spacing: -.01em; font-weight: 700; border-radius: 8px; background: var(--card); color: var(--ink); border: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -137,3 +137,17 @@ test('home by 9 PM: windows end by 9, and after 9 PM the plan is tomorrow', asyn
   const w = dogWalks(hourly, night.from);
   assert.ok(hourly[w.evening.index].time.getHours() <= 20, 'evening walk done by 9 PM');
 });
+
+test('either phone can log a check-in for the other person', async () => {
+  const { whoFed, choreTally, choreEntries } = await import('../js/brief.js');
+  const recs = [
+    { person: 'sandman', name: 'Sandman', fed: { '2026-10-16:breakfast': { at: 10, who: 'amani' } }, walks: { '2026-10-16': [11, { at: 12, who: 'amani' }] }, park: {} },
+    { person: 'amani', name: 'Amani', fed: {}, walks: {}, park: { '2026-10-16': [{ at: 13, who: 'sandman' }] } },
+  ];
+  const f = whoFed(recs, '2026-10-16:breakfast');
+  assert.deepEqual([f.person, f.name, f.by], ['amani', 'Amani', 'sandman'], "logged on Sandman's phone for Amani");
+  const t = choreTally(recs, '2026-10-16');
+  assert.deepEqual(t.sandman, { feed: 0, walk: 1, park: 1, total: 2 });
+  assert.deepEqual(t.amani, { feed: 1, walk: 1, park: 0, total: 2 });
+  assert.deepEqual(choreEntries({ d: [5, { at: 6, who: 'amani' }] }).d, [{ at: 5 }, { at: 6, who: 'amani' }]);
+});

@@ -3,7 +3,7 @@ import { store, global, PROFILES, ownerId, profileStore } from './storage.js';
 import { pushNow } from './sync.js';
 import {
   PLACE, weatherUrls, parseWeather, scoreHour, bestWindow, dogWalks, hottestPavement, asphaltF, pawRisk,
-  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, planRange, feedingSlot, whoFed, walkDay, choreTimes, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths,
+  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, planRange, feedingSlot, whoFed, walkDay, choreTimes, choreEntries, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths,
 } from './brief.js';
 import { renderDogs, initDogs, allDogs, dogAlerts, retryUploads } from './dogs.js';
 
@@ -167,46 +167,55 @@ const CHORES = {
 };
 function todaysChore(kind) {
   const day = walkDay();
-  return PROFILES.flatMap((p) => (choreTimes(profileStore(p.id).get(CHORES[kind].key, {}))[day] || []).map((at) => ({ person: p.id, name: nameOf(p.id), at })))
+  return PROFILES.flatMap((p) => (choreEntries(profileStore(p.id).get(CHORES[kind].key, {}))[day] || [])
+    .map((e) => ({ person: e.who || p.id, by: p.id, name: nameOf(e.who || p.id), at: e.at })))
     .sort((a, b) => a.at - b.at);
 }
 const whoName = (person, name) => (person === ownerId() ? 'You' : esc(name));
+// A round button split in two: the left half logs it for the first person, the right for
+// the second — from either phone.
+const halves = (attr, counts = {}) => `<span class="halves">${PROFILES.map((p) => `<button type="button" class="half" ${attr} data-who="${p.id}" aria-label="${esc(nameOf(p.id))}"><b>${esc(nameOf(p.id))}</b><small>${counts[p.id] ? `×${counts[p.id]}` : '&nbsp;'}</small></button>`).join('')}</span>`;
 function choreButton(kind) {
   const c = CHORES[kind];
   const list = todaysChore(kind);
   const by = {};
   for (const x of list) by[x.person] = (by[x.person] || 0) + 1;
   const last = list[list.length - 1];
-  const sub = !list.length ? (kind === 'walk' ? 'Tap when walked' : 'Tap after the park')
-    : list.length === 1 ? `${whoName(last.person, last.name)} · ${clock(new Date(last.at))}`
-    : Object.entries(by).map(([p, n]) => `${whoName(p, list.find((x) => x.person === p).name)} ×${n}`).join(' · ');
-  const mine = by[ownerId()] || 0;
+  const sub = !list.length ? 'Who went?' : list.length === 1 ? `${esc(last.name)} · ${clock(new Date(last.at))}` : '';
+  const mine = list.some((x) => x.by === ownerId());
   return `<div class="feed-col">
-      <button type="button" class="feed-btn ${list.length ? 'fed' : c.cls}" data-chore="${kind}" aria-pressed="${!!list.length}">
-        <span class="feed-icon">${list.length ? '✓' : c.icon}</span>
-        <span class="feed-title">${list.length ? (list.length > 1 ? `${c.done} ×${list.length}` : c.done) : c.todo}</span>
-        <span class="feed-sub">${sub}</span>
-      </button>
-      <p class="small muted center">${list.length ? 'Tap again to log another.' : 'Resets at 6 AM.'}${mine ? ` <button type="button" class="linkish small" data-undochore="${kind}">Undo my last</button>` : ''}</p>
+      <div class="feed-btn split ${list.length ? 'fed' : c.cls}">
+        <span class="feed-face"><span class="feed-icon">${list.length ? '✓' : c.icon}</span>
+          <span class="feed-title">${list.length ? (list.length > 1 ? `${c.done} ×${list.length}` : c.done) : c.todo}</span>
+          <span class="feed-sub">${sub}</span></span>
+        ${halves(`data-chore="${kind}"`, by)}
+      </div>
+      <p class="small muted center">${list.length ? 'Tap a name to log another.' : 'Tap who did it · resets 6 AM.'}${mine ? ` <button type="button" class="linkish small" data-undochore="${kind}">Undo last</button>` : ''}</p>
     </div>`;
 }
-function logChore(kind) {
+function logChore(kind, who = ownerId()) {
   const c = CHORES[kind];
   const n = todaysChore(kind).length;
-  if (n && !confirm(`Log another ${c.one} for you today? (${n + 1} today)`)) return;
+  if (n && !confirm(`Log another ${c.one} for ${who === ownerId() ? 'you' : nameOf(who)} today? (${n + 1} today)`)) return;
   const s = profileStore(ownerId());
-  const all = choreTimes(s.get(c.key, {}));
+  const all = s.get(c.key, {});
   const day = walkDay();
-  all[day] = [...(all[day] || []), Date.now()];
+  const list = Array.isArray(all[day]) ? all[day] : all[day]?.at ? [all[day].at] : [];
+  all[day] = [...list, who === ownerId() ? Date.now() : { at: Date.now(), who }];
   saveChore(s, c.key, all);
 }
+// Undo the last one logged on this phone (for either of you).
 function undoChore(kind) {
   const c = CHORES[kind];
   const s = profileStore(ownerId());
-  const all = choreTimes(s.get(c.key, {}));
+  const all = s.get(c.key, {});
   const day = walkDay();
-  if (!all[day]?.length || !confirm(`Undo your last ${c.one} today?`)) return;
-  all[day] = all[day].slice(0, -1);
+  const list = Array.isArray(all[day]) ? all[day] : all[day]?.at ? [all[day].at] : [];
+  if (!list.length) return;
+  const last = list[list.length - 1];
+  const who = typeof last === 'object' && last.who ? nameOf(last.who) : 'you';
+  if (!confirm(`Undo the last ${c.one} logged on this phone (${who})?`)) return;
+  all[day] = list.slice(0, -1);
   if (!all[day].length) delete all[day];
   saveChore(s, c.key, all);
 }
@@ -241,11 +250,14 @@ export function renderFeed() {
   el.innerHTML = `
     <div class="feed-pair">
       <div class="feed-col">
-        <button type="button" class="feed-btn ${fed ? 'fed' : 'hungry'}" data-feed aria-pressed="${!!fed}">
-          <span class="feed-icon">${fed ? '✓' : '🦴'}</span>
-          <span class="feed-title">${fed ? `${meal} done` : 'Feed the dogs'}</span>
-          <span class="feed-sub">${fed ? `${whoName(fed.person, fed.name)} · ${clock(new Date(fed.at))}` : `${meal} · tap when fed`}</span>
-        </button>
+        ${fed ? `<button type="button" class="feed-btn fed" data-feedundo aria-pressed="true">
+          <span class="feed-icon">✓</span>
+          <span class="feed-title">${meal} done</span>
+          <span class="feed-sub">${esc(fed.name)} fed them · ${clock(new Date(fed.at))}</span>
+        </button>` : `<div class="feed-btn split hungry">
+          <span class="feed-face"><span class="feed-icon">🦴</span><span class="feed-title">Feed the dogs</span><span class="feed-sub">${meal} · who fed?</span></span>
+          ${halves('data-feed')}
+        </div>`}
         <p class="small muted center">${fed ? `Resets ${slot.resets} for ${slot.meal === 'breakfast' ? 'dinner' : 'breakfast'}.` : `Resets ${slot.resets}.`}${other ? ` Breakfast: ${esc(other.person === ownerId() ? 'you' : other.name)} at ${clock(new Date(other.at))}.` : ''}</p>
       </div>
       ${choreButton('walk')}
@@ -260,33 +272,37 @@ export function homeDogs() {
   if (!ownerId()) return '';
   const slot = feedingSlot();
   const fed = whoFed(feedRecords(), slot.key);
-  const walks = todaysChore('walk').length, park = todaysChore('park').length;
-  const outings = walks + park;
+  const walks = todaysChore('walk'), park = todaysChore('park');
+  const outings = walks.length + park.length;
   const meal = slot.meal === 'breakfast' ? 'Breakfast' : 'Dinner';
-  const chip = (attr, done, icon, title, sub) => `<button type="button" class="home-dog ${done ? 'done' : ''}" ${attr}><span>${done ? '✓' : icon}</span><b>${title}</b><small>${sub}</small></button>`;
+  const names = (list) => [...new Set(list.map((x) => x.name))].map(esc).join(' & ');
+  const minis = (attr) => `<span class="mini-halves">${PROFILES.map((p) => `<button type="button" ${attr} data-who="${p.id}">${esc(nameOf(p.id))}</button>`).join('')}</span>`;
+  const chip = (done, icon, title, sub, attr) => `<div class="home-dog ${done ? 'done' : ''}"><span>${done ? '✓' : icon}</span><b>${title}</b><small>${sub}</small>${attr ? minis(attr) : ''}</div>`;
   return `<div class="card home-dogs">
     <div class="row between" style="margin-top:0"><div class="eyebrow">🐕 Dogs</div><button type="button" class="linkish small" data-goto="brief">Scores & golden days ›</button></div>
     <div class="home-dog-row">
-      ${chip('data-feed', !!fed, '🦴', fed ? `${meal} done` : `Feed ${meal.toLowerCase()}`, fed ? `${fed.person === ownerId() ? 'You' : esc(fed.name)} · ${clock(new Date(fed.at))}` : 'Tap when fed')}
-      ${chip('data-chore="walk"', walks > 0, '🐾', walks ? `Walked${walks > 1 ? ` ×${walks}` : ''}` : 'Walk', walks ? 'Tap for another' : 'Tap when walked')}
-      ${chip('data-chore="park"', park > 0, '🌳', park ? `Park${park > 1 ? ` ×${park}` : ''}` : 'Dog park', park ? 'Tap for another' : 'Tap after')}
+      ${fed ? `<button type="button" class="home-dog done" data-feedundo><span>✓</span><b>${meal} done</b><small>${esc(fed.name)} · ${clock(new Date(fed.at))}</small></button>`
+        : chip(false, '🦴', `Feed ${meal.toLowerCase()}`, 'Who fed them?', 'data-feed')}
+      ${chip(walks.length > 0, '🐾', walks.length ? `Walked${walks.length > 1 ? ` ×${walks.length}` : ''}` : 'Walk', walks.length ? names(walks) : 'Who walked?', 'data-chore="walk"')}
+      ${chip(park.length > 0, '🌳', park.length ? `Park${park.length > 1 ? ` ×${park.length}` : ''}` : 'Dog park', park.length ? names(park) : 'Who went?', 'data-chore="park"')}
     </div>
     ${dogAlerts(allDogs(), isoDay()).slice(0, 2).map((a) => `<p class="small tone-warn" data-goto="brief">⚠ ${esc(a.dog)}: ${esc(a.text)}</p>`).join('')}
     <p class="small ${outings >= 2 ? 'golden-note' : 'muted'}">${outings >= 2 ? '⭐ Golden day — out twice today!' : outings === 1 ? 'One more outing makes it a ⭐ golden day.' : 'Two outings today make a ⭐ golden day.'}</p>
   </div>`;
 }
 
-function toggleFeed() {
+function toggleFeed(who = ownerId()) {
   const slot = feedingSlot();
   const fed = whoFed(feedRecords(), slot.key);
   const s = profileStore(ownerId());
   const mineAll = s.get('dogFed', {});
   if (fed) {
-    if (fed.person !== ownerId()) { alert(`${fed.name} already fed them at ${clock(new Date(fed.at))}.`); return; }
+    // Only the phone that logged it can take it back.
+    if (fed.by !== ownerId()) { alert(`${fed.name} fed them at ${clock(new Date(fed.at))} — logged on ${nameOf(fed.by)}'s phone, so undo it there.`); return; }
     if (!confirm(`Undo — the dogs haven't had ${slot.meal} yet?`)) return;
     delete mineAll[slot.key];
   } else {
-    mineAll[slot.key] = { at: Date.now() };
+    mineAll[slot.key] = who === ownerId() ? { at: Date.now() } : { at: Date.now(), who };
   }
   // Keep about 13 months of feedings for the scoreboard.
   const keep = Object.keys(mineAll).sort().slice(-800);
@@ -470,8 +486,9 @@ export function initBrief() {
   root.addEventListener('click', (e) => {
     const t = e.target.closest('button');
     if (!t) return;
-    if (t.dataset.feed != null) { toggleFeed(); return; }
-    if (t.dataset.chore) { logChore(t.dataset.chore); return; }
+    if (t.dataset.feed != null) { toggleFeed(t.dataset.who || ownerId()); return; }
+    if (t.dataset.feedundo != null) { toggleFeed(); return; }
+    if (t.dataset.chore) { logChore(t.dataset.chore, t.dataset.who || ownerId()); return; }
     if (t.dataset.undochore) { undoChore(t.dataset.undochore); return; }
     if (t.dataset.dutyview) { dutyView = t.dataset.dutyview; renderDuty(); return; }
     if (t.dataset.toyadd != null) { toyAdding = true; renderToys(); $('#toyName')?.focus(); return; }
