@@ -12,14 +12,30 @@ const SOON_DAYS = 30;
 const MAX_FILE = 10 * 1024 * 1024;
 
 // ---------- pure (tested) ----------
+// Shared by both partners: each field keeps the time it was last changed, so if one of you
+// updates the vaccines while the other updates the food, both changes survive. Documents
+// from either phone are combined; a removed document stays removed.
+export const DOG_FIELDS = ['name', 'emoji', 'breed', 'sex', 'birthday', 'weightLb', 'food', 'supplements', 'meds', 'vaccines', 'vet', 'microchip', 'notes', 'deleted'];
 export function mergeDogs(records) {
-  const best = {};
-  for (const r of records) {
-    for (const [id, d] of Object.entries(r.dogs || {})) {
-      if (!best[id] || (d.updatedAt || 0) > (best[id].updatedAt || 0)) best[id] = { ...d, id };
+  const versions = {};
+  for (const r of records) for (const [id, d] of Object.entries(r.dogs || {})) (versions[id] ||= []).push({ ...d, person: r.person });
+  return Object.entries(versions).map(([id, vs]) => {
+    const newest = [...vs].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+    const dog = { ...newest, id };
+    const when = (v, f) => v.times?.[f] ?? v.updatedAt ?? 0;
+    for (const f of DOG_FIELDS) {
+      // A field a newer version doesn't have (e.g. no "deleted") counts as cleared then.
+      const best = [...vs].sort((a, b) => when(b, f) - when(a, f))[0];
+      if (best[f] !== undefined) dog[f] = best[f]; else delete dog[f];
     }
-  }
-  return Object.values(best).filter((d) => !d.deleted).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const removed = new Set(vs.flatMap((v) => v.removedDocs || []));
+    const docs = new Map();
+    for (const v of vs) for (const doc of v.docs || []) if (!removed.has(doc.id)) docs.set(doc.id, { ...docs.get(doc.id), ...doc, shared: doc.shared || docs.get(doc.id)?.shared || false });
+    dog.docs = [...docs.values()].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    dog.removedDocs = [...removed];
+    dog.editedBy = newest.by || newest.person;
+    return dog;
+  }).filter((d) => !d.deleted).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
 }
 const daysBetween = (a, b) => Math.round((Date.parse(`${b}T12:00:00`) - Date.parse(`${a}T12:00:00`)) / 864e5);
 // One vaccine → { level: 'ok' | 'soon' | 'overdue' | 'unknown', days } (days until due; negative = overdue).
@@ -57,12 +73,19 @@ const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const isoDate = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const shortDate = (d) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
+const nameOf = (id) => profileStore(id).get('profile', null)?.name?.split(/\s+/)[0] || PROFILES.find((p) => p.id === id)?.name || id;
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 export const allDogs = () => mergeDogs(PROFILES.map((p) => ({ person: p.id, dogs: profileStore(p.id).get('dogProfiles', {}) })));
+// Saves what changed, stamping each changed field so the partner's edits to other fields survive.
 function saveDog(dog) {
+  const now = Date.now();
+  const prev = mergeDogs(PROFILES.map((p) => ({ person: p.id, dogs: profileStore(p.id).get('dogProfiles', {}) }))).find((d) => d.id === dog.id);
+  const times = { ...(prev?.times || {}) };
+  for (const f of DOG_FIELDS) if (JSON.stringify(dog[f] ?? null) !== JSON.stringify(prev?.[f] ?? null)) times[f] = now;
+  const { person, editedBy, ...clean } = dog;
   const s = profileStore(ownerId());
-  s.set('dogProfiles', { ...s.get('dogProfiles', {}), [dog.id]: { ...dog, updatedAt: Date.now() } });
+  s.set('dogProfiles', { ...s.get('dogProfiles', {}), [dog.id]: { ...clean, times, updatedAt: now, by: ownerId() } });
   pushNow().catch(() => {});
 }
 
@@ -127,6 +150,7 @@ function dogView(d, today) {
       <div class="small muted">${[d.breed, age, d.weightLb ? `${d.weightLb} lb` : '', d.sex].filter(Boolean).map(esc).join(' · ')}</div></div>
       <div class="row" style="margin-top:0"><button type="button" class="ghost small" data-dogedit="${d.id}">Edit</button><button type="button" class="ghost small" data-dogclose>Done</button></div></div>
     ${badge(d, today)}
+    <p class="small muted">Shared — either of you can edit or add documents.${d.updatedAt ? ` Last change by ${d.editedBy === ownerId() ? 'you' : esc(nameOf(d.editedBy))}, ${new Date(d.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}.` : ''}</p>
     <h4>🍖 Food</h4>
     <p class="small">${d.food?.brand ? `<b>${esc(d.food.brand)}</b>` : '<span class="muted">Not set</span>'}${d.food?.type ? ` · ${esc(FOOD_TYPES[d.food.type] || d.food.type)}` : ''}${d.food?.amount ? ` · ${esc(d.food.amount)} per meal` : ''}</p>
     <h4>🌿 Supplements</h4>
@@ -196,7 +220,8 @@ export function renderDogs() {
         <small class="muted">${[d.breed, ageText(d.birthday, today)].filter(Boolean).map(esc).join(' · ') || 'Tap to fill in'}</small>
         ${badge(d, today)}
         <small class="muted">${(d.meds || []).filter((m) => m.active !== false).length} meds · ${(d.supplements || []).length} supplements · ${(d.docs || []).length} docs</small>
-      </button>`).join('')}</div>` : '<p class="small muted">Add each dog: food, supplements, medications, vaccines, vet and documents in one place, shared with your partner.</p>'}
+      </button>`).join('')}</div>` : '<p class="small muted">Add each dog: food, supplements, medications, vaccines, vet and documents in one place.</p>'}
+    <p class="small muted">Shared between both phones — either of you can add a dog, update vaccines or food, or upload documents.</p>
   </div>`;
 }
 
@@ -235,7 +260,7 @@ export function initDogs(root) {
       const [dogId, fid] = t.dataset.dogdocdel.split(':');
       if (!confirm('Remove this document?')) return;
       const d = allDogs().find((x) => x.id === dogId);
-      saveDog({ ...d, docs: (d.docs || []).filter((f) => f.id !== fid) });
+      saveDog({ ...d, docs: (d.docs || []).filter((f) => f.id !== fid), removedDocs: [...(d.removedDocs || []), fid] });
       idb('readwrite', (st) => st.delete(fid)).catch(() => {});
       const url = fileUrl(fid);
       if (url) fetch(url, { method: 'DELETE' }).catch(() => {});

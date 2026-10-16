@@ -11,6 +11,22 @@ test('dog profiles merge across phones: newest edit wins, removals stick', () =>
   assert.equal(dogs[0].breed, 'Lab mix');
 });
 
+test('both partners can edit the same dog: changes to different fields both survive', () => {
+  const [dog] = mergeDogs([
+    { person: 'sandman', dogs: { j: { name: 'Junior', food: { brand: 'Old' }, vaccines: [{ name: 'Rabies', due: '2027-10-30' }], times: { name: 1, food: 1, vaccines: 50 }, updatedAt: 50, by: 'sandman', docs: [{ id: 'a1', name: 'rabies.pdf' }] } } },
+    { person: 'amani', dogs: { j: { name: 'Junior', food: { brand: 'Pro Plan' }, vaccines: [], times: { name: 1, food: 60, vaccines: 1 }, updatedAt: 60, by: 'amani', docs: [{ id: 'b2', name: 'dhpp.jpg', shared: true }], removedDocs: [] } } },
+  ]);
+  assert.equal(dog.food.brand, 'Pro Plan', "Amani's newer food edit");
+  assert.equal(dog.vaccines[0].name, 'Rabies', "Sandman's newer vaccine edit");
+  assert.deepEqual(dog.docs.map((d) => d.id), ['a1', 'b2'], 'documents from both phones');
+  assert.equal(dog.editedBy, 'amani');
+  const [after] = mergeDogs([
+    { person: 'sandman', dogs: { j: { name: 'Junior', docs: [{ id: 'a1' }, { id: 'b2' }], updatedAt: 1 } } },
+    { person: 'amani', dogs: { j: { name: 'Junior', docs: [{ id: 'b2' }], removedDocs: ['a1'], updatedAt: 2 } } },
+  ]);
+  assert.deepEqual(after.docs.map((d) => d.id), ['b2'], 'a removed document stays removed');
+});
+
 test('vaccine status and alerts', () => {
   const today = '2026-10-16';
   assert.equal(vaccineStatus({ due: '2027-03-01' }, today).level, 'ok');
