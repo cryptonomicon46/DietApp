@@ -3,7 +3,7 @@
 // hearts you give the other person's notes live in yours.
 import { PROFILES, ownerId, profileStore, global, seenItems } from './storage.js';
 import { sync, pushNow } from './sync.js';
-import { renderPlans, initPlans, unreadPlans, syncLine } from './plans.js';
+import { renderPlans, initPlans, unreadPlans, syncLine, isUpcoming, planDay, whenText, PLAN_KINDS } from './plans.js';
 import { renderShows, initShows } from './shows.js';
 
 export const NOTE_EMOJI = ['❤️', '😘', '🥰', '😍', '💕', '🤗', '💪', '🔥', '🌟', '🎉', '☀️', '🌙', '🌸', '🍳', '🥗', '🍓', '☕', '😂', '🙏', '👏'];
@@ -57,6 +57,23 @@ const unreadNoteList = () => {
 };
 function unreadNotes() { return unreadNoteList().length; }
 export const unreadCount = () => unreadNotes() + unreadPlans();
+
+// Home: the newest note from your partner and the next plan, as one card into the Us tab.
+export function homeUs() {
+  const p = partner();
+  if (!me() || !p) return '';
+  const theirs = notesOf(p.id).filter((n) => n.at >= boardStart()).sort((a, b) => b.at - a.at)[0];
+  const n = unreadCount();
+  const next = PROFILES.flatMap((x) => profileStore(x.id).get('plans', [])).filter((x) => isUpcoming(x)).sort((a, b) => planDay(a).localeCompare(planDay(b)))[0];
+  const when = (t) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `<button type="button" class="card home-card" data-goto="notes">
+    <span class="home-ico">💞</span>
+    <span class="home-main"><b>${theirs ? `${esc(nameOf(p.id).split(/\s+/)[0])}: “${esc(theirs.text.length > 70 ? `${theirs.text.slice(0, 70)}…` : theirs.text)}”` : `No note from ${esc(nameOf(p.id).split(/\s+/)[0])} yet today`}</b>
+      ${theirs ? `<small class="muted">${when(theirs.at)}</small>` : ''}
+      ${next ? `<small class="muted">${PLAN_KINDS[next.kind]?.icon || '✨'} ${esc(next.what || next.where || PLAN_KINDS[next.kind]?.label || 'Plan')} · ${esc(whenText(next))}</small>` : ''}
+      ${n ? `<small class="tone-good">${n} new in Us</small>` : ''}</span>
+    <span class="home-go">›</span></button>`;
+}
 
 // The tab has two pages: notes and "feeling like" plans.
 let page = 'notes';

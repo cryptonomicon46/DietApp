@@ -623,3 +623,36 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .toy-list { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
 .toy-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; }
 .toy-e { font-size: 1.4rem; }
+
+/* Food pages bar (Meals · Weight · Groceries · Scan) */
+.subnav { display: flex; width: 100%; margin: 0 0 10px; }
+.subnav button { flex: 1; padding: 7px 2px; font-size: .78rem; }
+details.help { margin: 4px 2px 12px; }
+details.help summary { cursor: pointer; }
+/* 🏠 Home */
+.home-hello .greeting { font-size: 1.2rem; }
+.home-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; color: var(--ink); font-weight: 400; }
+.home-ico { font-size: 1.6rem; flex: none; }
+.home-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.home-go { color: var(--muted); font-size: 1.4rem; }
+.home-dog-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.home-dog { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-weight: 400; }
+.home-dog span { font-size: 1.5rem; line-height: 1.1; }
+.home-dog b { font-size: .85rem; text-align: center; }
+.home-dog small { font-size: .7rem; color: var(--muted); text-align: center; }
+.home-dog.done { background: color-mix(in srgb, var(--good) 18%, var(--card)); border-color: var(--good); }
+.home-dog.done span { color: var(--good); font-weight: 800; }
+.golden-note { color: #b88400; font-weight: 700; }
+/* Food › Meals: a compact day header so the meals start near the top */
+#tab-today .greeting { display: none; }
+#tab-today .day-card { padding: 10px 14px; }
+#tab-today .day-card .big { font-size: 1.45rem; line-height: 1.2; }
+#tab-today .day-card .row.between { align-items: center; margin-top: 0; }
+#tab-today .day-card .pill { font-size: .72rem; padding: 3px 8px; }
+#tab-today .macros { margin-top: 8px; gap: 6px; }
+#tab-today .macro { padding: 5px 8px; display: flex; align-items: baseline; gap: 6px; }
+#tab-today .macro b { display: inline; font-size: 1rem; white-space: nowrap; }
+#tab-today .macro { flex-wrap: wrap; row-gap: 0; }
+#tab-today .macro span { font-size: .72rem; }
+#tab-today #adjustBanner .banner { margin-top: 8px; padding: 6px 10px; font-size: .8rem; }
+#tab-today .day-nav { margin-bottom: 8px; }

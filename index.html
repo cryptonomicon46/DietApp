@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Lean Plate">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=90">
+  <link rel="stylesheet" href="styles.css?v=92">
 </head>
 <body>
   <header class="top">
@@ -29,7 +29,10 @@
 
   <main>
     <!-- TODAY -->
-    <section id="tab-today" class="tab active">
+    <!-- HOME: one glance at what needs doing today -->
+    <section id="tab-home" class="tab active">
+      <div class="card home-hello" id="homeHello"></div>
+      <div id="homeDogs"></div>
       <form id="weighForm" class="card weigh-card">
         <div class="row between" style="margin-top:0">
           <div><div class="eyebrow">Morning weigh-in</div><div class="small" id="weighStatus"></div></div>
@@ -41,7 +44,14 @@
         </div>
         <p class="muted small" style="margin:6px 0 0">Best: same time each morning, after the bathroom, before eating.</p>
       </form>
-      <div id="program"></div>
+      <div id="homeFood"></div>
+      <div id="homeUs"></div>
+      <div id="homeTrain"></div>
+    </section>
+
+    <!-- FOOD: meals (+ Weight, Groceries, Scan pages via the bar at the top) -->
+    <section id="tab-today" class="tab">
+      <div class="seg subnav" data-subnav></div>
       <nav class="day-nav" id="dayNav" aria-label="Choose a day"></nav>
       <div class="card day-card">
         <div class="row between">
@@ -55,14 +65,15 @@
         <div class="macros" id="todayMacros"></div>
         <div id="adjustBanner"></div>
       </div>
-      <div id="deficit"></div>
       <div id="checkin"></div>
-      <div id="training"></div>
       <div id="meals"></div>
+      <div id="deficit"></div>
     </section>
 
     <!-- WEIGHT -->
     <section id="tab-weight" class="tab">
+      <div class="seg subnav" data-subnav></div>
+      <div id="program"></div>
       <div class="card chart-card">
         <div class="row between" style="margin-top:0">
           <div><h2 style="margin:0">Weight</h2><span class="muted small" id="trendNote"></span></div>
@@ -109,6 +120,7 @@
 
     <!-- GROCERIES -->
     <section id="tab-groceries" class="tab">
+      <div class="seg subnav" data-subnav></div>
       <div class="card">
         <div class="row between">
           <h2>This week's groceries</h2>
@@ -121,6 +133,7 @@
 
     <!-- LIFT -->
     <section id="tab-lift" class="tab">
+      <div id="training"></div>
       <p class="small tone-good" id="liftDone"></p>
       <div class="card" id="liftPlan"></div>
       <div class="card" id="liftSession"></div>
@@ -138,6 +151,7 @@
 
     <!-- SCAN -->
     <section id="tab-scan" class="tab">
+      <div class="seg subnav" data-subnav></div>
       <div class="card">
         <h2>Scan a food</h2>
         <p class="muted small">Point your camera at the barcode on anything from Sprouts, Safeway or Costco. Nutrition comes from Open Food Facts.</p>
@@ -171,12 +185,10 @@
   </main>
 
   <nav class="tabs">
+    <button data-tab="home" class="active"><span>🏠</span>Home</button>
     <button data-tab="brief"><span>🐕</span>Dogs</button>
-    <button data-tab="today" class="active"><span>🍽</span>Today</button>
-    <button data-tab="weight"><span>⚖︎</span>Weight</button>
-    <button data-tab="lift"><span>🏋︎</span>Lift</button>
-    <button data-tab="groceries"><span>🛒</span>Groceries</button>
-    <button data-tab="scan"><span>▦</span>Scan</button>
+    <button data-tab="today"><span>🍽</span>Food</button>
+    <button data-tab="lift"><span>🏋︎</span>Train</button>
     <button data-tab="notes"><span>💞<b class="tab-badge" id="notesBadge" hidden></b></span>Us</button>
   </nav>
 
@@ -338,31 +350,31 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/activity.js": "./js/activity.js?v=90",
-    "./js/analytics.js": "./js/analytics.js?v=90",
-    "./js/app.js": "./js/app.js?v=90",
-    "./js/brief.js": "./js/brief.js?v=90",
-    "./js/briefTab.js": "./js/briefTab.js?v=90",
-    "./js/commands.js": "./js/commands.js?v=90",
-    "./js/devices.js": "./js/devices.js?v=90",
-    "./js/foods.js": "./js/foods.js?v=90",
-    "./js/lift.js": "./js/lift.js?v=90",
-    "./js/lifting.js": "./js/lifting.js?v=90",
-    "./js/notes.js": "./js/notes.js?v=90",
-    "./js/plan.js": "./js/plan.js?v=90",
-    "./js/plans.js": "./js/plans.js?v=90",
-    "./js/poster.js": "./js/poster.js?v=90",
-    "./js/research.js": "./js/research.js?v=90",
-    "./js/review.js": "./js/review.js?v=90",
-    "./js/rewards.js": "./js/rewards.js?v=90",
-    "./js/share.js": "./js/share.js?v=90",
-    "./js/shows.js": "./js/shows.js?v=90",
-    "./js/storage.js": "./js/storage.js?v=90",
-    "./js/sync.js": "./js/sync.js?v=90",
-    "./js/zip.js": "./js/zip.js?v=90"
+    "./js/activity.js": "./js/activity.js?v=92",
+    "./js/analytics.js": "./js/analytics.js?v=92",
+    "./js/app.js": "./js/app.js?v=92",
+    "./js/brief.js": "./js/brief.js?v=92",
+    "./js/briefTab.js": "./js/briefTab.js?v=92",
+    "./js/commands.js": "./js/commands.js?v=92",
+    "./js/devices.js": "./js/devices.js?v=92",
+    "./js/foods.js": "./js/foods.js?v=92",
+    "./js/lift.js": "./js/lift.js?v=92",
+    "./js/lifting.js": "./js/lifting.js?v=92",
+    "./js/notes.js": "./js/notes.js?v=92",
+    "./js/plan.js": "./js/plan.js?v=92",
+    "./js/plans.js": "./js/plans.js?v=92",
+    "./js/poster.js": "./js/poster.js?v=92",
+    "./js/research.js": "./js/research.js?v=92",
+    "./js/review.js": "./js/review.js?v=92",
+    "./js/rewards.js": "./js/rewards.js?v=92",
+    "./js/share.js": "./js/share.js?v=92",
+    "./js/shows.js": "./js/shows.js?v=92",
+    "./js/storage.js": "./js/storage.js?v=92",
+    "./js/sync.js": "./js/sync.js?v=92",
+    "./js/zip.js": "./js/zip.js?v=92"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=90"></script>
+  <script type="module" src="js/app.js?v=92"></script>
 </body>
 </html>

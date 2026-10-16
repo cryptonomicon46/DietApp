@@ -11,9 +11,9 @@ import {
 } from './activity.js';
 import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
-import { initNotes, renderNotes, updateNotesBadge, openUs } from './notes.js';
+import { initNotes, renderNotes, updateNotesBadge, openUs, homeUs } from './notes.js';
 import { syncLine } from './plans.js';
-import { initBrief, renderBrief, renderFeed } from './briefTab.js';
+import { initBrief, renderBrief, renderFeed, homeDogs } from './briefTab.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
@@ -499,7 +499,7 @@ function renderToday() {
   const day = viewDay(), today = isoDate();
   const isToday = day === today, past = day < today;
   // Today-only cards.
-  for (const id of ['#deficit', '#checkin', '#training', '#adjustBanner']) $(id).hidden = !isToday;
+  for (const id of ['#deficit', '#checkin', '#adjustBanner']) $(id).hidden = !isToday;
   if (!isToday) {
     const t = past ? null : baseTargets();
     $('#todayDate').textContent = dateOf(day).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
@@ -545,7 +545,8 @@ function renderToday() {
   $('#meals').innerHTML = mealCardsWithAdd(plan)
     + extrasCard()
     + shareRow()
-    + `<p class="muted small">Pick a food from any menu to swap it. Drag a slider to set that portion yourself (🔒) — the other items re-balance to keep the meal on target. Tap a food's “g cooked ⇄” to weigh just that food raw or dry (or switch all above); macros are the same either way. Oats are always dry. A logged meal is locked so it can't change by accident — tap Unlog to edit.</p>`;
+    + `<details class="help small muted"><summary>How this works</summary>Pick a food from any menu to swap it. Use − / + or type grams to set a portion yourself (🔒) — the other items re-balance to keep the meal on target. Each item has its own cooked / raw switch; macros are the same either way. A logged meal is locked so it can't change by accident — tap Unlog to edit.</details>`;
+  renderHome();
 }
 
 function extrasCard() {
@@ -2205,25 +2206,67 @@ form.addEventListener('submit', () => {
 });
 
 // ---------- tabs & boot ----------
-document.querySelectorAll('.tabs button').forEach((btn) => {
-  btn.onclick = () => {
-    document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${btn.dataset.tab}`));
-    if (btn.dataset.tab !== 'scan') stopScan();
-    if (btn.dataset.tab === 'lift') renderLift();
-    if (btn.dataset.tab === 'brief') renderBrief();
-    if (btn.dataset.tab === 'notes') {
-      openUs();
-      if (sync.enabled()) sync.pull().then((changed) => changed && renderNotes()).catch(() => {});
-    }
-    if (btn.dataset.tab === 'weight' && state.profile) renderStats();
-    window.scrollTo(0, 0);
-  };
+// Five tabs: Home, Dogs, Food, Train, Us. Food has four pages (Meals, Weight, Groceries,
+// Scan) switched from the bar at its top; the Food tab stays lit on all four.
+const FOOD_PAGES = [['today', '🍽 Meals'], ['weight', '⚖︎ Weight'], ['groceries', '🛒 Groceries'], ['scan', '▦ Scan']];
+let currentTab = 'home';
+function showTab(name) {
+  currentTab = name;
+  const lit = FOOD_PAGES.some(([k]) => k === name) ? 'today' : name;
+  document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === lit));
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${name}`));
+  document.querySelectorAll('[data-subnav]').forEach((el) => {
+    el.innerHTML = FOOD_PAGES.map(([k, label]) => `<button type="button" data-sub="${k}" class="${k === name ? 'on' : ''}">${label}</button>`).join('');
+  });
+  if (name !== 'scan') stopScan();
+  if (name === 'home') renderHome();
+  if (name === 'lift') { renderLift(); if (state.profile) renderTraining(targets()); }
+  if (name === 'brief') renderBrief();
+  if (name === 'notes') {
+    openUs();
+    if (sync.enabled()) sync.pull().then((changed) => changed && renderNotes()).catch(() => {});
+  }
+  if (name === 'weight' && state.profile) renderStats();
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll('.tabs button').forEach((btn) => { btn.onclick = () => showTab(btn.dataset.tab); });
+document.querySelector('main').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sub], [data-goto]');
+  if (b) showTab(b.dataset.sub || b.dataset.goto);
 });
+
+// ---------- HOME: one glance at what needs doing today ----------
+function renderHome() {
+  if (!$('#homeHello') || !state.profile) return;
+  const name = firstName();
+  $('#homeHello').innerHTML = `<div class="greeting">${name ? `${greetingWord()}, ${esc(name)}` : greetingWord()}</div>
+    <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>`;
+  $('#homeDogs').innerHTML = homeDogs();
+  // Food: the next meal not yet logged, and how many are done.
+  const plan = todayPlan(targets());
+  const order = mealOrder(plan);
+  const log = todaysLog();
+  const done = order.filter((m) => log.meals[m]).length;
+  const next = order.find((m) => !log.meals[m]);
+  const label = { breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Snack', dinner: 'Dinner' };
+  $('#homeFood').innerHTML = `<button type="button" class="card home-card" data-goto="today">
+      <span class="home-ico">🍽</span>
+      <span class="home-main"><b>${next ? `Next: ${label[next]}` : 'All meals logged 🎉'}</b>
+        <small class="muted">${next ? `${esc(plan[next].title)} · ${plan[next].totals.kcal} kcal` : 'Nice work today.'}</small>
+        <small class="muted">${done} of ${order.length} meals logged</small></span>
+      <span class="home-go">›</span></button>`;
+  $('#homeUs').innerHTML = homeUs();
+  const day = todaysTraining();
+  $('#homeTrain').innerHTML = `<button type="button" class="card home-card" data-goto="lift">
+      <span class="home-ico">🏋︎</span>
+      <span class="home-main"><b>${esc(day.label)}</b><small class="muted">${day.sessions.length ? `${day.sessions.length} activit${day.sessions.length === 1 ? 'y' : 'ies'} today` : 'Log a lift or add an activity'}</small></span>
+      <span class="home-go">›</span></button>`;
+}
 
 function renderAll() {
   if (!state.profile) return;
   renderToday();
+  renderTraining(targets());
   renderWeight();
   renderCheckinHistory();
   renderStats();

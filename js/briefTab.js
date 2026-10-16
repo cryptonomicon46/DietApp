@@ -236,7 +236,28 @@ export function renderFeed() {
       ${choreButton('park')}
     </div>`;
   renderDuty();
+  if ($('#homeDogs')) $('#homeDogs').innerHTML = homeDogs();
 }
+// Home: the same three check-ins as small buttons, and how close today is to golden.
+export function homeDogs() {
+  if (!ownerId()) return '';
+  const slot = feedingSlot();
+  const fed = whoFed(feedRecords(), slot.key);
+  const walks = todaysChore('walk').length, park = todaysChore('park').length;
+  const outings = walks + park;
+  const meal = slot.meal === 'breakfast' ? 'Breakfast' : 'Dinner';
+  const chip = (attr, done, icon, title, sub) => `<button type="button" class="home-dog ${done ? 'done' : ''}" ${attr}><span>${done ? '✓' : icon}</span><b>${title}</b><small>${sub}</small></button>`;
+  return `<div class="card home-dogs">
+    <div class="row between" style="margin-top:0"><div class="eyebrow">🐕 Dogs</div><button type="button" class="linkish small" data-goto="brief">Scores & golden days ›</button></div>
+    <div class="home-dog-row">
+      ${chip('data-feed', !!fed, '🦴', fed ? `${meal} done` : `Feed ${meal.toLowerCase()}`, fed ? `${fed.person === ownerId() ? 'You' : esc(fed.name)} · ${clock(new Date(fed.at))}` : 'Tap when fed')}
+      ${chip('data-chore="walk"', walks > 0, '🐾', walks ? `Walked${walks > 1 ? ` ×${walks}` : ''}` : 'Walk', walks ? 'Tap for another' : 'Tap when walked')}
+      ${chip('data-chore="park"', park > 0, '🌳', park ? `Park${park > 1 ? ` ×${park}` : ''}` : 'Dog park', park ? 'Tap for another' : 'Tap after')}
+    </div>
+    <p class="small ${outings >= 2 ? 'golden-note' : 'muted'}">${outings >= 2 ? '⭐ Golden day — out twice today!' : outings === 1 ? 'One more outing makes it a ⭐ golden day.' : 'Two outings today make a ⭐ golden day.'}</p>
+  </div>`;
+}
+
 function toggleFeed() {
   const slot = feedingSlot();
   const fed = whoFed(feedRecords(), slot.key);
@@ -419,6 +440,13 @@ export async function renderBrief(force = false) {
 }
 
 export function initBrief() {
+  // Home's dog buttons do the same as the big ones.
+  $('#tab-home')?.addEventListener('click', (e) => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.dataset.feed != null) toggleFeed();
+    else if (t.dataset.chore) logChore(t.dataset.chore);
+  });
   const root = $('#tab-brief');
   // Keep the tab's colour right as the 4 AM / 4 PM resets pass, on any tab.
   renderFeed();
