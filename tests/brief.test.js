@@ -77,3 +77,26 @@ test('one walk a day, from 6 AM to 6 AM Pacific', async () => {
   assert.equal(walkDay(new Date('2026-10-16T12:59:00Z')), '2026-10-15', '5:59 AM PT is still yesterday');
   assert.equal(walkDay(new Date('2026-10-16T13:00:00Z')), '2026-10-16', '6 AM PT starts a new day');
 });
+
+test('dog duty scoreboard: tallies, monthly winner and gold coins', async () => {
+  const { choreTally, monthWinner, coinsForYear, choreTimes } = await import('../js/brief.js');
+  const recs = [
+    { person: 'sandman', name: 'Sandman',
+      fed: { '2026-09-01:breakfast': { at: 10 }, '2026-09-01:dinner': { at: 50 }, '2026-10-02:breakfast': { at: 5 } },
+      walks: { '2026-09-01': [1, 2], '2026-09-02': { at: 3 } }, park: {} },
+    { person: 'amani', name: 'Amani',
+      fed: { '2026-09-01:breakfast': { at: 5 }, '2026-08-03:dinner': { at: 1 } },
+      walks: { '2026-09-03': [4] }, park: { '2026-09-05': [6], '2026-08-04': [7] } },
+  ];
+  assert.deepEqual(choreTimes({ a: { at: 3 }, b: [1, 2] }), { a: [3], b: [1, 2] });
+  const sep = choreTally(recs, '2026-09');
+  assert.deepEqual(sep.sandman, { feed: 1, walk: 3, park: 0, total: 4 }, 'Amani fed breakfast first, so only dinner counts');
+  assert.deepEqual(sep.amani, { feed: 1, walk: 1, park: 1, total: 3 });
+  assert.equal(monthWinner(recs, '2026-09').winner, 'sandman');
+  assert.equal(monthWinner(recs, '2026-08').winner, 'amani');
+  assert.equal(monthWinner(recs, '2026-07').winner, null);
+  const y = coinsForYear(recs, '2026', '2026-10');
+  assert.equal(y.months.length, 9, 'only finished months');
+  assert.deepEqual(y.coins, { sandman: 1, amani: 1 });
+  assert.equal(choreTally(recs, '2026-09-01').sandman.walk, 2, 'daily count');
+});

@@ -525,3 +525,28 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .feed-btn.unwalked { background: radial-gradient(circle at 35% 30%, #6fa3e6, #3a6cc0); }
 .feed-sub { text-align: center; padding: 0 8px; }
 .tabs button.dogs-done { background: #1fbf5a; color: #fff; font-weight: 800; }
+/* Dogs: three round buttons (feed, walk, dog park); the third wraps to its own row */
+.feed-pair { flex-wrap: wrap; row-gap: 10px; }
+.feed-col { flex: 0 1 calc(50% - 7px); }
+.feed-btn.nopark { background: radial-gradient(circle at 35% 30%, #a98be8, #6c4fc4); }
+.feed-col .linkish { font-size: inherit; }
+/* 🏆 dog duty scoreboard */
+.duty-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.duty-head .seg button { padding: 5px 10px; font-size: .8rem; }
+.duty-table { width: 100%; border-collapse: collapse; margin: 6px 0 8px; font-variant-numeric: tabular-nums; }
+.duty-table th, .duty-table td { padding: 7px 4px; text-align: center; border-bottom: 1px solid var(--line); }
+.duty-table th[scope=row] { text-align: left; font-weight: 500; }
+.duty-table thead th { font-size: .85rem; font-weight: 700; }
+.duty-table td { font-size: 1.05rem; font-weight: 700; }
+.duty-table tfoot th, .duty-table tfoot td { border-bottom: 0; font-weight: 800; }
+.duty-table tfoot td.lead { color: var(--good); font-size: 1.25rem; }
+.duty-table .p0 { color: #3a6cc0; } .duty-table .p1 { color: #c0457a; }
+.duty-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--bg); gap: 2px; }
+.duty-bar .p0 { background: #3a6cc0; } .duty-bar .p1 { background: #c0457a; }
+@media (prefers-color-scheme: dark) { .duty-table .p0 { color: #7fa9ec; } .duty-table .p1 { color: #ec7fb0; } }
+.coins { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, #e6b422 14%, var(--card)); border: 1px solid color-mix(in srgb, #e6b422 45%, transparent); }
+.coins p { margin: 6px 0 0; }
+.coin-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; font-weight: 700; }
+.coin-stack { letter-spacing: -4px; font-size: 1.15rem; margin-left: 4px; }
+.coin-months { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
+.coin-months li { display: grid; grid-template-columns: 3.5em 1fr auto; gap: 8px; font-size: .9rem; }

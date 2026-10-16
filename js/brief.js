@@ -158,3 +158,44 @@ export function whoFed(records, key) {
   const hits = records.flatMap((r) => (r.fed?.[key] ? [{ person: r.person, name: r.name, at: r.fed[key].at }] : []));
   return hits.sort((a, b) => a.at - b.at)[0] || null;
 }
+
+// ---------- dog duty scoreboard ----------
+// A person's log of one chore: {day: [timestamps]}. Older walk check-ins were {day: {at}}.
+export function choreTimes(log) {
+  return Object.fromEntries(Object.entries(log || {}).map(([day, v]) => [day, Array.isArray(v) ? v : v?.at ? [v.at] : []]));
+}
+// records: [{ person, name, fed: {slotKey: {at}}, walks: {day: [at]}, park: {day: [at]} }]
+// → { person: { feed, walk, park, total } } for keys starting with `prefix` ('2026', '2026-10', '2026-10-16').
+// A feeding counts once, for whoever did it first.
+export function choreTally(records, prefix) {
+  const t = Object.fromEntries(records.map((r) => [r.person, { feed: 0, walk: 0, park: 0, total: 0 }]));
+  const slots = new Set(records.flatMap((r) => Object.keys(r.fed || {})).filter((k) => k.startsWith(prefix)));
+  for (const k of slots) { const w = whoFed(records, k); if (w) t[w.person].feed++; }
+  for (const r of records) {
+    for (const [kind, key] of [['walk', 'walks'], ['park', 'park']]) {
+      for (const [day, times] of Object.entries(choreTimes(r[key]))) if (day.startsWith(prefix)) t[r.person][kind] += times.length;
+    }
+  }
+  for (const p in t) t[p].total = t[p].feed + t[p].walk + t[p].park;
+  return t;
+}
+// The month's winner: most feedings + walks + park trips. A tie (or an empty month) has no winner.
+export function monthWinner(records, month) {
+  const t = choreTally(records, month);
+  const ranked = Object.entries(t).sort((a, b) => b[1].total - a[1].total);
+  const [first, second] = ranked;
+  const winner = first && first[1].total > 0 && (!second || first[1].total > second[1].total) ? first[0] : null;
+  return { month, winner, tie: !winner && !!first && first[1].total > 0, tally: t };
+}
+// Finished months of `year` before `currentMonth` ('YYYY-MM'), each with its winner; a gold coin each.
+export function coinsForYear(records, year, currentMonth) {
+  const months = [];
+  for (let m = 1; m <= 12; m++) {
+    const key = `${year}-${String(m).padStart(2, '0')}`;
+    if (key >= currentMonth) break;
+    months.push(monthWinner(records, key));
+  }
+  const coins = Object.fromEntries(records.map((r) => [r.person, 0]));
+  for (const m of months) if (m.winner) coins[m.winner]++;
+  return { months, coins };
+}

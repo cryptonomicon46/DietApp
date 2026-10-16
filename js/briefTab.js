@@ -3,7 +3,7 @@ import { store, global, PROFILES, ownerId, profileStore } from './storage.js';
 import { pushNow } from './sync.js';
 import {
   PLACE, weatherUrls, parseWeather, scoreHour, bestWindow, dogWalks, hottestPavement, asphaltF, pawRisk,
-  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, feedingSlot, whoFed, walkDay,
+  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, feedingSlot, whoFed, walkDay, choreTimes, choreTally, monthWinner, coinsForYear,
 } from './brief.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -132,71 +132,107 @@ function classesCard(today) {
   </div>`;
 }
 
-// ---- 🐕 the big "dogs fed?" button, shared by both phones ----
+// ---- 🐕 the big feed / walk / dog-park buttons, shared by both phones ----
 const nameOf = (id) => profileStore(id).get('profile', null)?.name?.split(/\s+/)[0] || PROFILES.find((p) => p.id === id)?.name || id;
 function feedRecords(key = 'dogFed') {
   return PROFILES.map((p) => ({ person: p.id, name: nameOf(p.id), fed: profileStore(p.id).get(key, {}) }));
 }
-// The once-a-day walk button, next to the feeding button.
-function walkButton() {
-  const done = whoFed(feedRecords('dogWalked'), walkDay());
-  const who = done && (done.person === ownerId() ? 'You' : esc(done.name));
+// Everyone's dog duties, for the scoreboard.
+function dutyRecords() {
+  return PROFILES.map((p) => {
+    const s = profileStore(p.id);
+    return { person: p.id, name: nameOf(p.id), fed: s.get('dogFed', {}), walks: s.get('dogWalked', {}), park: s.get('dogPark', {}) };
+  });
+}
+// Walks and dog-park trips can happen more than once a day; each tap logs one for you.
+const CHORES = {
+  walk: { key: 'dogWalked', icon: '🐾', todo: 'Walk the dogs', done: 'Walked', cls: 'unwalked', one: 'walk' },
+  park: { key: 'dogPark', icon: '🌳', todo: 'Dog park', done: 'Park trip', cls: 'nopark', one: 'park trip' },
+};
+function todaysChore(kind) {
+  const day = walkDay();
+  return PROFILES.flatMap((p) => (choreTimes(profileStore(p.id).get(CHORES[kind].key, {}))[day] || []).map((at) => ({ person: p.id, name: nameOf(p.id), at })))
+    .sort((a, b) => a.at - b.at);
+}
+const whoName = (person, name) => (person === ownerId() ? 'You' : esc(name));
+function choreButton(kind) {
+  const c = CHORES[kind];
+  const list = todaysChore(kind);
+  const by = {};
+  for (const x of list) by[x.person] = (by[x.person] || 0) + 1;
+  const last = list[list.length - 1];
+  const sub = !list.length ? (kind === 'walk' ? 'Tap when walked' : 'Tap after the park')
+    : list.length === 1 ? `${whoName(last.person, last.name)} · ${clock(new Date(last.at))}`
+    : Object.entries(by).map(([p, n]) => `${whoName(p, list.find((x) => x.person === p).name)} ×${n}`).join(' · ');
+  const mine = by[ownerId()] || 0;
   return `<div class="feed-col">
-      <button type="button" class="feed-btn walk ${done ? 'fed' : 'unwalked'}" data-walk aria-pressed="${!!done}">
-        <span class="feed-icon">${done ? '✓' : '🐾'}</span>
-        <span class="feed-title">${done ? 'Walked' : 'Walk the dogs'}</span>
-        <span class="feed-sub">${done ? `${who} · ${clock(new Date(done.at))}` : 'Once a day'}</span>
+      <button type="button" class="feed-btn ${list.length ? 'fed' : c.cls}" data-chore="${kind}" aria-pressed="${!!list.length}">
+        <span class="feed-icon">${list.length ? '✓' : c.icon}</span>
+        <span class="feed-title">${list.length ? (list.length > 1 ? `${c.done} ×${list.length}` : c.done) : c.todo}</span>
+        <span class="feed-sub">${sub}</span>
       </button>
-      <p class="small muted center">Resets at 6 AM.</p>
+      <p class="small muted center">${list.length ? 'Tap again to log another.' : 'Resets at 6 AM.'}${mine ? ` <button type="button" class="linkish small" data-undochore="${kind}">Undo my last</button>` : ''}</p>
     </div>`;
 }
-function toggleWalk() {
-  const day = walkDay();
-  const done = whoFed(feedRecords('dogWalked'), day);
+function logChore(kind) {
+  const c = CHORES[kind];
+  const n = todaysChore(kind).length;
+  if (n && !confirm(`Log another ${c.one} for you today? (${n + 1} today)`)) return;
   const s = profileStore(ownerId());
-  const mine = s.get('dogWalked', {});
-  if (done) {
-    if (done.person !== ownerId()) { alert(`${done.name} already walked them at ${clock(new Date(done.at))}.`); return; }
-    if (!confirm('Undo — the dogs haven\'t been walked today?')) return;
-    delete mine[day];
-  } else {
-    mine[day] = { at: Date.now() };
-  }
-  const keep = Object.keys(mine).sort().slice(-14);
-  s.set('dogWalked', Object.fromEntries(keep.map((k) => [k, mine[k]])));
+  const all = choreTimes(s.get(c.key, {}));
+  const day = walkDay();
+  all[day] = [...(all[day] || []), Date.now()];
+  saveChore(s, c.key, all);
+}
+function undoChore(kind) {
+  const c = CHORES[kind];
+  const s = profileStore(ownerId());
+  const all = choreTimes(s.get(c.key, {}));
+  const day = walkDay();
+  if (!all[day]?.length || !confirm(`Undo your last ${c.one} today?`)) return;
+  all[day] = all[day].slice(0, -1);
+  if (!all[day].length) delete all[day];
+  saveChore(s, c.key, all);
+}
+// Keep about 13 months, so this year's and last month's scores are always there.
+function saveChore(s, key, all) {
+  const keep = Object.keys(all).sort().slice(-400);
+  s.set(key, Object.fromEntries(keep.map((k) => [k, all[k]])));
   renderFeed();
   pushNow().then(renderFeed);
 }
+
 export function renderFeed() {
   const el = $('#feedDogs');
   if (!el || !ownerId()) return;
   const slot = feedingSlot();
   const fed = whoFed(feedRecords(), slot.key);
-  const walked = whoFed(feedRecords('dogWalked'), walkDay());
+  const walked = todaysChore('walk').length > 0;
   // The 🐕 tab shows it from anywhere in the app: red = still to feed,
   // green = fed but not walked yet, bright green = fed and walked.
   const tab = document.querySelector('.tabs [data-tab="brief"]');
   if (tab) {
     tab.classList.toggle('dogs-hungry', !fed);
     tab.classList.toggle('dogs-fed', !!fed && !walked);
-    tab.classList.toggle('dogs-done', !!fed && !!walked);
+    tab.classList.toggle('dogs-done', !!fed && walked);
     tab.title = !fed ? `Dogs still need ${slot.meal}` : walked ? `Dogs fed (${slot.meal}) and walked` : `Dogs fed (${slot.meal}) — not walked yet`;
   }
   const other = slot.meal === 'breakfast' ? null : whoFed(feedRecords(), slot.key.replace('dinner', 'breakfast'));
   const meal = slot.meal === 'breakfast' ? 'Breakfast' : 'Dinner';
-  const mine = fed?.person === ownerId();
   el.innerHTML = `
     <div class="feed-pair">
       <div class="feed-col">
         <button type="button" class="feed-btn ${fed ? 'fed' : 'hungry'}" data-feed aria-pressed="${!!fed}">
           <span class="feed-icon">${fed ? '✓' : '🦴'}</span>
           <span class="feed-title">${fed ? `${meal} done` : 'Feed the dogs'}</span>
-          <span class="feed-sub">${fed ? `${esc(mine ? 'You' : fed.name)} · ${clock(new Date(fed.at))}` : `${meal} · tap when fed`}</span>
+          <span class="feed-sub">${fed ? `${whoName(fed.person, fed.name)} · ${clock(new Date(fed.at))}` : `${meal} · tap when fed`}</span>
         </button>
         <p class="small muted center">${fed ? `Resets ${slot.resets} for ${slot.meal === 'breakfast' ? 'dinner' : 'breakfast'}.` : `Resets ${slot.resets}.`}${other ? ` Breakfast: ${esc(other.person === ownerId() ? 'you' : other.name)} at ${clock(new Date(other.at))}.` : ''}</p>
       </div>
-      ${walkButton()}
+      ${choreButton('walk')}
+      ${choreButton('park')}
     </div>`;
+  renderDuty();
 }
 function toggleFeed() {
   const slot = feedingSlot();
@@ -210,11 +246,56 @@ function toggleFeed() {
   } else {
     mineAll[slot.key] = { at: Date.now() };
   }
-  // Keep about two weeks of feedings.
-  const keep = Object.keys(mineAll).sort().slice(-28);
+  // Keep about 13 months of feedings for the scoreboard.
+  const keep = Object.keys(mineAll).sort().slice(-800);
   s.set('dogFed', Object.fromEntries(keep.map((k) => [k, mineAll[k]])));
   renderFeed();
   pushNow().then(renderFeed);
+}
+
+// ---- 🏆 dog duty scoreboard: today / this month / this year, and a 🪙 gold coin each month ----
+let dutyView = 'month';
+const monthName = (ym, style = 'long') => new Date(`${ym}-15T12:00:00`).toLocaleDateString(undefined, { month: style });
+const prevMonth = (ym) => { const d = new Date(`${ym}-15T12:00:00`); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7); };
+function renderDuty() {
+  const el = $('#dogDuty');
+  if (!el || !ownerId()) return;
+  const recs = dutyRecords();
+  // Me first, then my partner.
+  const people = [...recs].sort((a, b) => (a.person === ownerId() ? -1 : b.person === ownerId() ? 1 : 0));
+  const today = walkDay();
+  const month = today.slice(0, 7);
+  const year = today.slice(0, 4);
+  const prefix = { today, month, year }[dutyView];
+  const t = choreTally(recs, prefix);
+  const top = Math.max(...people.map((p) => t[p.person].total));
+  const leader = people.filter((p) => t[p.person].total === top).length === 1 && top > 0 ? people.find((p) => t[p.person].total === top).person : null;
+  const row = (icon, label, k) => `<tr><th scope="row">${icon} ${label}</th>${people.map((p) => `<td>${t[p.person][k]}</td>`).join('')}</tr>`;
+  const sum = people.reduce((a, p) => a + t[p.person].total, 0);
+  const bar = sum ? `<div class="duty-bar" role="img" aria-label="${people.map((p) => `${esc(p.name)} ${t[p.person].total}`).join(', ')}">${people.map((p, i) => `<span class="p${i}" style="flex:${t[p.person].total || 0.0001}"></span>`).join('')}</div>` : '';
+  // 🪙 one gold coin for each finished month's winner.
+  const { months, coins } = coinsForYear(recs, year, month);
+  const last = month.endsWith('-01') ? monthWinner(recs, prevMonth(month)) : months[months.length - 1];
+  const lastLine = last ? (last.winner
+    ? `🪙 <b>${monthName(last.month)}</b> goes to <b>${esc(nameOf(last.winner))}</b> (${people.map((p) => last.tally[p.person].total).join('–')})`
+    : last.tie ? `${monthName(last.month)} was a tie — no coin` : '') : '';
+  const label = { today: 'Today', month: `${monthName(month)} so far`, year: `${year} so far` }[dutyView];
+  el.innerHTML = `
+    <div class="duty-head"><div class="eyebrow">🏆 Dog duty</div>
+      <div class="seg small">${['today', 'month', 'year'].map((v) => `<button type="button" data-dutyview="${v}" class="${dutyView === v ? 'on' : ''}">${{ today: 'Today', month: 'Month', year: 'Year' }[v]}</button>`).join('')}</div></div>
+    <p class="small muted">${label}${leader ? ` · ${esc(people.find((p) => p.person === leader).person === ownerId() ? 'you lead' : `${nameOf(leader)} leads`)} 👑` : top ? ' · all square' : ''}</p>
+    <table class="duty-table">
+      <thead><tr><th></th>${people.map((p, i) => `<th class="p${i}">${esc(p.person === ownerId() ? `${p.name} (you)` : p.name)}${p.person === leader ? ' 👑' : ''}</th>`).join('')}</tr></thead>
+      <tbody>${row('🦴', 'Feedings', 'feed')}${row('🐾', 'Walks', 'walk')}${row('🌳', 'Dog park', 'park')}</tbody>
+      <tfoot><tr><th scope="row">Total</th>${people.map((p) => `<td class="${p.person === leader ? 'lead' : ''}">${t[p.person].total}</td>`).join('')}</tr></tfoot>
+    </table>
+    ${bar}
+    <div class="coins">
+      <div class="small"><b>Gold coins ${year}</b> · one a month for the most feedings + walks + park trips</div>
+      <div class="coin-row">${people.map((p) => `<span>${esc(p.name)} ${coins[p.person] ? `<span class="coin-stack" aria-label="${coins[p.person]} gold coins">${'🪙'.repeat(Math.min(coins[p.person], 12))}</span>` : '<span class="muted">—</span>'}</span>`).join('')}</div>
+      ${lastLine ? `<p class="small">${lastLine}</p>` : ''}
+      ${dutyView === 'year' && months.some((m) => m.winner || m.tie) ? `<ul class="coin-months">${months.filter((m) => m.winner || m.tie).map((m) => `<li><span>${monthName(m.month, 'short')}</span><span>${m.winner ? `🪙 ${esc(nameOf(m.winner))}` : 'tie'}</span><span class="muted">${people.map((p) => m.tally[p.person].total).join('–')}</span></li>`).join('')}</ul>` : ''}
+    </div>`;
 }
 
 export async function renderBrief(force = false) {
@@ -268,7 +349,9 @@ export function initBrief() {
     const t = e.target.closest('button');
     if (!t) return;
     if (t.dataset.feed != null) { toggleFeed(); return; }
-    if (t.dataset.walk != null) { toggleWalk(); return; }
+    if (t.dataset.chore) { logChore(t.dataset.chore); return; }
+    if (t.dataset.undochore) { undoChore(t.dataset.undochore); return; }
+    if (t.dataset.dutyview) { dutyView = t.dataset.dutyview; renderDuty(); return; }
     if (t.dataset.briefrefresh != null) { renderBrief(true); return; }
     if (t.dataset.addclass != null) { adding = true; renderBrief(); return; }
     if (t.dataset.cancelclass != null) { adding = false; renderBrief(); return; }
