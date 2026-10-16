@@ -13,6 +13,7 @@ import { devices } from './devices.js';
 import { RESEARCH } from './research.js';
 import { initNotes, renderNotes, updateNotesBadge, openUs, homeUs } from './notes.js';
 import { syncLine } from './plans.js';
+import { initCal, renderCal, homeCal, updateCalBadge } from './calTab.js';
 import { initBrief, renderBrief, renderFeed, homeDogs } from './briefTab.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
@@ -2231,6 +2232,7 @@ function showTab(name) {
   if (name === 'home') { renderHome(); renderBrief(); }
   if (name === 'lift') { renderLift(); if (state.profile) renderTraining(targets()); renderBrief(); }
   if (name === 'brief') renderBrief();
+  if (name === 'calendar') renderCal();
   if (name === 'notes') {
     openUs();
     if (sync.enabled()) sync.pull().then((changed) => changed && renderNotes()).catch(() => {});
@@ -2265,6 +2267,7 @@ function renderHome() {
         <small class="muted">${done} of ${order.length} meals logged</small></span>
       <span class="home-go">›</span></button>`;
   $('#homeUs').innerHTML = homeUs();
+  $('#homeCal').innerHTML = homeCal();
   const day = todaysTraining();
   $('#homeTrain').innerHTML = `<button type="button" class="card home-card" data-goto="lift">
       <span class="home-ico">🏋︎</span>
@@ -2437,6 +2440,8 @@ $('#shareOff').onclick = () => { sync.save(null); global.set('shareOff', true); 
 initLift();
 initNotes();
 initBrief();
+initCal(document.querySelector('main'));
+updateCalBadge();
 updateNotesBadge();
 // Weigh-ins said on the Lift tab ("weigh in 161.4").
 window.addEventListener('lp:weighin', (e) => {
@@ -2509,19 +2514,22 @@ if (!sync.readOnly() && (justConnected || Date.now() - store.get('lastSync', 0) 
 applyPendingLink();
 if (sync.enabled()) {
   sync.push().catch(() => {});
-  sync.pull().then((changed) => { updateNotesBadge(); if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
+  sync.pull().then((changed) => { updateNotesBadge(); updateCalBadge(); if (changed) renderHome(); if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
   const onNotes = () => document.querySelector('#tab-notes').classList.contains('active');
   const onBrief = () => document.querySelector('#tab-brief').classList.contains('active');
   const refresh = () => sync.pull().then((changed) => {
     updateNotesBadge();
+    updateCalBadge();
     renderFeed(); // also colours the 🐕 tab
+    if (changed && currentTab === 'calendar') renderCal();
+    if (changed && currentTab === 'home') renderHome();
     if (onNotes() && changed) renderNotes();
     else if (onNotes()) { const l = document.querySelector('#tab-notes .sync-line'); if (l) l.outerHTML = syncLine(); }
     else if (changed && sync.readOnly()) location.reload();
   }).catch(() => {});
   setInterval(refresh, 5 * 60000);
   // While the Us tab is open, check for new notes and plans often.
-  setInterval(() => { if ((onNotes() || onBrief()) && document.visibilityState === 'visible') refresh(); }, 10000);
+  setInterval(() => { if ((onNotes() || onBrief() || currentTab === 'calendar') && document.visibilityState === 'visible') refresh(); }, 10000);
   // A home-screen app resumes without reloading: catch up when it comes back.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && Date.now() - global.get('pulledAt', 0) > 30000) { sync.push().catch(() => {}); refresh(); }

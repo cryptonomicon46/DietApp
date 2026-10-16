@@ -11,6 +11,7 @@
 //           ANTHROPIC_API_KEY (optional: "Ask Claude" for workout commands)
 
 import { assist } from './assistant.js';
+import { mergeEvents, icsCalendar } from '../js/calendar.js';
 
 const WHOOP = {
   auth: 'https://api.prod.whoop.com/oauth/oauth2/auth',
@@ -39,6 +40,29 @@ export default {
     const callback = `${url.origin}/${url.pathname.split('/')[1]}/callback`;
 
     try {
+      // ---- Shared calendar feed: /household/<code>/calendar.ics (subscribe in Apple / Google) ----
+      const hc = url.pathname.match(/^\/household\/([a-z0-9-]{12,64})\/calendar\.ics$/);
+      if (hc) {
+        if (!env.HOUSEHOLD) return json({ error: 'HOUSEHOLD storage not set up — see server/README.md' }, 501);
+        if (req.method !== 'GET' && req.method !== 'HEAD') return json({ error: 'method not allowed' }, 405);
+        const { keys } = await env.HOUSEHOLD.list({ prefix: `${hc[1]}:` });
+        const records = [];
+        const names = {};
+        for (const { name } of keys) {
+          const person = name.slice(hc[1].length + 1);
+          if (!/^[a-z]{2,20}$/.test(person) || person === 'link') continue;
+          try {
+            const data = JSON.parse(await env.HOUSEHOLD.get(name))?.data || {};
+            records.push({ person, events: data.events || [] });
+            if (data.profile?.name) names[person] = String(data.profile.name).split(/\s+/)[0];
+          } catch { /* skip a bad record */ }
+        }
+        if (!records.length) return json({ error: 'not found' }, 404);
+        // Subscribed calendars ignore alarms, so none are sent.
+        const body = icsCalendar(mergeEvents(records), { names, alarms: false, name: 'Our PawMily' });
+        return new Response(req.method === 'HEAD' ? null : body, { headers: { ...cors, 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'private, max-age=300' } });
+      }
+
       // ---- Household files (dog vaccine records etc.): /household/<code>/file/<id> ----
       // Raw bytes in KV with their type; anyone with the household code can read them,
       // exactly like the household's data.

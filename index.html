@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Our PawMily">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=108">
+  <link rel="stylesheet" href="styles.css?v=111">
 </head>
 <body>
   <header class="top">
@@ -32,6 +32,7 @@
     <!-- HOME: one glance at what needs doing today -->
     <section id="tab-home" class="tab active">
       <div class="card home-hello" id="homeHello"></div>
+      <div id="homeCal"></div>
       <div id="homeDogs"></div>
       <div id="homePlan"></div>
       <div id="homeFood"></div>
@@ -182,6 +183,12 @@
     </section>
 
     <!-- NOTES -->
+    <!-- CALENDAR: shared events, either of you can add -->
+    <section id="tab-calendar" class="tab">
+      <h2 class="brief-title">📅 Our calendar</h2>
+      <div id="calBoard"></div>
+    </section>
+
     <section id="tab-notes" class="tab">
       <div class="seg us-pages" id="usPages" role="group" aria-label="Notes or plans"></div>
       <div id="notesBoard"></div>
@@ -193,6 +200,7 @@
     <button data-tab="brief"><span>🐕</span>Dogs</button>
     <button data-tab="today"><span>🍽</span>Food</button>
     <button data-tab="lift"><span>🏋︎</span>Train</button>
+    <button data-tab="calendar"><span>📅<b class="tab-badge" id="calBadge" hidden></b></span>Calendar</button>
     <button data-tab="notes"><span>💞<b class="tab-badge" id="notesBadge" hidden></b></span>Us</button>
   </nav>
 
@@ -354,32 +362,34 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/activity.js": "./js/activity.js?v=108",
-    "./js/analytics.js": "./js/analytics.js?v=108",
-    "./js/app.js": "./js/app.js?v=108",
-    "./js/brief.js": "./js/brief.js?v=108",
-    "./js/briefTab.js": "./js/briefTab.js?v=108",
-    "./js/commands.js": "./js/commands.js?v=108",
-    "./js/devices.js": "./js/devices.js?v=108",
-    "./js/dogs.js": "./js/dogs.js?v=108",
-    "./js/foods.js": "./js/foods.js?v=108",
-    "./js/lift.js": "./js/lift.js?v=108",
-    "./js/lifting.js": "./js/lifting.js?v=108",
-    "./js/notes.js": "./js/notes.js?v=108",
-    "./js/plan.js": "./js/plan.js?v=108",
-    "./js/plans.js": "./js/plans.js?v=108",
-    "./js/poster.js": "./js/poster.js?v=108",
-    "./js/research.js": "./js/research.js?v=108",
-    "./js/review.js": "./js/review.js?v=108",
-    "./js/rewards.js": "./js/rewards.js?v=108",
-    "./js/share.js": "./js/share.js?v=108",
-    "./js/shows.js": "./js/shows.js?v=108",
-    "./js/storage.js": "./js/storage.js?v=108",
-    "./js/sync.js": "./js/sync.js?v=108",
-    "./js/zip.js": "./js/zip.js?v=108"
+    "./js/activity.js": "./js/activity.js?v=111",
+    "./js/analytics.js": "./js/analytics.js?v=111",
+    "./js/app.js": "./js/app.js?v=111",
+    "./js/brief.js": "./js/brief.js?v=111",
+    "./js/briefTab.js": "./js/briefTab.js?v=111",
+    "./js/calTab.js": "./js/calTab.js?v=111",
+    "./js/calendar.js": "./js/calendar.js?v=111",
+    "./js/commands.js": "./js/commands.js?v=111",
+    "./js/devices.js": "./js/devices.js?v=111",
+    "./js/dogs.js": "./js/dogs.js?v=111",
+    "./js/foods.js": "./js/foods.js?v=111",
+    "./js/lift.js": "./js/lift.js?v=111",
+    "./js/lifting.js": "./js/lifting.js?v=111",
+    "./js/notes.js": "./js/notes.js?v=111",
+    "./js/plan.js": "./js/plan.js?v=111",
+    "./js/plans.js": "./js/plans.js?v=111",
+    "./js/poster.js": "./js/poster.js?v=111",
+    "./js/research.js": "./js/research.js?v=111",
+    "./js/review.js": "./js/review.js?v=111",
+    "./js/rewards.js": "./js/rewards.js?v=111",
+    "./js/share.js": "./js/share.js?v=111",
+    "./js/shows.js": "./js/shows.js?v=111",
+    "./js/storage.js": "./js/storage.js?v=111",
+    "./js/sync.js": "./js/sync.js?v=111",
+    "./js/zip.js": "./js/zip.js?v=111"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=108"></script>
+  <script type="module" src="js/app.js?v=111"></script>
 </body>
 </html>
