@@ -680,3 +680,7 @@ details.help summary { cursor: pointer; }
 .row.wrap { flex-wrap: wrap; gap: 6px; }
 .danger { color: var(--alert); }
 .edit-row .date-lbl { flex: 1 1 140px; display: grid; gap: 2px; color: var(--muted); }
+
+/* Dogs: walk times replace the calorie bar at the top */
+body[data-tab="brief"] .daybar-wrap { display: none; }
+.plan-temp { font-size: .78rem; font-weight: 700; color: var(--muted); background: var(--bg); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }

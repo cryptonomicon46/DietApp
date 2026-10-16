@@ -2212,6 +2212,7 @@ const FOOD_PAGES = [['today', '🍽 Meals'], ['weight', '⚖︎ Weight'], ['groc
 let currentTab = 'home';
 function showTab(name) {
   currentTab = name;
+  document.body.dataset.tab = name; // Dogs hides the calorie bar
   const lit = FOOD_PAGES.some(([k]) => k === name) ? 'today' : name;
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === lit));
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${name}`));

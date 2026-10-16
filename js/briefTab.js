@@ -85,6 +85,13 @@ function strip(hourly, from, activity = 'run') {
   }).join('')}</div>`;
 }
 
+// Air temperature across a window, e.g. "58–64°F" (one number when it barely moves).
+function tempRange(hourly, start, hours) {
+  const ts = hourly.slice(start, start + hours + 1).map((h) => Math.round(h.temp));
+  const lo = Math.min(...ts), hi = Math.max(...ts);
+  return hi - lo < 2 ? `${lo}°F` : `${lo}–${hi}°F`;
+}
+
 // The day in order: best run, ride, both dog walks and your classes.
 function dayPlan(hourly, from, end, today, late = false) {
   const items = [];
@@ -93,13 +100,13 @@ function dayPlan(hourly, from, end, today, late = false) {
   const walks = dogWalks(hourly, from);
   // A dog walk inside a run or ride window rides along: 🐾 on that line instead of its own.
   const acts = [];
-  if (run?.score > 0) acts.push({ w: run, item: { t: hourly[run.start].time, label: '🏃 Run 4 mi' } });
-  if (bike?.score > 0) acts.push({ w: bike, item: { t: hourly[bike.start].time, label: '🚴 Ride 25–30 mi', note: `until ${clock(new Date(hourly[bike.start + 2].time.getTime() + 3600000))}` } });
+  if (run?.score > 0) acts.push({ w: run, item: { t: hourly[run.start].time, label: '🏃 Run 4 mi', temp: tempRange(hourly, run.start, 1) } });
+  if (bike?.score > 0) acts.push({ w: bike, item: { t: hourly[bike.start].time, label: '🚴 Ride 25–30 mi', temp: tempRange(hourly, bike.start, 3), note: `until ${clock(new Date(hourly[bike.start + 2].time.getTime() + 3600000))}` } });
   for (const walk of [walks.morning, walks.evening]) {
     if (!walk) continue;
     const with_ = acts.filter((a) => walk.index >= a.w.start && walk.index < a.w.start + a.w.hours);
     if (with_.length) for (const a of with_) a.paw = true;
-    else items.push({ t: hourly[walk.index].time, label: '🐕 Walk the dogs' });
+    else items.push({ t: hourly[walk.index].time, label: '🐕 Walk the dogs', temp: tempRange(hourly, walk.index, 1) });
   }
   for (const a of acts) items.push(a.paw ? { ...a.item, label: `${a.item.label} 🐾` } : a.item);
   for (const c of classesOn(store.get('gymClasses', []), today)) {
@@ -110,7 +117,7 @@ function dayPlan(hourly, from, end, today, late = false) {
   if (!items.length) return '';
   items.sort((a, b) => a.t - b.t);
   return `<div class="card brief-card"><div class="eyebrow">${late ? `Tomorrow · ${today.toLocaleDateString(undefined, { weekday: 'long' })}` : 'Your day'}</div>
-    <ul class="list day-plan">${items.map((i) => `<li><span><b>${clock(i.t)}</b> ${esc(i.label)}</span>${i.note ? `<small class="muted">${esc(i.note)}</small>` : ''}</li>`).join('')}</ul>
+    <ul class="list day-plan">${items.map((i) => `<li><span><b>${clock(i.t)}</b> ${esc(i.label)}${i.temp ? ` <span class="plan-temp">${i.temp}</span>` : ''}</span>${i.note ? `<small class="muted">${esc(i.note)}</small>` : ''}</li>`).join('')}</ul>
     <p class="small muted">Run and ride are alternatives — pick whichever fits the day.${items.some((i) => i.label.endsWith('🐾')) ? ' 🐾 = a good time to walk the dogs too.' : ''}</p></div>`;
 }
 
@@ -414,14 +421,15 @@ export async function renderBrief(force = false) {
   renderFeed();
   const dogEl = $('#briefBody'), fitEl = $('#fitBrief'), homeEl = $('#homePlan');
   if (!weather || force) {
-    if (dogEl) dogEl.innerHTML = `<p class="muted small">Getting ${PLACE.name} weather…</p>`;
+    if ($('#dogWalkTop')) $('#dogWalkTop').innerHTML = `<p class="muted small">Getting ${PLACE.name} weather…</p>`;
     if (fitEl) fitEl.innerHTML = `<p class="muted small">Getting ${PLACE.name} weather…</p>`;
     try {
       loading ||= loadWeather(force);
       weather = await loading;
     } catch (err) {
       const fail = `<div class="card"><p class="tone-warn">Couldn't get the weather (${esc(err.message)}).</p><button type="button" data-briefrefresh>Try again</button></div>`;
-      if (dogEl) dogEl.innerHTML = fail;
+      if (dogEl) dogEl.innerHTML = '';
+      if ($('#dogWalkTop')) $('#dogWalkTop').innerHTML = fail;
       if (fitEl) fitEl.innerHTML = fail + classesCard(new Date());
       if (homeEl) homeEl.innerHTML = '';
       return;
@@ -439,8 +447,8 @@ export async function renderBrief(force = false) {
       <div class="big">${Math.round(cur.temp)}°F <small>${esc(hourLine(cur).split(' · ').slice(1).join(' · '))}</small></div>
       ${sunIdx >= 0 ? `<div class="small muted">Sunrise ${clock(weather.sunrise[sunIdx])} · sunset ${clock(weather.sunset[sunIdx])} · updated ${clock(new Date(weather.fetchedAt))} <button type="button" class="linkish" data-briefrefresh>Refresh</button></div>` : ''}
     </div>`;
-  if (dogEl) dogEl.innerHTML = `${dogCard(hourly, from, late)}
-    <div class="card"><div class="eyebrow">🐾 Pavement, hour by hour</div>${strip(hourly, from, 'dog')}
+  if ($('#dogWalkTop')) $('#dogWalkTop').innerHTML = dogCard(hourly, from, late);
+  if (dogEl) dogEl.innerHTML = `<div class="card"><div class="eyebrow">🐾 Pavement, hour by hour</div>${strip(hourly, from, 'dog')}
       <p class="small muted">Color = how good each hour is for a dog walk. Weather: Open-Meteo.</p></div>`;
   if (fitEl) fitEl.innerHTML = `${nowCard}
     ${activityCard('🏃', `${late ? 'Tomorrow · ' : ''}Run 4 miles`, '~40 min', hourly, 'run', 1, from, end)}
