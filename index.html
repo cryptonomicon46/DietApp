@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Our PawMily">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=101">
+  <link rel="stylesheet" href="styles.css?v=102">
 </head>
 <body>
   <header class="top">
@@ -33,6 +33,15 @@
     <section id="tab-home" class="tab active">
       <div class="card home-hello" id="homeHello"></div>
       <div id="homeDogs"></div>
+      <div id="homePlan"></div>
+      <div id="homeFood"></div>
+      <div id="homeUs"></div>
+      <div id="homeTrain"></div>
+    </section>
+
+    <!-- FOOD: meals (+ Weight, Groceries, Scan pages via the bar at the top) -->
+    <section id="tab-today" class="tab">
+      <div class="seg subnav" data-subnav></div>
       <form id="weighForm" class="card weigh-card">
         <div class="row between" style="margin-top:0">
           <div><div class="eyebrow">Morning weigh-in</div><div class="small" id="weighStatus"></div></div>
@@ -44,15 +53,6 @@
         </div>
         <p class="muted small" style="margin:6px 0 0">Best: same time each morning, after the bathroom, before eating.</p>
       </form>
-      <div id="homePlan"></div>
-      <div id="homeFood"></div>
-      <div id="homeUs"></div>
-      <div id="homeTrain"></div>
-    </section>
-
-    <!-- FOOD: meals (+ Weight, Groceries, Scan pages via the bar at the top) -->
-    <section id="tab-today" class="tab">
-      <div class="seg subnav" data-subnav></div>
       <nav class="day-nav" id="dayNav" aria-label="Choose a day"></nav>
       <div class="card day-card">
         <div class="row between">
@@ -354,32 +354,32 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/activity.js": "./js/activity.js?v=101",
-    "./js/analytics.js": "./js/analytics.js?v=101",
-    "./js/app.js": "./js/app.js?v=101",
-    "./js/brief.js": "./js/brief.js?v=101",
-    "./js/briefTab.js": "./js/briefTab.js?v=101",
-    "./js/commands.js": "./js/commands.js?v=101",
-    "./js/devices.js": "./js/devices.js?v=101",
-    "./js/dogs.js": "./js/dogs.js?v=101",
-    "./js/foods.js": "./js/foods.js?v=101",
-    "./js/lift.js": "./js/lift.js?v=101",
-    "./js/lifting.js": "./js/lifting.js?v=101",
-    "./js/notes.js": "./js/notes.js?v=101",
-    "./js/plan.js": "./js/plan.js?v=101",
-    "./js/plans.js": "./js/plans.js?v=101",
-    "./js/poster.js": "./js/poster.js?v=101",
-    "./js/research.js": "./js/research.js?v=101",
-    "./js/review.js": "./js/review.js?v=101",
-    "./js/rewards.js": "./js/rewards.js?v=101",
-    "./js/share.js": "./js/share.js?v=101",
-    "./js/shows.js": "./js/shows.js?v=101",
-    "./js/storage.js": "./js/storage.js?v=101",
-    "./js/sync.js": "./js/sync.js?v=101",
-    "./js/zip.js": "./js/zip.js?v=101"
+    "./js/activity.js": "./js/activity.js?v=102",
+    "./js/analytics.js": "./js/analytics.js?v=102",
+    "./js/app.js": "./js/app.js?v=102",
+    "./js/brief.js": "./js/brief.js?v=102",
+    "./js/briefTab.js": "./js/briefTab.js?v=102",
+    "./js/commands.js": "./js/commands.js?v=102",
+    "./js/devices.js": "./js/devices.js?v=102",
+    "./js/dogs.js": "./js/dogs.js?v=102",
+    "./js/foods.js": "./js/foods.js?v=102",
+    "./js/lift.js": "./js/lift.js?v=102",
+    "./js/lifting.js": "./js/lifting.js?v=102",
+    "./js/notes.js": "./js/notes.js?v=102",
+    "./js/plan.js": "./js/plan.js?v=102",
+    "./js/plans.js": "./js/plans.js?v=102",
+    "./js/poster.js": "./js/poster.js?v=102",
+    "./js/research.js": "./js/research.js?v=102",
+    "./js/review.js": "./js/review.js?v=102",
+    "./js/rewards.js": "./js/rewards.js?v=102",
+    "./js/share.js": "./js/share.js?v=102",
+    "./js/shows.js": "./js/shows.js?v=102",
+    "./js/storage.js": "./js/storage.js?v=102",
+    "./js/sync.js": "./js/sync.js?v=102",
+    "./js/zip.js": "./js/zip.js?v=102"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=101"></script>
+  <script type="module" src="js/app.js?v=102"></script>
 </body>
 </html>

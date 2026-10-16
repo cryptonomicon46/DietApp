@@ -1787,10 +1787,18 @@ function renderWeighStatus() {
   $('#weighStatus').innerHTML = t
     ? `✓ <b>${t.weight.toFixed(1)} lb</b> today${prev ? ` · ${t.weight <= prev.weight ? '−' : '+'}${Math.abs(t.weight - prev.weight).toFixed(1)} since ${fmtShort(prev.date)}` : ''}`
     : `Not logged yet today${prev ? ` · last ${prev.weight.toFixed(1)} lb on ${fmtShort(prev.date)}` : ''}`;
+  // Once today's weight is in, the card folds to one line; Change opens it again.
+  if (t) $('#weighStatus').innerHTML += ' <button type="button" class="linkish small" data-weighedit>Change</button>';
   $('#weighForm').classList.toggle('done', !!t);
+  $('#weighForm').classList.remove('editing');
 }
 const fmtShort = (d) => new Date(d + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
+$('#weighForm').addEventListener('click', (e) => {
+  if (!e.target.closest('[data-weighedit]')) return;
+  $('#weighForm').classList.add('editing');
+  $('#weighValue').focus();
+});
 $('#weighForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const date = $('#weighDate').value;

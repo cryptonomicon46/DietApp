@@ -684,3 +684,12 @@ details.help summary { cursor: pointer; }
 /* Dogs: walk times replace the calorie bar at the top */
 body[data-tab="brief"] .daybar-wrap { display: none; }
 .plan-temp { font-size: .78rem; font-weight: 700; color: var(--muted); background: var(--bg); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+
+/* Weigh-in on Food › Meals: one line once today's weight is in */
+.weigh-card.done:not(.editing) > .row:not(.between), .weigh-card.done:not(.editing) > p { display: none; }
+.weigh-card.done:not(.editing) { padding-top: 10px; padding-bottom: 10px; }
+/* Us: no calorie bar */
+body[data-tab="notes"] .daybar-wrap { display: none; }
+/* The tab you're on gets an outline */
+.tabs button { border-radius: 12px; margin: 4px 2px; padding: 4px 0 6px; }
+.tabs button.active { outline: 2px solid var(--brand); outline-offset: -2px; background: color-mix(in srgb, var(--brand) 10%, transparent); }
