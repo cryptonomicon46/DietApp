@@ -4,6 +4,7 @@
 import { PROFILES, ownerId, profileStore, global, seenItems } from './storage.js';
 import { sync, pushNow } from './sync.js';
 import { renderPlans, initPlans, unreadPlans, syncLine } from './plans.js';
+import { renderShows, initShows } from './shows.js';
 
 export const NOTE_EMOJI = ['❤️', '😘', '🥰', '😍', '💕', '🤗', '💪', '🔥', '🌟', '🎉', '☀️', '🌙', '🌸', '🍳', '🥗', '🍓', '☕', '😂', '🙏', '👏'];
 export const NOTE_COLORS = { yellow: 'Yellow', pink: 'Pink', blue: 'Blue', green: 'Green' };
@@ -83,9 +84,10 @@ export function renderNotes() {
   const focused = document.activeElement?.id === 'noteText';
   queueMicrotask(() => { const ta = $('#noteText'); if (ta && draft && !ta.value) { ta.value = draft; $('#noteCount').textContent = `${[...draft].length}/${MAX}`; if (focused) ta.focus(); } });
   const n = unreadNotes(), pl = unreadPlans();
-  $('#usPages').innerHTML = [['notes', '💌 Notes', n], ['plans', '✨ Feeling like', pl]].map(([k, label, c]) =>
+  $('#usPages').innerHTML = [['notes', '💌 Notes', n], ['plans', '✨ Feeling like', pl], ['shows', '📺 Watching', 0]].map(([k, label, c]) =>
     `<button type="button" class="${k === page ? 'on' : ''}" data-page="${k}" aria-pressed="${k === page}">${label}${c && k !== page ? ` <b class="dot">${c}</b>` : ''}</button>`).join('');
   if (page === 'plans') { renderPlans(el); updateNotesBadge(); return; }
+  if (page === 'shows') { el.innerHTML = syncLine() + '<div id="showsBoard"></div>'; renderShows($('#showsBoard')); updateNotesBadge(); return; }
   const start = boardStart();
   const fresh = unreadNoteList();
   for (const x of fresh) if (x.at < start) carried.add(key(x));
@@ -164,6 +166,7 @@ function postit(n, { pName, hearts, theirHearts }) {
 export function initNotes() {
   const root = $('#tab-notes');
   initPlans(root, () => renderNotes());
+  initShows(root, () => renderNotes());
   $('#usPages').addEventListener('click', (e) => {
     const b = e.target.closest('[data-page]');
     if (b) { page = b.dataset.page; renderNotes(); }

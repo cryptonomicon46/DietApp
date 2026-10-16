@@ -397,7 +397,7 @@ dialog.review { width: min(520px, calc(100vw - 24px)); }
 .center { text-align: center; }
 
 /* Us tab: Notes / Feeling like */
-.us-pages { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 0 12px; }
+.us-pages { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 0 0 12px; }
 .us-pages button { background: var(--card); color: var(--ink); border: 1px solid var(--line); font-weight: 600; }
 .us-pages button.on { background: var(--brand); color: #fff; border-color: var(--brand); }
 .us-pages .dot { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: #d33; color: #fff; font-size: .7rem; line-height: 18px; }
@@ -550,3 +550,44 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .coin-stack { letter-spacing: -4px; font-size: 1.15rem; margin-left: 4px; }
 .coin-months { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
 .coin-months li { display: grid; grid-template-columns: 3.5em 1fr auto; gap: 8px; font-size: .9rem; }
+
+/* 📺 Watching together (Us tab) */
+.us-pages button { padding: 8px 4px; font-size: .85rem; }
+.show-views { display: flex; width: 100%; margin-bottom: 10px; }
+.show-views button { flex: 1; }
+.add-show { width: 100%; margin-bottom: 6px; }
+.show-form { display: grid; gap: 10px; }
+.show-form .seg { justify-self: start; }
+.svc-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.svc-opt { background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; font-size: .8rem; font-weight: 600; }
+.svc-opt.on { background: var(--svc); color: #fff; border-color: var(--svc); }
+.svc { display: inline-block; border-radius: 6px; padding: 2px 7px; font-size: .72rem; font-weight: 800; letter-spacing: .02em; white-space: nowrap; }
+.show-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; display: grid; gap: 6px; }
+.show-card.finished { border-color: color-mix(in srgb, var(--good) 50%, var(--line)); }
+.show-card.dropped { opacity: .7; }
+.show-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.show-status { font-size: .78rem; color: var(--muted); font-weight: 600; }
+.show-title { font-size: 1.1rem; font-weight: 800; overflow-wrap: anywhere; }
+.tonight { justify-self: start; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; font-weight: 700; }
+.tonight.on { background: var(--good); color: #fff; border-color: var(--good); }
+.show-rate { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.show-rate .small:first-child { margin-right: 4px; }
+.star { background: none; border: 0; padding: 2px 3px; font-size: 1.25rem; line-height: 1; color: var(--line); min-width: 0; }
+.star.on { color: #e6b422; }
+.stars { color: #e6b422; letter-spacing: -1px; }
+.show-actions { display: flex; gap: 14px; flex-wrap: wrap; }
+.month-shows { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 8px; }
+.month-shows summary { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; cursor: pointer; }
+.month-list { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+.month-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
+.month-list .t { font-weight: 600; overflow-wrap: anywhere; }
+.recap .recap-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 10px 0; text-align: center; }
+.recap .recap-stats b { display: block; font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.recap .recap-stats small { color: var(--muted); }
+.recap p { margin: 6px 0; }
+.svc-bars { display: grid; gap: 6px; margin-top: 8px; }
+.svc-bar { display: grid; grid-template-columns: 6.5em 1fr 2em; gap: 8px; align-items: center; }
+.svc-bar .bar { height: 10px; background: var(--bg); border-radius: 999px; overflow: hidden; }
+.svc-bar .bar span { display: block; height: 100%; border-radius: 999px; }
+.year-months { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.year-months li { display: grid; grid-template-columns: 3em 1fr; gap: 8px; }
