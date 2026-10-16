@@ -118,3 +118,22 @@ test('happy dog days: two outings make a best day', async () => {
   assert.equal(y.months.length, 10);
   assert.equal(y.happiest, '2026-10');
 });
+
+test('home by 9 PM: windows end by 9, and after 9 PM the plan is tomorrow', async () => {
+  const { scoreHour, planRange, dogWalks } = await import('../js/brief.js');
+  const mk = (y, m, d, h) => ({ time: new Date(y, m, d, h), temp: 60, feels: 60, rain: 0, wind: 3, gust: 5, uv: 0, radiation: 0, isDay: h >= 7 && h < 19, aqi: 20 });
+  const hourly = [];
+  for (let d = 16; d <= 17; d++) for (let h = 0; h < 24; h++) hourly.push(mk(2026, 9, d, h));
+  assert.equal(scoreHour(hourly[21], 'run').score, 0, '9 PM is out');
+  assert.ok(scoreHour(hourly[20], 'dog').score > 0, '8 PM still works');
+  const evening = planRange(hourly, new Date(2026, 9, 16, 19, 30));
+  assert.equal(evening.late, false);
+  assert.equal(hourly[evening.from].time.getHours(), 19);
+  const night = planRange(hourly, new Date(2026, 9, 16, 21, 5));
+  assert.equal(night.late, true);
+  assert.equal(hourly[night.from].time.getDate(), 17, 'tomorrow');
+  assert.equal(hourly[night.from].time.getHours(), 5);
+  assert.equal(night.end, hourly.length);
+  const w = dogWalks(hourly, night.from);
+  assert.ok(hourly[w.evening.index].time.getHours() <= 20, 'evening walk done by 9 PM');
+});

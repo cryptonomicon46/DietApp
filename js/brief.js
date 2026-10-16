@@ -1,6 +1,10 @@
 // Daily brief: when to run, ride and walk the dogs today (San Jose weather), and the
 // Movement classes you take. Scoring is pure so it can be tested without a network.
 
+// You're home from runs, rides and walks by 9 PM: windows end by then, and after 9 PM the
+// brief plans tomorrow.
+export const HOME_BY = 21;
+
 export const PLACE = { name: 'San Jose', lat: 37.3382, lon: -121.8863 };
 
 // Estimated asphalt temperature (°F). Sun heats dark pavement far above the air: at 77°F
@@ -48,9 +52,23 @@ export function scoreHour(h, activity) {
     hit(Math.max((h.aqi ?? 0) - 100, 0) * 0.5, `AQI ${h.aqi}`);
     hit(h.isDay ? 0 : 10, 'dark');
   }
-  // Outside waking hours (before 5 AM, after 9:30 PM) isn't a real option.
-  if (hour < 5 || hour > 21) s -= 100;
+  // Before 5 AM, or from 9 PM (home by then), isn't a real option.
+  if (hour < 5 || hour >= HOME_BY) s -= 100;
   return { score: Math.max(0, Math.round(s)), why };
+}
+
+// Which hours to plan: what's left of today, or — from 9 PM — tomorrow from 5 AM.
+export function planRange(hourly, now = new Date()) {
+  let from = hourly.findIndex((h) => h.time.getTime() + 3600000 > now.getTime());
+  if (from < 0) from = 0;
+  const late = now.getHours() >= HOME_BY;
+  if (late) {
+    const next = hourly.findIndex((h) => h.time.toDateString() !== now.toDateString() && h.time > now && h.time.getHours() >= 5);
+    if (next >= 0) from = next;
+  }
+  const day = hourly[from].time.toDateString();
+  const until = hourly.findIndex((h, i) => i > from && h.time.toDateString() !== day);
+  return { from, end: until < 0 ? hourly.length : until, late };
 }
 
 // Best window of `hours` consecutive hours between `from` and `until` (indexes into hourly).
@@ -78,7 +96,7 @@ export function dogWalks(hourly, from = 0) {
     });
     return best;
   };
-  return { morning: pick(5, 11), evening: pick(16, 21) };
+  return { morning: pick(5, 11), evening: pick(16, HOME_BY - 1) };
 }
 
 // The hottest pavement hour today, for a heads-up.

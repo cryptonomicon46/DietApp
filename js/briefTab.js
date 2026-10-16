@@ -3,7 +3,7 @@ import { store, global, PROFILES, ownerId, profileStore } from './storage.js';
 import { pushNow } from './sync.js';
 import {
   PLACE, weatherUrls, parseWeather, scoreHour, bestWindow, dogWalks, hottestPavement, asphaltF, pawRisk,
-  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, feedingSlot, whoFed, walkDay, choreTimes, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths,
+  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, planRange, feedingSlot, whoFed, walkDay, choreTimes, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths,
 } from './brief.js';
 import { renderDogs, initDogs, allDogs, dogAlerts, retryUploads } from './dogs.js';
 
@@ -55,7 +55,7 @@ function activityCard(icon, title, sub, hourly, activity, hours, from, until) {
   </div>`;
 }
 
-function dogCard(hourly, from) {
+function dogCard(hourly, from, late = false) {
   const walks = dogWalks(hourly, from);
   const hot = hottestPavement(hourly, from);
   const slot = (label, w) => {
@@ -67,7 +67,7 @@ function dogCard(hourly, from) {
   };
   const hotRisk = hot && pawRisk(hot.asphalt);
   return `<div class="card brief-card">
-    <div class="eyebrow">🐕 Dog walks</div>
+    <div class="eyebrow">🐕 ${late ? "Tomorrow's dog walks" : 'Dog walks'}</div>
     <ul class="list">${slot('Morning', walks.morning)}${slot('Evening', walks.evening)}</ul>
     ${hot && hotRisk.level !== 'ok' ? `<p class="small tone-warn">Pavement peaks ~${hot.asphalt}°F around ${clock(hourly[hot.index].time)} — ${esc(hotRisk.label.toLowerCase())}. Back-of-hand test: if you can't hold it there 7 seconds, it's too hot for paws.</p>`
       : '<p class="small muted">Pavement estimate from air temperature, sunshine and wind. Back-of-hand test: 7 seconds on the pavement — too hot for you, too hot for paws.</p>'}
@@ -86,7 +86,7 @@ function strip(hourly, from, activity = 'run') {
 }
 
 // The day in order: best run, ride, both dog walks and your classes.
-function dayPlan(hourly, from, end, today) {
+function dayPlan(hourly, from, end, today, late = false) {
   const items = [];
   const run = bestWindow(hourly, 'run', 1, from, end);
   if (run?.score > 0) items.push({ t: hourly[run.start].time, label: '🏃 Run 4 mi' });
@@ -101,7 +101,7 @@ function dayPlan(hourly, from, end, today) {
   }
   if (!items.length) return '';
   items.sort((a, b) => a.t - b.t);
-  return `<div class="card brief-card"><div class="eyebrow">Your day</div>
+  return `<div class="card brief-card"><div class="eyebrow">${late ? `Tomorrow · ${today.toLocaleDateString(undefined, { weekday: 'long' })}` : 'Your day'}</div>
     <ul class="list day-plan">${items.map((i) => `<li><span><b>${clock(i.t)}</b> ${esc(i.label)}</span>${i.note ? `<small class="muted">${esc(i.note)}</small>` : ''}</li>`).join('')}</ul>
     <p class="small muted">Run and ride are alternatives — pick whichever fits the day.</p></div>`;
 }
@@ -421,14 +421,8 @@ export async function renderBrief(force = false) {
   }
   const { hourly } = weather;
   const now = new Date();
-  let from = hourly.findIndex((h) => h.time.getTime() + 3600000 > now.getTime());
-  if (from < 0) from = 0;
-  // Today's remaining hours; after 8 PM, plan tomorrow instead.
-  const late = now.getHours() >= 20;
-  const dayOf = (i) => hourly[i].time.toDateString();
-  if (late) from = hourly.findIndex((h) => h.time.toDateString() !== now.toDateString() && h.time.getHours() >= 5);
-  const until = hourly.findIndex((h, i) => i > from && h.time.toDateString() !== dayOf(from));
-  const end = until < 0 ? hourly.length : until;
+  // Today's remaining hours; from 9 PM (home by then), plan tomorrow instead.
+  const { from, end, late } = planRange(hourly, now);
   const cur = hourly[Math.max(0, hourly.findIndex((h) => h.time.getTime() + 3600000 > now.getTime()))];
   const target = hourly[from].time;
   const sunIdx = weather.sunrise.findIndex((d) => d.toDateString() === target.toDateString());
@@ -437,16 +431,16 @@ export async function renderBrief(force = false) {
       <div class="big">${Math.round(cur.temp)}°F <small>${esc(hourLine(cur).split(' · ').slice(1).join(' · '))}</small></div>
       ${sunIdx >= 0 ? `<div class="small muted">Sunrise ${clock(weather.sunrise[sunIdx])} · sunset ${clock(weather.sunset[sunIdx])} · updated ${clock(new Date(weather.fetchedAt))} <button type="button" class="linkish" data-briefrefresh>Refresh</button></div>` : ''}
     </div>`;
-  if (dogEl) dogEl.innerHTML = `${dogCard(hourly, from)}
+  if (dogEl) dogEl.innerHTML = `${dogCard(hourly, from, late)}
     <div class="card"><div class="eyebrow">🐾 Pavement, hour by hour</div>${strip(hourly, from, 'dog')}
       <p class="small muted">Color = how good each hour is for a dog walk. Weather: Open-Meteo.</p></div>`;
   if (fitEl) fitEl.innerHTML = `${nowCard}
-    ${activityCard('🏃', 'Run 4 miles', '~40 min', hourly, 'run', 1, from, end)}
-    ${activityCard('🚴', 'Ride 25–30 miles', '~2½ h, daylight', hourly, 'bike', 3, from, end)}
+    ${activityCard('🏃', `${late ? 'Tomorrow · ' : ''}Run 4 miles`, '~40 min', hourly, 'run', 1, from, end)}
+    ${activityCard('🚴', `${late ? 'Tomorrow · ' : ''}Ride 25–30 miles`, '~2½ h, daylight', hourly, 'bike', 3, from, end)}
     ${classesCard(target)}
     <div class="card"><div class="eyebrow">Hour by hour</div>${strip(hourly, from)}
       <p class="small muted">Color = how good each hour is for a run. Weather and air quality: Open-Meteo.</p></div>`;
-  if (homeEl) homeEl.innerHTML = dayPlan(hourly, from, end, target);
+  if (homeEl) homeEl.innerHTML = dayPlan(hourly, from, end, target, late);
 }
 
 export function initBrief() {
