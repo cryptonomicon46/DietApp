@@ -3,7 +3,7 @@ import { store, global, PROFILES, ownerId, profileStore } from './storage.js';
 import { pushNow } from './sync.js';
 import {
   PLACE, weatherUrls, parseWeather, scoreHour, bestWindow, dogWalks, hottestPavement, asphaltF, pawRisk,
-  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, feedingSlot, whoFed, walkDay, choreTimes, choreTally, monthWinner, coinsForYear,
+  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, feedingSlot, whoFed, walkDay, choreTimes, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths,
 } from './brief.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -207,15 +207,18 @@ export function renderFeed() {
   if (!el || !ownerId()) return;
   const slot = feedingSlot();
   const fed = whoFed(feedRecords(), slot.key);
-  const walked = todaysChore('walk').length > 0;
-  // The 🐕 tab shows it from anywhere in the app: red = still to feed,
-  // green = fed but not walked yet, bright green = fed and walked.
+  const outings = todaysChore('walk').length + todaysChore('park').length;
+  const walked = outings > 0;
+  const best = outings >= 2;
+  // The 🐕 tab shows it from anywhere in the app: red = still to feed, green = fed but not
+  // out yet, bright green = fed and walked, gold = fed and a best day (2+ walks, or walk + park).
   const tab = document.querySelector('.tabs [data-tab="brief"]');
   if (tab) {
     tab.classList.toggle('dogs-hungry', !fed);
     tab.classList.toggle('dogs-fed', !!fed && !walked);
-    tab.classList.toggle('dogs-done', !!fed && walked);
-    tab.title = !fed ? `Dogs still need ${slot.meal}` : walked ? `Dogs fed (${slot.meal}) and walked` : `Dogs fed (${slot.meal}) — not walked yet`;
+    tab.classList.toggle('dogs-done', !!fed && walked && !best);
+    tab.classList.toggle('dogs-best', !!fed && best);
+    tab.title = !fed ? `Dogs still need ${slot.meal}` : best ? 'Best day: fed, and out twice ⭐' : walked ? `Dogs fed (${slot.meal}) and walked` : `Dogs fed (${slot.meal}) — not walked yet`;
   }
   const other = slot.meal === 'breakfast' ? null : whoFed(feedRecords(), slot.key.replace('dinner', 'breakfast'));
   const meal = slot.meal === 'breakfast' ? 'Breakfast' : 'Dinner';
@@ -253,6 +256,43 @@ function toggleFeed() {
   pushNow().then(renderFeed);
 }
 
+// ---- 🐶 happy dog days: a calendar of this month, best days, and the happiest month ----
+function renderHappy(recs) {
+  const el = $('#dogHappy');
+  if (!el) return;
+  const days = dogDays(recs);
+  const today = walkDay();
+  const month = today.slice(0, 7);
+  const year = today.slice(0, 4);
+  const m = happyStats(days, month, today);
+  const y = happyStats(days, year, today);
+  const { months, happiest } = happyMonths(days, year, month);
+  const first = new Date(`${month}-01T12:00:00`);
+  const daysIn = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  const cells = Array.from({ length: first.getDay() }, () => '<span class="cal-pad"></span>');
+  for (let i = 1; i <= daysIn; i++) {
+    const k = `${month}-${String(i).padStart(2, '0')}`;
+    const d = days[k];
+    const cls = d?.best ? 'best' : d?.outings ? 'out' : k > today ? 'future' : 'none';
+    cells.push(`<span class="cal ${cls}${k === today ? ' today' : ''}" title="${k}${d ? `: ${d.walks} walk${d.walks === 1 ? '' : 's'}, ${d.park} park` : ''}">${d?.best ? '⭐' : i}</span>`);
+  }
+  const top = Math.max(1, ...months.map((x) => x.best));
+  el.innerHTML = `
+    <div class="eyebrow">🐶 Happy dog days</div>
+    <p class="small muted">A ⭐ best day is two outings — two walks, or a walk and the dog park.</p>
+    <div class="happy-stats">
+      <div><b>${m.best}</b><small>best days in ${monthName(month)}</small></div>
+      <div><b>${m.out}</b><small>days out</small></div>
+      <div><b>${m.streak}</b><small>⭐ streak</small></div>
+    </div>
+    <div class="cal-grid">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((x) => `<span class="cal-h">${x}</span>`).join('')}${cells.join('')}</div>
+    <div class="cal-key small muted"><span class="cal best">⭐</span> best day <span class="cal out"></span> out once <span class="cal none"></span> no walk</div>
+    <div class="happy-year">
+      <div class="small"><b>${year}</b>: ${y.best} best days · ${y.out} days out${happiest ? ` · happiest month <b>${monthName(happiest)}</b> 🏆` : ''}</div>
+      <div class="month-bars">${months.map((x) => `<div class="mb${x.month === happiest ? ' mb-top' : ''}" title="${monthName(x.month)}: ${x.best} best days"><span class="mb-n">${x.best || ''}</span><span class="mb-bar" style="height:${Math.round((x.best / top) * 100)}%"></span><span class="mb-l">${monthName(x.month, 'narrow')}</span></div>`).join('')}</div>
+    </div>`;
+}
+
 // ---- 🏆 dog duty scoreboard: today / this month / this year, and a 🪙 gold coin each month ----
 let dutyView = 'month';
 const monthName = (ym, style = 'long') => new Date(`${ym}-15T12:00:00`).toLocaleDateString(undefined, { month: style });
@@ -261,6 +301,7 @@ function renderDuty() {
   const el = $('#dogDuty');
   if (!el || !ownerId()) return;
   const recs = dutyRecords();
+  renderHappy(recs);
   // Me first, then my partner.
   const people = [...recs].sort((a, b) => (a.person === ownerId() ? -1 : b.person === ownerId() ? 1 : 0));
   const today = walkDay();

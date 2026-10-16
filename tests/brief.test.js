@@ -100,3 +100,21 @@ test('dog duty scoreboard: tallies, monthly winner and gold coins', async () => 
   assert.deepEqual(y.coins, { sandman: 1, amani: 1 });
   assert.equal(choreTally(recs, '2026-09-01').sandman.walk, 2, 'daily count');
 });
+
+test('happy dog days: two outings make a best day', async () => {
+  const { dogDays, happyStats, happyMonths } = await import('../js/brief.js');
+  const recs = [
+    { person: 'sandman', walks: { '2026-10-01': [1], '2026-10-02': [1, 2], '2026-10-03': { at: 1 }, '2026-10-04': [1] }, park: {} },
+    { person: 'amani', walks: { '2026-10-03': [1] }, park: { '2026-10-04': [5], '2026-09-10': [1, 2] } },
+  ];
+  const days = dogDays(recs);
+  assert.equal(days['2026-10-01'].best, false, 'one walk is a good day');
+  assert.equal(days['2026-10-02'].best, true, 'two walks');
+  assert.equal(days['2026-10-03'].best, true, 'one walk each');
+  assert.equal(days['2026-10-04'].best, true, 'walk + dog park');
+  const oct = happyStats(days, '2026-10', '2026-10-05');
+  assert.deepEqual(oct, { out: 4, best: 3, streak: 3 }, 'streak counts back from yesterday while today is open');
+  const y = happyMonths(days, '2026', '2026-10');
+  assert.equal(y.months.length, 10);
+  assert.equal(y.happiest, '2026-10');
+});

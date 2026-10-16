@@ -525,6 +525,7 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .feed-btn.unwalked { background: radial-gradient(circle at 35% 30%, #6fa3e6, #3a6cc0); }
 .feed-sub { text-align: center; padding: 0 8px; }
 .tabs button.dogs-done { background: #1fbf5a; color: #fff; font-weight: 800; }
+.tabs button.dogs-best { background: linear-gradient(160deg, #ffe27a, #e6a817); color: #3b2a00; font-weight: 800; box-shadow: inset 0 0 0 1px #c98f00; }
 /* Dogs: three round buttons (feed, walk, dog park); the third wraps to its own row */
 .feed-pair { flex-wrap: wrap; row-gap: 10px; }
 .feed-col { flex: 0 1 calc(50% - 7px); }
@@ -591,3 +592,25 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .svc-bar .bar span { display: block; height: 100%; border-radius: 999px; }
 .year-months { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
 .year-months li { display: grid; grid-template-columns: 3em 1fr; gap: 8px; }
+
+/* 🐶 happy dog days */
+.happy-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; margin: 8px 0 10px; }
+.happy-stats b { display: block; font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.happy-stats small { color: var(--muted); font-size: .75rem; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-h { text-align: center; font-size: .7rem; color: var(--muted); font-weight: 700; }
+.cal { display: grid; place-items: center; aspect-ratio: 1; border-radius: 8px; font-size: .78rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cal.none { background: var(--bg); color: var(--muted); }
+.cal.future { color: var(--line); }
+.cal.out { background: color-mix(in srgb, var(--good) 35%, transparent); color: var(--ink); }
+.cal.best { background: linear-gradient(160deg, #ffe27a, #e6a817); font-size: .95rem; }
+.cal.today { box-shadow: inset 0 0 0 2px var(--brand); }
+.cal-key { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.cal-key .cal { width: 20px; height: 20px; aspect-ratio: auto; font-size: .7rem; }
+.happy-year { margin-top: 12px; }
+.month-bars { display: flex; align-items: flex-end; gap: 4px; height: 90px; margin-top: 8px; }
+.mb { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 2px; }
+.mb-bar { width: 100%; min-height: 3px; border-radius: 4px 4px 0 0; background: color-mix(in srgb, #e6a817 55%, var(--bg)); }
+.mb.mb-top .mb-bar { background: linear-gradient(180deg, #ffe27a, #e6a817); }
+.mb-n { font-size: .7rem; font-weight: 700; color: var(--muted); }
+.mb-l { font-size: .7rem; color: var(--muted); }

@@ -199,3 +199,46 @@ export function coinsForYear(records, year, currentMonth) {
   for (const m of months) if (m.winner) coins[m.winner]++;
   return { months, coins };
 }
+
+// ---------- happy dog days ----------
+// Both people's walks and park trips per day → { day: { walks, park, outings, best } }.
+// A best day ⭐ has two or more outings: two walks, or a walk and the dog park.
+export function dogDays(records) {
+  const days = {};
+  for (const r of records) {
+    for (const [kind, key] of [['walks', 'walks'], ['park', 'park']]) {
+      for (const [day, times] of Object.entries(choreTimes(r[key]))) {
+        if (!times.length) continue;
+        days[day] ||= { walks: 0, park: 0 };
+        days[day][kind] += times.length;
+      }
+    }
+  }
+  for (const d of Object.values(days)) { d.outings = d.walks + d.park; d.best = d.outings >= 2; }
+  return days;
+}
+// Days out and best days for keys starting with `prefix`; the best-day streak runs back from `today`.
+export function happyStats(days, prefix, today) {
+  const keys = Object.keys(days).filter((d) => d.startsWith(prefix));
+  let streak = 0;
+  const d = new Date(`${today}T12:00:00`);
+  if (!days[today]?.best) d.setDate(d.getDate() - 1); // today isn't over yet
+  for (;;) {
+    const k = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    if (!days[k]?.best) break;
+    streak++;
+    d.setDate(d.getDate() - 1);
+  }
+  return { out: keys.filter((k) => days[k].outings > 0).length, best: keys.filter((k) => days[k].best).length, streak };
+}
+// Best days per month of `year` (up to `month`), and the happiest month.
+export function happyMonths(days, year, month) {
+  const months = [];
+  for (let m = 1; m <= 12; m++) {
+    const key = `${year}-${String(m).padStart(2, '0')}`;
+    if (key > month) break;
+    months.push({ month: key, ...happyStats(days, key, `${key}-01`) });
+  }
+  const top = Math.max(0, ...months.map((m) => m.best));
+  return { months, happiest: top ? months.find((m) => m.best === top).month : null };
+}
