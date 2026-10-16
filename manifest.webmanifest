@@ -1,7 +1,7 @@
 {
   "name": "Our PawMily",
   "short_name": "Our PawMily",
-  "description": "Simple daily macros, portions, weigh-ins and grocery scanning for sustainable weight loss.",
+  "description": "A couples app for two people and their dogs: dog care, notes and plans, meals and lifting.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
