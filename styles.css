@@ -745,3 +745,7 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .who-pick button { flex: 1; }
 .cal-sub summary { cursor: pointer; }
 .home-cal small { display: block; }
+
+.repeat-box { display: grid; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; }
+.repeat-box label.every { display: flex; align-items: center; gap: 6px; }
+.repeat-box label.every input { width: 64px; flex: none; }

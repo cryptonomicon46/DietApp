@@ -3,7 +3,7 @@
 // into Apple or Google Calendar — or subscribe to the whole shared calendar there.
 import { PROFILES, ownerId, profileStore, seenItems } from './storage.js';
 import { sync, pushNow } from './sync.js';
-import { REMINDERS, WHO_BOTH, mergeEvents, eventsOn, upcoming, icsCalendar, googleUrl } from './calendar.js';
+import { REMINDERS, REPEATS, WHO_BOTH, mergeEvents, eventsOn, upcoming, icsCalendar, googleUrl, repeatText, repeatUnit } from './calendar.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -47,7 +47,7 @@ export function updateCalBadge() {
 let month = isoDate().slice(0, 7);
 let selected = isoDate();
 let editing = null;   // event being added / edited (a copy)
-let openId = null;    // event whose details are open
+let openId = null;    // "<id>:<date>" of the event (or one date of a series) whose details are open
 let note = '';
 
 function monthGrid(events) {
@@ -70,12 +70,14 @@ function monthGrid(events) {
 }
 
 function eventRow(e, { showDay = false } = {}) {
-  const open = openId === e.id;
+  const key = `${e.id}:${e.date}`;
+  const open = openId === key;
+  const rpt = repeatText(e);
   const added = PROFILES.filter((p) => profileStore(p.id).get('calAdded', {})[e.id]).map((p) => (p.id === me() ? 'you' : nameOf(p.id)));
   return `<li class="ev ${open ? 'open' : ''}">
-    <button type="button" class="ev-main" data-calopen="${e.id}">
+    <button type="button" class="ev-main" data-calopen="${key}">
       <span class="ev-time">${showDay ? `${dayLabel(e.date)}<br>` : ''}${e.allDay || !e.start ? 'All day' : time12(e.start)}</span>
-      <span class="ev-body"><b>${esc(e.title)}</b>${e.place ? `<small class="muted">📍 ${esc(e.place)}</small>` : ''}</span>
+      <span class="ev-body"><b>${esc(e.title)}</b>${rpt ? `<small class="muted">🔁 ${esc(rpt)}</small>` : ''}${e.place ? `<small class="muted">📍 ${esc(e.place)}</small>` : ''}</span>
       <span class="who-chip ${whoClass(e.who)}">${esc(whoLabel(e.who))}</span>
     </button>
     ${open ? `<div class="ev-more">
@@ -85,8 +87,9 @@ function eventRow(e, { showDay = false } = {}) {
       <div class="row wrap">
         <button type="button" class="small" data-calics="${e.id}"> Apple Calendar</button>
         <a class="btn small ghost" href="${esc(googleUrl(e, names()))}" target="_blank" rel="noopener" data-calgoogle="${e.id}">Google Calendar</a>
-        <button type="button" class="ghost small" data-caledit="${e.id}">Edit</button>
-        <button type="button" class="ghost small danger" data-caldel="${e.id}">Delete</button>
+        <button type="button" class="ghost small" data-caledit="${e.id}">${rpt ? 'Edit series' : 'Edit'}</button>
+        ${rpt ? `<button type="button" class="ghost small" data-calskip="${e.id}:${e.date}">Skip ${esc(dayLabel(e.date))}</button>` : ''}
+        <button type="button" class="ghost small danger" data-caldel="${e.id}">${rpt ? 'Delete series' : 'Delete'}</button>
       </div>
     </div>` : ''}
   </li>`;
@@ -103,6 +106,12 @@ function form() {
     <div class="row times" ${e.allDay ? 'hidden' : ''}><label class="small">Starts <input type="time" name="start" value="${esc(e.start || '')}"></label><label class="small">Ends <input type="time" name="end" value="${esc(e.end || '')}"></label></div>
     <input name="place" value="${esc(e.place || '')}" maxlength="80" placeholder="Where? (optional)">
     <div class="seg who-pick">${whoOpts.map(([k, l]) => `<button type="button" class="${(e.who || WHO_BOTH) === k ? 'on' : ''}" data-calwho="${k}">${esc(l)}</button>`).join('')}</div>
+    <div class="repeat-box">
+      <label class="small">Repeats <select name="repeat">${Object.entries(REPEATS).map(([k, l]) => `<option value="${k}" ${(e.repeat?.kind || '') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      ${repeatUnit(e.repeat?.kind) ? `<label class="small every">Every <input type="number" name="every" min="1" max="99" inputmode="numeric" value="${esc(e.repeat?.every || 1)}"> ${repeatUnit(e.repeat.kind)}(s)</label>` : ''}
+      ${e.repeat?.kind === 'twiceMonthly' ? `<label class="small">and on the <select name="day2">${[...Array.from({ length: 28 }, (_, i) => [String(i + 1), `${i + 1}`]), ['-1', 'last day']].map(([k, l]) => `<option value="${k}" ${String(e.repeat?.day2 ?? 15) === k ? 'selected' : ''}>${l}</option>`).join('')}</select> of each month (first date is the event's day)</label>` : ''}
+      ${e.repeat?.kind ? `<label class="small">Ends <input type="date" name="until" value="${esc(e.repeat?.until || '')}" min="${esc(e.date)}"> <span class="muted">(leave empty for never)</span></label>` : ''}
+    </div>
     <label class="small">Reminder <select name="remind">${Object.entries(REMINDERS).map(([k, l]) => `<option value="${k}" ${String(e.remind ?? 30) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <textarea name="notes" rows="2" maxlength="500" placeholder="Notes (optional)">${esc(e.notes || '')}</textarea>
     <div class="row end"><button type="button" class="ghost" data-calcancel>Cancel</button><button type="submit">Save</button></div>
@@ -160,7 +169,9 @@ export function homeCal() {
 function readForm() {
   const f = $('#calForm');
   const v = (n) => f.elements[n]?.value?.trim() || '';
-  editing = { ...editing, title: v('title'), date: v('date'), allDay: f.elements.allDay.checked, start: v('start'), end: v('end'), place: v('place'), remind: v('remind'), notes: v('notes') };
+  const kind = v('repeat');
+  const repeat = kind ? { kind, ...(repeatUnit(kind) && f.elements.every ? { every: Math.max(1, +v('every') || 1) } : {}), ...(kind === 'twiceMonthly' ? { day2: +(f.elements.day2 ? v('day2') : 15) } : {}), ...(f.elements.until && v('until') ? { until: v('until') } : {}) } : null;
+  editing = { ...editing, title: v('title'), date: v('date'), allDay: f.elements.allDay.checked, start: v('start'), end: v('end'), place: v('place'), remind: v('remind'), notes: v('notes'), repeat };
 }
 function downloadIcs(e) {
   const blob = new Blob([icsCalendar([e], { names: names(), name: e.title })], { type: 'text/calendar' });
@@ -191,8 +202,13 @@ export function initCal(root) {
     else if (d.caledit) { editing = { ...allEvents().find((e) => e.id === d.caledit) }; renderCal(); }
     else if (d.caldel) {
       const e = allEvents().find((x) => x.id === d.caldel);
-      if (!e || !confirm(`Delete “${e.title}” for both of you?`)) return;
+      if (!e || !confirm(e.repeat?.kind ? `Delete every “${e.title}” (the whole series) for both of you?` : `Delete “${e.title}” for both of you?`)) return;
       saveEvent({ ...e, deleted: true }); openId = null; renderCal();
+    } else if (d.calskip) {
+      const [id, day] = d.calskip.split(':');
+      const e = allEvents().find((x) => x.id === id);
+      if (!e || !confirm(`Skip “${e.title}” on ${dayLabel(day)} only?`)) return;
+      saveEvent({ ...e, skip: [...new Set([...(e.skip || []), day])] }); openId = null; renderCal();
     } else if (d.calics) {
       const e = allEvents().find((x) => x.id === d.calics);
       if (!e) return;
@@ -203,7 +219,7 @@ export function initCal(root) {
     else if (d.calcopy) { navigator.clipboard?.writeText(d.calcopy).then(() => { note = 'Calendar link copied.'; renderCal(); }).catch(() => {}); }
   });
   root.addEventListener('change', (ev) => {
-    if (ev.target.name === 'allDay' && ev.target.closest('#calForm')) { readForm(); renderCal(); }
+    if (['allDay', 'repeat'].includes(ev.target.name) && ev.target.closest('#calForm')) { readForm(); renderCal(); }
   });
   root.addEventListener('submit', (ev) => {
     if (ev.target.id !== 'calForm') return;
@@ -213,7 +229,8 @@ export function initCal(root) {
     if (editing.allDay) { editing.start = ''; editing.end = ''; }
     const saved = { ...editing, createdAt: editing.createdAt || Date.now() };
     saveEvent(saved);
-    selected = saved.date; month = saved.date.slice(0, 7); openId = saved.id; editing = null;
+    if (!saved.repeat) delete saved.repeat;
+    selected = saved.date; month = saved.date.slice(0, 7); openId = `${saved.id}:${saved.date}`; editing = null;
     note = 'Saved — Amani sees it too. Add it to your own calendar below.'.replace('Amani', nameOf(PROFILES.find((p) => p.id !== me())?.id || ''));
     renderCal();
   });
