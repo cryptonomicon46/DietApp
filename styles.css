@@ -852,3 +852,11 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .adopt-form label input, .adopt-form label select, .adopt-form label textarea { width: 100%; margin-top: 4px; box-sizing: border-box; }
 .adopt-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
 .adopt-upload { display: inline-block !important; border: 1px dashed var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+
+/* 🔐 Household code */
+.hh-moved { border: 2px solid #b4246b; }
+.hh-fresh { background: var(--bg); border: 1px solid var(--brand); border-radius: 12px; padding: 10px 12px; margin-top: 8px; }
+.hh-fresh p { margin: 4px 0; }
+.hh-card .share-code { overflow-wrap: anywhere; }
+.hh-dialog { padding: 0; border: 0; background: transparent; max-width: min(420px, calc(100vw - 32px)); }
+.hh-dialog .hh-card { margin: 0; }

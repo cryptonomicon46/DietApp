@@ -1,0 +1,131 @@
+// 🔐 Our household code: see it, change it, and — when your partner changed it — enter the
+// new one. Changing it moves everything to a fresh random code and empties the old one, so
+// anyone who had the old code (an old screenshot, a shared calendar link) is locked out.
+import { PROFILES, ownerId, profileStore } from './storage.js';
+import { sync } from './sync.js';
+import { allDogs } from './dogs.js';
+import { allAdopt } from './adopt.js';
+
+const $ = (sel) => document.querySelector(sel);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const nameOf = (id) => profileStore(id).get('profile', null)?.name?.split(/\s+/)[0] || PROFILES.find((p) => p.id === id)?.name || id;
+const partner = () => PROFILES.find((p) => p.id !== ownerId())?.id;
+export const prettyCode = (code) => String(code || '').replace(/(.{4})(?=.)/g, '$1-');
+const linkFor = (code) => `${location.origin}${location.pathname}#link=${encodeURIComponent(code)}`;
+const ago = (t) => { const d = Math.floor((Date.now() - t) / 864e5); return d < 1 ? 'today' : d === 1 ? 'yesterday' : d < 60 ? `${d} days ago` : `${Math.round(d / 30)} months ago`; };
+
+let shown = false;   // code visible
+let fresh = null;    // {code, files} right after changing it
+let msg = '';
+let busy = false;
+let dismissed = false; // "Later" on the pop-up: ask again next time the app opens
+
+function movedCard(inDialog = false) {
+  const by = sync.settings().moved.by;
+  return `<div class="card hh-card hh-moved">
+    <div class="eyebrow">🔐 New household code</div>
+    <p><b>${esc(nameOf(by))} changed your household code.</b> Sharing is paused on this phone until you enter the new one.</p>
+    <p class="small muted">On ${esc(nameOf(by))}'s phone: Us › 🔐 Our household code › Send. Tap the link they send, or paste the code here.</p>
+    <div class="row"><input class="hh-input" data-hhinput autocomplete="off" autocapitalize="none" placeholder="xxxx-xxxx-xxxx" style="flex:1">
+      <button type="button" class="ghost small" data-hhpaste>📋 Paste</button></div>
+    <div class="row"><button type="button" data-hhjoin ${busy ? 'disabled' : ''}>${busy ? 'Checking…' : 'Use the new code'}</button>${inDialog ? '<button type="button" class="ghost" data-hhlater>Later</button>' : ''}</div>
+    ${msg ? `<p class="small">${esc(msg)}</p>` : ''}
+  </div>`;
+}
+
+function codeCard() {
+  const s = sync.settings();
+  if (!s?.code || !sync.enabled()) {
+    return `<div class="card hh-card"><div class="eyebrow">🔐 Our household code</div>
+      <p class="small muted">Sharing is off on this phone. Link your phones first (open ${esc(nameOf(partner()))}'s day and tap Link phones).</p></div>`;
+  }
+  const code = s.code;
+  const masked = `••••-••••-${code.slice(-4)}`;
+  return `<div class="card hh-card">
+    <div class="eyebrow">🔐 Our household code</div>
+    <p class="small muted">Both phones share through this private code. It works like a password: anyone who has it can see your shared data. Change it now and then, or any time it may have been seen.</p>
+    <div class="row"><code class="share-code">${esc(shown ? prettyCode(code) : masked)}</code><button type="button" class="ghost small" data-hhshow>${shown ? 'Hide' : 'Show'}</button></div>
+    <p class="small muted">${s.changedAt ? `Last changed ${ago(s.changedAt)}.` : 'Not changed since you linked your phones.'}${/^[a-hj-km-np-z2-9]{12}$/.test(code) ? '' : ' <b class="tone-warn">This is a phrase you typed — changing it gives you a strong random code.</b>'}</p>
+    ${fresh ? `<div class="hh-fresh">
+        <p><b>✓ Changed.</b> New code: <code class="share-code">${esc(prettyCode(fresh.code))}</code></p>
+        <p class="small">Now send it to ${esc(nameOf(partner()))}: their phone has paused sharing and is asking for it. Send it privately (Messages, AirDrop) — never in a group or a post.</p>
+        <div class="row"><button type="button" data-hhsend>Send to ${esc(nameOf(partner()))}</button><button type="button" class="ghost small" data-hhcopy>Copy</button></div>
+        <p class="small muted">Subscribed to the shared calendar in Apple or Google Calendar? That link used the old code — add it again from the Calendar tab on both phones.${fresh.files ? ` ${fresh.files} file${fresh.files === 1 ? '' : 's'} moved over.` : ''}</p>
+      </div>`
+      : `<div class="row"><button type="button" class="ghost" data-hhchange ${busy ? 'disabled' : ''}>${busy ? 'Changing…' : '🔄 Change our code'}</button>
+        ${shown ? `<button type="button" class="ghost small" data-hhsend>Send to ${esc(nameOf(partner()))}</button>` : ''}</div>`}
+    ${msg ? `<p class="small">${esc(msg)}</p>` : ''}
+  </div>`;
+}
+
+export function renderHousehold() {
+  if (!ownerId()) return;
+  const moved = !!sync.settings()?.moved;
+  // A pop-up rather than a Home card: Home can't be typed in while you view your partner's day.
+  const dlg = $('#hhDialog');
+  if (dlg) {
+    if (moved && !dismissed) {
+      // Redraw only when something changed, so typing (and a tap) isn't interrupted.
+      const html = movedCard(true);
+      if (dlg.dataset.html !== html) {
+        const typed = dlg.querySelector('[data-hhinput]')?.value || '';
+        dlg.innerHTML = html;
+        dlg.dataset.html = html;
+        dlg.querySelector('[data-hhinput]').value = typed;
+      }
+      if (!dlg.open) dlg.showModal();
+    } else if (dlg.open) dlg.close();
+  }
+  if ($('#usHousehold')) $('#usHousehold').innerHTML = moved ? movedCard() : codeCard();
+}
+
+async function share(code) {
+  const text = `Our new OurPawMili household code. Tap to switch (open it in the browser you use for OurPawMili): ${linkFor(code)}\nOr paste this code when the app asks: ${prettyCode(code)}`;
+  try {
+    if (navigator.share) await navigator.share({ text });
+    else { await navigator.clipboard.writeText(text); msg = 'Copied — paste it in a private message.'; renderHousehold(); }
+  } catch { /* share sheet closed */ }
+}
+
+export function initHousehold() {
+  window.addEventListener('lp:household', renderHousehold);
+  $('#hhDialog')?.addEventListener('cancel', () => { dismissed = true; });
+  document.addEventListener('click', async (e) => {
+    const t = e.target.closest('button');
+    if (!t || !t.closest('.hh-card')) return;
+    const ds = t.dataset;
+    if (ds.hhlater != null) { dismissed = true; renderHousehold(); }
+    else if (ds.hhshow != null) { shown = !shown; renderHousehold(); }
+    else if (ds.hhsend != null) share(fresh?.code || sync.settings().code);
+    else if (ds.hhcopy != null) { await navigator.clipboard?.writeText(prettyCode(fresh.code)).catch(() => {}); msg = 'Code copied.'; renderHousehold(); }
+    else if (ds.hhchange != null) {
+      const p = nameOf(partner());
+      if (!confirm(`Change your household code?\n\nEverything moves to a new code and the old one stops working. ${p}'s phone will pause sharing until ${p} enters the new code, which you'll send from here.`)) return;
+      busy = true; msg = ''; renderHousehold();
+      try {
+        const fileIds = [
+          ...allDogs().flatMap((d) => (d.docs || []).filter((f) => f.shared).map((f) => f.id)),
+          ...allAdopt().filter((d) => d.photo?.shared).map((d) => d.photo.id),
+        ];
+        fresh = await sync.rotate(fileIds);
+        shown = false;
+      } catch (err) { msg = err.message; }
+      busy = false; renderHousehold();
+    } else if (ds.hhpaste != null) {
+      const text = await navigator.clipboard?.readText?.().catch(() => '') || '';
+      const m = text.match(/#link=([^\s&]+)/) || text.match(/\b([a-z0-9]{4}-?[a-z0-9]{4}-?[a-z0-9]{4}[a-z0-9-]*)\b/i);
+      const input = t.closest('.hh-card').querySelector('[data-hhinput]');
+      if (m && input) input.value = decodeURIComponent(m[1]);
+      else { msg = 'Nothing to paste — copy the code from the message first.'; renderHousehold(); }
+    } else if (ds.hhjoin != null) {
+      const value = t.closest('.hh-card').querySelector('[data-hhinput]')?.value.trim();
+      if (!value) return;
+      busy = true; msg = ''; renderHousehold();
+      try {
+        await sync.join(value);
+        busy = false; msg = '';
+        location.reload();
+      } catch (err) { busy = false; msg = err.message; renderHousehold(); }
+    }
+  });
+}

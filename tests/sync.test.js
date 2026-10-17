@@ -6,13 +6,13 @@ globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: 
 const { householdCode, newHouseholdCode } = await import('../js/sync.js');
 
 test('the same phrase typed any way gives the same household code', () => {
-  const want = 'thenallanisatsomestreet';
-  for (const typed of ['The Nallanis at Some Street', 'the-nallanis-at-some-street', 'thenallanisatsomestreet', '  THE nallanis  at some_street ']) {
+  const want = 'purplekitesoverthebay';
+  for (const typed of ['Purple Kites Over The Bay', 'purple-kites-over-the-bay', 'purplekitesoverthebay', '  PURPLE kites  over_the bay ']) {
     assert.equal(householdCode(typed), want, typed);
   }
-  assert.equal(householdCode('nallanis'), 'householdnallanis');
-  assert.equal(householdCode('household-nallanis'), 'householdnallanis', 'old short-phrase form matches');
-  assert.equal(householdCode('householdnallanis'), 'householdnallanis', 'stable when entered again');
+  assert.equal(householdCode('bluekites'), 'householdbluekites');
+  assert.equal(householdCode('household-bluekites'), 'householdbluekites', 'old short-phrase form matches');
+  assert.equal(householdCode('householdbluekites'), 'householdbluekites', 'stable when entered again');
   assert.equal(householdCode('9BZX-femy-btmk'), '9bzxfemybtmk');
   assert.equal(householdCode('abc'), null);
   for (let i = 0; i < 20; i++) assert.match(householdCode(newHouseholdCode()), /^[a-z0-9]{12,64}$/);

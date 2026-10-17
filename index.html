@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawMili">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=135">
+  <link rel="stylesheet" href="styles.css?v=144">
 </head>
 <body>
   <header class="top">
@@ -194,6 +194,7 @@
     <section id="tab-notes" class="tab">
       <div class="seg us-pages" id="usPages" role="group" aria-label="Notes or plans"></div>
       <div id="notesBoard"></div>
+      <div id="usHousehold"></div>
     </section>
   </main>
 
@@ -240,6 +241,8 @@
     <p class="muted small">You'll set up and edit only your own profile on this phone. Your partner's day can be viewed once you both turn on sharing.</p>
     <div class="owner-choices" id="ownerChoices"></div>
   </dialog>
+
+  <dialog id="hhDialog" class="hh-dialog"></dialog>
 
   <!-- PARTNER NOT SET UP -->
   <dialog id="partnerDialog">
@@ -364,35 +367,36 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/activity.js": "./js/activity.js?v=135",
-    "./js/adopt.js": "./js/adopt.js?v=135",
-    "./js/analytics.js": "./js/analytics.js?v=135",
-    "./js/app.js": "./js/app.js?v=135",
-    "./js/brief.js": "./js/brief.js?v=135",
-    "./js/briefTab.js": "./js/briefTab.js?v=135",
-    "./js/calTab.js": "./js/calTab.js?v=135",
-    "./js/calendar.js": "./js/calendar.js?v=135",
-    "./js/commands.js": "./js/commands.js?v=135",
-    "./js/devices.js": "./js/devices.js?v=135",
-    "./js/dogs.js": "./js/dogs.js?v=135",
-    "./js/foods.js": "./js/foods.js?v=135",
-    "./js/lift.js": "./js/lift.js?v=135",
-    "./js/lifting.js": "./js/lifting.js?v=135",
-    "./js/notes.js": "./js/notes.js?v=135",
-    "./js/plan.js": "./js/plan.js?v=135",
-    "./js/plans.js": "./js/plans.js?v=135",
-    "./js/poster.js": "./js/poster.js?v=135",
-    "./js/research.js": "./js/research.js?v=135",
-    "./js/review.js": "./js/review.js?v=135",
-    "./js/rewards.js": "./js/rewards.js?v=135",
-    "./js/share.js": "./js/share.js?v=135",
-    "./js/shows.js": "./js/shows.js?v=135",
-    "./js/storage.js": "./js/storage.js?v=135",
-    "./js/sync.js": "./js/sync.js?v=135",
-    "./js/zip.js": "./js/zip.js?v=135"
+    "./js/activity.js": "./js/activity.js?v=144",
+    "./js/adopt.js": "./js/adopt.js?v=144",
+    "./js/analytics.js": "./js/analytics.js?v=144",
+    "./js/app.js": "./js/app.js?v=144",
+    "./js/brief.js": "./js/brief.js?v=144",
+    "./js/briefTab.js": "./js/briefTab.js?v=144",
+    "./js/calTab.js": "./js/calTab.js?v=144",
+    "./js/calendar.js": "./js/calendar.js?v=144",
+    "./js/commands.js": "./js/commands.js?v=144",
+    "./js/devices.js": "./js/devices.js?v=144",
+    "./js/dogs.js": "./js/dogs.js?v=144",
+    "./js/foods.js": "./js/foods.js?v=144",
+    "./js/household.js": "./js/household.js?v=144",
+    "./js/lift.js": "./js/lift.js?v=144",
+    "./js/lifting.js": "./js/lifting.js?v=144",
+    "./js/notes.js": "./js/notes.js?v=144",
+    "./js/plan.js": "./js/plan.js?v=144",
+    "./js/plans.js": "./js/plans.js?v=144",
+    "./js/poster.js": "./js/poster.js?v=144",
+    "./js/research.js": "./js/research.js?v=144",
+    "./js/review.js": "./js/review.js?v=144",
+    "./js/rewards.js": "./js/rewards.js?v=144",
+    "./js/share.js": "./js/share.js?v=144",
+    "./js/shows.js": "./js/shows.js?v=144",
+    "./js/storage.js": "./js/storage.js?v=144",
+    "./js/sync.js": "./js/sync.js?v=144",
+    "./js/zip.js": "./js/zip.js?v=144"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=135"></script>
+  <script type="module" src="js/app.js?v=144"></script>
 </body>
 </html>

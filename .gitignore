@@ -1,2 +1,24 @@
 node_modules/
 .DS_Store
+
+# Never commit anything private. The app keeps your data on your phones and in Cloudflare;
+# nothing personal belongs in this public repo.
+# Wrangler: local secrets and state
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+.wrangler/
+# Exports from the app (weekly CSV, backups, calendars) and device exports
+*.csv
+*.ics
+!tests/fixtures/*.ics
+*.zip
+ourpawmili-*
+lean-plate-*.json
+# Documents and photos you might drop in the folder by accident
+*.pdf
+*.heic
+*.HEIC
+*.jpg
+*.jpeg

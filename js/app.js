@@ -19,6 +19,7 @@ import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from 
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
 import { sync, newHouseholdCode, DEFAULT_CONNECTOR } from './sync.js';
+import { renderHousehold, initHousehold } from './household.js';
 import { buildTables, toCsv, summary, weekRows } from './analytics.js';
 import { icsCalendar } from './calendar.js';
 import { makeZip } from './zip.js';
@@ -2348,6 +2349,7 @@ function showTab(name) {
   if (name === 'calendar') renderCal();
   if (name === 'notes') {
     openUs();
+    renderHousehold();
     if (sync.enabled()) sync.pull().then((changed) => changed && renderNotes()).catch(() => {});
   }
   if (name === 'weight' && state.profile) renderStats();
@@ -2392,6 +2394,7 @@ function renderHome() {
   $('#homeCal').innerHTML = homeCal();
   updateFoodBadge();
   $('#homeUs').innerHTML = homeUs();
+  renderHousehold();
   if (!state.profile) { $('#homeFood').innerHTML = ''; $('#homeTrain').innerHTML = ''; return; }
   // Food: the next meal not yet logged, and how many are done.
   const plan = todayPlan(targets());
@@ -2583,6 +2586,7 @@ initLift();
 initNotes();
 initBrief();
 initCal(document.querySelector('main'));
+initHousehold();
 updateCalBadge();
 updateNotesBadge();
 // Weigh-ins said on the Lift tab ("weigh in 161.4").
@@ -2650,6 +2654,7 @@ if (!ownerId()) openOwnerPicker();
 else if (state.profile) renderAll();
 else if (sync.readOnly()) openPartnerNotice();
 else openProfile();
+renderHousehold(); // a changed household code asks for the new one as soon as the app opens
 // Pull workouts on open (at most every 10 min) and right after connecting.
 if (!sync.readOnly() && (justConnected || Date.now() - store.get('lastSync', 0) > 10 * 60000)) syncDevices();
 // Household: upload my latest, then fetch my partner's; reload if I'm looking at fresh data.
