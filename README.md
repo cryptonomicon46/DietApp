@@ -77,7 +77,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
   - Each half is pale yellow until something is logged, then green, and the button becomes a circle.
   - Breakfast runs 4 AM–4 PM and dinner 4 PM–4 AM (Pacific).
   - Only the phone that logged a feeding can undo it.
-- **🐾 Walk** and **🌳 Dog park:** the same split ovals. Tap again for another outing, and *Undo my last* takes yours back. They reset at 6 AM.
+- **🐾 Walk** and **🌳 Dog park:** the same split ovals, plus a **👫 Both** button for an outing you did together: it gives each of you a point on the scoreboard but counts as one outing toward a golden day (also on Home). Tap again for another outing, and *Undo last* takes back the last one logged on your phone. They reset at 6 AM.
 - **🍪 Treats & toys:** Treat on top (once a day, anyone can tap), 🧸 New toy below (name optional, counted per month).
 - **Tab colour, visible from anywhere:**
   - **red** = still needs this meal

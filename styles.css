@@ -863,3 +863,8 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .gym-links { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: flex-end; }
 .gym-links a { white-space: nowrap; }
 .home-gym .gym + .gym { margin-top: 8px; }
+
+/* 👫 Both: a walk or park trip together, a point each */
+.both-btn { align-self: center; margin-top: 8px; padding: 6px 14px; border-radius: 999px; font-size: .85rem; font-weight: 700; background: linear-gradient(90deg, #fdf7b4, #f1e66a); color: #5b4a00; border: 1px solid #e3d55a; }
+.both-btn.on { background: #2f9e5b; color: #fff; border-color: #2f9e5b; }
+.mini-halves button.mini-both { color: #5b4a00; }

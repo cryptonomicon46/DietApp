@@ -193,6 +193,8 @@ export function whoFed(records, key) {
 // ---------- dog duty scoreboard ----------
 // A person's log of one chore: {day: [timestamps]}. Older walk check-ins were {day: {at}}.
 // Walks / park trips: {day: [timestamp | {at, who}]} → {day: [{at, who?}]}.
+// A walk or park trip you did together is logged once with who = BOTH and credits each of you.
+export const BOTH = 'both';
 export function choreEntries(log) {
   return Object.fromEntries(Object.entries(log || {}).map(([day, v]) => [day,
     (Array.isArray(v) ? v : v?.at ? [v] : []).map((e) => (typeof e === 'number' ? { at: e } : { at: e.at, ...(e.who ? { who: e.who } : {}) }))]));
@@ -211,7 +213,11 @@ export function choreTally(records, prefix) {
     for (const [kind, key] of [['walk', 'walks'], ['park', 'park']]) {
       for (const [day, list] of Object.entries(choreEntries(r[key]))) {
         if (!day.startsWith(prefix)) continue;
-        for (const e of list) { const who = t[e.who] ? e.who : r.person; t[who][kind]++; }
+        for (const e of list) {
+          // "Both" went together: a point each.
+          const whos = e.who === BOTH ? Object.keys(t) : [t[e.who] ? e.who : r.person];
+          for (const who of whos) t[who][kind]++;
+        }
       }
     }
   }

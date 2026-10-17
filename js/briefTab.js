@@ -3,7 +3,7 @@ import { store, global, PROFILES, ownerId, profileStore } from './storage.js';
 import { pushNow } from './sync.js';
 import {
   PLACE, weatherUrls, parseWeather, scoreHour, bestWindow, dogWalks, hottestPavement, asphaltF, pawRisk,
-  GYMS, gymSchedule, gymMap, CLASS_TYPES, WEEKDAYS, classesOn, planRange, feedingSlot, whoFed, walkDay, choreTimes, choreEntries, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths, treatOn, isGolden,
+  BOTH, GYMS, gymSchedule, gymMap, CLASS_TYPES, WEEKDAYS, classesOn, planRange, feedingSlot, whoFed, walkDay, choreTimes, choreEntries, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths, treatOn, isGolden,
 } from './brief.js';
 import { renderDogs, initDogs, allDogs, dogAlerts, retryUploads } from './dogs.js';
 import { renderAdopt, initAdopt, retryAdoptUploads, unseenAdopt } from './adopt.js';
@@ -228,7 +228,7 @@ const CHORES = {
 function todaysChore(kind) {
   const day = walkDay();
   return PROFILES.flatMap((p) => (choreEntries(profileStore(p.id).get(CHORES[kind].key, {}))[day] || [])
-    .map((e) => ({ person: e.who || p.id, by: p.id, name: nameOf(e.who || p.id), at: e.at })))
+    .map((e) => ({ person: e.who || p.id, by: p.id, name: e.who === BOTH ? 'Both of you' : nameOf(e.who || p.id), at: e.at })))
     .sort((a, b) => a.at - b.at);
 }
 const whoName = (person, name) => (person === ownerId() ? 'You' : esc(name));
@@ -241,20 +241,23 @@ function choreButton(kind) {
   const c = CHORES[kind];
   const list = todaysChore(kind);
   const by = {};
-  for (const x of list) by[x.person] = (by[x.person] || 0) + 1;
+  for (const x of list) for (const p of (x.person === BOTH ? PROFILES.map((q) => q.id) : [x.person])) by[p] = (by[p] || 0) + 1;
+  const together = list.filter((x) => x.person === BOTH).length;
   const last = list[list.length - 1];
   const sub = !list.length ? 'Who went?' : list.length === 1 ? `${esc(last.name)} · ${clock(new Date(last.at))}` : `${list.length} today`;
   const mine = list.some((x) => x.by === ownerId());
   return `<div class="feed-col">
       <div class="btn-head">${list.length ? '✓' : c.icon} <b>${list.length ? c.done : c.todo}</b><small>${sub}</small></div>
       <div class="feed-btn oval hsplit ${list.length ? 'fed' : c.cls}">${halves(`data-chore="${kind}"`, by)}</div>
+      <button type="button" class="both-btn ${together ? 'on' : ''}" data-chore="${kind}" data-who="${BOTH}">👫 Both${together ? ` ×${together}` : ''}</button>
       <p class="small muted center">${list.length ? 'Tap a name to log another.' : 'Tap who did it · resets 6 AM.'}${mine ? ` <button type="button" class="linkish small" data-undochore="${kind}">Undo last</button>` : ''}</p>
     </div>`;
 }
 function logChore(kind, who = ownerId()) {
   const c = CHORES[kind];
   const n = todaysChore(kind).length;
-  if (n && !confirm(`Log another ${c.one} for ${who === ownerId() ? 'you' : nameOf(who)} today? (${n + 1} today)`)) return;
+  const whoText = who === BOTH ? 'both of you' : who === ownerId() ? 'you' : nameOf(who);
+  if (n && !confirm(`Log another ${c.one} for ${whoText} today? (${n + 1} today)`)) return;
   const s = profileStore(ownerId());
   const all = s.get(c.key, {});
   const day = walkDay();
@@ -271,7 +274,7 @@ function undoChore(kind) {
   const list = Array.isArray(all[day]) ? all[day] : all[day]?.at ? [all[day].at] : [];
   if (!list.length) return;
   const last = list[list.length - 1];
-  const who = typeof last === 'object' && last.who ? nameOf(last.who) : 'you';
+  const who = typeof last === 'object' && last.who ? (last.who === BOTH ? 'both of you' : nameOf(last.who)) : 'you';
   if (!confirm(`Undo the last ${c.one} logged on this phone (${who})?`)) return;
   all[day] = list.slice(0, -1);
   if (!all[day].length) delete all[day];
@@ -333,15 +336,15 @@ export function homeDogs() {
   const treat = treatToday();
   const meal = slot.meal === 'breakfast' ? 'Breakfast' : 'Dinner';
   const names = (list) => [...new Set(list.map((x) => x.name))].map(esc).join(' & ');
-  const minis = (attr) => `<span class="mini-halves">${PROFILES.map((p) => `<button type="button" ${attr} data-who="${p.id}">${esc(nameOf(p.id))}</button>`).join('')}</span>`;
-  const chip = (done, icon, title, sub, attr) => `<div class="home-dog ${done ? 'done' : ''}"><span>${done ? '✓' : icon}</span><b>${title}</b><small>${sub}</small>${attr ? minis(attr) : ''}</div>`;
+  const minis = (attr, both) => `<span class="mini-halves">${PROFILES.map((p) => `<button type="button" ${attr} data-who="${p.id}">${esc(nameOf(p.id))}</button>`).join('')}${both ? `<button type="button" class="mini-both" ${attr} data-who="${BOTH}">Both</button>` : ''}</span>`;
+  const chip = (done, icon, title, sub, attr, both) => `<div class="home-dog ${done ? 'done' : ''}"><span>${done ? '✓' : icon}</span><b>${title}</b><small>${sub}</small>${attr ? minis(attr, both) : ''}</div>`;
   return `<div class="card home-dogs">
     <div class="row between" style="margin-top:0"><div class="eyebrow">🐕 Dogs</div><button type="button" class="linkish small" data-goto="brief">Scores & golden days ›</button></div>
     <div class="home-dog-row">
       ${fed ? `<button type="button" class="home-dog done" data-feedundo><span>✓</span><b>${meal} done</b><small>${esc(fed.name)} · ${clock(new Date(fed.at))}</small></button>`
         : chip(false, '🦴', `Feed ${meal.toLowerCase()}`, 'Who fed them?', 'data-feed')}
-      ${chip(walks.length > 0, '🐾', walks.length ? `Walked${walks.length > 1 ? ` ×${walks.length}` : ''}` : 'Walk', walks.length ? names(walks) : 'Who walked?', 'data-chore="walk"')}
-      ${chip(park.length > 0, '🌳', park.length ? `Park${park.length > 1 ? ` ×${park.length}` : ''}` : 'Dog park', park.length ? names(park) : 'Who went?', 'data-chore="park"')}
+      ${chip(walks.length > 0, '🐾', walks.length ? `Walked${walks.length > 1 ? ` ×${walks.length}` : ''}` : 'Walk', walks.length ? names(walks) : 'Who walked?', 'data-chore="walk"', true)}
+      ${chip(park.length > 0, '🌳', park.length ? `Park${park.length > 1 ? ` ×${park.length}` : ''}` : 'Dog park', park.length ? names(park) : 'Who went?', 'data-chore="park"', true)}
       <div class="home-dog ${treat ? 'done' : ''}"><span>${treat ? '✓' : '🍪'}</span><b>${treat ? 'Treat given' : 'Treats & toys'}</b><small>${treat ? 'Tap Treat to undo' : 'Anyone can tap'}</small>
         <span class="mini-halves"><button type="button" data-treat>🍪 Treat</button><button type="button" data-newtoy>🧸 Toy</button></span></div>
     </div>

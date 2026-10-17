@@ -166,3 +166,16 @@ test('treats: one shared button; walk + treat makes a golden day', async () => {
   assert.equal(days['2026-10-20'].outings, 0);
   assert.deepEqual([isGolden(2, false), isGolden(1, true), isGolden(1, false), isGolden(0, true)], [true, true, false, false]);
 });
+
+test('a walk or park trip done together gives each of you a point, but counts as one outing', async () => {
+  const { choreTally, dogDays, BOTH } = await import('../js/brief.js');
+  const recs = [
+    { person: 'sandman', name: 'Sandman', fed: {}, walks: { '2026-10-17': [{ at: 1, who: BOTH }] }, park: { '2026-10-17': [{ at: 2, who: BOTH }] } },
+    { person: 'amani', name: 'Amani', fed: {}, walks: { '2026-10-17': [3] }, park: {} },
+  ];
+  const t = choreTally(recs, '2026-10');
+  assert.deepEqual([t.sandman.walk, t.sandman.park, t.sandman.total], [1, 1, 2]);
+  assert.deepEqual([t.amani.walk, t.amani.park, t.amani.total], [2, 1, 3]);
+  const day = dogDays(recs)['2026-10-17'];
+  assert.equal(day.outings, 3, 'together = one outing');
+});
