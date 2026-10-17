@@ -180,9 +180,9 @@ function treatButton() {
   const thisMonth = toys.filter((x) => x.date.startsWith(month)).length;
   return `<div class="feed-col">
       <div class="btn-head">🍪 <b>Treats &amp; toys</b><small>${on ? 'Treat given today' : 'Anyone can tap'}</small></div>
-      <div class="feed-btn oblong hsplit notreat">
-        <button type="button" class="hhalf ${on ? 'on' : ''}" data-treat aria-pressed="${on}"><span class="nm nt">${on ? '✓ Treat given' : '🍪 Treat'}</span>${on && t ? `<small>${clock(new Date(t.at))}</small>` : ''}</button>
-        <button type="button" class="hhalf" data-newtoy><span class="nm nt">🧸 New toy</span>${thisMonth ? `<small>${thisMonth} this month</small>` : ''}</button>
+      <div class="feed-btn oval hsplit ${on ? 'fed' : 'notreat'}">
+        <button type="button" class="hhalf ${on ? 'on' : ''}" data-treat aria-pressed="${on}"><span class="nm nt">${on ? '✓ Treat' : '🍪 Treat'}</span>${on && t ? `<small>${clock(new Date(t.at))}</small>` : ''}</button>
+        <button type="button" class="hhalf" data-newtoy><span class="nm nt">🧸 ${on ? 'Toy' : 'New toy'}</span>${thisMonth ? `<small>${thisMonth} this mo.</small>` : ''}</button>
       </div>
       <p class="small muted center">${on ? 'Tap the treat again to undo.' : 'Treat resets at 6 AM.'}${toys[0] ? ` Last toy: ${esc(toys[0].toy)}.` : ''}</p>
     </div>`;
@@ -228,7 +228,7 @@ function choreButton(kind) {
   const mine = list.some((x) => x.by === ownerId());
   return `<div class="feed-col">
       <div class="btn-head">${list.length ? '✓' : c.icon} <b>${list.length ? c.done : c.todo}</b><small>${sub}</small></div>
-      <div class="feed-btn oblong hsplit ${list.length ? 'fed' : c.cls}">${halves(`data-chore="${kind}"`, by)}</div>
+      <div class="feed-btn oval hsplit ${list.length ? 'fed' : c.cls}">${halves(`data-chore="${kind}"`, by)}</div>
       <p class="small muted center">${list.length ? 'Tap a name to log another.' : 'Tap who did it · resets 6 AM.'}${mine ? ` <button type="button" class="linkish small" data-undochore="${kind}">Undo last</button>` : ''}</p>
     </div>`;
 }
@@ -290,9 +290,9 @@ export function renderFeed() {
     <div class="feed-pair">
       <div class="feed-col">
         <div class="btn-head">${fed ? '✓' : '🦴'} <b>${fed ? `${meal} done` : 'Feed the dogs'}</b><small>${fed ? `${esc(fed.name)} · ${clock(new Date(fed.at))}` : `${meal} · who fed?`}</small></div>
-        ${fed ? `<button type="button" class="feed-btn oblong fed single" data-feedundo aria-pressed="true">
+        ${fed ? `<button type="button" class="feed-btn oval fed single" data-feedundo aria-pressed="true">
           <span class="nm n${Math.max(0, PROFILES.findIndex((p) => p.id === fed.person))}">${esc(fed.name)}</span><small>fed them · tap to undo</small>
-        </button>` : `<div class="feed-btn oblong hsplit hungry">${halves('data-feed')}</div>`}
+        </button>` : `<div class="feed-btn oval hsplit hungry">${halves('data-feed')}</div>`}
         <p class="small muted center">${fed ? `Resets ${slot.resets} for ${slot.meal === 'breakfast' ? 'dinner' : 'breakfast'}.` : `Resets ${slot.resets}.`}${other ? ` Breakfast: ${esc(other.person === ownerId() ? 'you' : other.name)} at ${clock(new Date(other.at))}.` : ''}</p>
       </div>
       ${choreButton('walk')}
