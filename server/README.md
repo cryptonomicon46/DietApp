@@ -90,8 +90,12 @@ updated worker. Deploy it once:
 
 ```
 cd server
+npm install          # needed on any fresh copy: the worker bundles @anthropic-ai/sdk
 npx wrangler deploy
 ```
+
+If the deploy says `Could not resolve "@anthropic-ai/sdk"`, you skipped
+`npm install` (node_modules isn't in git). Run it in `server/` and deploy again.
 
 Until then, documents stay on the phone that added them; the app retries the
 upload automatically after the update.
