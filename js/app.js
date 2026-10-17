@@ -2,7 +2,7 @@ import { FOODS, STORES, FOOD_GROUPS, addScannedFoods } from './foods.js';
 import {
   ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
-  FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek,
+  FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek, checkinWindow, isCheckinDue, weeklyReview, deltaMacros,
   EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE, DRINKS, drinksTotals, fitItems,
 } from './plan.js';
 import {
@@ -1390,11 +1390,11 @@ function greetingWord() {
 }
 
 const DAY = 86400000;
+// Check-ins fall every 7 days from the day this phase (the diet) started — start on a Monday,
+// check in every Monday — and stay up until done.
+const programStartDay = () => state.profile.phaseStart || state.profile.createdOn || state.weights[0]?.date;
 function checkinDue() {
-  const last = state.checkins[state.checkins.length - 1]?.date || state.profile.createdOn || state.weights[0]?.date;
-  if (!last) return false;
-  if (store.get('checkinSnooze', null) === isoDate()) return false;
-  return Date.now() - new Date(last + 'T00:00').getTime() >= 7 * DAY;
+  return isCheckinDue(programStartDay(), isoDate(), state.checkins, store.get('checkinSnooze', null));
 }
 
 let draft = null; // in-progress check-in: {feeling, note, choice, custom: {p, f, c}, open}
@@ -1405,33 +1405,53 @@ function renderCheckin() {
   draft = draft || { feeling: null, note: '', choice: null, custom: { p: 0, f: 0, c: 0 } };
   const name = firstName();
   const base = baseTargets();
-  const trend = suggestAdjustment(phaseWeights(), base.lbPerWeek);
+  const today = isoDate();
+  const win = checkinWindow(programStartDay(), today) || { week: 1, due: today };
+  const phase = PHASES[state.profile.phase] ? state.profile.phase : 'cut';
+  const plannedWeeks = state.profile.phaseWeeks || PHASES[phase].weeks;
+  // The week just finished: the 7 days before this check-in's day.
+  const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(`${win.due}T12:00:00`); d.setDate(d.getDate() - 7 + i); return isoDate(d); });
+  const r = weeklyReview({
+    days: weekDays.map((d) => ({ date: d, ...(state.days[d] || {}) })), weights: phaseWeights(),
+    targetKcal: base.kcal, targetRate: phase === 'cut' ? base.lbPerWeek : 0, floor: state.profile.sex === 'male' ? 1500 : 1200,
+    weightLb: currentWeight(), weeksIn: win.week, plannedWeeks, phase, feeling: draft.feeling,
+  });
   const wow = weekOverWeek(state.weights);
-  const rec = recommendCheckin(trend, draft.feeling, base.atFloor);
-  const choice = draft.choice || rec.id;
-  const options = [...CHECKIN_OPTIONS].sort((a, b) => (a.id === rec.id ? -1 : b.id === rec.id ? 1 : 0));
-  const delta = choice === 'custom' ? draft.custom : CHECKIN_OPTIONS.find((o) => o.id === choice).delta;
+  const suggested = r.id === 'suggested' ? { id: 'suggested', label: `${r.delta > 0 ? '+' : '−'}${Math.abs(r.delta)} kcal`, detail: (() => { const m = deltaMacros(r.delta); return `${m.c > 0 ? '+' : '−'}${Math.abs(m.c)} g carbs, ${m.f > 0 ? '+' : '−'}${Math.abs(m.f)} g fat · protein stays`; })(), delta: deltaMacros(r.delta) } : null;
+  const maintenance = { id: 'maintenance', label: 'Maintenance for 2 weeks (diet break)', detail: 'Eat at maintenance, then pick the next phase', delta: { p: 0, f: 0, c: 0 } };
+  const all = [...(suggested ? [suggested] : []), ...CHECKIN_OPTIONS, ...(phase === 'cut' ? [maintenance] : [])];
+  const recId = r.id === 'suggested' ? 'suggested' : r.id;
+  const choice = draft.choice || recId;
+  const options = [...all].sort((a, b) => (a.id === recId ? -1 : b.id === recId ? 1 : 0));
+  const delta = choice === 'custom' ? draft.custom : (all.find((o) => o.id === choice) || all[0]).delta;
   const after = { p: base.p + (delta.p || 0), f: base.f + (delta.f || 0), c: base.c + (delta.c || 0) };
   const sign = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : '0');
+  const fmtD = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  const stat = (big, label) => `<div><b>${big}</b><small>${label}</small></div>`;
 
   el.innerHTML = `
     <div class="card checkin">
-      <div class="eyebrow">Weekly check-in</div>
-      <h3>${name ? `Hi ${esc(name)}, how` : 'How'} did this week go?</h3>
-      ${wow ? `<p class="small">7-day average: <b>${wow.before.toFixed(1)} → ${wow.now.toFixed(1)} lb</b> (${wow.change <= 0 ? '−' : '+'}${Math.abs(wow.change).toFixed(1)}). Goal pace: −${base.lbPerWeek} lb/week.</p>`
-        : '<p class="small muted">Log weigh-ins most mornings and next week I can compare week over week.</p>'}
+      <div class="eyebrow">Week ${win.week} check-in · ${fmtD(win.due)}</div>
+      <h3>${name ? `Hi ${esc(name)}, how` : 'How'} did week ${win.week} go?</h3>
+      <div class="ck-stats">
+        ${stat(wow ? `${wow.change <= 0 ? '−' : '+'}${Math.abs(wow.change).toFixed(1)} lb` : (r.lost != null ? `${r.lost >= 0 ? '−' : '+'}${Math.abs(r.lost).toFixed(1)} lb` : '—'), wow ? `7-day avg ${wow.before.toFixed(1)} → ${wow.now.toFixed(1)}` : 'weight trend')}
+        ${stat(r.avgIntake != null ? `${r.avgIntake}` : '—', `avg kcal eaten · target ${r.avgTarget}`)}
+        ${stat(`${r.logged}/7`, 'days logged')}
+        ${stat(r.tdee ? `~${r.tdee}` : '—', 'your real maintenance')}
+      </div>
+      ${phase === 'cut' ? `<p class="small muted">Week ${win.week} of a planned ${plannedWeeks}-week cut. Cuts work best at 0.5–1% of body weight a week for about 8–12 weeks, followed by 1–2 weeks at maintenance before the next block.</p>` : ''}
       <div class="chips" role="group" aria-label="How the week felt">
         ${Object.entries(FEELINGS).map(([k, v]) => `<button type="button" class="chip ${draft.feeling === k ? 'on' : ''}" data-feel="${k}">${v}</button>`).join('')}
       </div>
       <textarea id="checkinNote" rows="2" placeholder="Anything else? (optional — sleep, stress, travel…)">${esc(draft.note)}</textarea>
 
       <h3 class="q">${name ? `${esc(name)}, would` : 'Would'} you like to change your macros?</h3>
-      <p class="small muted">Suggested: ${esc(rec.why)}</p>
+      <p class="small"><b>Suggested:</b> ${esc(r.why)}</p>
       <div class="options">
         ${options.map((o) => `
           <label class="opt ${choice === o.id ? 'on' : ''}">
             <input type="radio" name="checkinChoice" value="${o.id}" ${choice === o.id ? 'checked' : ''}>
-            <span><b>${o.label}</b>${o.id === rec.id ? ' <em class="badge">Suggested</em>' : ''}<small>${o.detail}</small></span>
+            <span><b>${o.label}</b>${o.id === recId ? ' <em class="badge">Suggested</em>' : ''}<small>${o.detail}</small></span>
           </label>`).join('')}
         <label class="opt ${choice === 'custom' ? 'on' : ''}">
           <input type="radio" name="checkinChoice" value="custom" ${choice === 'custom' ? 'checked' : ''}>
@@ -1447,7 +1467,7 @@ function renderCheckin() {
           <div class="small muted">${sign(deltaKcal(draft.custom))} kcal/day</div>
         </div>` : ''}
       </div>
-      <p class="small">New daily targets: <b>${base.kcal + deltaKcal(delta)} kcal</b> · ${after.p}P · ${after.f}F · ${after.c}C</p>
+      <p class="small">${choice === 'maintenance' ? 'For the next 2 weeks: <b>maintenance calories</b> (about your current burn); then the app asks what\'s next.' : `New daily targets: <b>${base.kcal + deltaKcal(delta)} kcal</b> · ${after.p}P · ${after.f}F · ${after.c}C`}</p>
       <div class="row">
         <button type="button" id="saveCheckin">Save check-in</button>
         <button type="button" class="ghost" id="snoozeCheckin">Not now</button>
@@ -1456,18 +1476,21 @@ function renderCheckin() {
 
   el.querySelectorAll('[data-feel]').forEach((b) => b.onclick = () => { draft.feeling = b.dataset.feel; draft.choice = null; renderCheckin(); });
   $('#checkinNote').oninput = (e) => { draft.note = e.target.value; };
-  el.querySelectorAll('input[name=checkinChoice]').forEach((r) => r.onchange = () => { draft.choice = r.value; renderCheckin(); });
+  el.querySelectorAll('input[name=checkinChoice]').forEach((x) => x.onchange = () => { draft.choice = x.value; renderCheckin(); });
   el.querySelectorAll('[data-step]').forEach((b) => b.onclick = () => { draft.custom[b.dataset.step] += +b.dataset.by; renderCheckin(); });
   $('#snoozeCheckin').onclick = () => { store.set('checkinSnooze', isoDate()); draft = null; renderCheckin(); };
   $('#saveCheckin').onclick = () => {
+    const entry = { date: isoDate(), week: win.week, feeling: draft.feeling, note: draft.note.trim(), change: choice, delta, kcal: deltaKcal(delta),
+      review: { lost: r.lost, avgIntake: r.avgIntake, tdee: r.tdee, logged: r.logged } };
+    state.checkins.push(entry);
+    store.set('checkins', state.checkins);
+    draft = null;
+    if (choice === 'maintenance') { startPhase('break', 0, 2); $('#checkin').innerHTML = `<div class="banner">Saved${name ? `, ${esc(name)}` : ''}. Two weeks at maintenance start today — enjoy the break.</div>`; return; }
     for (const k of ['p', 'f', 'c']) state.macroAdjust[k] += delta[k] || 0;
     store.set('macroAdjust', state.macroAdjust);
-    state.checkins.push({ date: isoDate(), feeling: draft.feeling, note: draft.note.trim(), change: choice, delta, kcal: deltaKcal(delta) });
-    store.set('checkins', state.checkins);
     store.set('adjustAppliedOn', isoDate());
-    draft = null;
     renderAll();
-    $('#checkin').innerHTML = `<div class="banner">Saved${name ? `, ${esc(name)}` : ''}. ${deltaKcal(delta) || delta.p ? 'Your new targets start now.' : 'Same targets — keep it up.'} Next check-in in a week.</div>`;
+    $('#checkin').innerHTML = `<div class="banner">Saved${name ? `, ${esc(name)}` : ''}. ${deltaKcal(delta) || delta.p ? 'Your new targets start now.' : 'Same targets — keep it up.'} Next check-in ${fmtD(win.next || today)}.</div>`;
   };
 }
 
@@ -2266,6 +2289,7 @@ function showTab(name) {
 }
 document.querySelectorAll('.tabs button').forEach((btn) => { btn.onclick = () => showTab(btn.dataset.tab); });
 document.querySelector('main').addEventListener('click', (e) => {
+  if (e.target.closest('[data-opencheckin]')) { openCheckin(); return; }
   const b = e.target.closest('[data-sub], [data-goto]');
   if (b) showTab(b.dataset.sub || b.dataset.goto);
 });
@@ -2288,7 +2312,8 @@ function renderHome() {
   const done = order.filter((m) => log.meals[m]).length;
   const next = order.find((m) => !log.meals[m]);
   const label = { breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Snack', dinner: 'Dinner' };
-  $('#homeFood').innerHTML = `<button type="button" class="card home-card" data-goto="today">
+  const ckWin = checkinDue() ? checkinWindow(programStartDay(), isoDate()) : null;
+  $('#homeFood').innerHTML = (ckWin ? `<button type="button" class="card home-card home-checkin" data-opencheckin><span class="home-ico">📋</span><span class="home-main"><b>Week ${ckWin.week} check-in is ready</b><small class="muted">See how the week went and adjust your macros</small></span><span class="home-go">›</span></button>` : '') + `<button type="button" class="card home-card" data-goto="today">
       <span class="home-ico">🍽</span>
       <span class="home-main"><b>${next ? `Next: ${label[next]}` : 'All meals logged 🎉'}</b>
         <small class="muted">${next ? `${esc(plan[next].title)} · ${plan[next].totals.kcal} kcal` : 'Nice work today.'}</small>

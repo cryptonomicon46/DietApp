@@ -202,3 +202,39 @@ test('restaurant meal with wine and cocktails', async () => {
   const menu = eatOutMeal({ eatout: { mode: 'menu', menu: { kcal: 800 }, drinks: { beer: 1 } } });
   assert.equal(menu.totals.kcal, 955, 'works with menu calories too');
 });
+
+test('weekly check-in: falls on the diet start weekday, suggests from intake and weight trend', async () => {
+  const { checkinWindow, isCheckinDue, weeklyReview, deltaMacros } = await import('../js/plan.js');
+  // Started Monday Oct 5 → check-ins Monday Oct 12, 19…
+  assert.equal(checkinWindow('2026-10-05', '2026-10-11'), null, 'week 1 not done yet');
+  assert.deepEqual(checkinWindow('2026-10-05', '2026-10-12'), { week: 1, due: '2026-10-12', next: '2026-10-19' });
+  assert.deepEqual(checkinWindow('2026-10-05', '2026-10-16'), { week: 1, due: '2026-10-12', next: '2026-10-19' });
+  assert.equal(isCheckinDue('2026-10-05', '2026-10-14', []), true, 'missed Monday: still due');
+  assert.equal(isCheckinDue('2026-10-05', '2026-10-14', [{ date: '2026-10-12' }]), false, 'done');
+  assert.equal(isCheckinDue('2026-10-05', '2026-10-19', [{ date: '2026-10-12' }]), true, 'next Monday');
+  assert.equal(isCheckinDue('2026-10-05', '2026-10-19', [], '2026-10-19'), false, 'snoozed today');
+
+  const days = (eaten, target = 2000) => Array.from({ length: 7 }, (_, i) => ({ date: `2026-10-${12 + i}`, eaten, target }));
+  const weights = (perWeek) => Array.from({ length: 14 }, (_, i) => ({ date: `2026-10-${String(5 + i).padStart(2, '0')}`, weight: 200 - (perWeek / 7) * i }));
+  const base = { targetKcal: 2000, targetRate: 1, floor: 1500, weightLb: 200, weeksIn: 3, plannedWeeks: 8, phase: 'cut' };
+  // Ate 2000, lost only 0.5 lb/wk → maintenance ≈ 2250 → for 1 lb/wk eat 1750 → −250.
+  const slow = weeklyReview({ ...base, days: days(2000), weights: weights(0.5) });
+  assert.equal(slow.tdee, 2250);
+  assert.deepEqual([slow.id, slow.delta], ['suggested', -250]);
+  // On pace → keep.
+  assert.equal(weeklyReview({ ...base, days: days(2000), weights: weights(1) }).id, 'keep');
+  // Losing 2.4 lb/wk at 200 lb (>1%/wk) → eat more.
+  const fast = weeklyReview({ ...base, days: days(2000), weights: weights(2.4) });
+  assert.ok(fast.delta > 0);
+  // Over target → fix adherence, don't cut.
+  assert.match(weeklyReview({ ...base, days: days(2400), weights: weights(0.2) }).why, /Hitting the current plan/);
+  // Not enough logging.
+  assert.equal(weeklyReview({ ...base, days: days(2000).slice(0, 2), weights: weights(0.2) }).id, 'keep');
+  // Floor respected.
+  assert.equal(weeklyReview({ ...base, targetKcal: 1600, days: days(1600, 1600), weights: weights(0.2) }).delta, -100);
+  // Long cut → maintenance.
+  assert.equal(weeklyReview({ ...base, weeksIn: 8, days: days(2000), weights: weights(0.5) }).id, 'maintenance');
+  assert.equal(weeklyReview({ ...base, weeksIn: 8, plannedWeeks: 12, feeling: 'tired', days: days(2000), weights: weights(0.5) }).id, 'maintenance');
+  const m = deltaMacros(-250);
+  assert.ok(Math.abs(m.f * 9 + m.c * 4 + 250) <= 4 && m.p === 0);
+});

@@ -466,3 +466,92 @@ export function weekOverWeek(entries, today = new Date()) {
   const now = avg(-1, 7), before = avg(7, 14);
   return now != null && before != null ? { now, before, change: now - before } : null;
 }
+
+// ---------- weekly check-in on the diet's weekly anniversary ----------
+export const KCAL_PER_LB = 3500;
+const dnum = (d) => Date.parse(`${d}T12:00:00Z`) / 864e5;
+const ddate = (n) => new Date(n * 864e5).toISOString().slice(0, 10);
+// Check-ins fall every 7 days from the day the diet (phase) started: start on a Monday, check in
+// each Monday. → { week, due, next } for the latest one that has come round, or null in week 1.
+export function checkinWindow(start, today) {
+  if (!start) return null;
+  const days = dnum(today) - dnum(start);
+  if (days < 7) return null;
+  const week = Math.floor(days / 7);
+  return { week, due: ddate(dnum(start) + week * 7), next: ddate(dnum(start) + (week + 1) * 7) };
+}
+export function isCheckinDue(start, today, checkins = [], snoozedOn = null) {
+  const w = checkinWindow(start, today);
+  return !!w && snoozedOn !== today && !checkins.some((c) => c.date >= w.due && c.change !== 'phase');
+}
+
+// What the week says, and the change it calls for. Uses the energy balance the evidence supports:
+// real maintenance ≈ what you ate + what you lost (3,500 kcal per lb), so the calories for your
+// planned pace = that − planned loss. Changes are kept small (±50–250 kcal), never below the
+// floor, and a fast loss (>1% of body weight a week) gets more food (Helms 2014). Long cuts get
+// a maintenance phase / diet break of 1–2 weeks (Byrne 2018 MATADOR; Peos 2021 ICECAP).
+// in: { days: [{date, eaten, target}], weights: [{date, weight}] (this phase), targetKcal, targetRate
+//       (lb/wk lost; 0 maintenance), floor, weightLb, weeksIn, plannedWeeks, phase, feeling }
+export function weeklyReview(o) {
+  const logged = (o.days || []).filter((d) => d.eaten > 300);
+  const avgIntake = logged.length ? Math.round(logged.reduce((a, d) => a + d.eaten, 0) / logged.length) : null;
+  const avgTarget = logged.length ? Math.round(logged.reduce((a, d) => a + (d.target || o.targetKcal), 0) / logged.length) : o.targetKcal;
+  const trend = weeklyTrend(o.weights || [], 14);
+  const lost = trend && trend.spanDays >= 6 && (o.weights || []).length >= 3 ? +(-trend.lbPerWeek).toFixed(2) : null;
+  const enoughFood = logged.length >= 4;
+  const onPlan = enoughFood && Math.abs(avgIntake - avgTarget) <= avgTarget * 0.1;
+  const tdee = enoughFood && lost != null ? Math.round(avgIntake + (lost * KCAL_PER_LB) / 7) : null;
+  const cutting = (o.phase || 'cut') === 'cut';
+  const struggling = ['hungry', 'tired', 'hard'].includes(o.feeling);
+  const pctPerWeek = lost != null && o.weightLb ? (lost / o.weightLb) * 100 : null;
+  const out = { logged: logged.length, avgIntake, avgTarget, lost, tdee, pctPerWeek, onPlan, notes: [] };
+  const round50 = (x) => Math.round(x / 50) * 50;
+  const clampDelta = (d) => Math.max(o.floor - o.targetKcal, Math.max(-250, Math.min(250, d)));
+
+  // Cut length: after the planned weeks (or 12+), or worn down at 8+, take maintenance.
+  const longCut = cutting && (o.weeksIn >= (o.plannedWeeks || 12) || o.weeksIn >= 12);
+  if (cutting && (longCut || (o.weeksIn >= 8 && struggling))) {
+    out.id = 'maintenance';
+    out.delta = 0;
+    out.why = longCut
+      ? `Week ${o.weeksIn} of your cut. Cuts work best in blocks of about 8–12 weeks; 1–2 weeks at maintenance now eases hunger and fatigue, then you can start the next block.`
+      : `Week ${o.weeksIn} and the week felt hard. A 1–2 week diet break at maintenance helps you stick with it and keeps fat loss going afterwards.`;
+    return out;
+  }
+  if (!enoughFood) {
+    out.id = 'keep'; out.delta = 0;
+    out.why = `Only ${logged.length} day${logged.length === 1 ? '' : 's'} of meals logged this week — not enough to judge. Keep your targets and log most days so next week's check-in can fine-tune.`;
+    return out;
+  }
+  if (avgIntake > avgTarget * 1.1 && cutting) {
+    out.id = 'keep'; out.delta = 0;
+    out.why = `You averaged ${avgIntake} kcal against a ${avgTarget} target. Hitting the current plan will do more than cutting calories further — keep it and aim for target most days.`;
+    return out;
+  }
+  if (lost == null) {
+    out.id = 'keep'; out.delta = 0;
+    out.why = 'Too few weigh-ins this week to read the trend. Keep your targets and weigh in most mornings.';
+    return out;
+  }
+  if (cutting && o.weeksIn <= 1 && lost > 0) {
+    out.id = 'keep'; out.delta = 0;
+    out.why = `First week: ${lost.toFixed(1)} lb/week, partly water and stored carbs. Keep the plan — week 2 shows the real trend.`;
+    return out;
+  }
+  let delta = clampDelta(round50((tdee - (o.targetRate * KCAL_PER_LB) / 7) - o.targetKcal));
+  if (cutting && pctPerWeek > 1) delta = Math.max(delta, 100); // losing too fast: protect muscle
+  if (cutting && struggling && delta < 0) delta = Math.max(delta, -100);
+  out.delta = Math.abs(delta) < 50 ? 0 : delta;
+  out.id = out.delta === 0 ? 'keep' : 'suggested';
+  const pace = lost >= 0 ? `losing ${lost.toFixed(1)} lb/week` : `gaining ${(-lost).toFixed(1)} lb/week`;
+  out.why = `You ate about ${avgIntake} kcal/day and were ${pace}, so your real maintenance is about ${tdee} kcal. `
+    + (out.delta === 0 ? `That matches your plan — no change needed.`
+      : `For your planned −${(+o.targetRate).toFixed(1)} lb/week, ${out.delta > 0 ? 'add' : 'cut'} ${Math.abs(out.delta)} kcal/day.`)
+    + (cutting && pctPerWeek > 1 ? ' You\'re losing more than 1% of body weight a week, which risks muscle — eat a bit more.' : '');
+  return out;
+}
+// Split a calorie change mostly from carbs, some from fat; protein stays.
+export function deltaMacros(kcal) {
+  const f = Math.round((kcal * 0.3) / 9);
+  return { p: 0, f, c: Math.round((kcal - f * 9) / 4) };
+}

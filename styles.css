@@ -814,3 +814,10 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .drink.on { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, var(--card)); }
 .drink button { background: none; color: var(--ink); border: 0; border-radius: 0; padding: 6px 10px; font-size: .8rem; font-weight: 600; }
 .drink .drink-less { border-left: 1px solid var(--line); padding: 6px 10px; color: var(--muted); }
+
+/* Weekly check-in summary */
+.ck-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 8px 0; }
+.ck-stats div { background: var(--bg); border-radius: 10px; padding: 8px 10px; }
+.ck-stats b { display: block; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.ck-stats small { color: var(--muted); font-size: .72rem; }
+.home-checkin { border-color: var(--brand); }
