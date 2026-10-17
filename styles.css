@@ -797,9 +797,11 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .feed-btn.oval .hhalf { padding: 0 6px; }
 
 /* Each half: yellow until it happens, green once it's logged */
-.feed-btn.hsplit { background: #e9b81f; }
-.feed-btn.hsplit .hhalf { background: linear-gradient(180deg, #f8d65a, #eab722); color: #5a4300; }
-.feed-btn.hsplit .hhalf small { color: #5a4300; }
+/* A pale lemon, deliberately unlike the amber gold of a golden day ⭐ */
+.feed-btn.hsplit { background: #f1e66a; }
+.feed-btn.hsplit .hhalf { background: linear-gradient(180deg, #fdf7b4, #f1e66a); color: #5c5300; }
+.feed-btn.hsplit .hhalf small { color: #5c5300; }
+.feed-btn.hsplit:not(.fed) .hhalf + .hhalf { border-top-color: #ffffff; }
 .feed-btn.hsplit .hhalf.on { background: linear-gradient(180deg, #55c48f, #2e8d5f); color: #fff; }
 .feed-btn.hsplit .hhalf.on small { color: #fff; }
 .feed-btn.hsplit .hhalf:active { filter: brightness(.92); }
