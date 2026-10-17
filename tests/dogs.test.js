@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mergeDogs, vaccineStatus, dogAlerts, ageText } from '../js/dogs.js';
+import { cleanUrl, sourceOf, mergeAdopt } from '../js/adopt.js';
 
 test('dog profiles merge across phones: newest edit wins, removals stick', () => {
   const dogs = mergeDogs([
@@ -37,4 +38,34 @@ test('vaccine status and alerts', () => {
   assert.deepEqual(alerts.map((a) => a.text), ['DHPP overdue 6 days', 'Apoquel refill in 3 days', 'Rabies due in 14 days']);
   assert.equal(ageText('2024-04-16', today), '2 yr');
   assert.equal(ageText('2026-04-16', today), '6 mo');
+});
+
+test('adoption board: links are cleaned so both phones see one dog', () => {
+  assert.equal(cleanUrl('Look at her! https://m.facebook.com/groups/123/posts/456/?mibextid=abc&fbclid=x'), 'https://www.facebook.com/groups/123/posts/456');
+  assert.equal(cleanUrl('https://www.facebook.com/share/p/1AbC/?mibextid=WC7FNe'), 'https://www.facebook.com/share/p/1AbC');
+  assert.equal(cleanUrl('https://www.petfinder.com/dog/biscuit-123/?referrer_id=9'), 'https://www.petfinder.com/dog/biscuit-123?referrer_id=9');
+  assert.equal(cleanUrl('no link here'), '');
+  assert.equal(sourceOf('https://www.facebook.com/share/p/1'), 'Facebook');
+  assert.equal(sourceOf('https://sjshelter.org/dog/1'), 'sjshelter.org');
+});
+
+test('adoption board: edits from both phones merge, reactions are per person, past dogs sink', () => {
+  const dogs = mergeAdopt([
+    { person: 'sandman', dogs: {
+      a: { url: 'u1', name: 'Biscuit', status: 'interested', addedAt: 10, addedBy: 'sandman', vote: 'love', times: { name: 10, status: 30 }, updatedAt: 30 },
+      b: { name: 'Old', status: 'gone', addedAt: 50, addedBy: 'sandman', updatedAt: 50 },
+      c: { name: 'Removed', deleted: true, addedAt: 5, updatedAt: 6 },
+    } },
+    { person: 'amani', dogs: {
+      a: { url: 'u1', name: 'Biscuit', notes: 'Good with dogs', status: 'new', addedAt: 10, addedBy: 'sandman', vote: 'maybe', times: { name: 10, notes: 20, status: 10 }, updatedAt: 20 },
+      d: { name: 'Pepper', addedAt: 40, addedBy: 'amani', updatedAt: 40 },
+    } },
+  ]);
+  assert.deepEqual(dogs.map((d) => d.name), ['Pepper', 'Biscuit', 'Old']);
+  const b = dogs[1];
+  assert.equal(b.status, 'interested', "Sandman's newer status");
+  assert.equal(b.notes, 'Good with dogs', "Amani's note");
+  assert.deepEqual(b.votes, { sandman: 'love', amani: 'maybe' });
+  assert.equal(dogs[0].status, 'new');
+  assert.equal(dogs[0].addedBy, 'amani');
 });

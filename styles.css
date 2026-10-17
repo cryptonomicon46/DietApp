@@ -827,3 +827,28 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .home-checkin.late { border-color: var(--alert); background: color-mix(in srgb, var(--alert) 8%, var(--card)); }
 .home-checkin.late b { color: var(--alert); }
 .home-next-ck { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 14px; font-size: .9rem; }
+
+/* 🏡 Dogs up for adoption (bottom of the Dogs tab) */
+.adopt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 8px; }
+.adopt-card { display: flex; gap: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 10px; min-width: 0; }
+.adopt-card.s-interested, .adopt-card.s-meet { border-color: #e7a1c0; }
+.adopt-card.s-applied, .adopt-card.s-contacted { border-color: var(--brand); }
+.adopt-card.s-pass, .adopt-card.s-gone { opacity: .7; }
+.adopt-photo { flex: 0 0 96px; width: 96px; height: 120px; border-radius: 10px; overflow: hidden; padding: 0; border: 0; background: var(--line); display: grid; place-items: center; font-size: 2.2rem; }
+.adopt-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.adopt-photo.missing::after { content: '🐕'; }
+.adopt-photo.missing img { display: none; }
+.adopt-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.adopt-body small { overflow-wrap: anywhere; }
+.adopt-name { font-size: 1.05rem; }
+.adopt-new { font-size: .7rem; font-weight: 700; background: #b4246b; color: #fff; border-radius: 999px; padding: 2px 8px; }
+.adopt-notes { margin: 4px 0 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.adopt-votes { display: flex; align-items: center; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+.adopt-votes .vote { background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; font-size: 1rem; line-height: 1.2; filter: grayscale(.8); opacity: .75; }
+.adopt-votes .vote.on { filter: none; opacity: 1; background: var(--card); border-color: var(--brand); }
+.adopt-status { margin-top: 6px; font-size: .85rem; padding: 6px 8px; max-width: 100%; }
+.adopt-card .btn-link { font-size: .85rem; font-weight: 600; color: var(--brand); text-decoration: none; padding: 6px 0; margin-right: auto; }
+.adopt-form label { display: block; font-size: .85rem; margin-top: 8px; }
+.adopt-form label input, .adopt-form label select, .adopt-form label textarea { width: 100%; margin-top: 4px; box-sizing: border-box; }
+.adopt-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.adopt-upload { display: inline-block !important; border: 1px dashed var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; }

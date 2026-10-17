@@ -97,15 +97,15 @@ const db = () => (dbp ||= new Promise((res, rej) => {
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
 }));
-const idb = async (mode, fn) => { const d = await db(); return new Promise((res, rej) => { const tx = d.transaction('files', mode); const q = fn(tx.objectStore('files')); tx.oncomplete = () => res(q?.result); tx.onerror = () => rej(tx.error); }); };
-const fileUrl = (id) => { const s = sync.settings(); return s?.url && s?.code ? `${s.url}/household/${encodeURIComponent(s.code)}/file/${id}` : null; };
-async function uploadFile(id, blob) {
+export const idb = async (mode, fn) => { const d = await db(); return new Promise((res, rej) => { const tx = d.transaction('files', mode); const q = fn(tx.objectStore('files')); tx.oncomplete = () => res(q?.result); tx.onerror = () => rej(tx.error); }); };
+export const fileUrl = (id) => { const s = sync.settings(); return s?.url && s?.code ? `${s.url}/household/${encodeURIComponent(s.code)}/file/${id}` : null; };
+export async function uploadFile(id, blob) {
   const url = fileUrl(id);
   if (!url) return false;
   const res = await fetch(url, { method: 'PUT', body: blob, headers: { 'Content-Type': blob.type || 'application/octet-stream' } });
   return res.ok;
 }
-async function getFile(id) {
+export async function getFile(id) {
   const local = await idb('readonly', (st) => st.get(id)).catch(() => null);
   if (local) return local;
   const url = fileUrl(id);
@@ -203,12 +203,13 @@ function dogForm() {
   </form>`;
 }
 
-export function renderDogs() {
+// force: redraw an open form (after adding a row); the minute timer leaves it alone so typing isn't lost.
+export function renderDogs(force = false) {
   const el = $('#dogProfiles');
   if (!el || !ownerId()) return;
   const today = isoDate();
   const dogs = allDogs();
-  if (draft) { el.innerHTML = `<div class="card">${dogForm()}</div>`; return; }
+  if (draft) { if (force || !el.querySelector('#dogForm')) el.innerHTML = `<div class="card">${dogForm()}</div>`; return; }
   const open = dogs.find((d) => d.id === openDog);
   if (open) { el.innerHTML = `<div class="card">${dogView(open, today)}</div>`; return; }
   const alerts = dogAlerts(dogs, today);
@@ -244,9 +245,9 @@ export function initDogs(root) {
     else if (t.dataset.dogclose != null) { openDog = null; renderDogs(); }
     else if (t.dataset.dogedit) { draft = structuredClone(allDogs().find((d) => d.id === t.dataset.dogedit)); for (const k of ['supplements', 'meds', 'vaccines']) draft[k] ||= []; renderDogs(); }
     else if (t.dataset.dogcancel != null) { draft = null; renderDogs(); }
-    else if (t.dataset.rowadd) { readDraft(); draft[t.dataset.rowadd].push({}); renderDogs(); }
-    else if (t.dataset.vaxadd) { readDraft(); draft.vaccines.push({ name: t.dataset.vaxadd }); renderDogs(); }
-    else if (t.dataset.rowdel) { readDraft(); const [k, i] = t.dataset.rowdel.split(':'); draft[k].splice(+i, 1); renderDogs(); }
+    else if (t.dataset.rowadd) { readDraft(); draft[t.dataset.rowadd].push({}); renderDogs(true); }
+    else if (t.dataset.vaxadd) { readDraft(); draft.vaccines.push({ name: t.dataset.vaxadd }); renderDogs(true); }
+    else if (t.dataset.rowdel) { readDraft(); const [k, i] = t.dataset.rowdel.split(':'); draft[k].splice(+i, 1); renderDogs(true); }
     else if (t.dataset.dogdel) {
       if (!confirm(`Remove ${draft?.name || 'this dog'} and its records?`)) return;
       saveDog({ ...draft, deleted: true }); draft = null; openDog = null; renderDogs();

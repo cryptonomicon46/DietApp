@@ -6,6 +6,7 @@ import {
   GYMS, CLASS_TYPES, WEEKDAYS, classesOn, planRange, feedingSlot, whoFed, walkDay, choreTimes, choreEntries, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths, treatOn, isGolden,
 } from './brief.js';
 import { renderDogs, initDogs, allDogs, dogAlerts, retryUploads } from './dogs.js';
+import { renderAdopt, initAdopt, retryAdoptUploads, unseenAdopt } from './adopt.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -302,6 +303,7 @@ export function renderFeed() {
     </div>`;
   renderDuty();
   renderDogs();
+  renderAdopt();
   if ($('#homeDogs')) $('#homeDogs').innerHTML = homeDogs();
 }
 // Home: the same three check-ins as small buttons, and how close today is to golden.
@@ -326,6 +328,7 @@ export function homeDogs() {
       <div class="home-dog ${treat ? 'done' : ''}"><span>${treat ? '✓' : '🍪'}</span><b>${treat ? 'Treat given' : 'Treats & toys'}</b><small>${treat ? 'Tap Treat to undo' : 'Anyone can tap'}</small>
         <span class="mini-halves"><button type="button" data-treat>🍪 Treat</button><button type="button" data-newtoy>🧸 Toy</button></span></div>
     </div>
+    ${(() => { const n = unseenAdopt(); return n.length ? `<p class="small" data-goto="brief">🏡 ${esc(nameOf(n[0].addedBy))} found ${n.length > 1 ? `${n.length} dogs` : esc(n[0].name || 'a dog')} up for adoption — see the bottom of Dogs.</p>` : ''; })()}
     ${dogAlerts(allDogs(), isoDay()).slice(0, 2).map((a) => `<p class="small tone-warn" data-goto="brief">⚠ ${esc(a.dog)}: ${esc(a.text)}</p>`).join('')}
     <p class="small ${isGolden(outings, treat) ? 'golden-note' : 'muted'}">${isGolden(outings, treat) ? `⭐ Golden day — ${outings >= 2 ? 'out twice today' : 'a walk and a treat'}!` : outings === 1 ? 'One more outing or a treat makes it a ⭐ golden day.' : treat ? 'Treat given — a walk makes it a ⭐ golden day.' : 'Two outings, or an outing and a treat, make a ⭐ golden day.'}</p>
   </div>`;
@@ -519,7 +522,8 @@ export function initBrief() {
   // Dog buttons (Dogs and Home), classes and weather (Train) — one listener for all tabs.
   const root = $('main');
   initDogs(root);
-  setTimeout(() => retryUploads().catch(() => {}), 8000);
+  initAdopt(root);
+  setTimeout(() => { retryUploads().catch(() => {}); retryAdoptUploads().catch(() => {}); }, 8000);
   // Keep the tab's colour right as the 4 AM / 4 PM resets pass, on any tab.
   renderFeed();
   setInterval(renderFeed, 60000);
