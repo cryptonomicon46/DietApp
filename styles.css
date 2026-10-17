@@ -795,3 +795,11 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .feed-btn.oval { width: 128px; height: 168px; align-self: center; }
 .feed-btn.oval .nm { font-size: .82rem; padding: 3px 9px; }
 .feed-btn.oval .hhalf { padding: 0 6px; }
+
+/* Each half: yellow until it happens, green once it's logged */
+.feed-btn.hsplit { background: #e9b81f; }
+.feed-btn.hsplit .hhalf { background: linear-gradient(180deg, #f8d65a, #eab722); color: #5a4300; }
+.feed-btn.hsplit .hhalf small { color: #5a4300; }
+.feed-btn.hsplit .hhalf.on { background: linear-gradient(180deg, #55c48f, #2e8d5f); color: #fff; }
+.feed-btn.hsplit .hhalf.on small { color: #fff; }
+.feed-btn.hsplit .hhalf:active { filter: brightness(.92); }

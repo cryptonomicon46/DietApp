@@ -178,11 +178,12 @@ function treatButton() {
   const month = walkDay().slice(0, 7);
   const toys = allToys();
   const thisMonth = toys.filter((x) => x.date.startsWith(month)).length;
+  const toyToday = toys.some((x) => x.date === walkDay());
   return `<div class="feed-col">
       <div class="btn-head">🍪 <b>Treats &amp; toys</b><small>${on ? 'Treat given today' : 'Anyone can tap'}</small></div>
-      <div class="feed-btn oval hsplit ${on ? 'fed' : 'notreat'}">
+      <div class="feed-btn oval hsplit ${on || toyToday ? 'fed' : 'notreat'}">
         <button type="button" class="hhalf ${on ? 'on' : ''}" data-treat aria-pressed="${on}"><span class="nm nt">${on ? '✓ Treat' : '🍪 Treat'}</span>${on && t ? `<small>${clock(new Date(t.at))}</small>` : ''}</button>
-        <button type="button" class="hhalf" data-newtoy><span class="nm nt">🧸 ${on ? 'Toy' : 'New toy'}</span>${thisMonth ? `<small>${thisMonth} this mo.</small>` : ''}</button>
+        <button type="button" class="hhalf ${toyToday ? 'on' : ''}" data-newtoy><span class="nm nt">🧸 ${on ? 'Toy' : 'New toy'}</span>${thisMonth ? `<small>${thisMonth} this mo.</small>` : ''}</button>
       </div>
       <p class="small muted center">${on ? 'Tap the treat again to undo.' : 'Treat resets at 6 AM.'}${toys[0] ? ` Last toy: ${esc(toys[0].toy)}.` : ''}</p>
     </div>`;
@@ -215,7 +216,7 @@ function todaysChore(kind) {
 const whoName = (person, name) => (person === ownerId() ? 'You' : esc(name));
 // An oblong button split across the middle: the top half logs it for the first person, the
 // bottom half for the second — from either phone. Each name has its own color.
-const halves = (attr, counts = {}) => PROFILES.map((p, i) => `<button type="button" class="hhalf" ${attr} data-who="${p.id}" aria-label="${esc(nameOf(p.id))}"><span class="nm n${i}">${esc(nameOf(p.id))}</span>${counts[p.id] ? `<small>×${counts[p.id]}</small>` : ''}</button>`).join('');
+const halves = (attr, counts = {}) => PROFILES.map((p, i) => `<button type="button" class="hhalf ${counts[p.id] ? 'on' : ''}" ${attr} data-who="${p.id}" aria-label="${esc(nameOf(p.id))}"><span class="nm n${i}">${esc(nameOf(p.id))}</span>${counts[p.id] ? `<small>×${counts[p.id]}</small>` : ''}</button>`).join('');
 // The left/right split this replaced:
 const halvesV = (attr, counts = {}) => `<span class="halves">${PROFILES.map((p) => `<button type="button" class="half" ${attr} data-who="${p.id}" aria-label="${esc(nameOf(p.id))}"><b>${esc(nameOf(p.id))}</b><small>${counts[p.id] ? `×${counts[p.id]}` : '&nbsp;'}</small></button>`).join('')}</span>`;
 function choreButton(kind) {
