@@ -3,7 +3,7 @@ import { store, global, PROFILES, ownerId, profileStore } from './storage.js';
 import { pushNow } from './sync.js';
 import {
   PLACE, weatherUrls, parseWeather, scoreHour, bestWindow, dogWalks, hottestPavement, asphaltF, pawRisk,
-  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, planRange, feedingSlot, whoFed, walkDay, choreTimes, choreEntries, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths,
+  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, planRange, feedingSlot, whoFed, walkDay, choreTimes, choreEntries, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths, treatOn, isGolden,
 } from './brief.js';
 import { renderDogs, initDogs, allDogs, dogAlerts, retryUploads } from './dogs.js';
 
@@ -154,10 +154,40 @@ function feedRecords(key = 'dogFed') {
   return PROFILES.map((p) => ({ person: p.id, name: nameOf(p.id), fed: profileStore(p.id).get(key, {}) }));
 }
 // Everyone's dog duties, for the scoreboard.
+// 🦴 Treat: one shared button per day (resets at 6 AM). Either phone can tap it on or off.
+const treatToday = () => treatOn(PROFILES.map((p) => ({ treats: profileStore(p.id).get('dogTreats', {}) })), walkDay());
+function lastTreat() {
+  const day = walkDay();
+  return PROFILES.map((p) => profileStore(p.id).get('dogTreats', {})[day]).filter((t) => t?.on !== false && t).sort((a, b) => b.at - a.at)[0] || null;
+}
+function toggleTreat() {
+  const on = !treatToday();
+  if (!on && !confirm('Undo — no treat today after all?')) return;
+  const s = profileStore(ownerId());
+  const all = s.get('dogTreats', {});
+  all[walkDay()] = { at: Date.now(), on };
+  const keep = Object.keys(all).sort().slice(-400);
+  s.set('dogTreats', Object.fromEntries(keep.map((k) => [k, all[k]])));
+  renderFeed();
+  pushNow().then(renderFeed);
+}
+function treatButton() {
+  const on = treatToday();
+  const t = on && lastTreat();
+  return `<div class="feed-col">
+      <button type="button" class="feed-btn ${on ? 'fed' : 'notreat'}" data-treat aria-pressed="${on}">
+        <span class="feed-icon">${on ? '✓' : '🍪'}</span>
+        <span class="feed-title">${on ? 'Treat given' : 'Treat'}</span>
+        <span class="feed-sub">${on ? (t ? clock(new Date(t.at)) : '') : 'Tap when they get one'}</span>
+      </button>
+      <p class="small muted center">${on ? 'Tap to undo.' : 'Once a day · resets 6 AM.'}</p>
+    </div>`;
+}
+
 function dutyRecords() {
   return PROFILES.map((p) => {
     const s = profileStore(p.id);
-    return { person: p.id, name: nameOf(p.id), fed: s.get('dogFed', {}), walks: s.get('dogWalked', {}), park: s.get('dogPark', {}) };
+    return { person: p.id, name: nameOf(p.id), fed: s.get('dogFed', {}), walks: s.get('dogWalked', {}), park: s.get('dogPark', {}), treats: s.get('dogTreats', {}) };
   });
 }
 // Walks and dog-park trips can happen more than once a day; each tap logs one for you.
@@ -234,7 +264,7 @@ export function renderFeed() {
   const fed = whoFed(feedRecords(), slot.key);
   const outings = todaysChore('walk').length + todaysChore('park').length;
   const walked = outings > 0;
-  const best = outings >= 2;
+  const best = isGolden(outings, treatToday());
   // The 🐕 tab shows it from anywhere in the app: red = still to feed, green = fed but not
   // out yet, bright green = fed and walked, gold = fed and a golden day (2+ walks, or walk + park).
   const tab = document.querySelector('.tabs [data-tab="brief"]');
@@ -243,7 +273,7 @@ export function renderFeed() {
     tab.classList.toggle('dogs-fed', !!fed && !walked);
     tab.classList.toggle('dogs-done', !!fed && walked && !best);
     tab.classList.toggle('dogs-best', !!fed && best);
-    tab.title = !fed ? `Dogs still need ${slot.meal}` : best ? 'Golden day: fed, and out twice ⭐' : walked ? `Dogs fed (${slot.meal}) and walked` : `Dogs fed (${slot.meal}) — not walked yet`;
+    tab.title = !fed ? `Dogs still need ${slot.meal}` : best ? `Golden day: fed, and ${outings >= 2 ? 'out twice' : 'a walk and a treat'} ⭐` : walked ? `Dogs fed (${slot.meal}) and walked` : `Dogs fed (${slot.meal}) — not walked yet`;
   }
   const other = slot.meal === 'breakfast' ? null : whoFed(feedRecords(), slot.key.replace('dinner', 'breakfast'));
   const meal = slot.meal === 'breakfast' ? 'Breakfast' : 'Dinner';
@@ -262,6 +292,7 @@ export function renderFeed() {
       </div>
       ${choreButton('walk')}
       ${choreButton('park')}
+      ${treatButton()}
     </div>`;
   renderDuty();
   renderDogs();
@@ -274,6 +305,7 @@ export function homeDogs() {
   const fed = whoFed(feedRecords(), slot.key);
   const walks = todaysChore('walk'), park = todaysChore('park');
   const outings = walks.length + park.length;
+  const treat = treatToday();
   const meal = slot.meal === 'breakfast' ? 'Breakfast' : 'Dinner';
   const names = (list) => [...new Set(list.map((x) => x.name))].map(esc).join(' & ');
   const minis = (attr) => `<span class="mini-halves">${PROFILES.map((p) => `<button type="button" ${attr} data-who="${p.id}">${esc(nameOf(p.id))}</button>`).join('')}</span>`;
@@ -285,9 +317,10 @@ export function homeDogs() {
         : chip(false, '🦴', `Feed ${meal.toLowerCase()}`, 'Who fed them?', 'data-feed')}
       ${chip(walks.length > 0, '🐾', walks.length ? `Walked${walks.length > 1 ? ` ×${walks.length}` : ''}` : 'Walk', walks.length ? names(walks) : 'Who walked?', 'data-chore="walk"')}
       ${chip(park.length > 0, '🌳', park.length ? `Park${park.length > 1 ? ` ×${park.length}` : ''}` : 'Dog park', park.length ? names(park) : 'Who went?', 'data-chore="park"')}
+      <button type="button" class="home-dog ${treat ? 'done' : ''}" data-treat><span>${treat ? '✓' : '🍪'}</span><b>${treat ? 'Treat given' : 'Treat'}</b><small>${treat ? 'Tap to undo' : 'Tap when given'}</small></button>
     </div>
     ${dogAlerts(allDogs(), isoDay()).slice(0, 2).map((a) => `<p class="small tone-warn" data-goto="brief">⚠ ${esc(a.dog)}: ${esc(a.text)}</p>`).join('')}
-    <p class="small ${outings >= 2 ? 'golden-note' : 'muted'}">${outings >= 2 ? '⭐ Golden day — out twice today!' : outings === 1 ? 'One more outing makes it a ⭐ golden day.' : 'Two outings today make a ⭐ golden day.'}</p>
+    <p class="small ${isGolden(outings, treat) ? 'golden-note' : 'muted'}">${isGolden(outings, treat) ? `⭐ Golden day — ${outings >= 2 ? 'out twice today' : 'a walk and a treat'}!` : outings === 1 ? 'One more outing or a treat makes it a ⭐ golden day.' : treat ? 'Treat given — a walk makes it a ⭐ golden day.' : 'Two outings, or an outing and a treat, make a ⭐ golden day.'}</p>
   </div>`;
 }
 
@@ -334,7 +367,7 @@ function renderHappy(recs) {
   const top = Math.max(1, ...months.map((x) => x.best));
   el.innerHTML = `
     <div class="eyebrow">⭐ Golden days</div>
-    <p class="small muted">A ⭐ golden day is two outings — two walks, or a walk and the dog park.</p>
+    <p class="small muted">A ⭐ golden day: two outings (walks or the dog park), or one outing and a treat.</p>
     <div class="happy-stats">
       <div><b>${m.best}</b><small>golden days in ${monthName(month)}</small></div>
       <div><b>${m.out}</b><small>days out</small></div>
@@ -488,6 +521,7 @@ export function initBrief() {
     if (!t) return;
     if (t.dataset.feed != null) { toggleFeed(t.dataset.who || ownerId()); return; }
     if (t.dataset.feedundo != null) { toggleFeed(); return; }
+    if (t.dataset.treat != null) { toggleTreat(); return; }
     if (t.dataset.chore) { logChore(t.dataset.chore, t.dataset.who || ownerId()); return; }
     if (t.dataset.undochore) { undoChore(t.dataset.undochore); return; }
     if (t.dataset.dutyview) { dutyView = t.dataset.dutyview; renderDuty(); return; }

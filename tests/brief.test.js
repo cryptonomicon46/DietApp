@@ -151,3 +151,18 @@ test('either phone can log a check-in for the other person', async () => {
   assert.deepEqual(t.amani, { feed: 1, walk: 1, park: 0, total: 2 });
   assert.deepEqual(choreEntries({ d: [5, { at: 6, who: 'amani' }] }).d, [{ at: 5 }, { at: 6, who: 'amani' }]);
 });
+
+test('treats: one shared button; walk + treat makes a golden day', async () => {
+  const { dogDays, treatOn, isGolden } = await import('../js/brief.js');
+  const recs = [
+    { person: 'sandman', walks: { '2026-10-18': [1], '2026-10-19': [1] }, park: {}, treats: { '2026-10-18': { at: 5, on: true }, '2026-10-20': { at: 5, on: true } } },
+    { person: 'amani', walks: {}, park: {}, treats: { '2026-10-19': { at: 9, on: true }, '2026-10-20': { at: 7, on: false } } },
+  ];
+  const days = dogDays(recs);
+  assert.equal(days['2026-10-18'].best, true, 'walk + treat');
+  assert.equal(days['2026-10-19'].best, true, "treat from the other phone counts");
+  assert.equal(treatOn(recs, '2026-10-20'), false, "Amani's later tap undid Sandman's");
+  assert.equal(days['2026-10-20'].best, false, 'a treat alone is not golden');
+  assert.equal(days['2026-10-20'].outings, 0);
+  assert.deepEqual([isGolden(2, false), isGolden(1, true), isGolden(1, false), isGolden(0, true)], [true, true, false, false]);
+});

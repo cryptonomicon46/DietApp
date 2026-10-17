@@ -234,8 +234,16 @@ export function coinsForYear(records, year, currentMonth) {
 }
 
 // ---------- happy dog days ----------
-// Both people's walks and park trips per day → { day: { walks, park, outings, best } }.
-// A best day ⭐ has two or more outings: two walks, or a walk and the dog park.
+// Treats: one shared yes/no per day, whoever taps. Each phone logs {day: {at, on}}; the latest
+// tap from either phone wins, so either of you can undo it.
+export function treatOn(records, day) {
+  const taps = records.map((r) => r.treats?.[day]).filter(Boolean).sort((a, b) => b.at - a.at);
+  return taps.length ? taps[0].on !== false : false;
+}
+// A golden day ⭐: out twice (walks or the dog park), or out once and a treat.
+export const isGolden = (outings, treat) => outings >= 2 || (outings >= 1 && !!treat);
+
+// Both people's walks, park trips and treats per day → { day: { walks, park, outings, treat, best } }.
 export function dogDays(records) {
   const days = {};
   for (const r of records) {
@@ -246,8 +254,13 @@ export function dogDays(records) {
         days[day][kind] += times.length;
       }
     }
+    for (const day of Object.keys(r.treats || {})) days[day] ||= { walks: 0, park: 0 };
   }
-  for (const d of Object.values(days)) { d.outings = d.walks + d.park; d.best = d.outings >= 2; }
+  for (const [day, d] of Object.entries(days)) {
+    d.outings = d.walks + d.park;
+    d.treat = treatOn(records, day);
+    d.best = isGolden(d.outings, d.treat);
+  }
   return days;
 }
 // Days out and best days for keys starting with `prefix`; the best-day streak runs back from `today`.
