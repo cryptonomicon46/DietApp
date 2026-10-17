@@ -167,3 +167,112 @@ export function googleUrl(ev, names = {}) {
   if (rrule(e)) q.set('recur', `RRULE:${rrule(e)}`);
   return `https://calendar.google.com/calendar/render?${q}`;
 }
+
+// ---------- reading calendar files (.ics) from Apple / Google Calendar ----------
+// Times become this phone's local time; repeat rules map onto ours where they can (weekly on
+// several days becomes one series per day); anything we can't repeat keeps its next date.
+const unescapeIcs = (s) => s.replace(/\\n/gi, '\n').replace(/\\([,;\\])/g, '$1');
+function icsLines(text) {
+  return text.replace(/\r\n[ \t]|\n[ \t]/g, '').split(/\r?\n/).filter(Boolean).map((line) => {
+    const colon = line.search(/:(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+    const head = line.slice(0, colon), value = line.slice(colon + 1);
+    const [name, ...ps] = head.split(';');
+    const params = Object.fromEntries(ps.map((p) => p.split('=')).map(([k, v]) => [k.toUpperCase(), (v || '').replace(/"/g, '')]));
+    return { name: name.toUpperCase(), params, value };
+  });
+}
+// Offset (ms) of a time zone from UTC at a given instant.
+function tzOffset(tz, ms) {
+  try {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      .formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - ms;
+  } catch { return 0; }
+}
+// An .ics date/time → { date, time? } in local time (or the event's own day for all-day).
+function icsWhen(prop, localTz) {
+  if (!prop) return null;
+  const v = prop.value.trim();
+  const m = v.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/);
+  if (!m) return null;
+  const [, y, mo, d, h, mi, , z] = m;
+  if (h == null || prop.params.VALUE === 'DATE') return { date: `${y}-${mo}-${d}`, allDay: true };
+  let ms = Date.UTC(+y, +mo - 1, +d, +h, +mi);
+  if (z) { /* already UTC */ } else if (prop.params.TZID) { const guess = ms; ms = guess - tzOffset(prop.params.TZID, guess); ms = guess - tzOffset(prop.params.TZID, ms); } else { return { date: `${y}-${mo}-${d}`, time: `${h}:${mi}` }; }
+  const local = new Date(ms + tzOffset(localTz, ms));
+  const iso = local.toISOString();
+  return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
+}
+const WD2 = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+const addDays = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+// RRULE → our repeat (one or more series, by start date), or null when we can't express it.
+function mapRule(rr, start) {
+  const r = Object.fromEntries(rr.split(';').map((x) => x.split('=')));
+  const every = Math.max(1, +r.INTERVAL || 1);
+  const until = r.UNTIL ? `${r.UNTIL.slice(0, 4)}-${r.UNTIL.slice(4, 6)}-${r.UNTIL.slice(6, 8)}` : undefined;
+  const base = (kind, extra = {}) => ({ kind, ...(every > 1 ? { every } : {}), ...(until ? { until } : {}), ...extra });
+  const days = (r.BYDAY || '').split(',').filter(Boolean);
+  switch (r.FREQ) {
+    case 'DAILY': return [{ start, repeat: base('daily') }];
+    case 'WEEKLY': {
+      const wds = days.length ? days.map((x) => WD2.indexOf(x.slice(-2))) : [weekday(start)];
+      return wds.map((wd) => { let s = start; while (weekday(s) !== wd) s = addDays(s, 1); return { start: s, repeat: base('weekly') }; });
+    }
+    case 'MONTHLY': {
+      if (r.BYMONTHDAY === '-1') return [{ start, repeat: base('monthlyLast') }];
+      if (r.BYMONTHDAY && r.BYMONTHDAY.includes(',')) {
+        const [d1, d2] = r.BYMONTHDAY.split(',').map(Number);
+        return every === 1 && parts(start).d === d1 ? [{ start, repeat: base('twiceMonthly', { day2: d2 }) }] : null;
+      }
+      if (days.length === 1 && /^-?\d/.test(days[0])) return [{ start, repeat: base('monthlyNth') }];
+      return days.length ? null : [{ start, repeat: base('monthly') }];
+    }
+    case 'YEARLY': return [{ start, repeat: base('yearly') }];
+    default: return null;
+  }
+}
+// The whole file → events in our shape. `from`: drop one-off events that ended before it.
+export function parseIcs(text, { localTz = 'America/Los_Angeles', from = '0000', who = WHO_BOTH, source = '' } = {}) {
+  const out = [];
+  let cur = null;
+  for (const l of icsLines(text)) {
+    if (l.name === 'BEGIN' && l.value === 'VEVENT') cur = { props: {}, exdates: [] };
+    else if (l.name === 'END' && l.value === 'VEVENT' && cur) {
+      const p = cur.props;
+      const st = icsWhen(p.DTSTART, localTz);
+      if (st && !p['RECURRENCE-ID'] && (p.STATUS?.value || '').toUpperCase() !== 'CANCELLED') {
+        const en = icsWhen(p.DTEND, localTz);
+        const uid = (p.UID?.value || `${st.date}-${p.SUMMARY?.value || ''}`).replace(/[^\w@.-]+/g, '');
+        const ev = {
+          title: unescapeIcs(p.SUMMARY?.value || '(No title)').slice(0, 80), date: st.date, allDay: !!st.allDay,
+          start: st.time || '', end: en && !st.allDay && en.date === st.date ? en.time : '',
+          place: unescapeIcs(p.LOCATION?.value || '').slice(0, 80), notes: unescapeIcs(p.DESCRIPTION?.value || '').slice(0, 300),
+          who, remind: '', tz: localTz, source,
+        };
+        let series = [{ start: st.date, repeat: null }];
+        let unsupported = false;
+        if (p.RRULE) {
+          const m = mapRule(p.RRULE.value, st.date);
+          if (m) series = m; else unsupported = true;
+          // COUNT → an end date, by walking the occurrences.
+          const count = +(p.RRULE.value.match(/COUNT=(\d+)/)?.[1] || 0);
+          if (m && count) for (const s of series) {
+            let n = 0, d = s.start;
+            for (let i = 0; i < 3 * 366 && n < count; i++, d = addDays(d, 1)) if (occursOn({ date: s.start, repeat: s.repeat }, d) && ++n === count) s.repeat.until = d;
+          }
+        }
+        const skip = cur.exdates.map((x) => icsWhen(x, localTz)?.date).filter(Boolean);
+        series.forEach((s, i) => {
+          const e = { ...ev, id: `ics-${uid}${series.length > 1 ? `-${i}` : ''}`.slice(0, 120), date: s.start, ...(s.repeat ? { repeat: s.repeat } : {}), ...(skip.length ? { skip } : {}), ...(unsupported ? { notes: [ev.notes, '(Repeats in your calendar app; only the first date shown here.)'].filter(Boolean).join('\n') } : {}) };
+          const ended = e.repeat ? (e.repeat.until && e.repeat.until < from) : e.date < from;
+          if (!ended) out.push(e);
+        });
+      }
+      cur = null;
+    } else if (cur) {
+      if (l.name === 'EXDATE') for (const v of l.value.split(',')) cur.exdates.push({ value: v, params: l.params });
+      else if (!cur.props[l.name]) cur.props[l.name] = l;
+    }
+  }
+  return out;
+}

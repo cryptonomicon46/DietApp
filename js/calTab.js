@@ -1,9 +1,9 @@
 // 📅 The Calendar tab: a shared calendar either partner can add to and edit, a month view,
 // the chosen day's events, what's coming up, and buttons to put an event (with its reminder)
 // into Apple or Google Calendar — or subscribe to the whole shared calendar there.
-import { PROFILES, ownerId, profileStore, seenItems } from './storage.js';
+import { PROFILES, ownerId, profileStore, seenItems, global } from './storage.js';
 import { sync, pushNow } from './sync.js';
-import { REMINDERS, REPEATS, WHO_BOTH, mergeEvents, eventsOn, upcoming, icsCalendar, googleUrl, repeatText, repeatUnit } from './calendar.js';
+import { REMINDERS, REPEATS, WHO_BOTH, mergeEvents, eventsOn, upcoming, icsCalendar, googleUrl, repeatText, repeatUnit, parseIcs } from './calendar.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -22,7 +22,76 @@ const dayLabel = (d, today = isoDate()) => {
 const whoClass = (who) => (who === WHO_BOTH || !who ? 'w-both' : `w-p${Math.max(0, PROFILES.findIndex((p) => p.id === who))}`);
 const whoLabel = (who) => (who === WHO_BOTH || !who ? 'Both' : nameOf(who));
 
-export const allEvents = () => mergeEvents(PROFILES.map((p) => ({ person: p.id, events: profileStore(p.id).get('events', []) })));
+// Shared events (editable by both) — the ones that live in the app.
+export const sharedEvents = () => mergeEvents(PROFILES.map((p) => ({ person: p.id, events: profileStore(p.id).get('events', []) })));
+// Plus events from linked calendars (Apple / Google), read-only, refreshed from the source.
+export const allEvents = () => [...sharedEvents(), ...feedEvents()];
+
+// ---------- linked calendars (Apple iCloud public link, Google secret iCal address) ----------
+const localTz = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles';
+const allFeeds = () => PROFILES.flatMap((p) => profileStore(p.id).get('calFeeds', []).map((f) => ({ ...f, owner: p.id })));
+const feedCache = () => global.get('calFeedCache', {});
+function feedEvents() {
+  const cache = feedCache();
+  return allFeeds().flatMap((f) => (cache[f.id]?.events || []).map((e) => ({ ...e, id: `${f.id}:${e.id}`, readonly: true, feed: f.name, by: f.owner })));
+}
+const fresh = (f) => Date.now() - (feedCache()[f.id]?.fetchedAt || 0) < 30 * 60000;
+let refreshing = false;
+export async function refreshFeeds(force = false) {
+  const s = sync.settings();
+  if (refreshing || !s?.url || !s?.code) return;
+  const due = allFeeds().filter((f) => force || !fresh(f));
+  if (!due.length) return;
+  refreshing = true;
+  const from = isoDate(new Date(Date.now() - 30 * 864e5));
+  try {
+    for (const f of due) {
+      const cache = feedCache();
+      try {
+        const res = await fetch(`${s.url}/ics?code=${encodeURIComponent(s.code)}&url=${encodeURIComponent(f.url)}`);
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `error ${res.status}`);
+        const events = parseIcs(await res.text(), { localTz: localTz(), from, who: f.who, source: f.name }).slice(0, 1500);
+        cache[f.id] = { fetchedAt: Date.now(), events };
+      } catch (err) {
+        cache[f.id] = { ...(cache[f.id] || {}), fetchedAt: Date.now(), error: /fetch/i.test(err.message) ? 'connector needs the update (server/README.md)' : err.message };
+      }
+      global.set('calFeedCache', cache);
+    }
+  } finally { refreshing = false; }
+  renderCal();
+  updateCalBadge();
+}
+let linkWho = null;
+function bringInCard() {
+  const feeds = allFeeds();
+  const cache = feedCache();
+  const who = linkWho || me();
+  const whoSeg = (attr) => `<div class="seg who-pick">${[[WHO_BOTH, 'Both'], ...PROFILES.map((p) => [p.id, nameOf(p.id)])].map(([k, l]) => `<button type="button" class="${who === k ? 'on' : ''}" ${attr}="${k}">${esc(l)}</button>`).join('')}</div>`;
+  const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
+  return `<details class="card cal-sub" ${feeds.length ? '' : 'open'}><summary><b>📲 Bring in a calendar</b> <span class="small muted">— Apple or Google, so you don't retype events</span></summary>
+    ${feeds.length ? `<ul class="list feed-list">${feeds.map((f) => {
+      const c = cache[f.id];
+      return `<li><span><b>${esc(f.name)}</b> <span class="who-chip ${whoClass(f.who)}">${esc(whoLabel(f.who))}</span><br><small class="${c?.error ? 'tone-warn' : 'muted'}">${c?.error ? esc(c.error) : c?.events ? `${c.events.length} events · updated ${ago(c.fetchedAt)}` : 'Not loaded yet'}</small></span>
+        <span><button type="button" class="ghost small" data-feedrefresh="${f.id}" aria-label="Refresh">↻</button>${f.owner === me() ? ` <button type="button" class="x" data-feeddel="${f.id}" aria-label="Unlink ${esc(f.name)}">✕</button>` : ''}</span></li>`;
+    }).join('')}</ul>` : ''}
+    <form id="feedForm" class="cal-form">
+      <div class="small"><b>Link a calendar (stays up to date)</b></div>
+      <input name="name" maxlength="40" placeholder="Name, e.g. ${esc(nameOf(me()))}'s iPhone" required>
+      <input name="url" inputmode="url" autocomplete="off" placeholder="webcal://p…-caldav.icloud.com/published/…" required>
+      <div class="small">Whose events are these?</div>${whoSeg('data-linkwho')}
+      <button type="submit">Link calendar</button>
+      <details class="small help"><summary>Where do I find the link?</summary>
+        <p><b>iPhone:</b> open the Calendar app → Calendars at the bottom → tap ⓘ next to your calendar → turn on <b>Public Calendar</b> → Share Link → Copy, then paste it here. (iCloud calendars only; anyone with that link can see the calendar, so keep it private.)</p>
+        <p><b>Google Calendar</b> (on a computer): Settings → your calendar → <b>Secret address in iCal format</b> → copy.</p>
+        <p>Events show here read-only and refresh every half hour; change them in your calendar app. Needs the updated connector (server/README.md).</p>
+      </details>
+    </form>
+    <div class="cal-form" style="margin-top:12px">
+      <div class="small"><b>Or import a calendar file once (.ics)</b> — e.g. exported from Calendar on a Mac (File → Export). Imported events become shared events you can both edit.</div>
+      <label class="filebtn ghost">Choose .ics file<input type="file" accept=".ics,text/calendar" data-icsimport hidden></label>
+    </div>
+  </details>`;
+}
 function saveEvent(ev) {
   const s = profileStore(me());
   const list = s.get('events', []).filter((e) => e.id !== ev.id);
@@ -35,7 +104,7 @@ function saveEvent(ev) {
 
 // New or changed events from the other person, for the tab's badge.
 const seenKey = (e) => `ev:${e.id}:${e.updatedAt}`;
-export const unseenEvents = () => (me() ? allEvents().filter((e) => e.by !== me() && e.date >= isoDate() && !seenItems.has(seenKey(e))) : []);
+export const unseenEvents = () => (me() ? sharedEvents().filter((e) => e.by !== me() && e.date >= isoDate() && !seenItems.has(seenKey(e))) : []);
 export function updateCalBadge() {
   const b = $('#calBadge');
   if (!b) return;
@@ -73,6 +142,16 @@ function eventRow(e, { showDay = false } = {}) {
   const key = `${e.id}:${e.date}`;
   const open = openId === key;
   const rpt = repeatText(e);
+  if (e.readonly) {
+    return `<li class="ev ${open ? 'open' : ''} feed">
+    <button type="button" class="ev-main" data-calopen="${key}">
+      <span class="ev-time">${showDay ? `${dayLabel(e.date)}<br>` : ''}${e.allDay || !e.start ? 'All day' : time12(e.start)}</span>
+      <span class="ev-body"><b>${esc(e.title)}</b>${e.place ? `<small class="muted">📍 ${esc(e.place)}</small>` : ''}<small class="muted">📲 ${esc(e.feed)}</small></span>
+      <span class="who-chip ${whoClass(e.who)}">${esc(whoLabel(e.who))}</span>
+    </button>
+    ${open ? `<div class="ev-more"><p class="small">${e.allDay || !e.start ? 'All day' : `${time12(e.start)}${e.end ? `–${time12(e.end)}` : ''}`} · ${esc(dayLabel(e.date))}${rpt ? ` · 🔁 ${esc(rpt)}` : ''}</p>${e.notes ? `<p class="small">${esc(e.notes)}</p>` : ''}<p class="small muted">From ${esc(e.feed)} — change it in that calendar app.</p></div>` : ''}
+  </li>`;
+  }
   const added = PROFILES.filter((p) => profileStore(p.id).get('calAdded', {})[e.id]).map((p) => (p.id === me() ? 'you' : nameOf(p.id)));
   return `<li class="ev ${open ? 'open' : ''}">
     <button type="button" class="ev-main" data-calopen="${key}">
@@ -133,6 +212,7 @@ function subscribeCard() {
 }
 
 export function renderCal() {
+  if (me() && allFeeds().some((f) => !fresh(f))) setTimeout(() => refreshFeeds().catch(() => {}), 0);
   const el = $('#calBoard');
   if (!el || !me()) return;
   const events = allEvents();
@@ -148,6 +228,7 @@ export function renderCal() {
       ${dayEvents.length ? `<ul class="ev-list">${dayEvents.map((e) => eventRow(e)).join('')}</ul>` : '<p class="small muted">Nothing planned. Tap ＋ to add something.</p>'}</div>
     ${next.length ? `<div class="card"><div class="eyebrow">Coming up</div><ul class="ev-list">${next.map((e) => eventRow(e, { showDay: true })).join('')}</ul></div>` : ''}
     ${note ? `<p class="small">${esc(note)}</p>` : ''}
+    ${bringInCard()}
     ${subscribeCard()}`;
 }
 
@@ -193,6 +274,13 @@ export function initCal(root) {
     const t = ev.target.closest('button, a');
     if (!t || !t.closest('#calBoard')) return;
     const d = t.dataset;
+    if (d.linkwho) { linkWho = d.linkwho; const f = $('#feedForm'); const keep = f ? [f.elements.name.value, f.elements.url.value] : null; renderCal(); if (keep && $('#feedForm')) { $('#feedForm').elements.name.value = keep[0]; $('#feedForm').elements.url.value = keep[1]; } return; }
+    if (d.feedrefresh) { refreshFeeds(true); note = 'Refreshing…'; renderCal(); return; }
+    if (d.feeddel) {
+      if (!confirm('Unlink this calendar? Its events leave this app (nothing changes in the calendar itself).')) return;
+      const s = profileStore(me()); s.set('calFeeds', s.get('calFeeds', []).filter((f) => f.id !== d.feeddel)); pushNow().catch(() => {});
+      const c = feedCache(); delete c[d.feeddel]; global.set('calFeedCache', c); renderCal(); return;
+    }
     if (d.caladd != null) { editing = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date: selected, who: WHO_BOTH, remind: '30', tz: Intl.DateTimeFormat().resolvedOptions().timeZone }; renderCal(); $('#calForm [name=title]')?.focus(); }
     else if (d.calcancel != null) { editing = null; renderCal(); }
     else if (d.calwho) { readForm(); editing.who = d.calwho; renderCal(); }
@@ -218,10 +306,37 @@ export function initCal(root) {
     } else if (d.calgoogle) { markAdded(d.calgoogle); setTimeout(renderCal, 300); }
     else if (d.calcopy) { navigator.clipboard?.writeText(d.calcopy).then(() => { note = 'Calendar link copied.'; renderCal(); }).catch(() => {}); }
   });
-  root.addEventListener('change', (ev) => {
+  root.addEventListener('change', async (ev) => {
+    if (ev.target.dataset?.icsimport != null) {
+      const file = ev.target.files?.[0];
+      if (!file) return;
+      const events = parseIcs(await file.text(), { localTz: localTz(), from: isoDate(new Date(Date.now() - 30 * 864e5)), who: linkWho || me() });
+      const s = profileStore(me());
+      const have = new Set(sharedEvents().map((e) => e.id));
+      const fresh = events.filter((e) => !have.has(e.id)).map((e) => ({ ...e, remind: '', updatedAt: Date.now(), by: me(), createdAt: Date.now() }));
+      s.set('events', [...s.get('events', []), ...fresh].slice(-1500));
+      pushNow().catch(() => {});
+      note = fresh.length ? `Imported ${fresh.length} event${fresh.length === 1 ? '' : 's'}${events.length > fresh.length ? ` (${events.length - fresh.length} already here)` : ''}.` : 'Nothing new in that file.';
+      renderCal();
+      return;
+    }
     if (['allDay', 'repeat'].includes(ev.target.name) && ev.target.closest('#calForm')) { readForm(); renderCal(); }
   });
   root.addEventListener('submit', (ev) => {
+    if (ev.target.id === 'feedForm') {
+      ev.preventDefault();
+      const f = ev.target;
+      const url = f.elements.url.value.trim();
+      if (!/^(webcals?|https):\/\//i.test(url)) { note = 'Paste the calendar link (it starts with webcal:// or https://).'; renderCal(); return; }
+      const s = profileStore(me());
+      const feed = { id: `f${Date.now().toString(36)}`, name: f.elements.name.value.trim() || `${nameOf(me())}'s calendar`, url, who: linkWho || me(), addedAt: Date.now() };
+      s.set('calFeeds', [...s.get('calFeeds', []), feed]);
+      pushNow().catch(() => {});
+      note = 'Linked — loading its events…';
+      renderCal();
+      refreshFeeds(true);
+      return;
+    }
     if (ev.target.id !== 'calForm') return;
     ev.preventDefault();
     readForm();

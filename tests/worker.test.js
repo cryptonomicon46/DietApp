@@ -64,3 +64,23 @@ test('shared calendar feed: both people\'s events as one subscribable calendar',
   assert.match(body, /For: Amani/);
   assert.ok(!body.includes('VALARM'));
 });
+
+test('linked calendars: fetched for a known household from calendar hosts only', async () => {
+  const code = 'ics1-ics2-ics3';
+  await call(`/household/${code}/amani`, { method: 'PUT', body: JSON.stringify({ savedAt: 1, data: {} }) });
+  const realFetch = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async (u) => { asked.push(String(u)); return new Response('BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n', { status: 200 }); };
+  try {
+    const link = encodeURIComponent('webcal://p52-caldav.icloud.com/published/2/abc');
+    assert.equal((await call(`/ics?code=zzzz-zzzz-zzzz&url=${link}`)).status, 403, 'unknown household');
+    const ok = await call(`/ics?code=${code}&url=${link}`);
+    assert.equal(ok.status, 200);
+    assert.match(await ok.text(), /BEGIN:VCALENDAR/);
+    assert.equal(asked[0], 'https://p52-caldav.icloud.com/published/2/abc', 'webcal becomes https');
+    assert.equal((await call(`/ics?code=${code}&url=${encodeURIComponent('https://evil.example.com/x.ics')}`)).status, 400, 'other hosts refused');
+    assert.equal((await call(`/ics?code=${code}&url=${encodeURIComponent('http://p52-caldav.icloud.com/x')}`)).status, 400, 'https only');
+    globalThis.fetch = async () => new Response('<html>nope</html>', { status: 200 });
+    assert.equal((await call(`/ics?code=${code}&url=${link}`)).status, 422);
+  } finally { globalThis.fetch = realFetch; }
+});

@@ -40,6 +40,28 @@ export default {
     const callback = `${url.origin}/${url.pathname.split('/')[1]}/callback`;
 
     try {
+      // ---- Linked calendars: GET /ics?code=<household>&url=<public iCloud / Google calendar link> ----
+      // The phone can't fetch another site's calendar directly (browsers block it), so the
+      // connector does — only for a known household, and only from calendar hosts.
+      if (url.pathname === '/ics') {
+        if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405);
+        const code = url.searchParams.get('code') || '';
+        const known = /^[a-z0-9-]{12,64}$/.test(code) && env.HOUSEHOLD
+          && (await env.HOUSEHOLD.list({ prefix: `${code}:`, limit: 1 })).keys.length > 0;
+        if (!known) return json({ error: 'turn on household sharing first' }, 403);
+        let target;
+        try { target = new URL((url.searchParams.get('url') || '').trim().replace(/^webcals?:/i, 'https:')); } catch { return json({ error: 'not a link' }, 400); }
+        const host = target.hostname.toLowerCase();
+        const allowed = target.protocol === 'https:' && (host.endsWith('.icloud.com') || host === 'calendar.google.com' || host === 'outlook.live.com' || host === 'outlook.office365.com');
+        if (!allowed) return json({ error: 'only iCloud, Google or Outlook calendar links' }, 400);
+        const res = await fetch(target.toString(), { headers: { Accept: 'text/calendar' }, redirect: 'follow' });
+        if (!res.ok) return json({ error: `calendar link answered ${res.status}` }, 502);
+        const text = await res.text();
+        if (text.length > 5_000_000) return json({ error: 'calendar too large' }, 413);
+        if (!text.includes('BEGIN:VCALENDAR')) return json({ error: 'that link is not a calendar' }, 422);
+        return new Response(text, { headers: { ...cors, 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'private, max-age=600' } });
+      }
+
       // ---- Shared calendar feed: /household/<code>/calendar.ics (subscribe in Apple / Google) ----
       const hc = url.pathname.match(/^\/household\/([a-z0-9-]{12,64})\/calendar\.ics$/);
       if (hc) {

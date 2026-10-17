@@ -102,3 +102,9 @@ The same update adds `/household/<code>/calendar.ics`: both partners' events as
 one calendar that Apple Calendar (webcal://) and Google Calendar (From URL) can
 subscribe to. It reads the profiles already stored in HOUSEHOLD; nothing else
 to set up beyond `npx wrangler deploy`.
+
+## Linked calendars
+
+The update also adds `GET /ics?code=<household>&url=<calendar link>`, which fetches a
+public iCloud (`*.icloud.com`), Google (`calendar.google.com`) or Outlook calendar for
+a known household — phones can't fetch those directly because of browser rules.

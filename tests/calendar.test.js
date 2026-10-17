@@ -91,3 +91,26 @@ test('recurring events in views, calendar files and Google links', async () => {
   assert.match(ics, /EXDATE;TZID=America\/Los_Angeles:20261208T080000/);
   assert.equal(new URL(googleUrl(day[0])).searchParams.get('recur'), 'RRULE:FREQ=MONTHLY;BYDAY=2TU');
 });
+
+test('reading an Apple / Google calendar file', async () => {
+  const { parseIcs, eventsOn } = await import('../js/calendar.js');
+  const ics = ['BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'UID:yoga-1', 'DTSTART;TZID=America/Los_Angeles:20261020T183000', 'DTEND;TZID=America/Los_Angeles:20261020T193000',
+    'RRULE:FREQ=WEEKLY;BYDAY=TU,TH', 'EXDATE;TZID=America/Los_Angeles:20261022T183000', 'SUMMARY:Yoga\\, Movement', 'LOCATION:815 Stewart Dr\\, Sunnyv', ' ale', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:dentist', 'DTSTART:20261028T210000Z', 'DTEND:20261028T220000Z', 'SUMMARY:Dentist', 'DESCRIPTION:Bring card\\nDr. Kim', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:bday', 'DTSTART;VALUE=DATE:20261105', 'RRULE:FREQ=YEARLY', 'SUMMARY:Mom', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:class', 'DTSTART;TZID=America/Los_Angeles:20261019T070000', 'RRULE:FREQ=WEEKLY;COUNT=3', 'SUMMARY:Class', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:old', 'DTSTART:20250101T170000Z', 'SUMMARY:Old', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:x', 'DTSTART:20261101T170000Z', 'STATUS:CANCELLED', 'SUMMARY:Off', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const ev = parseIcs(ics, { from: '2026-10-17', who: 'amani', localTz: 'America/Los_Angeles' });
+  assert.deepEqual(ev.map((e) => e.id), ['ics-yoga-1-0', 'ics-yoga-1-1', 'ics-dentist', 'ics-bday', 'ics-class'], 'old and cancelled dropped');
+  assert.equal(ev[0].title, 'Yoga, Movement');
+  assert.equal(ev[0].place, '815 Stewart Dr, Sunnyvale', 'folded line joined');
+  assert.deepEqual([ev[1].date, ev[1].repeat.kind], ['2026-10-22', 'weekly'], 'Thursday series');
+  assert.equal(eventsOn(ev, '2026-10-22').length, 0, 'skipped date');
+  assert.equal(eventsOn(ev, '2026-10-27').length, 1);
+  assert.deepEqual([ev[2].date, ev[2].start, ev[2].end], ['2026-10-28', '14:00', '15:00'], 'UTC → Pacific');
+  assert.equal(ev[2].notes, 'Bring card\nDr. Kim');
+  assert.deepEqual([ev[3].allDay, ev[3].repeat.kind], [true, 'yearly']);
+  assert.equal(ev[4].repeat.until, '2026-11-02', 'COUNT=3 weekly from Oct 19');
+  assert.ok(ev.every((e) => e.who === 'amani'));
+});

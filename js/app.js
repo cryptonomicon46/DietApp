@@ -2248,11 +2248,15 @@ document.querySelector('main').addEventListener('click', (e) => {
 
 // ---------- HOME: one glance at what needs doing today ----------
 function renderHome() {
-  if (!$('#homeHello') || !state.profile) return;
+  if (!$('#homeHello')) return;
   const name = firstName();
   $('#homeHello').innerHTML = `<div class="greeting">${name ? `${greetingWord()}, ${esc(name)}` : greetingWord()}</div>
     <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>`;
+  // Dogs, calendar and notes don't need a diet profile.
   $('#homeDogs').innerHTML = homeDogs();
+  $('#homeCal').innerHTML = homeCal();
+  $('#homeUs').innerHTML = homeUs();
+  if (!state.profile) { $('#homeFood').innerHTML = ''; $('#homeTrain').innerHTML = ''; return; }
   // Food: the next meal not yet logged, and how many are done.
   const plan = todayPlan(targets());
   const order = mealOrder(plan);
