@@ -579,7 +579,7 @@ const MEAL_TEMPLATES = { eggs: 'Switch: eggs', oatmeal: 'Switch: oatmeal' };
 
 // Order of the day's cards; the afternoon snack sits between lunch and dinner when it's on.
 const mealOrder = (plan) => ['breakfast', 'lunch', ...(plan.snack ? ['snack'] : []), 'dinner'];
-const SNACK_PICKS = [['apple', '🍎'], ['banana', '🍌'], ['orange', '🍊'], ['grapes', '🍇'], ['strawberries', '🍓'], ['berries', '🫐'], ['mixedNuts', '🥜'], ['cashews', '🥜'], ['almonds', '🌰'], ['greekYogurt', '🥛'], ['premierShake', '🥤'], ['barebells', '🍫']];
+const SNACK_PICKS = [['apple', '🍎'], ['banana', '🍌'], ['orange', '🍊'], ['grapes', '🍇'], ['strawberries', '🍓'], ['berries', '🫐'], ['mixedNuts', '🥜'], ['cashews', '🥜'], ['almonds', '🌰'], ['greekYogurt', '🥛'], ['premierShake', '🥤'], ['barebells', '🍫'], ['latte', '☕'], ['cappuccino', '☕'], ['cortado', '☕'], ['chocCookie', '🍪']];
 $('#meals').addEventListener('click', (e) => {
   const b = e.target.closest('[data-weighfood]');
   if (!b) return;
@@ -720,7 +720,7 @@ function quickPicker(attr, label, withSnacks = false) {
   };
   const snacks = withSnacks ? (FOOD_GROUPS.Snacks || []).filter((k) => FOODS[k]) : [];
   return `<select ${attr} aria-label="${esc(label)}"><option value="">${esc(label)}</option>
-    ${snacks.length ? `<optgroup label="Fruit, nuts & yogurt">${snacks.map(opt).join('')}</optgroup><optgroup label="Bars & shakes">${QUICK().map(opt).join('')}</optgroup>` : QUICK().map(opt).join('')}
+    ${snacks.length ? `<optgroup label="Fruit, nuts & yogurt">${snacks.map(opt).join('')}</optgroup><optgroup label="Coffee shop">${(FOOD_GROUPS['Coffee shop'] || []).filter((k) => FOODS[k]).map(opt).join('')}</optgroup><optgroup label="Bars & shakes">${QUICK().map(opt).join('')}</optgroup>` : QUICK().map(opt).join('')}
   </select>`;
 }
 function useQuick(meal, food) {
