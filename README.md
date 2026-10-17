@@ -1,60 +1,231 @@
 # OurPawMili
 
-A couples app for two people and their dogs: shared dog care, notes and plans, and each partner's diet and lifting.
+**One shared app for a couple and their dogs.** OurPawMili keeps the everyday life of a two-person household with dogs in one place: who fed and walked the dogs, the dogs' health records, a shared calendar, notes and plans for each other, and each person's own food and training. It runs in the phone's browser (add it to the Home Screen and it works like an app), needs no account, and keeps the two phones in step through a private phrase only the two of you know.
 
-- **Home by 9 PM** – suggested run, ride and dog-walk windows all end by 9 PM; from 9 PM on, Home, Train and Dogs show tomorrow's best times so you can plan the next day.
-- **Weekly check-in** – every 7 days from the day your diet started (start on a Monday, check in every Monday; a missed one waits for you, and Home flags it). It shows the week: weight change (7-day averages), average calories eaten vs target, days logged and your real maintenance, worked out from what you ate and how your weight moved (3,500 kcal ≈ 1 lb). It suggests a change sized to your planned pace (±50–250 kcal, carbs first, protein kept, never below the floor); more food if you're losing over 1% of body weight a week; no cut when the week was under-logged or over target; and after 8–12 weeks of cutting (or sooner if you're worn down) 2 weeks at maintenance as a diet break. You can pick any option or set your own. **⇩ Week as CSV** (one row per day: weight, calories in/target/burned, protein, fat, carbs, meals, activities, lifting) shares the week as a file — on iPhone the share sheet can send it straight to the Claude app — and **📋 Copy for Claude** copies a ready-to-paste summary with the data for a deeper review. Both are also under Food › Weight. Reminders: Home always shows the next check-in (and turns red when overdue), the Food tab gets a badge on check-in day, and **🔔 Weekly reminder** adds a repeating 8 AM event on your check-in weekday to your iPhone Calendar.
-- **Tabs** – six tabs: **🏠 Home** (greeting, the dog buttons, your day in order — best run or ride, dog walks, classes — your next meal, your partner's latest note and next plan, today's training), **🐕 Dogs**, **🍽 Food** (a bar at the top switches between Meals, Weight, Groceries and Scan; the morning weigh-in sits at the top of Meals and folds to one line once logged), **🏋︎ Train** (the training card with WHOOP / Strava calories and workout fuel, best run and ride windows, Movement classes, then the lifting log); Dogs keeps only dog things and **💞 Us**. On Food › Meals, today's deficit sits at the bottom after dinner.
-- **Who did it** – the Feed, Walk and Dog park buttons (Dogs tab and Home) are ovals split cleanly across the middle (they turn into circles once something is logged): tap the top half (Sandman, in blue) or the bottom half (Amani, in magenta), from either phone. The button then shows who fed or walked them, and the scoreboard credits that person. Only the phone that logged a check-in can undo it.
-- **📅 Calendar** – a shared calendar for the two of you. Either phone can add, edit or delete an event: title, day, time (or all day), place, who it's for (Both, Sandman or Amani), a reminder and notes. Events can **repeat**: every day, every week, every 2 weeks (paychecks), monthly on the same date, monthly on the same weekday (e.g. the gardener on the 2nd Tuesday), the last day of the month, twice a month (e.g. the 1st and 15th), every 3 months or every year — or every N days/weeks/months/years — with an optional end date; *Skip* drops a single date, and repeats carry into Apple and Google Calendar. A month view with colored dots, the chosen day's events, and what's coming up; new events from your partner badge the tab. Home shows today's events (or the next one). Each event has **Apple Calendar** (a calendar file with your reminder — tap Add) and **Google Calendar** buttons, and shows whose calendar it's in. **Bring in a calendar** (📲): link an Apple iCloud calendar (Calendar app → Calendars → ⓘ → Public Calendar → Share Link) or a Google calendar's secret iCal address, and its events show here read-only, refreshed every half hour, marked with whose they are — or import a .ics file once to copy its events in as shared events. To see everything in your calendar app automatically, subscribe once on each phone under *Show this calendar in Apple or Google Calendar* (needs the updated connector).
-- **🐕 Dogs** – a big round **Feed the dogs** button shared by both phones: tap it when you feed them and the other phone shows “Breakfast done · Amani · 7:05 AM”. It resets at 4 PM (Pacific) for dinner and at 4 AM for breakfast; tap again to undo your own. The **🐕 Dogs** tab at the bottom shows it from anywhere: **red** while the dogs still need this meal, **green** once someone has fed them. Next to it, round **🐾 Walk the dogs** and **🌳 Dog park** buttons log a walk or park trip for whoever taps (tap again for another one that day; *Undo my last* takes yours back); they reset at 6 AM. The tab turns **green** once they're fed, **bright green** once they're fed *and* walked, and **gold** on a ⭐ golden day — fed, and out twice (walks or the dog park) or out once with a treat. A single shared **🍪 Treat** button (anyone can tap it, once a day, resets at 6 AM) records the treat.
-- **⭐ Golden days** (Dogs tab, right under the buttons) – this month as a calendar (⭐ golden days, green days out), golden days and days out for the month and year, your current ⭐ streak, and a bar for each month with the happiest month crowned 🏆.
-- **🐶 Our dogs** (Dogs tab) – a profile per dog: breed, birthday, weight, food (brand, type, amount), supplements, medications and prescriptions (dose, schedule, prescribing vet, refill date), vaccines (given and next due, with Current / Due soon / Overdue), vet and microchip, notes, and documents — vaccine certificates and vet records as PDFs or photos, opened with one tap. Overdue vaccines and refills due within a week show on the Dogs tab and on Home. Shared by both of you: either phone can add a dog, update vaccines, food or meds, or upload documents, and edits to different fields both survive. Documents need the updated connector (server/README.md).
-- **🧸 New toys** – the bottom half of the Treats & toys button logs a new toy (name optional); the button shows how many this month.
-- **🏆 Dog duty** (Dogs tab) – who did the feedings, walks and dog-park trips, **Today**, this **Month** or this **Year**, with the leader crowned 👑. At the end of each month the one with the most feedings + walks + park trips wins a **🪙 gold coin**; the coin count for the year and each month's winner are shown (ties get no coin). Each feeding counts once, for whoever tapped it first. Below it, your daily brief for San Jose: the best hour for a 4-mile run, the best 2½-hour daylight window for a 25–30 mile ride, the best morning and evening dog walks with an estimated **pavement temperature** (sun heats asphalt far above the air — ~125°F at 77°F in full sun; above ~125°F it can burn paws), an hour-by-hour strip, and **Your day** in time order. Scores weigh feels-like temperature, rain chance, wind and gusts, air quality (US AQI), UV and daylight. Weather and air quality come live from Open-Meteo (free, no key). **Movement Santa Clara & Sunnyvale**: links to each gym's live class schedule, plus the classes you take (add them once with their days and time) shown on those days.
-- **🔐 Our household code** (Us tab, at the bottom) – the private code both phones share through; it works like a password. Tap **Show** to see it, or **🔄 Change our code** (either of you, any time) to move everything — both of your data, dog documents and adoption photos — to a new random code. The old code is emptied, so anyone who had it (an old screenshot, an old calendar link) sees nothing, and it doesn't point to the new one. The other phone pauses sharing and pops up **New household code**; send it the new code with **Send to …** (Messages or AirDrop) and tap the link or paste it there. A wrong or old code is refused. Afterwards, re-add the shared calendar subscription from the Calendar tab, since its link contains the code.
-- **Privacy** – the repo holds only the app's code: your data stays on your phones and in your Cloudflare storage, and someone who downloads or opens the app gets their own empty app with its own new code. `.gitignore` blocks exports, documents, photos and wrangler secret files from being committed by accident.
-- **🏡 Dogs up for adoption** (bottom of the Dogs tab) – spot a dog on Facebook (or a shelter, Petfinder…)? Tap **＋ Add a link**, then **📋 Paste** the ad's link (Facebook: Share › Copy link; tracking bits are stripped), add the name, age, breed, where, notes and a screenshot of the ad. It shows on both phones as a card with the photo, an **Open ad ↗** button, each of your reactions (❤️ 👍 🤔 👎) and a status (Just found → Interested → Contacted → Applied → Meet & greet; Pass, Adopted by others or 🎉 Ours! move it to **Past**). A dog your partner adds is marked **New** and mentioned on Home. Facebook doesn't let other sites show its posts, so the card keeps what you type plus the screenshot; screenshots are shared through the connector's file store, like dog documents.
-- **Today** – daily calories and protein / fat / carb targets, split into breakfast, lunch and dinner with exact portion sizes (grams + oz / cups / slices / scoops). Oats are weighed dry; meat, fish, eggs, rice and veggies are weighed cooked. The grocery list converts back to raw amounts to buy. Every item has a swap menu and − / + portion buttons: pick almond butter instead of peanut butter, butter instead of avocado, steak / chicken thigh (dark) / breast (white) / ground beef / fish, sweet potato instead of rice, and use − / + to set an amount yourself; the rest of the meal re-balances to stay on target. Swaps (except the day's protein) are remembered. **✎ Customize** turns a meal into your own list: add any food, remove items, set grams, or type the calories/protein/fat/carbs yourself; **Back to plan** restores the suggestion.
-  - Breakfast: eggs + sourdough + avocado, or oatmeal + whey protein
-  - Lunch & dinner: chicken, 95/5 beef, salmon, cod or trout with rice and veggies
-- **Sandman / Amani** – first launch asks whose phone it is; only that person can set up or edit their profile there. A switch at the top flips to the other person's day, view-only. Each person's data (profile, meals, weigh-ins, lifting, coins) is kept separately. With household sharing on (see [`server/README.md`](server/README.md)), each phone uploads its owner's data and shows the other person's day read-only, refreshed every few minutes.
-- **Daily deficit game** – type your calories burned from the WHOOP app (for the day, or per activity) and see today's deficit: burned − eaten. Every logged day in a deficit earns 🪙 10, plus 🪙 5 if the deficit stays sustainable, and a 🍪 for hitting protein. Streaks of 3, 7, 14 and 30 days pay bonus coins and badges. Very large deficits earn no bonus, so it rewards steady progress, not crash dieting.
-- **Meal check-in** – tap **I ate this** on a meal (or log intra-workout fuel, or a scanned snack) and the bar at the top of every screen shows calories eaten, calories left, and protein/fat/carbs left for today.
-- **Stats & export** (Weight tab) – meals logged, % of meals on target (calories within 10% of the meal's target and protein ≥ 90%), deficit days, protein days, lifting workouts and activities for the last 7/30/90/365 days. **Export data** downloads a zip of CSVs for Excel / Numbers / Google Sheets: `meals`, `days`, `activities`, `lifting_sessions`, `lifting_sets`, `weigh_ins`, `checkins`. **Backup / Restore** saves or restores everything as one file.
-- **Weekly check-in** – once a week the app greets you by name, asks how the week went (great / okay / hungry / low energy / hard to stick to), shows your week-over-week weight change, and offers macro changes (−100, −200, +100, +200 kcal, more protein, more carbs, or a custom P/F/C change) with one suggested from your trend and feedback.
-- **8-week program & next step** – a strip under the weigh-in shows the current phase (cut · week 3 of 8). When it ends, a review shows weight change and rate, days logged, meals on target, protein days, workouts and strength (estimated 1-rep max, first vs last 2 weeks), then recommends what's next: finish the last few pounds, a 2-week diet break, keep cutting (or add walks if calories are at the floor), maintenance, or a lean gain. Picking one switches calories, check-ins and coins to that phase.
-- **Weigh-in** – the first card on Today; shows today's weight and the change since last time.
-- **Weight** – a line graph of daily weigh-ins, the 7-day average, your goal and the planned path (30 days / 90 days / all), with tap-to-read values. After 2 weeks of data it suggests a ±100 kcal tweak if you're losing slower or faster than planned.
-- **Lift** – a full-body program 3 days a week (A heavy · B moderate · C light) with a 54-exercise library across 10 muscle groups. Pick any exercise for a slot; **+ Add set / − Remove set** changes the number of sets; on barbell lifts the **⦿ plate calculator** adds up the plates on one side (45, 35, 25, 15, 10, 5, 2.5) plus the bar, and each exercise shows which plates to load for the suggested weight (remembered for that exercise and still progressed and deloaded with the block). The app sets sets × reps, reps-in-reserve and rest, and suggests your next weight from your last session. Weeks 1–5 build volume and effort, week 6 is a deload, then a new block starts. Bodyweight moves (pull-ups, chin-ups, dips, push-ups, heel raises, hanging leg raises, ab wheel, back extensions) log reps only, at your body weight from your latest weigh-in, or your profile weight if you haven't weighed in (it asks if neither is set), and progress by reps then harder variations. **↑ / ↓ / Later** reorder today's exercises (say the squat rack is taken); **📌 Keep this order** saves it for that day, **Back to plan order** undoes it, and you can say it too ("move calves up", "move exercise 4 down 2", "move rows after squats", "do squats last"). **+ Add exercise after** puts any library exercise into today's session (e.g. Bulgarian split squats after squats), for today only or kept in that day from now on. The **command bar** (type or tap 🎤 and speak) logs sets in plain words: "squats 3 sets of 5 at 185", "add bulgarian split squats 3x10 at 40", "one more set of 8", "bench 135 for 8, 8, 7", "weigh in 160.8", and ticks sets off: "check all my sets for calves", "check exercise 3", "done with leg press", "check everything" (blank reps get the target; each exercise also has a **✓ Check all** button). Anything it can't parse can go to **Claude** through your connector (optional, see [`server/README.md`](server/README.md#ask-claude-optional)); every command has **Undo**.
-- **Groceries** – a weekly list built from your plan, grouped by Costco / Sprouts / Safeway, with checkboxes.
-- **Training** (on Today) – pick activities by sport (running, cycling, rock climbing, weight lifting, swimming, hiking, HIIT, yoga…) with an intensity and minutes, as many per day as you like. Calories are estimated from **your own WHOOP / Garmin history for that sport** once you've imported 3+ sessions, otherwise from Compendium MET values; workouts from **WHOOP** and **Garmin** replace matching ones you added so nothing is counted twice. Training add calories back as carbs. Planned cardio of 45+ minutes gets an **intra-workout carb** target (e.g. ~60 g/h for a 2-hour hard session) with banana / sports drink / gel / date options, taken out of your meals.
-- **Science** – every number links to the peer-reviewed paper it comes from.
-- **Us** – three pages for the two of you. **✨ Feeling like**: suggest a plan (movie, a show to watch tonight, brunch, lunch, dinner, coffee, a walk, a workout together or anything else) with where, when (tonight, today, tomorrow, this weekend or a day you pick), an optional time and note; the other person answers 🙌 I'm in, 🤔 Maybe or ⏰ Another time, and you can mark it done or cancel it. Places get a map link. **💌 Notes**: a shared post-it board that starts fresh every morning at 5 AM (earlier notes move to **Earlier notes**; a note you haven't read yet stays on the board until you've seen it) for daily notes to each other: write a note, tap emoji to add them, pick a post-it color and **Post it**. Notes arrive on the other phone with the household sync (a badge on the tab shows new ones), you can ↩ reply to a note (your reply quotes it) or ❤️ it, delete your own, and keep a 💌 daily streak. Works even while viewing the other person's day.
-- **📺 Watching** (Us tab) – the shows and movies you watch together, on Netflix, Hulu, HBO Max, Prime Video, Apple TV+, Disney+, Peacock, Paramount+, YouTube, a theater or anything else. Add a title once (either phone), tap **📺 We watched tonight** each evening you watch it (counted once even if you both tap), rate it ★1–5 each, and mark it **Finished** or **Dropped**. **Now** shows what's on the go, **By month** lists every month's titles and nights, and the **year recap** totals nights, shows, movies and finished titles, with your most-watched show, your favourite (average of both ratings) and which services you used most.
-- **⭐ Saved combos** – on any meal, **☆ Save combo** stores its foods and amounts under a name (e.g. “Whey shake”: whey, oat milk, berries). Pick it later from **⭐ My combos** on that meal — breakfast combos for breakfast, lunch and dinner share theirs. Each food keeps its own − / + (and grams box), **⚖️ Fit to target** scales the whole combo to the meal's calories, and **Edit list** deletes combos. Combos sync with household sharing like the rest of your data.
-- **📤 Share…** (bottom of Today) – pick **what** (this day's meals, your combos, or your progress), **how long** for progress (1 day, 1 week, 2 weeks or the full program) and **as** text (paste into any message), a poster image (share sheet: Messages, WhatsApp, Photos…) or a CSV. The progress poster has your average daily macros, a weight chart for that stretch (weigh-ins + 7-day average) and day-by-day totals with the meals you ate (week-by-week for longer stretches).
-- **Cooked or raw** – amounts are cooked weights for meat, fish, eggs, rice, potatoes and veggies (oats dry; bread, fruit, nuts as they come). Every item in every meal starts as cooked and has its own **cooked | raw** (or **cooked | dry**) switch next to its grams box, so you can weigh just that item raw or dry — e.g. lunch chicken raw but dinner chicken and rice cooked. Oats are the other way round: **dry | cooked**, where cooked means oatmeal made with water (about 5.3× the dry weight) (e.g. 150 g cooked chicken ≈ 200 g raw; ¾ cup cooked rice ≈ 43 g dry); macros are the same either way.
-- **Logged meals are locked** – after ✓ I ate this, a meal can't be changed by accident; **Unlog to edit** unlocks it (☆ Save combo still works).
-- **Portions: − / +** – every food in a meal has a grams box with **−** and **+** buttons (one tap = the food's usual step: 5 g meat, 10 g rice, 25 g veggies…; press and hold to keep going), or type an exact weight. Your amount is kept exactly and locked 🔒, and the rest of the meal re-balances; tap 🔒 to hand it back to the app.
-- **🍷 Drinks when you eat out** – on a restaurant meal (🍴 Ate out), open *Drinks with the meal* and tap a glass of red, white, rosé or bubbly, a beer, or a cocktail (margarita, old fashioned, martini, espresso martini, mojito, gin & tonic, vodka soda, Moscow mule, Aperol spritz, a spirit neat); tap again for another, − to take one back. Their calories join the meal; only mixer sugar counts as carbs.
-- **☕ Coffee shop** – latte, cappuccino, iced latte, cortado, flat white, oat milk latte, mocha, chai latte, americano, espresso, drip coffee and a chocolate chip cookie: quick chips on the afternoon snack, a Coffee shop group in “Add a snack” and in custom meals. Drinks are 12 oz with 2% milk (flat white whole, oat latte oat), no syrup; adjust the amount with − / + (1½ cups ≈ a 16 oz).
-- **🍎 Afternoon snack (~3 PM, optional)** – **＋ Add an afternoon snack** between lunch and dinner, then tap what you had: apple, banana, orange, grapes, strawberries, blueberries, unsalted mixed nuts or cashews, almonds, Greek yogurt, a shake or a bar. Tap again for another one; fruit is counted by the piece (− / + in ½-fruit steps), berries and grapes by the cup, nuts by the handful. Its calories come out of lunch and dinner (mostly from the rice/potato), so the day still adds up. **✓ Log snack** adds it to today's eaten calories and macros (so does picking one under Snacks & extras). Save favorites as **Snack combos**; **✕ No snack** removes it.
-- **⚡ Bars & shakes** – Clif Bar, Clif Builders, Barebells, Quest, RXBAR, Kirkland protein bar, Premier Protein and Fairlife Core Power (label values for a common flavor). **⚡ Quick swap** on a meal replaces it with one (slide for ½ or 2 bars); **➕ Snack** under Snacks & extras logs one. Any other bar can be scanned.
-- **Combos are per meal**: Breakfast combos, Lunch combos, Dinner combos (lunch and dinner also offer each other's). With your phones linked, the other person's combos appear in your lists too; picking one copies it into your meal.
-- **Any day** (top of Today) – **‹ ›** or tap the date to move between days. **Past days** show what you logged: calories, protein, fat and carbs against that day's targets, each meal with its foods and time, snacks, calories burned, the weigh-in and coins earned. **Future days** (up to two weeks ahead) show the planned meals at your base targets; swap foods, move − / +, customize or plan a meal out, and it's saved for that day and becomes Today's plan when the day comes.
-- **🍴 Ate out** (on any meal) – log a restaurant meal: name the place, then either **estimate it** (pick the kind of dish, portion size and how much you ate; estimates lean generous because restaurant food carries hidden oil and butter) or enter the **calories/macros the menu lists** (only calories? macros are filled in with a typical restaurant split). **Back to plan** undoes it.
-- **Scan** – scan a barcode with your phone camera (or type it) to see macros from [Open Food Facts](https://world.openfoodfacts.org) and how well it fits your plan. Pick how much (servings or grams) and add it to **breakfast, lunch, dinner or a snack**; a planned meal keeps its foods and gains the scanned item, which you can then resize or pick again in any meal's “+ Add a food” list. Or add it to your grocery list.
+## Why it's useful for a family with dogs
 
-## How targets are set
+- **No more "did you feed them?"** One tap logs a feeding or a walk, and the other phone sees it right away. The 🐕 tab turns red while the dogs still need their meal and green once they've eaten.
+- **The dogs' records in one place.** Vaccines with due dates, medications and refills, food and supplements, the vet and microchip, and the certificates themselves as PDFs or photos. Either of you can update them, and both see overdue vaccines and refills due soon.
+- **Happier dogs, made into a game.** "Golden days" (two outings, or an outing and a treat), streaks, the happiest month, and a monthly 🪙 gold coin for whoever did the most feedings and walks.
+- **Safe walks.** Hour-by-hour weather, air quality and an estimated pavement temperature, so you walk when the asphalt won't burn paws.
+- **One family calendar.** Shared events, repeating ones (paychecks, the gardener, the groomer), your iPhone calendars linked in, and the whole thing shown in Apple or Google Calendar.
+- **Time for each other.** Daily post-it notes, "feeling like…" plans the other answers with 🙌 / 🤔 / ⏰, and the shows you watch together.
+- **Each person's own health goals.** Meal plans with exact portions, a weekly check-in, a lifting program and workout tracking, kept per person: you can view each other's day, but only edit your own.
+- **Looking for another dog?** A shared board of adoption ads you've each found, with reactions and a status.
+- **Private by design.** Your data lives on your phones and in your own small cloud store, readable only with your household phrase. Nothing personal is in this code repository.
+
+## The six tabs
+
+| Tab | What it's for |
+|---|---|
+| **🏠 Home** | Today at a glance: the dog buttons and how close today is to a golden day, today's calendar, your day in time order (best run, ride and dog-walk windows with temperatures; after 9 PM it plans tomorrow), your next meal and the weekly check-in, your partner's latest note and plan, and today's training. |
+| **🐕 Dogs** | Pavement temperature and the best walk windows, the Feed / Walk / Dog park / Treat buttons, golden days, dog profiles and documents, the dog-duty scoreboard, and the adoption board. |
+| **🍽 Food** | Your meal plan (with the morning weigh-in at the top), plus **Weight**, **Groceries** and **Scan** pages from the bar at the top. |
+| **🏋︎ Train** | Your training card (WHOOP / Garmin calories, workout fuel), the best run and ride windows, class schedules, and the lifting log. |
+| **📅 Calendar** | The shared family calendar, linked phone calendars, and the subscription link for Apple / Google Calendar. |
+| **💞 Us** | 💌 Notes, ✨ Feeling like (plans), 📺 Watching, and 🔐 your household code. |
+
+## How a family uses it: the secret phrase
+
+Each phone keeps its owner's data, and the two phones share through a **household code**. Think of it as a shared password: whoever has it can see your shared data, so keep it between the two of you.
+
+**Setting up (once, about 5 minutes):**
+
+1. **Open the app on both phones** in Safari (or the browser you'll use) and tap **Share › Add to Home Screen**. Safari, Chrome and the Home Screen icon each keep their own data, so always open it the same way.
+2. **Pick whose phone it is.** On first launch each of you taps your own name. You can only edit your own profile on your phone; your partner's is view-only.
+3. **Choose a secret phrase together**, out loud or in person: something only the two of you would know and nobody could guess, ideally 4 or more unrelated words (for example *"purple kites over the bay"*). Avoid your names, your dogs' names, your street or birthdays.
+4. **Type the same phrase on both phones.** Tap your partner's name at the top, then **Link phones**, type the phrase into the box and tap **Link**. Spaces, dashes and capitals don't matter: "Purple Kites" and "purple-kites" are the same.
+   *Or* skip the phrase: one phone taps **Send** to text its code, and the other enters it or taps the link.
+5. **Done.** Within a few minutes each phone shows the other's feedings, walks, notes, events and dog records.
+
+**Changing the code (now and then, or if it may have been seen):** go to **Us › 🔐 Our household code › 🔄 Change our code**. Either of you can do it.
+
+- Everything moves to a new random code, and the old one is emptied, so an old screenshot or link shows nothing.
+- The other phone pauses sharing and pops up **New household code**.
+- Tap **Send to…** to send the new code privately (Messages or AirDrop). Your partner taps the link or pastes the code, and you're both back in sync.
+- Re-add the calendar subscription afterwards, because its link contains the code.
+
+**Good habits:**
+- Never post the phrase or code in a group chat or on social media, or put it in a screenshot.
+- Lock both phones with Face ID or a passcode.
+- Don't store passwords, ID or bank numbers in notes or documents.
+
+## Privacy and security
+
+- **Where data lives.** Each phone stores its owner's data in the browser. A small Cloudflare worker (the *connector*) holds a copy of each person's shared data, filed under your household code, so the other phone can read it.
+- **What the connector requires.** It answers only to the right code and only over HTTPS. Service keys (Claude, WHOOP, Strava) are kept as Cloudflare secrets, never in the app or this repository. WHOOP and Strava sign-ins stay on the phone that made them.
+- **What's in the repository.** It holds only the app's code. Anyone who downloads or opens the app gets their own empty copy with its own new code. `.gitignore` blocks exports, documents, photos and connector secret files from ever being committed.
+
+---
+
+# Detailed specifications
+
+## 🏠 Home
+
+- Greeting and date, then today's calendar events (or the next one).
+- **Dogs:** compact Feed / Walk / Dog park / Treats & toys buttons (tap your name), overdue vaccines or refills, a new dog on the adoption board, and how close today is to a ⭐ golden day.
+- **Your day:** the best run, ride and dog-walk windows in time order with the temperature range. A 🐾 marks a run or ride that overlaps a good walk window. Everything ends by 9 PM, and from 9 PM on, Home, Train and Dogs plan tomorrow.
+- **Food:** the next meal, and the weekly check-in reminder (red when overdue).
+- **Us:** your partner's latest note and next plan. **Train:** today's training.
+- Home works even before a diet profile is set up.
+
+## 🐕 Dogs
+
+- **Pavement, hour by hour** (top): the best morning and evening walk windows with an estimated **pavement temperature**. Sun heats asphalt far above the air: about 125°F at 77°F in full sun, and above about 125°F it can burn paws. Weather and air quality come live from Open-Meteo (free, no key). The location is set in `js/brief.js`.
+- **Feed the dogs:** an upright oval split in two, with the top half for one partner (blue) and the bottom for the other (magenta).
+  - Each half is pale yellow until something is logged, then green, and the button becomes a circle.
+  - Breakfast runs 4 AM–4 PM and dinner 4 PM–4 AM (Pacific).
+  - Only the phone that logged a feeding can undo it.
+- **🐾 Walk** and **🌳 Dog park:** the same split ovals. Tap again for another outing, and *Undo my last* takes yours back. They reset at 6 AM.
+- **🍪 Treats & toys:** Treat on top (once a day, anyone can tap), 🧸 New toy below (name optional, counted per month).
+- **Tab colour, visible from anywhere:**
+  - **red** = still needs this meal
+  - **green** = fed
+  - **bright green** = fed and walked
+  - **gold** = a ⭐ golden day
+- **⭐ Golden days:** a day with two outings (walks or the dog park), or one outing plus a treat. The card shows:
+  - this month as a calendar, with stars on golden days
+  - golden days and days out for the month and year
+  - the current streak
+  - a bar for each month, with the happiest month crowned 🏆
+- **🐶 Our dogs:** a profile per dog, shared by both phones. Edits to different fields from each phone both survive.
+  - Breed, birthday, weight.
+  - Food (brand, type, amount) and supplements.
+  - Medications and prescriptions: dose, schedule, prescribing vet, refill date.
+  - Vaccines, given and next due, marked Current / Due soon / Overdue.
+  - Vet, microchip, notes.
+  - **Documents:** vaccine certificates and vet records as PDFs or photos (up to 10 MB), opened with one tap on either phone.
+  - Overdue vaccines and refills due within a week show here and on Home.
+- **🏆 Dog duty:** who did the feedings, walks and park trips, for Today, this Month or this Year, with the leader crowned 👑. Each month's leader wins a **🪙 gold coin** (ties get none), and the year's coins and each month's winner are listed.
+- **🏡 Dogs up for adoption** (bottom): a shared board of adoption ads.
+  - **Adding a dog:** tap **＋ Add a link**, then **📋 Paste** the ad's link (Facebook: Share › Copy link; tracking parameters are removed). Add the name, age, sex, size, breed, where, notes and a screenshot of the ad, which is shrunk to save space.
+  - **Each card shows:** the photo, **Open ad ↗**, both partners' reactions (❤️ 👍 🤔 👎) and a status (Just found → Interested → Contacted → Applied → Meet & greet). *Pass*, *Adopted by others* or *🎉 Ours!* moves the card to **Past**.
+  - A dog the other partner adds is marked **New** and mentioned on Home.
+  - Facebook doesn't let other sites show its posts, so the card keeps what you type plus the screenshot.
+
+## 🍽 Food
+
+**Meals.** Daily calories and protein / fat / carb targets, split into breakfast, lunch and dinner with exact portions (grams plus oz / cups / slices / scoops).
+- **Defaults:**
+  - Breakfast: eggs + sourdough + avocado, or oatmeal + whey.
+  - Lunch and dinner: chicken, beef, salmon, cod, trout or canned tuna with rice and veggies.
+- **Swaps:** every item has a swap menu (e.g. almond butter for peanut butter, butter or avocado for fat, steak / chicken thigh / breast / ground beef / fish, sweet potato for rice), and swaps are remembered.
+- **Portions − / +:** each food has a grams box with − and + (one tap = the usual step; hold to keep going) or an exact weight. Your amount is locked 🔒 and the rest of the meal re-balances.
+- **Cooked or raw:**
+  - Each item has its own **cooked | raw** switch (oats: **dry | cooked**); macros are the same either way.
+  - Meat, fish, eggs, rice and veggies are weighed cooked.
+  - The grocery list converts back to raw amounts.
+- **✎ Customize:** turns a meal into your own list. **⭐ Saved combos** store a meal's foods by name (per meal; the partner's combos appear too). **⚖️ Fit to target** scales a combo to the meal.
+- **Snacks and extras:**
+  - **🍎 Afternoon snack:** fruit, nuts, yogurt, shakes and bars. Its calories come out of lunch and dinner, so the day still adds up.
+  - **☕ Coffee shop:** lattes, cappuccinos, cortados, flat whites, mochas, chai and a chocolate chip cookie.
+  - **⚡ Bars & shakes:** common protein bars and shakes.
+- **🍴 Ate out:** estimate a restaurant meal (dish, portion, how much you ate; estimates lean generous) or enter the menu's calories. **🍷 Drinks with the meal** adds wine, beer or cocktails.
+- **Logging:**
+  - **✓ I ate this** logs a meal and locks it until *Unlog to edit*.
+  - The bar at the top shows calories and macros left today. It's hidden on Dogs, Us and Calendar.
+  - **Any day:** ‹ › moves through past days (what was logged) and up to two weeks ahead (planned meals you can edit).
+- **Daily deficit game:** burned − eaten.
+  - 🪙 10 for each deficit day, +5 if it's sustainable, and 🍪 for hitting protein.
+  - Streak bonuses at 3, 7, 14 and 30 days.
+  - Very large deficits earn no bonus.
+- **Weekly check-in:** every 7 days from the diet's start day. A missed one waits, and Home and the Food tab badge flag it.
+  - **The week in numbers:** weight change (7-day averages), average intake against target, days logged, and your real maintenance (from intake and the weight trend, 3,500 kcal ≈ 1 lb).
+  - **Suggested change:** sized to your planned pace (±50–250 kcal, carbs first, protein kept, never below the floor).
+    - It adds food if you're losing more than 1% of body weight a week.
+    - It suggests no cut if the week was under-logged or over target.
+    - After 8–12 weeks of cutting (sooner if you're worn down), it suggests a 2-week diet break at maintenance.
+  - **Exports:**
+    - **⇩ Week as CSV** shares a one-row-per-day file.
+    - **📋 Copy for Claude** copies a ready-to-paste summary.
+    - **🔔 Weekly reminder** adds a repeating calendar event on check-in day.
+- **8-week program:** a strip shows the phase (e.g. *cut · week 3 of 8*). At the end, a review of weight, adherence, protein, workouts and strength recommends what's next: a diet break, keep cutting, maintenance or a lean gain.
+
+**Weight.**
+- A graph of weigh-ins, the 7-day average, your goal and the planned path, with tap-to-read values.
+- **Stats:** meals on target, deficit and protein days, and workouts over 7/30/90/365 days.
+- **Export data:** a zip of CSVs (meals, days, activities, lifting sessions and sets, weigh-ins, check-ins).
+- **Backup / Restore:** everything as one file.
+- **📤 Share…:** the day's meals, your combos or your progress, as text, a poster image or CSV.
+
+**Groceries.** A weekly list built from the plan, grouped by store, with checkboxes.
+
+**Scan.** Scan a barcode (or type it) for macros from [Open Food Facts](https://world.openfoodfacts.org), see how it fits, and add it to a meal, a snack or the grocery list.
+
+## 🏋︎ Train
+
+- **Training card:**
+  - Add activities by sport (running, cycling, climbing, lifting, swimming, hiking, HIIT, yoga…) with intensity and minutes.
+  - Calories come from your own WHOOP / Garmin history for that sport once there are 3+ sessions, otherwise from standard MET values.
+  - Synced workouts replace matching manual ones.
+  - Training calories are added back as carbs.
+  - Sessions of 45+ minutes get an **intra-workout carb** target (banana, sports drink, gel, dates).
+- **Best windows:** a 4-mile run (best hour) and a 25–30 mile ride (best 2½-hour daylight window). Scored on feels-like temperature, rain, wind, air quality, UV and daylight, with an hour-by-hour strip.
+- **Classes:** links to your gym's live class schedule, plus your regular classes (days and time) shown on those days.
+- **Lifting:**
+  - **Program:**
+    - Full body, 3 days a week (A heavy · B moderate · C light), from a 54-exercise library across 10 muscle groups.
+    - Sets × reps, reps in reserve and rest are set for you, and the next weight is suggested from your last session.
+    - Weeks 1–5 build, week 6 is a deload, then a new block starts.
+    - Bodyweight moves progress by reps, then by harder variations.
+  - **Session tools:**
+    - **⦿ Plate calculator** shows the plates per side.
+    - **↑ / ↓ / Later** reorder the session, and **📌 Keep this order** saves it.
+    - **＋ Add exercise after** adds a movement.
+  - **🎤 Command bar** (type or speak):
+    - "squats 3 sets of 5 at 185", "bench 135 for 8, 8, 7", "one more set of 8", "check all my sets for calves", "move rows after squats", "weigh in 160.8".
+    - Anything it can't parse can go to **Claude** through the connector (optional).
+    - Every command has **Undo**.
+- **Devices:**
+  - **WHOOP** and **Garmin** (through Strava) sync automatically through the connector.
+  - **WHOOP export** and **Garmin CSV** import with no setup.
+
+## 📅 Calendar
+
+- **Shared events:** either phone can add, edit or delete. Each event has a title, day, time or all-day, place, who it's for (both or either of you), a reminder and notes.
+- **Repeats:**
+  - Every day, week or 2 weeks (paychecks).
+  - Monthly on a date, or on a weekday (e.g. the 2nd Tuesday).
+  - The last day of the month, or twice a month (e.g. the 1st and 15th).
+  - Quarterly or yearly, or every N days / weeks / months / years.
+  - An optional end date, and **Skip** removes a single date.
+- **Views:** a month view with coloured dots, the chosen day, and what's coming up. New events from your partner badge the tab.
+- **Per event:** **Apple Calendar** (a calendar file with your reminder) and **Google Calendar** buttons.
+- **📲 Bring in a calendar:**
+  - Link an iPhone iCloud calendar (Calendar app → Calendars → ⓘ → Public Calendar → Share Link) or a Google calendar's secret iCal address. Its events show read-only, refreshed every half hour.
+  - Or import an .ics file once.
+- **Show this calendar in Apple or Google Calendar:** subscribe once per phone to see all shared events there.
+
+## 💞 Us
+
+- **💌 Notes:** a post-it board for each other.
+  - It starts fresh every morning at 5 AM, and earlier notes move to *Earlier notes*. Unread notes stay until seen.
+  - Emoji, colours, ↩ replies, ❤️ and a daily streak.
+  - New notes badge the tab.
+- **✨ Feeling like:** suggest a plan (movie, show, brunch, dinner, coffee, a walk, a workout…) with where, when, time and a note.
+  - The other answers 🙌 I'm in, 🤔 Maybe or ⏰ Another time.
+  - Mark it done or cancel it.
+  - Places get a map link.
+- **📺 Watching:** shows and movies you watch together on any service.
+  - **📺 We watched tonight** counts each night, once even if you both tap.
+  - Each of you rates ★1–5, and you can mark a title Finished or Dropped.
+  - Views by month, plus a year recap (nights, titles, your favourite, top services).
+- **🔐 Our household code:** see it (masked until *Show*), when it was last changed, **🔄 Change our code**, and **Send to…**. See *How a family uses it* above.
+
+## Profiles and sharing
+
+- **Profiles.** There are two profiles (names set in `js/storage.js`). First launch asks whose phone it is. Each person's data (profile, meals, weigh-ins, lifting, coins) is kept separately and is editable only on its owner's phone. The switch at the top shows the other person's day, view-only.
+- **Shared things.** Dog feedings, walks, treats and profiles, the calendar, notes, plans, shows and the adoption board are combined from both phones. Each phone writes only its own copy, so nothing is overwritten.
+- **Sync.** A phone uploads a few seconds after a change and checks for the other phone's updates every few minutes and when opened.
+
+## How food targets are set
 
 - Maintenance: Mifflin-St Jeor BMR × activity factor.
 - Deficit: your chosen pace (0.5–1% of body weight per week, max 2 lb/week), never more than 25% below maintenance, with a 1200/1500 kcal floor.
 - Protein ≈ 1 g per lb of goal weight; fat ≈ 27% of calories; carbs fill the rest.
+- Training days (when Profile → Activity is "Count my workouts"): base = BMR × 1.3, plus 75% of each workout's net calories, added as carbs. Intra-workout carbs: <45 min none; ~1 h small amounts; 1–2.5 h 30–60 g/h; >2.5 h up to 90 g/h.
 
-- Training days (when Profile → Activity is "Count my workouts"): base = BMR × 1.3 for everyday life, plus 75% of each workout's net calories, all added as carbs. Intra-workout carbs: <45 min none; ~1 h small amounts; 1–2.5 h 30–60 g/h; >2.5 h up to 90 g/h.
-
-### Sources
+### Nutrition sources
 
 | Setting | Paper |
 |---|---|
@@ -82,13 +253,11 @@ A couples app for two people and their dogs: shared dog care, notes and plans, a
 | Rest 2–3 min on compounds | Schoenfeld et al. 2016, *JSCR* 30:1805 |
 | Deload week | Bell et al. 2023, *Sports Med Open* 9:87 — [doi](https://doi.org/10.1186/s40798-023-00633-0) |
 
-## WHOOP & Garmin
+This is general guidance, not medical or veterinary advice. Check with a doctor, dietitian or vet if you have health conditions.
 
-- **WHOOP export import** works with no setup: WHOOP app → More → App Settings → Data Export → import `workouts.csv` under Devices.
-- **Garmin CSV import** works with no setup: Garmin Connect → Activities → Export CSV → OurPawMili → Devices → Import.
-- **Automatic sync** for WHOOP and Garmin (through Strava, since Garmin's own API is limited to approved businesses) needs a small free connector — see [`server/README.md`](server/README.md).
+---
 
-This is general guidance, not medical advice — check with a doctor or dietitian if you have health conditions.
+# For developers
 
 ## Run it
 
@@ -96,13 +265,37 @@ No build step. Serve the folder over HTTP and open it:
 
 ```sh
 npm start          # python3 -m http.server 8080 → http://localhost:8080
-npm test           # unit tests for the planning math
+npm test           # unit tests
 ```
 
-The camera scanner needs **HTTPS** on a phone. The easiest way is GitHub Pages: repo **Settings → Pages → Deploy from branch** (root folder), then open the site on your phone and use **Add to Home Screen**.
+The camera scanner needs **HTTPS** on a phone. The easiest host is GitHub Pages: repo **Settings → Pages → Deploy from branch** (root folder), then open the site on the phone and **Add to Home Screen**.
 
-All data stays in your browser's local storage.
+## The connector
+
+Sharing between phones, dog documents and photos, the calendar feed, linked iCloud calendars, WHOOP / Strava sign-in and *Ask Claude* go through a small Cloudflare Worker in [`server/`](server/README.md). App changes go live through GitHub Pages; connector changes need a deploy from a computer:
+
+```sh
+cd server
+npm install        # first time on a fresh copy
+npx wrangler deploy
+```
+
+Secrets are added with `npx wrangler secret put …` and never committed.
 
 ## Releasing an update
 
 Run `node scripts/bump-version.mjs` before committing. It gives every app file a new `?v=` address (through the import map in `index.html`) and renames the offline cache, so phones never mix old and new files after an update.
+
+## Code map
+
+| File | What it does |
+|---|---|
+| `js/app.js` | Tabs, Home, Food, check-ins, profiles, sharing settings |
+| `js/plan.js`, `js/foods.js` | Targets, meal planning, foods, check-in math |
+| `js/brief.js`, `js/briefTab.js` | Weather, walk / run / ride windows, dog buttons, golden days, scoreboard |
+| `js/dogs.js`, `js/adopt.js` | Dog profiles and documents; adoption board |
+| `js/calendar.js`, `js/calTab.js` | Calendar rules, .ics import / export, Calendar tab |
+| `js/notes.js`, `js/plans.js`, `js/shows.js` | Us tab: notes, plans, watching |
+| `js/lifting.js`, `js/lift.js` | Lifting program and log |
+| `js/sync.js`, `js/household.js`, `js/storage.js` | Profiles, household sync, changing the household code |
+| `server/worker.js` | The connector |

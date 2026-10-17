@@ -14,7 +14,7 @@ so the app gets Garmin data two other ways:
 2. **CSV import (no setup):** Garmin Connect website → *Activities → All
    Activities → Export CSV*, then in OurPawMili tap *Devices → Import Garmin CSV*.
 
-## Household sharing (Sandman ↔ Amani)
+## Household sharing (two phones)
 
 The same worker keeps a copy of each person's app data so the other phone can view it.
 Data is stored in Cloudflare KV under your private household code; anyone without the
@@ -43,8 +43,8 @@ code can't read it. Treat the code like a password.
    ```
 3. **Household sharing** is on by default (the app has this worker's URL built in, in
    `js/sync.js`). Each phone starts with its own private code. To link the phones once:
-   on Sandman's phone tap **Amani** at the top, and enter the code shown in the same box on
-   Amani's phone (or tap **Send** to text yours to her and she enters it).
+   on one phone tap the other person's name at the top, and enter the code shown in the same
+   box on the other phone (or tap **Send** to text yours over and enter it there).
    Or both phones type the same private phrase (12+ letters/numbers, e.g. “sunset tacos 4821”)
    into that box; each phone switches to exactly what it was given. Chrome, Safari and a
    home-screen icon keep separate app data, so link the one you actually use on each phone.
