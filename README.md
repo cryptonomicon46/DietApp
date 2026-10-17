@@ -18,7 +18,7 @@
 
 | Tab | What it's for |
 |---|---|
-| **🏠 Home** | Today at a glance: the dog buttons and how close today is to a golden day, today's calendar, your day in time order (best run, ride and dog-walk windows with temperatures; after 9 PM it plans tomorrow), your next meal and the weekly check-in, your partner's latest note and plan, and today's training. |
+| **🏠 Home** | Today at a glance: the dog buttons and how close today is to a golden day, today's calendar, your day in time order (best run, ride and dog-walk windows with temperatures; after 9 PM it plans tomorrow), your gyms' yoga and fitness class schedules, your next meal and the weekly check-in, your partner's latest note and plan, and today's training. |
 | **🐕 Dogs** | Pavement temperature and the best walk windows, the Feed / Walk / Dog park / Treat buttons, golden days, dog profiles and documents, the dog-duty scoreboard, and the adoption board. |
 | **🍽 Food** | Your meal plan (with the morning weigh-in at the top), plus **Weight**, **Groceries** and **Scan** pages from the bar at the top. |
 | **🏋︎ Train** | Your training card (WHOOP / Garmin calories, workout fuel), the best run and ride windows, class schedules, and the lifting log. |
@@ -65,6 +65,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 - Greeting and date, then today's calendar events (or the next one).
 - **Dogs:** compact Feed / Walk / Dog park / Treats & toys buttons (tap your name), overdue vaccines or refills, a new dog on the adoption board, and how close today is to a ⭐ golden day.
 - **Your day:** the best run, ride and dog-walk windows in time order with the temperature range. A 🐾 marks a run or ride that overlaps a good walk window. Everything ends by 9 PM, and from 9 PM on, Home, Train and Dogs plan tomorrow.
+- **🧗 Gym classes:** each gym's live **🧘 Yoga** and **🏋️ Fitness** schedule one tap away, plus map links and the classes you take today (added under Train). The gyms are set in `js/brief.js`.
 - **Food:** the next meal, and the weekly check-in reminder (red when overdue).
 - **Us:** your partner's latest note and next plan. **Train:** today's training.
 - Home works even before a diet profile is set up.
@@ -161,7 +162,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
   - Training calories are added back as carbs.
   - Sessions of 45+ minutes get an **intra-workout carb** target (banana, sports drink, gel, dates).
 - **Best windows:** a 4-mile run (best hour) and a 25–30 mile ride (best 2½-hour daylight window). Scored on feels-like temperature, rain, wind, air quality, UV and daylight, with an hour-by-hour strip.
-- **Classes:** links to your gym's live class schedule, plus your regular classes (days and time) shown on those days.
+- **Classes:** links to each gym's live yoga and fitness schedule, plus your regular classes (days and time), shown here and on Home on those days.
 - **Lifting:**
   - **Program:**
     - Full body, 3 days a week (A heavy · B moderate · C light), from a 54-exercise library across 10 muscle groups.

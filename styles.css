@@ -860,3 +860,6 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .hh-card .share-code { overflow-wrap: anywhere; }
 .hh-dialog { padding: 0; border: 0; background: transparent; max-width: min(420px, calc(100vw - 32px)); }
 .hh-dialog .hh-card { margin: 0; }
+.gym-links { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: flex-end; }
+.gym-links a { white-space: nowrap; }
+.home-gym .gym + .gym { margin-top: 8px; }

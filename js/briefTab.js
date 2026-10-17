@@ -3,7 +3,7 @@ import { store, global, PROFILES, ownerId, profileStore } from './storage.js';
 import { pushNow } from './sync.js';
 import {
   PLACE, weatherUrls, parseWeather, scoreHour, bestWindow, dogWalks, hottestPavement, asphaltF, pawRisk,
-  GYMS, CLASS_TYPES, WEEKDAYS, classesOn, planRange, feedingSlot, whoFed, walkDay, choreTimes, choreEntries, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths, treatOn, isGolden,
+  GYMS, gymSchedule, gymMap, CLASS_TYPES, WEEKDAYS, classesOn, planRange, feedingSlot, whoFed, walkDay, choreTimes, choreEntries, choreTally, monthWinner, coinsForYear, dogDays, happyStats, happyMonths, treatOn, isGolden,
 } from './brief.js';
 import { renderDogs, initDogs, allDogs, dogAlerts, retryUploads } from './dogs.js';
 import { renderAdopt, initAdopt, retryAdoptUploads, unseenAdopt } from './adopt.js';
@@ -122,6 +122,23 @@ function dayPlan(hourly, from, end, today, late = false) {
     <p class="small muted">Run and ride are alternatives — pick whichever fits the day.${items.some((i) => i.label.endsWith('🐾')) ? ' 🐾 = a good time to walk the dogs too.' : ''}</p></div>`;
 }
 
+// Live schedule links: yoga and fitness classes at each gym, and the map.
+const gymLinks = (key) => `<span class="small gym-links"><a href="${gymSchedule(key, 'yoga')}" target="_blank" rel="noopener">🧘 Yoga ↗</a> <a href="${gymSchedule(key, 'fitness')}" target="_blank" rel="noopener">🏋️ Fitness ↗</a> <a href="${gymMap(key)}" target="_blank" rel="noopener">map</a></span>`;
+// Home: both gyms' class schedules, and the classes you take today (added on Train).
+export function homeGym(today = new Date()) {
+  const todays = classesOn(store.get('gymClasses', []), today);
+  return `<div class="card home-gym">
+    <div class="row between" style="margin-top:0"><div class="eyebrow">🧗 Movement classes · ${WEEKDAYS[today.getDay()]}</div><button type="button" class="linkish small" data-goto="lift">My classes ›</button></div>
+    ${Object.keys(GYMS).map((key) => {
+      const mine = todays.filter((c) => c.gym === key);
+      return `<div class="gym">
+        <div class="row between" style="margin-top:0"><b>${GYMS[key].short}</b>${gymLinks(key)}</div>
+        ${mine.length ? `<ul class="list">${mine.map((c) => `<li><span>${esc(CLASS_TYPES[c.type] || '')} ${esc(c.name)}</span><span>${esc(c.time12 || c.time)}</span></li>`).join('')}</ul>` : ''}
+      </div>`;
+    }).join('')}
+    <p class="small muted">Opens Movement's live schedule for today's yoga and fitness classes. Going regularly? Add the class under Train › Movement and it shows here on those days.</p>
+  </div>`;
+}
 function classesCard(today) {
   const classes = store.get('gymClasses', []);
   const todays = classesOn(classes, today);
@@ -129,7 +146,7 @@ function classesCard(today) {
     const g = GYMS[key];
     const list = todays.filter((c) => c.gym === key);
     return `<div class="gym">
-      <div class="row between" style="margin-top:0"><b>${g.short}</b><span class="small"><a href="${g.url}" target="_blank" rel="noopener">Live schedule ↗</a> · <a href="https://maps.apple.com/?q=${encodeURIComponent(g.name + ', ' + g.address)}" target="_blank" rel="noopener">map</a></span></div>
+      <div class="row between" style="margin-top:0"><b>${g.short}</b>${gymLinks(key)}</div>
       ${list.length ? `<ul class="list">${list.map((c) => `<li><span>${esc(CLASS_TYPES[c.type] || '')} ${esc(c.name)}</span><span>${esc(c.time12 || c.time)} <button class="x" data-delclass="${esc(c.id)}" aria-label="Remove ${esc(c.name)}">✕</button></span></li>`).join('')}</ul>`
         : '<p class="small muted">None of your classes here today.</p>'}
     </div>`;

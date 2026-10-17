@@ -140,9 +140,15 @@ export function weatherUrls(place = PLACE) {
 
 // Movement gyms: your usual classes (you add them once) + links to the live schedule.
 export const GYMS = {
-  santaClara: { name: 'Movement Santa Clara', short: 'Santa Clara', url: 'https://movementgyms.com/santa-clara/calendar/#activity=fitness&location=santa-clara', address: '801 Martin Ave, Santa Clara' },
-  sunnyvale: { name: 'Movement Sunnyvale', short: 'Sunnyvale', url: 'https://movementgyms.com/sunnyvale/calendar/#activity=fitness&location=sunnyvale', address: '815 Stewart Dr, Sunnyvale' },
+  santaClara: { name: 'Movement Santa Clara', short: 'Santa Clara', slug: 'santa-clara', address: '801 Martin Ave, Santa Clara' },
+  sunnyvale: { name: 'Movement Sunnyvale', short: 'Sunnyvale', slug: 'sunnyvale', address: '815 Stewart Dr, Sunnyvale' },
 };
+// The gym's live calendar, filtered to yoga or fitness classes (or everything).
+export const gymSchedule = (key, activity) => {
+  const g = GYMS[key];
+  return `https://movementgyms.com/${g.slug}/calendar/#${activity ? `activity=${activity}&` : ''}location=${g.slug}`;
+};
+export const gymMap = (key) => `https://maps.apple.com/?q=${encodeURIComponent(`${GYMS[key].name}, ${GYMS[key].address}`)}`;
 export const CLASS_TYPES = { yoga: '🧘 Yoga', fitness: '🏋️ Fitness', climbing: '🧗 Climbing' };
 export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 

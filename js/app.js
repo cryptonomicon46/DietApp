@@ -14,7 +14,7 @@ import { RESEARCH } from './research.js';
 import { initNotes, renderNotes, updateNotesBadge, openUs, homeUs } from './notes.js';
 import { syncLine } from './plans.js';
 import { initCal, renderCal, homeCal, updateCalBadge } from './calTab.js';
-import { initBrief, renderBrief, renderFeed, homeDogs } from './briefTab.js';
+import { initBrief, renderBrief, renderFeed, homeDogs, homeGym } from './briefTab.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
@@ -2394,6 +2394,7 @@ function renderHome() {
   $('#homeCal').innerHTML = homeCal();
   updateFoodBadge();
   $('#homeUs').innerHTML = homeUs();
+  $('#homeGym').innerHTML = homeGym();
   renderHousehold();
   if (!state.profile) { $('#homeFood').innerHTML = ''; $('#homeTrain').innerHTML = ''; return; }
   // Food: the next meal not yet logged, and how many are done.
