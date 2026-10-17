@@ -19,7 +19,8 @@ import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from 
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
 import { sync, newHouseholdCode, DEFAULT_CONNECTOR } from './sync.js';
-import { buildTables, toCsv, summary } from './analytics.js';
+import { buildTables, toCsv, summary, weekRows } from './analytics.js';
+import { icsCalendar } from './calendar.js';
 import { makeZip } from './zip.js';
 import { drawPoster, planCsvRows, drawReportPoster } from './poster.js';
 import { RANGES, PHASE_NAMES, buildReport, reportText, reportCsvRows, weeklyRows, rangeTitle, combosText, combosCsvRows } from './share.js';
@@ -1439,6 +1440,8 @@ function renderCheckin() {
         ${stat(`${r.logged}/7`, 'days logged')}
         ${stat(r.tdee ? `~${r.tdee}` : '—', 'your real maintenance')}
       </div>
+      <div class="row wrap ck-tools"><button type="button" class="ghost small" id="ckCsv">⇩ Week as CSV</button><button type="button" class="ghost small" id="ckClaude">📋 Copy for Claude</button><button type="button" class="ghost small" id="ckRemind">🔔 Weekly reminder</button></div>
+      <p class="small muted" id="ckToolsNote"></p>
       ${phase === 'cut' ? `<p class="small muted">Week ${win.week} of a planned ${plannedWeeks}-week cut. Cuts work best at 0.5–1% of body weight a week for about 8–12 weeks, followed by 1–2 weeks at maintenance before the next block.</p>` : ''}
       <div class="chips" role="group" aria-label="How the week felt">
         ${Object.entries(FEELINGS).map(([k, v]) => `<button type="button" class="chip ${draft.feeling === k ? 'on' : ''}" data-feel="${k}">${v}</button>`).join('')}
@@ -1478,6 +1481,10 @@ function renderCheckin() {
   $('#checkinNote').oninput = (e) => { draft.note = e.target.value; };
   el.querySelectorAll('input[name=checkinChoice]').forEach((x) => x.onchange = () => { draft.choice = x.value; renderCheckin(); });
   el.querySelectorAll('[data-step]').forEach((b) => b.onclick = () => { draft.custom[b.dataset.step] += +b.dataset.by; renderCheckin(); });
+  const toolNote = (msg) => { const n = $('#ckToolsNote'); if (n) n.textContent = msg; };
+  $('#ckCsv').onclick = async () => toolNote(await exportWeek());
+  $('#ckClaude').onclick = async () => toolNote(await copyWeekForClaude());
+  $('#ckRemind').onclick = async () => toolNote(`${await checkinReminder()} Tap Add to put a repeating reminder in your calendar.`);
   $('#snoozeCheckin').onclick = () => { store.set('checkinSnooze', isoDate()); draft = null; renderCheckin(); };
   $('#saveCheckin').onclick = () => {
     const entry = { date: isoDate(), week: win.week, feeling: draft.feeling, note: draft.note.trim(), change: choice, delta, kcal: deltaKcal(delta),
@@ -1492,6 +1499,65 @@ function renderCheckin() {
     renderAll();
     $('#checkin').innerHTML = `<div class="banner">Saved${name ? `, ${esc(name)}` : ''}. ${deltaKcal(delta) || delta.p ? 'Your new targets start now.' : 'Same targets — keep it up.'} Next check-in ${fmtD(win.next || today)}.</div>`;
   };
+}
+
+// ---- the week, for a spreadsheet or the Claude app ----
+// The week a check-in covers (the 7 days before it), or the last 7 days.
+function exportWeekStart() {
+  const w = checkinWindow(programStartDay(), isoDate());
+  const d = new Date(`${w ? w.due : isoDate()}T12:00:00`);
+  d.setDate(d.getDate() - (w ? 7 : 6));
+  return isoDate(d);
+}
+function weekReview(from) {
+  const base = baseTargets();
+  const phase = PHASES[state.profile.phase] ? state.profile.phase : 'cut';
+  const win = checkinWindow(programStartDay(), isoDate());
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(`${from}T12:00:00`); d.setDate(d.getDate() + i); return isoDate(d); });
+  return weeklyReview({
+    days: days.map((d) => ({ date: d, ...(state.days[d] || {}) })), weights: phaseWeights(), targetKcal: base.kcal,
+    targetRate: phase === 'cut' ? base.lbPerWeek : 0, floor: state.profile.sex === 'male' ? 1500 : 1200, weightLb: currentWeight(),
+    weeksIn: win?.week || 1, plannedWeeks: state.profile.phaseWeeks || PHASES[phase].weeks, phase, feeling: draft?.feeling,
+  });
+}
+function weekCsv(from) { return toCsv(weekRows(exportProfile(activeProfile().id), from)); }
+async function exportWeek() {
+  const from = exportWeekStart();
+  return deliver(new Blob([weekCsv(from)], { type: 'text/csv' }), `${fileSlug().replace(/-\d{4}-\d{2}-\d{2}$/, '')}-week-of-${from}.csv`);
+}
+// A summary plus the CSV, ready to paste into the Claude app for a deeper look.
+async function copyWeekForClaude() {
+  const from = exportWeekStart();
+  const p = state.profile, base = baseTargets(), r = weekReview(from);
+  const phase = PHASES[p.phase] ? p.phase : 'cut';
+  const win = checkinWindow(programStartDay(), isoDate());
+  const ft = Math.floor((p.heightIn || 0) / 12), inch = Math.round((p.heightIn || 0) % 12);
+  const text = [
+    `Here is my week from my diet & training tracker (week of ${from}). Please review it like a coach: is my calorie target right for my goal, how is my protein and adherence, and what one or two changes would help most next week? Keep it evidence-based.`,
+    '',
+    `Me: ${p.sex || ''}, ${p.age || '?'} years, ${ft ? `${ft}'${inch}"` : ''}, now ${currentWeight().toFixed(1)} lb, goal ${p.goalLb || '?'} lb.`,
+    `Phase: ${PHASES[phase].label.toLowerCase()}, week ${win?.week || 1} of ${p.phaseWeeks || PHASES[phase].weeks}; planned pace ${phase === 'cut' ? `−${(+base.lbPerWeek).toFixed(1)} lb/week` : 'hold steady'}.`,
+    `Daily targets: ${base.kcal} kcal · ${base.p} g protein · ${base.f} g fat · ${base.c} g carbs.`,
+    `This week: ${r.logged}/7 days logged, average ${r.avgIntake ?? '?'} kcal eaten vs ${r.avgTarget} target${r.lost != null ? `, weight trend ${r.lost >= 0 ? '−' : '+'}${Math.abs(r.lost).toFixed(1)} lb/week` : ''}${r.tdee ? `, estimated maintenance ~${r.tdee} kcal` : ''}.`,
+    `The app suggests: ${r.why}`,
+    '',
+    'Daily data (CSV):',
+    weekCsv(from),
+  ].join('\n');
+  try { await navigator.clipboard.writeText(text); return 'Copied — open the Claude app and paste.'; }
+  catch { return 'Couldn\'t copy here — use “Week as CSV” and share the file to Claude instead.'; }
+}
+// A repeating calendar reminder on check-in day, for the iPhone's Calendar.
+async function checkinReminder() {
+  const w = checkinWindow(programStartDay(), isoDate());
+  const start = programStartDay();
+  if (!start) return 'Set up your profile first.';
+  // Always on the check-in weekday: today if today is check-in day, else the next one.
+  const d = new Date(`${w ? (w.due === isoDate() ? w.due : w.next) : start}T12:00:00`);
+  if (!w) d.setDate(d.getDate() + 7);
+  const ev = { id: `checkin-${start}`, title: 'OurPawMili weekly check-in 📋', date: isoDate(d), start: '08:00', end: '08:15', repeat: { kind: 'weekly' }, remind: '0',
+    notes: 'Open OurPawMili → Home → check-in: see the week and adjust macros.', who: 'both', tz: Intl.DateTimeFormat().resolvedOptions().timeZone };
+  return deliver(new Blob([icsCalendar([ev], { name: 'Weekly check-in' })], { type: 'text/calendar' }), 'weekly-check-in.ics');
 }
 
 function openCheckin() {
@@ -2290,11 +2356,32 @@ function showTab(name) {
 document.querySelectorAll('.tabs button').forEach((btn) => { btn.onclick = () => showTab(btn.dataset.tab); });
 document.querySelector('main').addEventListener('click', (e) => {
   if (e.target.closest('[data-opencheckin]')) { openCheckin(); return; }
+  if (e.target.closest('[data-ckremind]')) { checkinReminder(); return; }
   const b = e.target.closest('[data-sub], [data-goto]');
   if (b) showTab(b.dataset.sub || b.dataset.goto);
 });
 
 // ---------- HOME: one glance at what needs doing today ----------
+// The weekly check-in, always in view: due / overdue stands out; otherwise when the next one is.
+function homeCheckin() {
+  const start = programStartDay();
+  if (!start || !state.profile) return '';
+  const today = isoDate();
+  const w = checkinWindow(start, today);
+  const fmt = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  const daysBetween = (a, b) => Math.round((Date.parse(`${b}T12:00:00`) - Date.parse(`${a}T12:00:00`)) / 864e5);
+  if (checkinDue() && w) {
+    const late = daysBetween(w.due, today);
+    return `<button type="button" class="card home-card home-checkin ${late ? 'late' : ''}" data-opencheckin><span class="home-ico">📋</span><span class="home-main"><b>Week ${w.week} check-in ${late ? `is ${late} day${late === 1 ? '' : 's'} overdue` : 'is today'}</b><small>See how the week went and adjust your macros — 2 minutes.</small></span><span class="home-go">›</span></button>`;
+  }
+  const next = w ? w.next : (() => { const d = new Date(`${start}T12:00:00`); d.setDate(d.getDate() + 7); return isoDate(d); })();
+  const n = daysBetween(today, next);
+  return `<div class="card home-next-ck"><span>📋 Next check-in <b>${n === 1 ? 'tomorrow' : fmt(next)}</b>${n > 1 ? ` · in ${n} days` : ''}</span><button type="button" class="linkish small" data-ckremind>🔔 Add to calendar</button></div>`;
+}
+function updateFoodBadge() {
+  const b = $('#foodBadge');
+  if (b) { const due = !!state.profile && checkinDue(); b.hidden = !due; b.textContent = '1'; }
+}
 function renderHome() {
   if (!$('#homeHello')) return;
   const name = firstName();
@@ -2303,6 +2390,7 @@ function renderHome() {
   // Dogs, calendar and notes don't need a diet profile.
   $('#homeDogs').innerHTML = homeDogs();
   $('#homeCal').innerHTML = homeCal();
+  updateFoodBadge();
   $('#homeUs').innerHTML = homeUs();
   if (!state.profile) { $('#homeFood').innerHTML = ''; $('#homeTrain').innerHTML = ''; return; }
   // Food: the next meal not yet logged, and how many are done.
@@ -2312,8 +2400,7 @@ function renderHome() {
   const done = order.filter((m) => log.meals[m]).length;
   const next = order.find((m) => !log.meals[m]);
   const label = { breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Snack', dinner: 'Dinner' };
-  const ckWin = checkinDue() ? checkinWindow(programStartDay(), isoDate()) : null;
-  $('#homeFood').innerHTML = (ckWin ? `<button type="button" class="card home-card home-checkin" data-opencheckin><span class="home-ico">📋</span><span class="home-main"><b>Week ${ckWin.week} check-in is ready</b><small class="muted">See how the week went and adjust your macros</small></span><span class="home-go">›</span></button>` : '') + `<button type="button" class="card home-card" data-goto="today">
+  $('#homeFood').innerHTML = homeCheckin() + `<button type="button" class="card home-card" data-goto="today">
       <span class="home-ico">🍽</span>
       <span class="home-main"><b>${next ? `Next: ${label[next]}` : 'All meals logged 🎉'}</b>
         <small class="muted">${next ? `${esc(plan[next].title)} · ${plan[next].totals.kcal} kcal` : 'Nice work today.'}</small>
@@ -2355,7 +2442,7 @@ function renderStats() {
 }
 $('#statsRange').onchange = renderStats;
 
-const fileSlug = () => `lean-plate-${(state.profile?.name || activeProfile().name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${isoDate()}`;
+const fileSlug = () => `ourpawmili-${(state.profile?.name || activeProfile().name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${isoDate()}`;
 
 // Share sheet on phones (Save to Files, AirDrop, email…), plain download elsewhere.
 async function deliver(blob, filename) {
@@ -2372,6 +2459,8 @@ async function deliver(blob, filename) {
   return `Saved ${filename}.`;
 }
 
+$('#exportWeek').onclick = async () => { $('#exportStatus').textContent = await exportWeek(); };
+$('#copyWeek').onclick = async () => { $('#exportStatus').textContent = await copyWeekForClaude(); };
 $('#exportData').onclick = async () => {
   const status = $('#exportStatus');
   status.textContent = 'Preparing…';

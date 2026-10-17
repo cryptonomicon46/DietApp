@@ -821,3 +821,9 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .ck-stats b { display: block; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 .ck-stats small { color: var(--muted); font-size: .72rem; }
 .home-checkin { border-color: var(--brand); }
+
+.ck-tools { gap: 6px; margin: 4px 0; }
+.home-checkin { border: 2px solid var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--card)); }
+.home-checkin.late { border-color: var(--alert); background: color-mix(in srgb, var(--alert) 8%, var(--card)); }
+.home-checkin.late b { color: var(--alert); }
+.home-next-ck { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 14px; font-size: .9rem; }

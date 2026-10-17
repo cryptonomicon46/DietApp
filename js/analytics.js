@@ -126,3 +126,33 @@ export function summary(data, today, n = 30) {
     activityMinutes: t.activities.filter(inRange).reduce((a, r) => a + (+r.minutes || 0), 0),
   };
 }
+
+// One row per day for a week (every day, logged or not), for a spreadsheet or the Claude app:
+// weight, calories in/target/burned, macros eaten, meals, activities and lifting.
+export function weekRows(data, from, days = 7) {
+  const t = buildTables(data);
+  const byDate = (rows) => rows.reduce((m, r) => ((m[r.date] ||= []).push(r), m), {});
+  const meals = byDate(t.meals), acts = byDate(t.activities), lifts = byDate(t.lifting_sessions);
+  const dayRow = Object.fromEntries(t.days.map((d) => [d.date, d]));
+  const weight = Object.fromEntries(t.weigh_ins.map((w) => [w.date, w.weight_lb]));
+  const sum = (rows, k) => Math.round((rows || []).reduce((a, r) => a + (+r[k] || 0), 0));
+  const out = [];
+  for (let i = 0; i < days; i++) {
+    const dt = new Date(`${from}T12:00:00Z`); dt.setUTCDate(dt.getUTCDate() + i);
+    const date = dt.toISOString().slice(0, 10);
+    const d = dayRow[date] || {};
+    const m = meals[date] || [];
+    out.push({
+      date, weekday: dt.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }),
+      weight_lb: weight[date] ?? '',
+      kcal_eaten: m.length ? sum(m, 'kcal') : (d.eaten_kcal ?? ''), kcal_target: d.target_kcal ?? '', kcal_burned: d.burned_kcal ?? '',
+      protein_g: m.length ? sum(m, 'protein_g') : (d.protein_g ?? ''), protein_target_g: d.protein_target_g ?? '',
+      fat_g: m.length ? sum(m, 'fat_g') : '', carbs_g: m.length ? sum(m, 'carbs_g') : '',
+      meals_logged: m.length, foods: m.map((x) => `${x.meal}: ${x.title}`).join('; '),
+      activities: (acts[date] || []).map((a) => `${a.activity} ${a.minutes} min${a.kcal ? ` ${a.kcal} kcal` : ''}`).join('; '),
+      lifting: (lifts[date] || []).map((l) => `${l.exercises} exercises, ${l.sets} sets`).join('; '),
+      day_result: d.result || 'not logged',
+    });
+  }
+  return out;
+}

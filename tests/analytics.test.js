@@ -67,3 +67,21 @@ test('zip writer produces a valid archive', async () => {
   assert.equal(readFileSync(`${dir}/a.csv`, 'utf8'), 'x,y\n1,2\n');
   assert.equal(readFileSync(`${dir}/b.txt`, 'utf8'), 'héllo');
 });
+
+test('a week as CSV rows, every day present', async () => {
+  const { weekRows, toCsv } = await import('../js/analytics.js');
+  const data = {
+    days: { '2026-10-12': { target: 2000, eaten: 1950, burned: 2500, protein: 150, proteinTarget: 160 } },
+    weights: [{ date: '2026-10-12', weight: 209.8 }, { date: '2026-10-14', weight: 209.2 }],
+    mealLog: { '2026-10-12': { meals: { breakfast: { title: 'Eggs & toast', kcal: 450, p: 30, f: 20, c: 35 }, dinner: { title: 'Salmon & rice', kcal: 700, p: 50, f: 25, c: 60 } }, extras: [{ title: 'Latte', kcal: 150, p: 10, f: 6, c: 15 }] } },
+    activities: [{ date: '2026-10-13', sport: 'running', minutes: 40, kcal: 420 }],
+  };
+  const rows = weekRows(data, '2026-10-12');
+  assert.equal(rows.length, 7);
+  assert.deepEqual([rows[0].date, rows[0].weekday, rows[0].weight_lb, rows[0].kcal_eaten, rows[0].protein_g, rows[0].meals_logged], ['2026-10-12', 'Mon', 209.8, 1300, 90, 3]);
+  assert.match(rows[0].foods, /breakfast: Eggs & toast; dinner: Salmon & rice; snack: Latte/);
+  assert.match(rows[1].activities, /40 min 420 kcal/);
+  assert.equal(rows[2].weight_lb, 209.2);
+  assert.equal(rows[6].day_result, 'not logged');
+  assert.match(toCsv(rows).split('\n')[0], /^date,weekday,weight_lb,kcal_eaten/);
+});

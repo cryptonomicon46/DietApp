@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawMili">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=131">
+  <link rel="stylesheet" href="styles.css?v=133">
 </head>
 <body>
   <header class="top">
@@ -109,6 +109,8 @@
         <p class="small muted">A meal is “on target” when its calories are within 10% of that meal's target and protein reaches 90% of it.</p>
         <div class="row">
           <button type="button" id="exportData">⇩ Export data (CSV)</button>
+          <button type="button" class="ghost" id="exportWeek">⇩ This week (CSV)</button>
+          <button type="button" class="ghost" id="copyWeek">📋 Copy week for Claude</button>
           <button type="button" class="ghost" id="exportBackup">Backup</button>
           <label class="filebtn ghost" id="restoreLabel">Restore<input id="restoreBackup" type="file" accept=".json,application/json" hidden></label>
         </div>
@@ -197,7 +199,7 @@
   <nav class="tabs">
     <button data-tab="home" class="active"><span>🏠</span>Home</button>
     <button data-tab="brief"><span>🐕</span>Dogs</button>
-    <button data-tab="today"><span>🍽</span>Food</button>
+    <button data-tab="today"><span>🍽<b class="tab-badge" id="foodBadge" hidden></b></span>Food</button>
     <button data-tab="lift"><span>🏋︎</span>Train</button>
     <button data-tab="calendar"><span>📅<b class="tab-badge" id="calBadge" hidden></b></span>Calendar</button>
     <button data-tab="notes"><span>💞<b class="tab-badge" id="notesBadge" hidden></b></span>Us</button>
@@ -361,34 +363,34 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/activity.js": "./js/activity.js?v=131",
-    "./js/analytics.js": "./js/analytics.js?v=131",
-    "./js/app.js": "./js/app.js?v=131",
-    "./js/brief.js": "./js/brief.js?v=131",
-    "./js/briefTab.js": "./js/briefTab.js?v=131",
-    "./js/calTab.js": "./js/calTab.js?v=131",
-    "./js/calendar.js": "./js/calendar.js?v=131",
-    "./js/commands.js": "./js/commands.js?v=131",
-    "./js/devices.js": "./js/devices.js?v=131",
-    "./js/dogs.js": "./js/dogs.js?v=131",
-    "./js/foods.js": "./js/foods.js?v=131",
-    "./js/lift.js": "./js/lift.js?v=131",
-    "./js/lifting.js": "./js/lifting.js?v=131",
-    "./js/notes.js": "./js/notes.js?v=131",
-    "./js/plan.js": "./js/plan.js?v=131",
-    "./js/plans.js": "./js/plans.js?v=131",
-    "./js/poster.js": "./js/poster.js?v=131",
-    "./js/research.js": "./js/research.js?v=131",
-    "./js/review.js": "./js/review.js?v=131",
-    "./js/rewards.js": "./js/rewards.js?v=131",
-    "./js/share.js": "./js/share.js?v=131",
-    "./js/shows.js": "./js/shows.js?v=131",
-    "./js/storage.js": "./js/storage.js?v=131",
-    "./js/sync.js": "./js/sync.js?v=131",
-    "./js/zip.js": "./js/zip.js?v=131"
+    "./js/activity.js": "./js/activity.js?v=133",
+    "./js/analytics.js": "./js/analytics.js?v=133",
+    "./js/app.js": "./js/app.js?v=133",
+    "./js/brief.js": "./js/brief.js?v=133",
+    "./js/briefTab.js": "./js/briefTab.js?v=133",
+    "./js/calTab.js": "./js/calTab.js?v=133",
+    "./js/calendar.js": "./js/calendar.js?v=133",
+    "./js/commands.js": "./js/commands.js?v=133",
+    "./js/devices.js": "./js/devices.js?v=133",
+    "./js/dogs.js": "./js/dogs.js?v=133",
+    "./js/foods.js": "./js/foods.js?v=133",
+    "./js/lift.js": "./js/lift.js?v=133",
+    "./js/lifting.js": "./js/lifting.js?v=133",
+    "./js/notes.js": "./js/notes.js?v=133",
+    "./js/plan.js": "./js/plan.js?v=133",
+    "./js/plans.js": "./js/plans.js?v=133",
+    "./js/poster.js": "./js/poster.js?v=133",
+    "./js/research.js": "./js/research.js?v=133",
+    "./js/review.js": "./js/review.js?v=133",
+    "./js/rewards.js": "./js/rewards.js?v=133",
+    "./js/share.js": "./js/share.js?v=133",
+    "./js/shows.js": "./js/shows.js?v=133",
+    "./js/storage.js": "./js/storage.js?v=133",
+    "./js/sync.js": "./js/sync.js?v=133",
+    "./js/zip.js": "./js/zip.js?v=133"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=131"></script>
+  <script type="module" src="js/app.js?v=133"></script>
 </body>
 </html>
