@@ -69,6 +69,8 @@ export const FOODS = {
   turkeyDeli: { name: 'Smoked turkey breast (deli slices)', kcal: 104, p: 17.1, f: 1.7, c: 4.2, unit: { label: 'slice', grams: 14 }, range: [0, 280, 14] },
   chickenDeli:{ name: 'Chicken breast (deli slices)',       kcal: 90,  p: 17.0, f: 1.5, c: 2.5, unit: { label: 'slice', grams: 14 }, range: [0, 280, 14] },
   trout:      { name: 'Rainbow trout',               kcal: 168, p: 23.8, f: 7.4,  c: 0, oz: true, yield: 0.8,  range: [0, 340, 5] },
+  // Lavash wrap (whole grain & flax): label per sheet (57 g) = 100 kcal, 6 g protein, 1 g fat, 19 g carbs; steps of ½ sheet.
+  lavash:     { name: 'Lavash wrap',             kcal: 175.4, p: 10.53, f: 1.75, c: 33.33, unit: { label: 'sheet', grams: 57 }, range: [0, 228, 28.5] },
   // Sides (cooked)
   rice:       { name: 'White/jasmine rice',       kcal: 130, p: 2.7, f: 0.3,  c: 28.2, unit: { label: 'cup', grams: 158 }, raw: 2.8, range: [0, 450, 10] },
   brownRice:  { name: 'Brown rice',               kcal: 112, p: 2.3, f: 0.8,  c: 23.5, unit: { label: 'cup', grams: 195 }, raw: 2.6, range: [0, 450, 10] },
@@ -85,7 +87,7 @@ export const FOODS = {
 // Groups for the "add a food" picker when you build a meal yourself.
 export const FOOD_GROUPS = {
   Protein: ['whey', 'eggWhites', 'egg', 'chicken', 'thigh', 'beef', 'steak', 'salmon', 'cod', 'trout', 'tuna', 'turkeyDeli', 'chickenDeli', 'cheddar'],
-  Carbs: ['oats', 'sourdough', 'wheatBread', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'banana'],
+  Carbs: ['oats', 'sourdough', 'wheatBread', 'lavash', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'banana'],
   'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'cauliflower', 'salad'],
   Milk: ['oatMilk', 'almondMilk', 'milk2'],
   'Coffee shop': ['latte', 'cappuccino', 'icedLatte', 'cortado', 'flatWhite', 'oatLatte', 'mocha', 'chaiLatte', 'americano', 'espresso', 'dripCoffee', 'chocCookie'],
@@ -107,7 +109,7 @@ export const BREAKFASTS = {
     items: [
       { slot: 'eggs', options: ['egg'], fixedByFat: true, min: 50, max: 150 },
       { slot: 'protein', options: ['eggWhites'], drives: 'p' },
-      { slot: 'carb', options: ['sourdough', 'wheatBread'], drives: 'c', min: 25 },
+      { slot: 'carb', options: ['sourdough', 'wheatBread', 'lavash'], drives: 'c', min: 25 },
       { slot: 'fat', options: ['avocado', 'butter', 'cheddar', 'oliveOil', 'mixedNuts', 'cashews'], drives: 'f' },
     ],
   },
@@ -126,7 +128,7 @@ export const MAIN_MEAL = {
   title: (f) => `${FOODS[f.protein].name.replace(/ \(.*\)/, '')}, ${FOODS[f.carb].name.replace(/ \(.*\)/, '').toLowerCase()} & ${f.veggies && f.veggies !== 'veggies' ? FOODS[f.veggies].name.replace(/ \(.*\)/, '').toLowerCase() : 'veggies'}`,
   items: [
     { slot: 'protein', options: PROTEIN_OPTIONS, drives: 'p', min: 60, max: 260 },
-    { slot: 'carb', options: ['rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'sourdough'], drives: 'c', max: 450 },
+    { slot: 'carb', options: ['rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'sourdough', 'lavash'], drives: 'c', max: 450 },
     { slot: 'veggies', options: ['veggies', 'broccoli', 'cauliflower', 'salad'], fixed: 200 },
     { slot: 'fat', options: ['oliveOil', 'butter', 'avocado', 'mixedNuts', 'cashews'], drives: 'f' },
   ],
@@ -156,6 +158,7 @@ export const STORES = {
   salad:       { store: 'Sprouts', tip: 'Butter lettuce (living heads or clamshell) + cucumbers — half and half by weight', packGrams: 454, packLabel: 'lb' },
   cauliflower:{ store: 'Sprouts', tip: 'Fresh cauliflower head or frozen florets (Costco, Safeway too)', packGrams: 454, packLabel: 'lb' },
   oliveOil:  { store: 'Costco',  tip: 'Kirkland extra virgin olive oil', packGrams: 1000, packLabel: 'bottle' },
+  lavash:      { store: 'Sprouts', tip: 'Lavash flatbread (e.g. Atoria\'s whole grain & flax, ~100 kcal a sheet); Costco and Safeway carry it too', packGrams: 57 * 4, packLabel: 'pack of 4 sheets' },
   wheatBread:  { store: 'Safeway', tip: 'Whole-wheat sandwich bread', packGrams: 680, packLabel: '24 oz loaf' },
   butter:      { store: 'Costco',  tip: 'Kirkland butter (freeze extra sticks)', packGrams: 454, packLabel: '1 lb' },
   cheddar:     { store: 'Costco',  tip: 'Sharp cheddar block or shredded', packGrams: 907, packLabel: '2 lb' },
