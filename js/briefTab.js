@@ -171,17 +171,28 @@ function toggleTreat() {
   renderFeed();
   pushNow().then(renderFeed);
 }
+// Treats & toys: one oblong, treat on top (a shared once-a-day yes/no), new toy below.
 function treatButton() {
   const on = treatToday();
   const t = on && lastTreat();
+  const month = walkDay().slice(0, 7);
+  const toys = allToys();
+  const thisMonth = toys.filter((x) => x.date.startsWith(month)).length;
   return `<div class="feed-col">
-      <button type="button" class="feed-btn ${on ? 'fed' : 'notreat'}" data-treat aria-pressed="${on}">
-        <span class="feed-icon">${on ? '✓' : '🍪'}</span>
-        <span class="feed-title">${on ? 'Treat given' : 'Treat'}</span>
-        <span class="feed-sub">${on ? (t ? clock(new Date(t.at)) : '') : 'Tap when they get one'}</span>
-      </button>
-      <p class="small muted center">${on ? 'Tap to undo.' : 'Once a day · resets 6 AM.'}</p>
+      <div class="btn-head">🍪 <b>Treats &amp; toys</b><small>${on ? 'Treat given today' : 'Anyone can tap'}</small></div>
+      <div class="feed-btn oblong hsplit notreat">
+        <button type="button" class="hhalf ${on ? 'on' : ''}" data-treat aria-pressed="${on}"><span class="nm nt">${on ? '✓ Treat given' : '🍪 Treat'}</span>${on && t ? `<small>${clock(new Date(t.at))}</small>` : ''}</button>
+        <button type="button" class="hhalf" data-newtoy><span class="nm nt">🧸 New toy</span>${thisMonth ? `<small>${thisMonth} this month</small>` : ''}</button>
+      </div>
+      <p class="small muted center">${on ? 'Tap the treat again to undo.' : 'Treat resets at 6 AM.'}${toys[0] ? ` Last toy: ${esc(toys[0].toy)}.` : ''}</p>
     </div>`;
+}
+function logNewToy() {
+  const name = prompt('New toy! What is it? (optional)', '');
+  if (name === null) return;
+  const now = Date.now();
+  saveToys([...profileStore(ownerId()).get('dogToys', []), { id: now.toString(36), toy: name.trim().slice(0, 60) || 'New toy', emoji: '🧸', date: isoDay(), at: now }]);
+  renderFeed();
 }
 
 function dutyRecords() {
@@ -202,24 +213,22 @@ function todaysChore(kind) {
     .sort((a, b) => a.at - b.at);
 }
 const whoName = (person, name) => (person === ownerId() ? 'You' : esc(name));
-// A round button split in two: the left half logs it for the first person, the right for
-// the second — from either phone.
-const halves = (attr, counts = {}) => `<span class="halves">${PROFILES.map((p) => `<button type="button" class="half" ${attr} data-who="${p.id}" aria-label="${esc(nameOf(p.id))}"><b>${esc(nameOf(p.id))}</b><small>${counts[p.id] ? `×${counts[p.id]}` : '&nbsp;'}</small></button>`).join('')}</span>`;
+// An oblong button split across the middle: the top half logs it for the first person, the
+// bottom half for the second — from either phone. Each name has its own color.
+const halves = (attr, counts = {}) => PROFILES.map((p, i) => `<button type="button" class="hhalf" ${attr} data-who="${p.id}" aria-label="${esc(nameOf(p.id))}"><span class="nm n${i}">${esc(nameOf(p.id))}</span>${counts[p.id] ? `<small>×${counts[p.id]}</small>` : ''}</button>`).join('');
+// The left/right split this replaced:
+const halvesV = (attr, counts = {}) => `<span class="halves">${PROFILES.map((p) => `<button type="button" class="half" ${attr} data-who="${p.id}" aria-label="${esc(nameOf(p.id))}"><b>${esc(nameOf(p.id))}</b><small>${counts[p.id] ? `×${counts[p.id]}` : '&nbsp;'}</small></button>`).join('')}</span>`;
 function choreButton(kind) {
   const c = CHORES[kind];
   const list = todaysChore(kind);
   const by = {};
   for (const x of list) by[x.person] = (by[x.person] || 0) + 1;
   const last = list[list.length - 1];
-  const sub = !list.length ? 'Who went?' : list.length === 1 ? `${esc(last.name)} · ${clock(new Date(last.at))}` : '';
+  const sub = !list.length ? 'Who went?' : list.length === 1 ? `${esc(last.name)} · ${clock(new Date(last.at))}` : `${list.length} today`;
   const mine = list.some((x) => x.by === ownerId());
   return `<div class="feed-col">
-      <div class="feed-btn split ${list.length ? 'fed' : c.cls}">
-        <span class="feed-face"><span class="feed-icon">${list.length ? '✓' : c.icon}</span>
-          <span class="feed-title">${list.length ? (list.length > 1 ? `${c.done} ×${list.length}` : c.done) : c.todo}</span>
-          <span class="feed-sub">${sub}</span></span>
-        ${halves(`data-chore="${kind}"`, by)}
-      </div>
+      <div class="btn-head">${list.length ? '✓' : c.icon} <b>${list.length ? c.done : c.todo}</b><small>${sub}</small></div>
+      <div class="feed-btn oblong hsplit ${list.length ? 'fed' : c.cls}">${halves(`data-chore="${kind}"`, by)}</div>
       <p class="small muted center">${list.length ? 'Tap a name to log another.' : 'Tap who did it · resets 6 AM.'}${mine ? ` <button type="button" class="linkish small" data-undochore="${kind}">Undo last</button>` : ''}</p>
     </div>`;
 }
@@ -280,14 +289,10 @@ export function renderFeed() {
   el.innerHTML = `
     <div class="feed-pair">
       <div class="feed-col">
-        ${fed ? `<button type="button" class="feed-btn fed" data-feedundo aria-pressed="true">
-          <span class="feed-icon">✓</span>
-          <span class="feed-title">${meal} done</span>
-          <span class="feed-sub">${esc(fed.name)} fed them · ${clock(new Date(fed.at))}</span>
-        </button>` : `<div class="feed-btn split hungry">
-          <span class="feed-face"><span class="feed-icon">🦴</span><span class="feed-title">Feed the dogs</span><span class="feed-sub">${meal} · who fed?</span></span>
-          ${halves('data-feed')}
-        </div>`}
+        <div class="btn-head">${fed ? '✓' : '🦴'} <b>${fed ? `${meal} done` : 'Feed the dogs'}</b><small>${fed ? `${esc(fed.name)} · ${clock(new Date(fed.at))}` : `${meal} · who fed?`}</small></div>
+        ${fed ? `<button type="button" class="feed-btn oblong fed single" data-feedundo aria-pressed="true">
+          <span class="nm n${Math.max(0, PROFILES.findIndex((p) => p.id === fed.person))}">${esc(fed.name)}</span><small>fed them · tap to undo</small>
+        </button>` : `<div class="feed-btn oblong hsplit hungry">${halves('data-feed')}</div>`}
         <p class="small muted center">${fed ? `Resets ${slot.resets} for ${slot.meal === 'breakfast' ? 'dinner' : 'breakfast'}.` : `Resets ${slot.resets}.`}${other ? ` Breakfast: ${esc(other.person === ownerId() ? 'you' : other.name)} at ${clock(new Date(other.at))}.` : ''}</p>
       </div>
       ${choreButton('walk')}
@@ -317,7 +322,8 @@ export function homeDogs() {
         : chip(false, '🦴', `Feed ${meal.toLowerCase()}`, 'Who fed them?', 'data-feed')}
       ${chip(walks.length > 0, '🐾', walks.length ? `Walked${walks.length > 1 ? ` ×${walks.length}` : ''}` : 'Walk', walks.length ? names(walks) : 'Who walked?', 'data-chore="walk"')}
       ${chip(park.length > 0, '🌳', park.length ? `Park${park.length > 1 ? ` ×${park.length}` : ''}` : 'Dog park', park.length ? names(park) : 'Who went?', 'data-chore="park"')}
-      <button type="button" class="home-dog ${treat ? 'done' : ''}" data-treat><span>${treat ? '✓' : '🍪'}</span><b>${treat ? 'Treat given' : 'Treat'}</b><small>${treat ? 'Tap to undo' : 'Tap when given'}</small></button>
+      <div class="home-dog ${treat ? 'done' : ''}"><span>${treat ? '✓' : '🍪'}</span><b>${treat ? 'Treat given' : 'Treats & toys'}</b><small>${treat ? 'Tap Treat to undo' : 'Anyone can tap'}</small>
+        <span class="mini-halves"><button type="button" data-treat>🍪 Treat</button><button type="button" data-newtoy>🧸 Toy</button></span></div>
     </div>
     ${dogAlerts(allDogs(), isoDay()).slice(0, 2).map((a) => `<p class="small tone-warn" data-goto="brief">⚠ ${esc(a.dog)}: ${esc(a.text)}</p>`).join('')}
     <p class="small ${isGolden(outings, treat) ? 'golden-note' : 'muted'}">${isGolden(outings, treat) ? `⭐ Golden day — ${outings >= 2 ? 'out twice today' : 'a walk and a treat'}!` : outings === 1 ? 'One more outing or a treat makes it a ⭐ golden day.' : treat ? 'Treat given — a walk makes it a ⭐ golden day.' : 'Two outings, or an outing and a treat, make a ⭐ golden day.'}</p>
@@ -522,6 +528,7 @@ export function initBrief() {
     if (t.dataset.feed != null) { toggleFeed(t.dataset.who || ownerId()); return; }
     if (t.dataset.feedundo != null) { toggleFeed(); return; }
     if (t.dataset.treat != null) { toggleTreat(); return; }
+    if (t.dataset.newtoy != null) { logNewToy(); return; }
     if (t.dataset.chore) { logChore(t.dataset.chore, t.dataset.who || ownerId()); return; }
     if (t.dataset.undochore) { undoChore(t.dataset.undochore); return; }
     if (t.dataset.dutyview) { dutyView = t.dataset.dutyview; renderDuty(); return; }

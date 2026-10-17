@@ -756,3 +756,23 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .iphone-steps { margin: 4px 0; padding-left: 20px; display: grid; gap: 4px; }
 
 .feed-btn.notreat { background: radial-gradient(circle at 35% 30%, #f3a6c8, #c8578f); }
+
+/* Oblong buttons split top / bottom: Sandman on top, Amani below (Treat on top, New toy below) */
+.feed-col .btn-head { width: 100%; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin: 0 2px 6px; font-size: .95rem; }
+.feed-col .btn-head small { width: 100%; color: var(--muted); font-size: .76rem; }
+.feed-btn.oblong { width: 100%; height: 132px; border-radius: 24px; }
+.feed-btn.hsplit { display: flex; flex-direction: column; padding: 0; overflow: hidden; gap: 0; }
+.feed-btn.single { flex-direction: column; gap: 6px; }
+.feed-btn.single small { font-size: .78rem; opacity: .95; }
+.hhalf { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; background: transparent; border: 0; border-radius: 0; color: #fff; min-height: 0; padding: 0 8px; }
+.hhalf + .hhalf { border-top: 2px solid rgba(255, 255, 255, .75); }
+.hhalf:active { background: rgba(0, 0, 0, .14); }
+.hhalf.on { background: rgba(0, 0, 0, .16); }
+.hhalf small { font-size: .78rem; font-weight: 700; color: #fff; }
+.nm { font-weight: 800; font-size: .95rem; padding: 4px 12px; border-radius: 999px; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .18); white-space: nowrap; }
+.nm.n0 { color: #1d4fb0; }
+.nm.n1 { color: #b4246b; }
+.nm.nt { color: #8a3d64; }
+.mini-halves button:first-child { color: #1d4fb0; }
+.mini-halves button:last-child { color: #b4246b; }
+.mini-halves button[data-treat], .mini-halves button[data-newtoy] { color: #8a3d64; }
