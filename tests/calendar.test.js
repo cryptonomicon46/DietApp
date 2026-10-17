@@ -114,3 +114,23 @@ test('reading an Apple / Google calendar file', async () => {
   assert.equal(ev[4].repeat.until, '2026-11-02', 'COUNT=3 weekly from Oct 19');
   assert.ok(ev.every((e) => e.who === 'amani'));
 });
+
+test('an iPhone (iCloud) public calendar: alarms ignored, moved and cancelled dates honoured', async () => {
+  const fs = await import('node:fs');
+  const { parseIcs, eventsOn } = await import('../js/calendar.js');
+  const text = fs.readFileSync(new URL('./fixtures/icloud-public.ics', import.meta.url), 'utf8');
+  const ev = parseIcs(text, { from: '2026-10-17', who: 'amani', localTz: 'America/Los_Angeles' });
+  const title = (d) => eventsOn(ev, d).map((e) => `${e.start || 'all day'} ${e.title}`);
+  assert.deepEqual(title('2026-10-20'), ['18:30 Power Flow yoga'], 'Tuesday class');
+  assert.deepEqual(title('2026-10-22'), ['18:30 Power Flow yoga'], 'Thursday class');
+  assert.deepEqual(title('2026-10-27'), [], 'moved away from Tue Oct 27');
+  assert.deepEqual(title('2026-10-28'), ['18:30 Power Flow yoga (moved)'], '…to Wed Oct 28');
+  assert.deepEqual(title('2026-10-29'), [], 'Thu Oct 29 cancelled');
+  assert.deepEqual(title('2026-11-03'), ['18:30 Power Flow yoga'], 'and back to normal');
+  const yoga = ev.find((e) => e.title === 'Power Flow yoga');
+  assert.equal(yoga.place, 'Movement Sunnyvale, 815 Stewart Dr, Sunnyvale CA 94085, United States');
+  assert.equal(yoga.notes, '', "the alarm's 'Reminder' text isn't the event's notes");
+  assert.deepEqual(title('2026-11-04'), ['08:30 Dr. Kim – dentist'], 'UTC → 8:30 AM Pacific (after DST ends)');
+  assert.equal(ev.find((e) => e.title.startsWith('Dr. Kim')).notes, 'Bring insurance card');
+  assert.deepEqual(title('2027-11-05'), ['all day Mom\'s birthday 🎂']);
+});

@@ -49,7 +49,11 @@ export async function refreshFeeds(force = false) {
       const cache = feedCache();
       try {
         const res = await fetch(`${s.url}/ics?code=${encodeURIComponent(s.code)}&url=${encodeURIComponent(f.url)}`);
-        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `error ${res.status}`);
+        if (!res.ok) {
+          const msg = (await res.json().catch(() => ({}))).error || `error ${res.status}`;
+          // An older connector doesn't know /ics yet.
+          throw new Error(res.status === 404 && msg === 'not found' ? 'connector needs the one-time update — run “npx wrangler deploy” in server/' : msg);
+        }
         const events = parseIcs(await res.text(), { localTz: localTz(), from, who: f.who, source: f.name }).slice(0, 1500);
         cache[f.id] = { fetchedAt: Date.now(), events };
       } catch (err) {
@@ -68,22 +72,29 @@ function bringInCard() {
   const who = linkWho || me();
   const whoSeg = (attr) => `<div class="seg who-pick">${[[WHO_BOTH, 'Both'], ...PROFILES.map((p) => [p.id, nameOf(p.id)])].map(([k, l]) => `<button type="button" class="${who === k ? 'on' : ''}" ${attr}="${k}">${esc(l)}</button>`).join('')}</div>`;
   const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
-  return `<details class="card cal-sub" ${feeds.length ? '' : 'open'}><summary><b>📲 Bring in a calendar</b> <span class="small muted">— Apple or Google, so you don't retype events</span></summary>
-    ${feeds.length ? `<ul class="list feed-list">${feeds.map((f) => {
+  return `${feeds.length ? `<div class="card"><div class="eyebrow">📲 Linked calendars</div><ul class="list feed-list">${feeds.map((f) => {
       const c = cache[f.id];
       return `<li><span><b>${esc(f.name)}</b> <span class="who-chip ${whoClass(f.who)}">${esc(whoLabel(f.who))}</span><br><small class="${c?.error ? 'tone-warn' : 'muted'}">${c?.error ? esc(c.error) : c?.events ? `${c.events.length} events · updated ${ago(c.fetchedAt)}` : 'Not loaded yet'}</small></span>
         <span><button type="button" class="ghost small" data-feedrefresh="${f.id}" aria-label="Refresh">↻</button>${f.owner === me() ? ` <button type="button" class="x" data-feeddel="${f.id}" aria-label="Unlink ${esc(f.name)}">✕</button>` : ''}</span></li>`;
-    }).join('')}</ul>` : ''}
+    }).join('')}</ul></div>` : ''}
+  <details class="card cal-sub" ${feeds.length ? '' : 'open'}><summary><b>📲 ${feeds.length ? 'Link another calendar' : 'Bring in your iPhone calendar'}</b> <span class="small muted">— so you don't retype events</span></summary>
     <form id="feedForm" class="cal-form">
-      <div class="small"><b>Link a calendar (stays up to date)</b></div>
-      <input name="name" maxlength="40" placeholder="Name, e.g. ${esc(nameOf(me()))}'s iPhone" required>
-      <input name="url" inputmode="url" autocomplete="off" placeholder="webcal://p…-caldav.icloud.com/published/…" required>
+      <div class="small"><b>Link your iPhone calendar</b> — do this once on each phone; events then keep themselves up to date.</div>
+      <ol class="small iphone-steps">
+        <li>Open the <b>Calendar</b> app and tap <b>Calendars</b> at the bottom.</li>
+        <li>Under <b>iCloud</b>, tap <b>ⓘ</b> next to the calendar you use (e.g. Home).</li>
+        <li>Scroll down, turn on <b>Public Calendar</b>, tap <b>Share Link…</b> → <b>Copy</b>.</li>
+        <li>Come back here, tap <b>Paste link</b>, then <b>Link calendar</b>.</li>
+      </ol>
+      <div class="row"><input name="url" inputmode="url" autocomplete="off" autocapitalize="none" placeholder="webcal://p…-caldav.icloud.com/published/2/…" required>
+        <button type="button" class="ghost small" data-feedpaste>Paste link</button></div>
+      <input name="name" maxlength="40" placeholder="Name, e.g. ${esc(nameOf(me()))}'s iPhone">
       <div class="small">Whose events are these?</div>${whoSeg('data-linkwho')}
       <button type="submit">Link calendar</button>
-      <details class="small help"><summary>Where do I find the link?</summary>
-        <p><b>iPhone:</b> open the Calendar app → Calendars at the bottom → tap ⓘ next to your calendar → turn on <b>Public Calendar</b> → Share Link → Copy, then paste it here. (iCloud calendars only; anyone with that link can see the calendar, so keep it private.)</p>
-        <p><b>Google Calendar</b> (on a computer): Settings → your calendar → <b>Secret address in iCal format</b> → copy.</p>
-        <p>Events show here read-only and refresh every half hour; change them in your calendar app. Needs the updated connector (server/README.md).</p>
+      <details class="small help"><summary>Good to know</summary>
+        <p>Only <b>iCloud</b> calendars have Public Calendar. Events from an Exchange/work or Google account on the iPhone can't be published from the Calendar app — for Google, use its <b>Secret address in iCal format</b> (Google Calendar settings on a computer) instead.</p>
+        <p>Anyone who has the public link can see that calendar, so keep it between the two of you. Turning Public Calendar off later stops it here too.</p>
+        <p>Events show here read-only and refresh every half hour (↻ to refresh now); edit them in the Calendar app. Want a calendar just for things you share? Make a new iCloud calendar (e.g. “Us”), publish that one, and keep work events out.</p>
       </details>
     </form>
     <div class="cal-form" style="margin-top:12px">
@@ -275,6 +286,10 @@ export function initCal(root) {
     if (!t || !t.closest('#calBoard')) return;
     const d = t.dataset;
     if (d.linkwho) { linkWho = d.linkwho; const f = $('#feedForm'); const keep = f ? [f.elements.name.value, f.elements.url.value] : null; renderCal(); if (keep && $('#feedForm')) { $('#feedForm').elements.name.value = keep[0]; $('#feedForm').elements.url.value = keep[1]; } return; }
+    if (d.feedpaste != null) {
+      navigator.clipboard?.readText?.().then((txt) => { const u = $('#feedForm [name=url]'); if (u && txt) { u.value = txt.trim(); note = ''; } }).catch(() => { note = 'Long-press the box and choose Paste.'; renderCal(); });
+      return;
+    }
     if (d.feedrefresh) { refreshFeeds(true); note = 'Refreshing…'; renderCal(); return; }
     if (d.feeddel) {
       if (!confirm('Unlink this calendar? Its events leave this app (nothing changes in the calendar itself).')) return;
@@ -327,7 +342,10 @@ export function initCal(root) {
       ev.preventDefault();
       const f = ev.target;
       const url = f.elements.url.value.trim();
-      if (!/^(webcals?|https):\/\//i.test(url)) { note = 'Paste the calendar link (it starts with webcal:// or https://).'; renderCal(); return; }
+      if (!/^(webcals?|https):\/\//i.test(url)) { note = 'Paste the calendar link (it starts with webcal://).'; renderCal(); return; }
+      // The iPhone's "Share Link" under Public Calendar is …icloud.com/published/…; an invitation
+      // link (www.icloud.com/calendar/…) only works for people you invite in the Calendar app.
+      if (/icloud\.com/i.test(url) && !/\/published\//i.test(url)) { note = 'That looks like an invitation link. Use the Public Calendar link instead: Calendar → Calendars → ⓘ → Public Calendar → Share Link → Copy.'; renderCal(); return; }
       const s = profileStore(me());
       const feed = { id: `f${Date.now().toString(36)}`, name: f.elements.name.value.trim() || `${nameOf(me())}'s calendar`, url, who: linkWho || me(), addedAt: Date.now() };
       s.set('calFeeds', [...s.get('calFeeds', []), feed]);

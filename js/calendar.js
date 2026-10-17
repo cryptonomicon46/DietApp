@@ -234,24 +234,35 @@ function mapRule(rr, start) {
 // The whole file → events in our shape. `from`: drop one-off events that ended before it.
 export function parseIcs(text, { localTz = 'America/Los_Angeles', from = '0000', who = WHO_BOTH, source = '' } = {}) {
   const out = [];
+  const moved = [];   // one date of a repeating event that was moved or cancelled: {uid, was}
   let cur = null;
+  let nested = 0;     // inside an event's alarm (VALARM) — its lines aren't the event's
   for (const l of icsLines(text)) {
+    if (cur && l.name === 'BEGIN' && l.value !== 'VEVENT') { nested++; continue; }
+    if (cur && nested && l.name === 'END') { nested--; continue; }
+    if (nested) continue;
     if (l.name === 'BEGIN' && l.value === 'VEVENT') cur = { props: {}, exdates: [] };
     else if (l.name === 'END' && l.value === 'VEVENT' && cur) {
       const p = cur.props;
       const st = icsWhen(p.DTSTART, localTz);
-      if (st && !p['RECURRENCE-ID'] && (p.STATUS?.value || '').toUpperCase() !== 'CANCELLED') {
+      const rawUid = (p.UID?.value || '').replace(/[^\w@.-]+/g, '');
+      // A moved / changed single date of a series: hide that date on the series, show this copy instead.
+      if (p['RECURRENCE-ID']) {
+        const was = icsWhen(p['RECURRENCE-ID'], localTz)?.date;
+        if (was && rawUid) moved.push({ uid: rawUid, was });
+      }
+      if (st && (p.STATUS?.value || '').toUpperCase() !== 'CANCELLED') {
         const en = icsWhen(p.DTEND, localTz);
-        const uid = (p.UID?.value || `${st.date}-${p.SUMMARY?.value || ''}`).replace(/[^\w@.-]+/g, '');
+        const uid = (p['RECURRENCE-ID'] ? `${rawUid}-${st.date}` : p.UID?.value || `${st.date}-${p.SUMMARY?.value || ''}`).replace(/[^\w@.-]+/g, '');
         const ev = {
           title: unescapeIcs(p.SUMMARY?.value || '(No title)').slice(0, 80), date: st.date, allDay: !!st.allDay,
           start: st.time || '', end: en && !st.allDay && en.date === st.date ? en.time : '',
-          place: unescapeIcs(p.LOCATION?.value || '').slice(0, 80), notes: unescapeIcs(p.DESCRIPTION?.value || '').slice(0, 300),
+          place: unescapeIcs(p.LOCATION?.value || '').replace(/\s*\n+\s*/g, ', ').slice(0, 80), notes: unescapeIcs(p.DESCRIPTION?.value || '').slice(0, 300),
           who, remind: '', tz: localTz, source,
         };
         let series = [{ start: st.date, repeat: null }];
         let unsupported = false;
-        if (p.RRULE) {
+        if (p.RRULE && !p['RECURRENCE-ID']) {
           const m = mapRule(p.RRULE.value, st.date);
           if (m) series = m; else unsupported = true;
           // COUNT → an end date, by walking the occurrences.
@@ -272,6 +283,12 @@ export function parseIcs(text, { localTz = 'America/Los_Angeles', from = '0000',
     } else if (cur) {
       if (l.name === 'EXDATE') for (const v of l.value.split(',')) cur.exdates.push({ value: v, params: l.params });
       else if (!cur.props[l.name]) cur.props[l.name] = l;
+    }
+  }
+  // Leave the moved dates out of their series.
+  for (const m of moved) {
+    for (const e of out) {
+      if (e.repeat && (e.id === `ics-${m.uid}` || e.id.startsWith(`ics-${m.uid}-`))) e.skip = [...new Set([...(e.skip || []), m.was])];
     }
   }
   return out;
