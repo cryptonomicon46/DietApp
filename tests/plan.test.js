@@ -188,3 +188,17 @@ test('an afternoon snack comes out of lunch and dinner', async () => {
   assert.equal(withSnack.breakfast.target.kcal, without.breakfast.target.kcal);
   assert.equal(planForDay(day, date, { snack: { on: true, items: [] } }, {}).snack.title, 'Afternoon snack');
 });
+
+test('restaurant meal with wine and cocktails', async () => {
+  const { eatOutMeal, drinksTotals } = await import('../js/plan.js');
+  const base = eatOutMeal({ eatout: { mode: 'estimate', dish: 'grilled', size: 'regular', ate: 1, place: 'Rangoli' } });
+  const withDrinks = eatOutMeal({ eatout: { mode: 'estimate', dish: 'grilled', size: 'regular', ate: 1, place: 'Rangoli', drinks: { redWine: 2, margarita: 1 } } });
+  assert.equal(withDrinks.totals.kcal - base.totals.kcal, 2 * 125 + 275, 'two glasses of red and a margarita');
+  assert.equal(withDrinks.totals.c - base.totals.c, 2 * 4 + 27);
+  assert.equal(withDrinks.totals.p, base.totals.p, 'alcohol adds no protein');
+  assert.equal(withDrinks.totals.f, base.totals.f, 'or fat');
+  assert.match(withDrinks.title, /Rangoli: grilled protein & veggies \+ 3 drinks$/);
+  assert.equal(drinksTotals({ vodkaSoda: 1, nope: 4, beer: 0 }).count, 1, 'unknown and zero ignored');
+  const menu = eatOutMeal({ eatout: { mode: 'menu', menu: { kcal: 800 }, drinks: { beer: 1 } } });
+  assert.equal(menu.totals.kcal, 955, 'works with menu calories too');
+});

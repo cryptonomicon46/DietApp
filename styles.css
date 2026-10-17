@@ -805,3 +805,12 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .feed-btn.hsplit .hhalf.on { background: linear-gradient(180deg, #55c48f, #2e8d5f); color: #fff; }
 .feed-btn.hsplit .hhalf.on small { color: #fff; }
 .feed-btn.hsplit .hhalf:active { filter: brightness(.92); }
+
+/* 🍷 Drinks with a restaurant meal */
+.eo-drinks { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.eo-drinks summary { cursor: pointer; font-weight: 600; }
+.drink-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.drink { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--bg); }
+.drink.on { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, var(--card)); }
+.drink button { background: none; color: var(--ink); border: 0; border-radius: 0; padding: 6px 10px; font-size: .8rem; font-weight: 600; }
+.drink .drink-less { border-left: 1px solid var(--line); padding: 6px 10px; color: var(--muted); }

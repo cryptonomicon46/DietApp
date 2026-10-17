@@ -243,6 +243,36 @@ export const EAT_OUT = {
   pasta:     { label: 'Pasta dish',                          kcal: 1100, p: 40, f: 45, c: 130 },
   brunch:    { label: 'Brunch plate (eggs, toast, potatoes)', kcal: 900, p: 35, f: 50, c: 75 },
 };
+// Drinks with the meal, per standard serving. Alcohol (7 kcal/g) counts in calories but isn't
+// protein, fat or carbs, so only the sugar (mixers, residual sugar) is listed as carbs.
+export const DRINKS = {
+  redWine:     { label: 'Red wine', icon: '🍷', serving: '5 oz glass', kcal: 125, c: 4 },
+  whiteWine:   { label: 'White wine', icon: '🥂', serving: '5 oz glass', kcal: 120, c: 4 },
+  rose:        { label: 'Rosé', icon: '🍷', serving: '5 oz glass', kcal: 125, c: 4 },
+  bubbly:      { label: 'Prosecco / Champagne', icon: '🥂', serving: '5 oz glass', kcal: 120, c: 2 },
+  beer:        { label: 'Beer', icon: '🍺', serving: '12 oz', kcal: 155, c: 13 },
+  lightBeer:   { label: 'Light beer', icon: '🍺', serving: '12 oz', kcal: 105, c: 6 },
+  margarita:   { label: 'Margarita', icon: '🍸', serving: 'restaurant pour', kcal: 275, c: 27 },
+  oldFashioned:{ label: 'Old fashioned', icon: '🥃', serving: 'cocktail', kcal: 175, c: 6 },
+  martini:     { label: 'Martini', icon: '🍸', serving: 'cocktail', kcal: 175, c: 1 },
+  espressoMartini: { label: 'Espresso martini', icon: '🍸', serving: 'cocktail', kcal: 230, c: 15 },
+  mojito:      { label: 'Mojito', icon: '🍹', serving: 'cocktail', kcal: 215, c: 25 },
+  ginTonic:    { label: 'Gin & tonic', icon: '🍸', serving: 'cocktail', kcal: 170, c: 14 },
+  vodkaSoda:   { label: 'Vodka soda', icon: '🍸', serving: 'cocktail', kcal: 100, c: 0 },
+  moscowMule:  { label: 'Moscow mule', icon: '🍹', serving: 'cocktail', kcal: 180, c: 18 },
+  spritz:      { label: 'Aperol spritz', icon: '🍹', serving: 'cocktail', kcal: 160, c: 15 },
+  whiskey:     { label: 'Whiskey / spirit, neat', icon: '🥃', serving: '1.5 oz', kcal: 100, c: 0 },
+};
+export function drinksTotals(drinks = {}) {
+  const t = { kcal: 0, p: 0, f: 0, c: 0, count: 0 };
+  for (const [k, n] of Object.entries(drinks)) {
+    const d = DRINKS[k];
+    if (!d || !(n > 0)) continue;
+    t.kcal += d.kcal * n; t.c += d.c * n; t.count += n;
+  }
+  return t;
+}
+
 export const EAT_OUT_SIZE = { light: { label: 'Light', x: 0.75 }, regular: { label: 'Regular', x: 1 }, large: { label: 'Large', x: 1.3 } };
 export const EAT_OUT_ATE = { 1: 'All of it', 0.75: 'Most', 0.5: 'Half' };
 
@@ -265,9 +295,13 @@ export function eatOutMeal(c, target) {
     const x = (EAT_OUT_SIZE[e.size] || EAT_OUT_SIZE.regular).x * (+e.ate || 1);
     totals = { kcal: d.kcal * x, p: d.p * x, f: d.f * x, c: d.c * x };
   }
+  // Wine, beer and cocktails with the meal.
+  const dr = drinksTotals(e.drinks);
+  totals.kcal += dr.kcal; totals.c += dr.c;
   for (const k in totals) totals[k] = Math.round(totals[k]);
   const what = e.mode === 'menu' ? (e.dishName || 'from the menu') : (EAT_OUT[e.dish] || EAT_OUT.plate).label.toLowerCase();
-  return { title: `Ate out${e.place ? ` at ${e.place}` : ''}: ${what}`, portions: [], totals, custom: true, eatout: true };
+  const drinksNote = dr.count ? ` + ${dr.count % 1 ? dr.count : dr.count} drink${dr.count === 1 ? '' : 's'}` : '';
+  return { title: `Ate out${e.place ? ` at ${e.place}` : ''}: ${what}${drinksNote}`, portions: [], totals, custom: true, eatout: true, drinks: dr };
 }
 
 // Deterministic rotation so each day looks different.

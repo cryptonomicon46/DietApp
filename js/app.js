@@ -3,7 +3,7 @@ import {
   ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
   FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek,
-  EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE, fitItems,
+  EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE, DRINKS, drinksTotals, fitItems,
 } from './plan.js';
 import {
   SESSION_TYPES, SPORTS, INTENSITY, trainingDay, applyTraining, parseGarminCsv, parseWhoopCsv,
@@ -674,8 +674,22 @@ function eatOutBody(meal, m) {
         <div class="small muted" style="margin-top:6px">Portion</div>${seg('size', EAT_OUT_SIZE, e.size || 'regular')}
         <div class="small muted" style="margin-top:6px">How much you ate</div>${seg('ate', EAT_OUT_ATE, e.ate || 1)}
         <p class="small muted">Restaurant food usually has more oil and butter than it looks, so these estimates lean generous.</p>`}
+      ${drinksBlock(e)}
       ${over > 100 ? `<p class="small">That's about <b>${over} kcal</b> over this meal's target. No stress: one meal doesn't make or break a week. Keep the rest of today light and protein-first.</p>` : ''}
     </div>`;
+}
+
+// 🍷 Wine, beer or cocktails with a restaurant meal: tap to add a glass, − to take one back.
+const DRINK_ROWS = [['Wine & beer', ['redWine', 'whiteWine', 'rose', 'bubbly', 'beer', 'lightBeer']], ['Cocktails & spirits', ['margarita', 'oldFashioned', 'martini', 'espressoMartini', 'mojito', 'ginTonic', 'vodkaSoda', 'moscowMule', 'spritz', 'whiskey']]];
+function drinksBlock(e) {
+  const drinks = e.drinks || {};
+  const t = drinksTotals(drinks);
+  return `<details class="eo-drinks" ${t.count ? 'open' : ''}><summary>🍷 Drinks with the meal${t.count ? ` · <b>${t.count}</b> · ${Math.round(t.kcal)} kcal` : ''}</summary>
+    ${DRINK_ROWS.map(([title, keys]) => `<div class="small muted" style="margin-top:6px">${title}</div>
+      <div class="drink-chips">${keys.map((k) => { const d = DRINKS[k], n = drinks[k] || 0; return `<span class="drink ${n ? 'on' : ''}">
+        <button type="button" class="drink-add" data-eodrink="${k}:1" title="${esc(d.serving)} · ${d.kcal} kcal">${d.icon} ${esc(d.label)}${n ? ` <b>×${n}</b>` : ''}</button>${n ? `<button type="button" class="drink-less" data-eodrink="${k}:-1" aria-label="One less ${esc(d.label)}">−</button>` : ''}</span>`; }).join('')}</div>`).join('')}
+    <p class="small muted">Wine is a 5 oz glass (~120 kcal), beer 12 oz, cocktails a typical bar pour. Alcohol counts in your calories but isn't protein, fat or carbs.</p>
+  </details>`;
 }
 
 // ---- saved combos: Breakfast / Lunch / Dinner combos. Lunch and dinner offer each other's
@@ -899,6 +913,16 @@ $('#meals').addEventListener('click', (e) => {
     renderToday();
   } else if (e.target.closest('[data-eatout]')) {
     editMeal(meal, (c) => { delete c.items; delete c.manual; c.eatout = { mode: 'estimate', dish: meal === 'breakfast' ? 'brunch' : 'plate', size: 'regular', ate: 1 }; });
+    resnap(meal);
+    renderToday();
+  } else if (e.target.closest('[data-eodrink]')) {
+    const [k, delta] = e.target.closest('[data-eodrink]').dataset.eodrink.split(':');
+    editMeal(meal, (c) => {
+      const drinks = { ...(c.eatout?.drinks || {}) };
+      drinks[k] = Math.max(0, (drinks[k] || 0) + +delta);
+      if (!drinks[k]) delete drinks[k];
+      c.eatout = { ...c.eatout, drinks };
+    });
     resnap(meal);
     renderToday();
   } else if (e.target.closest('[data-eoset]')) {
