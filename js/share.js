@@ -97,7 +97,7 @@ export function reportText(report, name) {
       for (const x of d.extras) lines.push(`  ➕ ${x}`);
     }
   }
-  lines.push('', '— Our PawMily');
+  lines.push('', '— OurPawMili');
   return lines.join('\n');
 }
 
@@ -123,7 +123,7 @@ export function combosText(groups, name) {
       for (const it of c.items) lines.push(`  – ${it.name}: ${it.amount} (${it.grams} g)`);
     }
   }
-  lines.push('', 'Oats weighed dry; meat, fish, rice and veggies cooked.', '— Our PawMily');
+  lines.push('', 'Oats weighed dry; meat, fish, rice and veggies cooked.', '— OurPawMili');
   return lines.join('\n');
 }
 

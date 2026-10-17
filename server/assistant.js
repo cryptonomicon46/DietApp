@@ -104,7 +104,7 @@ export function buildRequest(text, context = {}) {
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
     output_config: { effort: 'low' },
-    system: `You turn a lifter's spoken or typed note into entries in the workout log of Our PawMily, a couples app.
+    system: `You turn a lifter's spoken or typed note into entries in the workout log of OurPawMili, a couples app.
 Use the tools for everything the note asks to record; call several tools if it mentions several things. Pounds are the unit. "3x8 at 135" means 3 sets of 8 reps at 135 lb. When the note names an exercise loosely, pick the closest catalog entry, preferring one already in today's session.
 If the note asks for something these tools can't do (questions about progress, nutrition, editing past days), don't call a tool; reply in one short sentence saying what you can log instead.
 

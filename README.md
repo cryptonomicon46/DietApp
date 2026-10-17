@@ -1,4 +1,4 @@
-# Our PawMily
+# OurPawMili
 
 A couples app for two people and their dogs: shared dog care, notes and plans, and each partner's diet and lifting.
 
@@ -79,7 +79,7 @@ A couples app for two people and their dogs: shared dog care, notes and plans, a
 ## WHOOP & Garmin
 
 - **WHOOP export import** works with no setup: WHOOP app → More → App Settings → Data Export → import `workouts.csv` under Devices.
-- **Garmin CSV import** works with no setup: Garmin Connect → Activities → Export CSV → Our PawMily → Devices → Import.
+- **Garmin CSV import** works with no setup: Garmin Connect → Activities → Export CSV → OurPawMili → Devices → Import.
 - **Automatic sync** for WHOOP and Garmin (through Strava, since Garmin's own API is limited to approved businesses) needs a small free connector — see [`server/README.md`](server/README.md).
 
 This is general guidance, not medical advice — check with a doctor or dietitian if you have health conditions.

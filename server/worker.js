@@ -59,7 +59,7 @@ export default {
         }
         if (!records.length) return json({ error: 'not found' }, 404);
         // Subscribed calendars ignore alarms, so none are sent.
-        const body = icsCalendar(mergeEvents(records), { names, alarms: false, name: 'Our PawMily' });
+        const body = icsCalendar(mergeEvents(records), { names, alarms: false, name: 'OurPawMili' });
         return new Response(req.method === 'HEAD' ? null : body, { headers: { ...cors, 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'private, max-age=300' } });
       }
 

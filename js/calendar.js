@@ -144,7 +144,7 @@ export function icsEvent(ev, { names = {}, alarms = true, stamp = new Date() } =
   }
   lines.push(`SUMMARY:${icsText(e.title)}`);
   if (e.place) lines.push(`LOCATION:${icsText(e.place)}`);
-  lines.push(`DESCRIPTION:${icsText([`For: ${who}`, e.notes, 'From Our PawMily'].filter(Boolean).join('\n'))}`);
+  lines.push(`DESCRIPTION:${icsText([`For: ${who}`, e.notes, 'From OurPawMili'].filter(Boolean).join('\n'))}`);
   if (alarms && e.remind !== '' && e.remind != null) {
     lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText(e.title)}`, `TRIGGER:-PT${+e.remind}M`, 'END:VALARM');
   }
@@ -152,8 +152,8 @@ export function icsEvent(ev, { names = {}, alarms = true, stamp = new Date() } =
   return lines.map(fold).join('\r\n');
 }
 export function icsCalendar(events, opts = {}) {
-  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Our PawMily//Shared calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
-    `X-WR-CALNAME:${icsText(opts.name || 'Our PawMily')}`, 'X-PUBLISHED-TTL:PT1H', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//OurPawMili//Shared calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    `X-WR-CALNAME:${icsText(opts.name || 'OurPawMili')}`, 'X-PUBLISHED-TTL:PT1H', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
     ...events.map((e) => icsEvent(e, opts)), 'END:VCALENDAR'].join('\r\n') + '\r\n';
 }
 // Google Calendar's "add event" page, filled in (Google sets its own default reminder).
