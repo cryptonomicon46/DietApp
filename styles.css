@@ -791,3 +791,7 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .feed-btn.oval.fed .hhalf:first-child { justify-content: flex-end; padding-bottom: 6px; }
 .feed-btn.oval.fed .hhalf:last-child { justify-content: flex-start; padding-top: 6px; }
 .feed-btn.oval.fed .hhalf small { font-size: .66rem; line-height: 1.1; }
+/* Taller than wide: an upright oval (the circle once done stays as is) */
+.feed-btn.oval { width: 128px; height: 168px; align-self: center; }
+.feed-btn.oval .nm { font-size: .82rem; padding: 3px 9px; }
+.feed-btn.oval .hhalf { padding: 0 6px; }
