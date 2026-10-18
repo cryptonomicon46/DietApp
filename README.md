@@ -220,6 +220,7 @@ Everything for the two of you on one page, in compact sections; forms and histor
   - It starts fresh every morning at 5 AM, and earlier notes move to *Earlier notes*. Unread notes stay until seen.
   - Emoji, colours, ↩ replies, ❤️ and a daily streak.
   - New notes badge the tab.
+  - **Notes last 2 days.** Each phone deletes its own notes (and hearts on them) once they're 2 days old; only the days you wrote are kept, for the 💌 streak.
 - **✨ Feeling like:** suggest a plan (movie, show, brunch, dinner, coffee, a walk, a workout…) with where, when, time and a note.
   - The other answers 🙌 I'm in, 🤔 Maybe or ⏰ Another time.
   - Mark it done or cancel it.

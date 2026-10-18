@@ -36,3 +36,11 @@ test('a fresh plan counts as upcoming when used as a filter', async () => {
   const d = new Date(); const today = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   assert.equal([{ date: today, when: 'tonight' }].filter((x) => isUpcoming(x)).length, 1);
 });
+
+test('notes last 2 days', async () => {
+  const { keepNote, NOTE_KEEP_MS } = await import('../js/notes.js');
+  const now = Date.parse('2026-10-19T12:00:00Z');
+  assert.equal(NOTE_KEEP_MS, 2 * 86400000);
+  assert.equal(keepNote({ at: now - 47 * 3600e3 }, now), true);
+  assert.equal(keepNote({ at: now - 49 * 3600e3 }, now), false);
+});

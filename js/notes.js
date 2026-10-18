@@ -17,7 +17,28 @@ const isoDate = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset()
 const me = () => ownerId();
 const partner = () => PROFILES.find((p) => p.id !== me());
 const nameOf = (id) => profileStore(id).get('profile', null)?.name || PROFILES.find((p) => p.id === id)?.name || id;
-const notesOf = (id) => profileStore(id).get('notes', []);
+// Notes last 2 days, then they're gone (both phones delete their own; older ones are hidden).
+export const NOTE_KEEP_MS = 2 * 86400000;
+export const keepNote = (n, now = Date.now()) => n.at >= now - NOTE_KEEP_MS;
+const notesOf = (id) => profileStore(id).get('notes', []).filter((n) => keepNote(n));
+// Delete this phone's notes older than 2 days. Only the days you wrote are kept, for the streak.
+export function pruneMyNotes() {
+  if (!me()) return false;
+  const s = profileStore(me());
+  const all = s.get('notes', []);
+  const keep = all.filter((n) => keepNote(n));
+  if (keep.length === all.length) return false;
+  const days = new Set([...s.get('noteDays', []), ...all.filter((n) => !keepNote(n)).map((n) => n.date)]);
+  s.set('noteDays', [...days].sort().slice(-400));
+  s.set('notes', keep);
+  // Hearts on notes that are gone go too.
+  const p = partner();
+  const ids = new Set(p ? notesOf(p.id).map((n) => n.id) : []);
+  const hearts = s.get('noteHearts', {});
+  s.set('noteHearts', Object.fromEntries(Object.entries(hearts).filter(([id]) => ids.has(id))));
+  pushNow().catch(() => {});
+  return true;
+}
 
 let color = 'yellow';
 let replyTo = null; // the note you're answering, if any
@@ -92,6 +113,7 @@ export function updateNotesBadge() {
 export function renderNotes() {
   const el = $('#notesBoard');
   if (!el || !me()) return;
+  pruneMyNotes();
   // Keep a half-written note when the board refreshes.
   const draft = $('#noteText')?.value || '';
   const focused = document.activeElement?.id === 'noteText';
@@ -107,7 +129,7 @@ export function renderNotes() {
   const hearts = profileStore(me()).get('noteHearts', {});
   const theirHearts = profileStore(p.id).get('noteHearts', {});
   const today = isoDate();
-  const streak = noteStreak(mine);
+  const streak = noteStreak([...mine, ...profileStore(me()).get('noteDays', []).map((date) => ({ date }))]);
   const linked = global.get(`seen.${p.id}`, 0) > 0;
   const wroteToday = mine.some((n) => n.date === today);
 
@@ -148,7 +170,7 @@ export function renderNotes() {
       ${linked ? '' : `<p class="small muted">${esc(pName)} sees your notes once your phones are linked (tap ${esc(pName)} at the top → Link).</p>`}
       ${board.length ? `<div class="note-grid">${board.map((x) => postit(x, { pName, hearts, theirHearts })).join('')}</div>`
         : `<p class="muted small">A fresh board for today. Leave the first note 💌</p>`}
-      ${earlier.length ? `<details class="past-notes"><summary class="small">Earlier notes</summary>
+      ${earlier.length ? `<details class="past-notes"><summary class="small">Earlier notes <span class="muted">· kept 2 days</span></summary>
         ${Object.entries(byDay).map(([d, notes]) => `<h4 class="note-day small">${dayLabel(d)}</h4>
           <div class="note-grid">${notes.map((x) => postit(x, { pName, hearts, theirHearts })).join('')}</div>`).join('')}
       </details>` : ''}
@@ -177,6 +199,7 @@ function postit(n, { pName, hearts, theirHearts }) {
 }
 
 export function initNotes() {
+  pruneMyNotes();
   const root = $('#tab-notes');
   initPlans(root, () => renderNotes());
   initShows(root, () => renderNotes());
