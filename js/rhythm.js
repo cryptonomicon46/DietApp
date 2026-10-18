@@ -13,6 +13,21 @@ export const RHYTHMS = {
   getaway:   { icon: '🌴', label: 'Multi-night getaway', every: 'every 2 years', days: 730, soon: 60 },
 };
 const ORDER = ['date', 'close', 'overnight', 'getaway'];
+// What kind of date it was (any of these counts as the fortnightly date).
+export const DATE_TYPES = {
+  dinner: { icon: '🍷', label: 'Drinks & dinner' },
+  lunch:  { icon: '🥗', label: 'Lunch date' },
+  coffee: { icon: '☕', label: 'Coffee shop' },
+  books:  { icon: '📚', label: 'Bookshop' },
+  day:    { icon: '☀️', label: 'Day date' },
+  other:  { icon: '✨', label: 'Something else' },
+};
+// How a moment reads on the calendar and in the log.
+export function momentText(e) {
+  if (e.kind !== 'date') return RHYTHMS[e.kind]?.label || e.kind;
+  const t = DATE_TYPES[e.type];
+  return `${t ? t.label : 'Date night'}${e.place ? ` · ${e.place}` : ''}`;
+}
 
 export const LOVE = {
   date: [
@@ -104,11 +119,11 @@ const short = (s) => atNoon(s).toLocaleDateString(undefined, { month: 'short', d
 const inDays = (n) => (n <= 0 ? 'now' : n === 1 ? 'tomorrow' : n < 14 ? `in ${n} days` : n < 60 ? `in ${Math.round(n / 7)} weeks` : `in ${Math.round(n / 30)} months`);
 
 export const allRhythm = () => mergeRhythm(PROFILES.map((p) => ({ person: p.id, rhythm: profileStore(p.id).get('rhythm', {}) })));
-function logIt(kind, date = todayIso()) {
+function logIt(kind, date = todayIso(), extra = {}) {
   const s = profileStore(ownerId());
   const r = s.get('rhythm', {});
   const at = Date.now();
-  s.set('rhythm', { ...r, entries: [...(r.entries || []), { id: at.toString(36) + Math.random().toString(36).slice(2, 5), kind, date, at }].slice(-400) });
+  s.set('rhythm', { ...r, entries: [...(r.entries || []), { id: at.toString(36) + Math.random().toString(36).slice(2, 5), kind, date, at, ...extra }].slice(-400) });
   pushNow().catch(() => {});
 }
 function removeIt(id) {
@@ -135,6 +150,7 @@ function suggest(kind) {
 
 // ---------- UI ----------
 let showAll = false;
+let dateForm = null; // {date, type, place} while logging a date
 let detailsOpen = false; // keep "Log it" open across redraws
 function rowStatus(st) {
   const r = RHYTHMS[st.kind];
@@ -142,6 +158,19 @@ function rowStatus(st) {
   const extra = st.kind === 'overnight' ? ` · ${st.thisYear}/2 this year` : '';
   if (!st.last) return `<span class="muted">Not logged yet${extra}</span>`;
   return `Last ${short(st.last)} · <span class="${st.level === 'ok' ? 'muted' : st.level === 'due' ? 'tone-warn' : 'tone-good'}">${st.level === 'due' ? 'time for the next one' : `next ${inDays(st.daysLeft)}`}</span>${extra}`;
+}
+
+function dateFormHtml(entries) {
+  const f = dateForm;
+  const places = [...new Set(entries.filter((e) => e.kind === 'date' && e.place).reverse().map((e) => e.place))].slice(0, 12);
+  return `<div class="r-dateform">
+    <div class="small"><b>🍷 Log a date</b></div>
+    <div class="r-types">${Object.entries(DATE_TYPES).map(([k, v]) => `<button type="button" class="chip ${f.type === k ? 'on' : ''}" data-rtype="${k}">${v.icon} ${v.label}</button>`).join('')}</div>
+    <input data-rplace list="rPlaces" maxlength="60" placeholder="Where? e.g. Philz Coffee, Kepler's Books" value="${esc(f.place || '')}" aria-label="Where">
+    <datalist id="rPlaces">${places.map((p) => `<option value="${esc(p)}"></option>`).join('')}</datalist>
+    ${places.length ? `<div class="r-places">${places.slice(0, 5).map((p) => `<button type="button" class="chip small" data-rpick="${esc(p)}">📍 ${esc(p)}</button>`).join('')}</div>` : ''}
+    <div class="row"><input type="date" data-rdateform value="${f.date}" max="${todayIso()}" aria-label="When"><button type="button" class="ghost small" data-rdatecancel>Cancel</button><button type="button" class="small" data-rdatesave>Save ❤️</button></div>
+  </div>`;
 }
 
 export function rhythmCard({ home = false } = {}) {
@@ -155,10 +184,11 @@ export function rhythmCard({ home = false } = {}) {
   const suggestBtn = (k) => (k === 'close' ? '' : suggested(k)
     ? '<span class="small tone-good">✓ Suggested for the weekend</span>'
     : `<button type="button" class="ghost small" data-rsuggest="${k}">💡 Suggest for ${satText}</button>`);
-  const nudgeBlock = nudge ? `<div class="r-nudge r-${nudge.kind}">
+  const form = dateForm && dateForm.home === home ? dateFormHtml(entries) : '';
+  const nudgeBlock = form || (nudge ? `<div class="r-nudge r-${nudge.kind}">
       <p class="r-love">${esc(loveLine(nudge.kind, today))}</p>
       <div class="row wrap" style="margin-top:6px"><button type="button" class="small" data-rdid="${nudge.kind}">✓ We did it</button>${suggestBtn(nudge.kind)}</div>
-    </div>` : '<p class="small muted">All four are on track — enjoy each other 💞</p>';
+    </div>` : `<p class="small muted">All four are on track — enjoy each other 💞</p>${home ? '' : '<button type="button" class="ghost small" data-rdid="date">🍷 Log a date</button>'}`);
   const chips = `<div class="r-chips">${ORDER.map((k) => `<span class="r-chip ${st[k].level}" title="${RHYTHMS[k].label}, ${RHYTHMS[k].every}">${RHYTHMS[k].icon} ${k === 'close' ? `${st.close.count}/2` : st[k].level === 'ok' ? '✓' : st[k].level === 'due' ? 'due' : 'soon'}</span>`).join('')}</div>`;
   if (home) {
     return `<div class="card rhythm-card home-rhythm">
@@ -178,7 +208,7 @@ export function rhythmCard({ home = false } = {}) {
       <span class="r-act">${k === 'close' ? `<button type="button" class="small ghost" data-rdid="close">💗 +1</button>`
         : `<input type="date" data-rdate="${k}" value="${today}" max="${today}" aria-label="When"><button type="button" class="small ghost" data-rdid="${k}">✓ Log</button>`}</span>
     </li>`).join('')}</ul>
-    ${recent.length ? `<details class="r-log" ${showAll ? 'open' : ''}><summary class="small muted">Logged moments</summary><ul>${recent.map((e) => `<li><span>${RHYTHMS[e.kind]?.icon || '💞'} ${esc(RHYTHMS[e.kind]?.label || e.kind)} · ${short(e.date)}</span><small class="muted">${e.by === ownerId() ? 'you' : esc(nameOf(e.by))}</small><button type="button" class="x" data-rdel="${e.id}" aria-label="Remove">✕</button></li>`).join('')}</ul>
+    ${recent.length ? `<details class="r-log" ${showAll ? 'open' : ''}><summary class="small muted">Logged moments</summary><ul>${recent.map((e) => `<li><span>${e.kind === 'date' && DATE_TYPES[e.type] ? DATE_TYPES[e.type].icon : RHYTHMS[e.kind]?.icon || '💞'} ${esc(momentText(e))} · ${short(e.date)}</span><small class="muted">${e.by === ownerId() ? 'you' : esc(nameOf(e.by))}</small><button type="button" class="x" data-rdel="${e.id}" aria-label="Remove">✕</button></li>`).join('')}</ul>
       ${entries.length > 6 && !showAll ? '<button type="button" class="linkish small" data-rmore>Show more</button>' : ''}</details>` : ''}
     </details>
   </div>`;
@@ -195,10 +225,22 @@ export function initRhythm(root) {
     if (!t || !t.closest('.rhythm-card')) return;
     detailsOpen = !!t.closest('.r-more');
     const ds = t.dataset;
+    const card = t.closest('.rhythm-card');
+    const keepPlace = () => { if (dateForm) dateForm.place = card.querySelector('[data-rplace]')?.value || dateForm.place || ''; };
     if (ds.rdid) {
-      const input = t.closest('.rhythm-card').querySelector(`[data-rdate="${ds.rdid}"]`);
+      const input = card.querySelector(`[data-rdate="${ds.rdid}"]`);
       const date = input?.value && input.value <= todayIso() ? input.value : todayIso();
-      logIt(ds.rdid, date);
+      // A date gets its kind and place; everything else logs in one tap.
+      if (ds.rdid === 'date') dateForm = { date, type: 'dinner', place: '', home: card.classList.contains('home-rhythm') };
+      else logIt(ds.rdid, date);
+    } else if (ds.rtype) { keepPlace(); dateForm.type = ds.rtype; }
+    else if (ds.rpick) { dateForm.place = ds.rpick; }
+    else if (ds.rdatecancel != null) dateForm = null;
+    else if (ds.rdatesave != null) {
+      keepPlace();
+      const d = card.querySelector('[data-rdateform]')?.value;
+      logIt('date', d && d <= todayIso() ? d : dateForm.date, { type: dateForm.type, ...(dateForm.place.trim() ? { place: dateForm.place.trim().slice(0, 60) } : {}) });
+      dateForm = null;
     } else if (ds.rsuggest) suggest(ds.rsuggest);
     else if (ds.rdel) { if (!confirm('Remove this moment?')) return; removeIt(ds.rdel); }
     else if (ds.rmore != null) showAll = true;

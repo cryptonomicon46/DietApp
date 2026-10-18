@@ -3,6 +3,8 @@
 // into Apple or Google Calendar — or subscribe to the whole shared calendar there.
 import { PROFILES, ownerId, profileStore, seenItems, global } from './storage.js';
 import { sync, pushNow } from './sync.js';
+import { goldenDays } from './briefTab.js';
+import { allRhythm, momentText, DATE_TYPES, RHYTHMS } from './rhythm.js';
 import { REMINDERS, REPEATS, WHO_BOTH, mergeEvents, eventsOn, upcoming, icsCalendar, googleUrl, repeatText, repeatUnit, parseIcs } from './calendar.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -130,7 +132,14 @@ let editing = null;   // event being added / edited (a copy)
 let openId = null;    // "<id>:<date>" of the event (or one date of a series) whose details are open
 let note = '';
 
-function monthGrid(events) {
+// ❤️ moments from the 2-2-2-2 rhythm and the dogs' ⭐ golden days, by date, for the calendar.
+function marksByDay() {
+  const hearts = {};
+  for (const e of allRhythm()) (hearts[e.date] ||= []).push(e);
+  return { hearts, dogs: goldenDays() };
+}
+
+function monthGrid(events, marks) {
   const first = new Date(`${month}-01T12:00:00`);
   const daysIn = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
   const today = isoDate();
@@ -139,13 +148,15 @@ function monthGrid(events) {
     const k = `${month}-${String(i).padStart(2, '0')}`;
     const evs = eventsOn(events, k);
     cells.push(`<button type="button" class="cd ${k === selected ? 'sel' : ''} ${k === today ? 'today' : ''}" data-calday="${k}" aria-label="${k}${evs.length ? `, ${evs.length} events` : ''}">
-      <span>${i}</span><span class="dots">${evs.slice(0, 3).map((e) => `<i class="${whoClass(e.who)}"></i>`).join('')}</span></button>`);
+      <span>${i}</span><span class="dots">${evs.slice(0, 3).map((e) => `<i class="${whoClass(e.who)}"></i>`).join('')}</span>${marks.hearts[k] || marks.dogs[k]?.best ? `<span class="marks">${marks.dogs[k]?.best ? '⭐' : ''}${marks.hearts[k] ? '❤️' : ''}</span>` : ''}</button>`);
   }
   const title = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   return `<div class="card">
     <div class="row between" style="margin-top:0"><button type="button" class="ghost small" data-calmonth="-1" aria-label="Previous month">‹</button><b>${title}</b><button type="button" class="ghost small" data-calmonth="1" aria-label="Next month">›</button></div>
     <div class="cal-grid month">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((x) => `<span class="cal-h">${x}</span>`).join('')}${cells.join('')}</div>
-    <div class="cal-key small muted"><i class="w-both"></i> Both <i class="w-p0"></i> ${esc(nameOf(PROFILES[0].id))} <i class="w-p1"></i> ${esc(nameOf(PROFILES[1].id))}</div>
+    <div class="cal-key small muted"><i class="w-both"></i> Both <i class="w-p0"></i> ${esc(nameOf(PROFILES[0].id))} <i class="w-p1"></i> ${esc(nameOf(PROFILES[1].id))} <span class="mk">❤️ Us time</span> <span class="mk">⭐ Dogs' golden day</span></div>
+    ${(() => { const hearts = Object.entries(marks.hearts).filter(([d]) => d.startsWith(month)); const dates = hearts.flatMap(([, l]) => l).filter((e) => e.kind === 'date').length; const gold = Object.entries(marks.dogs).filter(([d, x]) => d.startsWith(month) && x.best).length;
+      return hearts.length || gold ? `<p class="small cal-month-sum">This month: ${dates ? `❤️ ${dates} date${dates === 1 ? '' : 's'}` : ''}${dates && gold ? ' · ' : ''}${gold ? `⭐ ${gold} golden day${gold === 1 ? '' : 's'} for the dogs` : ''}</p>` : ''; })()}
   </div>`;
 }
 
@@ -231,12 +242,21 @@ export function renderCal() {
   if (document.querySelector('#tab-calendar.active')) { seenItems.add(unseenEvents().map(seenKey)); updateCalBadge(); }
   if (editing) { el.innerHTML = form(); return; }
   const dayEvents = eventsOn(events, selected);
+  const marks = marksByDay();
+  const dayHearts = marks.hearts[selected] || [];
+  const dayDogs = marks.dogs[selected];
+  const dayMarks = [
+    ...dayHearts.map((e) => `<li class="mark-row">❤️ <span>${e.kind === 'date' && DATE_TYPES[e.type] ? DATE_TYPES[e.type].icon : RHYTHMS[e.kind]?.icon || ''} ${esc(momentText(e))}</span>${e.kind === 'date' && e.place ? ` <a class="small" href="https://maps.apple.com/?q=${encodeURIComponent(e.place)}" target="_blank" rel="noopener">map</a>` : ''}</li>`),
+    ...(dayDogs?.best ? [`<li class="mark-row">⭐ <span>Golden day for the dogs · ${dayDogs.outings} outing${dayDogs.outings === 1 ? '' : 's'}${dayDogs.treat ? ' + a treat' : ''}</span></li>`]
+      : dayDogs?.outings ? [`<li class="mark-row muted">🐾 <span>Dogs out ${dayDogs.outings}×${dayDogs.treat ? ' + a treat' : ''}</span></li>`] : []),
+  ];
   const next = upcoming(events, isoDate(), nowHHMM(), 6).filter((e) => e.date !== selected);
   el.innerHTML = `
     <button type="button" class="add-show" data-caladd>＋ Add an event</button>
-    ${monthGrid(events)}
+    ${monthGrid(events, marks)}
     <div class="card"><div class="eyebrow">${esc(dayLabel(selected))}${selected !== isoDate() ? ` · ${new Date(`${selected}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })}` : ''}</div>
-      ${dayEvents.length ? `<ul class="ev-list">${dayEvents.map((e) => eventRow(e)).join('')}</ul>` : '<p class="small muted">Nothing planned. Tap ＋ to add something.</p>'}</div>
+      ${dayMarks.length ? `<ul class="mark-list">${dayMarks.join('')}</ul>` : ''}
+      ${dayEvents.length ? `<ul class="ev-list">${dayEvents.map((e) => eventRow(e)).join('')}</ul>` : dayMarks.length ? '' : '<p class="small muted">Nothing planned. Tap ＋ to add something.</p>'}</div>
     ${next.length ? `<div class="card"><div class="eyebrow">Coming up</div><ul class="ev-list">${next.map((e) => eventRow(e, { showDay: true })).join('')}</ul></div>` : ''}
     ${note ? `<p class="small">${esc(note)}</p>` : ''}
     ${bringInCard()}

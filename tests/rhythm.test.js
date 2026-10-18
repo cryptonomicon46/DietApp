@@ -48,3 +48,10 @@ test('2-2-2-2: date every 2 weeks, intimacy twice a week, trips by the calendar'
   assert.deepEqual([fresh.overnight.level, fresh.getaway.level], ['soon', 'soon']);
   assert.ok(loveLine('date', '2026-10-15').length > 10);
 });
+
+test('2-2-2-2: a date reads as its kind and place', async () => {
+  const { momentText } = await import('../js/rhythm.js');
+  assert.equal(momentText({ kind: 'date', type: 'books', place: "Kepler's Books" }), "Bookshop · Kepler's Books");
+  assert.equal(momentText({ kind: 'date' }), 'Date night');
+  assert.equal(momentText({ kind: 'overnight' }), 'Overnight trip');
+});

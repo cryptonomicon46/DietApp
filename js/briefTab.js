@@ -214,6 +214,8 @@ function logNewToy() {
   renderFeed();
 }
 
+// Dog days for the shared calendar: {date: {outings, treat, best}} — best = a ⭐ golden day.
+export const goldenDays = () => dogDays(dutyRecords());
 function dutyRecords() {
   return PROFILES.map((p) => {
     const s = profileStore(p.id);
@@ -385,15 +387,6 @@ function renderHappy(recs) {
   const m = happyStats(days, month, today);
   const y = happyStats(days, year, today);
   const { months, happiest } = happyMonths(days, year, month);
-  const first = new Date(`${month}-01T12:00:00`);
-  const daysIn = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
-  const cells = Array.from({ length: first.getDay() }, () => '<span class="cal-pad"></span>');
-  for (let i = 1; i <= daysIn; i++) {
-    const k = `${month}-${String(i).padStart(2, '0')}`;
-    const d = days[k];
-    const cls = d?.best ? 'best' : d?.outings ? 'out' : k > today ? 'future' : 'none';
-    cells.push(`<span class="cal ${cls}${k === today ? ' today' : ''}" title="${k}${d ? `: ${d.walks} walk${d.walks === 1 ? '' : 's'}, ${d.park} park` : ''}">${d?.best ? '⭐' : i}</span>`);
-  }
   const top = Math.max(1, ...months.map((x) => x.best));
   el.innerHTML = `
     <div class="eyebrow">⭐ Golden days</div>
@@ -403,8 +396,7 @@ function renderHappy(recs) {
       <div><b>${m.out}</b><small>days out</small></div>
       <div><b>${m.streak}</b><small>⭐ streak</small></div>
     </div>
-    <div class="cal-grid">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((x) => `<span class="cal-h">${x}</span>`).join('')}${cells.join('')}</div>
-    <div class="cal-key small muted"><span class="cal best">⭐</span> golden day <span class="cal out"></span> out once <span class="cal none"></span> no walk</div>
+    <button type="button" class="ghost small" data-goto="calendar">📅 Golden days are on the shared calendar ›</button>
     <div class="happy-year">
       <div class="small"><b>${year}</b>: ${y.best} golden days · ${y.out} days out${happiest ? ` · happiest month <b>${monthName(happiest)}</b> 🏆` : ''}</div>
       <div class="month-bars">${months.map((x) => `<div class="mb${x.month === happiest ? ' mb-top' : ''}" title="${monthName(x.month)}: ${x.best} golden days"><span class="mb-n">${x.best || ''}</span><span class="mb-bar" style="height:${Math.round((x.best / top) * 100)}%"></span><span class="mb-l">${monthName(x.month, 'narrow')}</span></div>`).join('')}</div>

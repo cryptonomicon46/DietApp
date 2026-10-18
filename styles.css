@@ -950,3 +950,17 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 #tab-privacy .card + .card { margin-top: 12px; }
 body[data-tab="privacy"] .daybar-wrap { display: none; }
 .us-sec .emoji-row .emoji { flex: 0 0 38px; }
+
+/* ❤️ / ⭐ on the shared calendar */
+.cd .marks { font-size: .7rem; line-height: 1; letter-spacing: -1px; }
+.cal-key .mk { margin-left: 8px; }
+.cal-month-sum { margin: 8px 0 0; }
+.mark-list { list-style: none; padding: 0; margin: 6px 0; }
+.mark-row { display: flex; gap: 6px; align-items: baseline; padding: 4px 0; font-size: .9rem; }
+.mark-row span { flex: 1; }
+/* 🍷 logging a date */
+.r-dateform { margin: 8px 0; display: grid; gap: 8px; }
+.r-types, .r-places { display: flex; flex-wrap: wrap; gap: 6px; }
+.r-types .chip { font-size: .82rem; padding: 6px 10px; }
+.r-places .chip { font-size: .78rem; padding: 4px 9px; }
+.r-dateform input[type=date] { width: 9.5em; }
