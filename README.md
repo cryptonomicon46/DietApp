@@ -109,7 +109,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 **Meals.** Daily calories and protein / fat / carb targets, split into breakfast, lunch and dinner with exact portions (grams plus oz / cups / slices / scoops).
 - **Defaults:**
   - Breakfast: eggs + sourdough (or wheat bread or a lavash wrap) + avocado, or oatmeal + whey.
-  - Lunch and dinner: chicken, beef, salmon, cod, trout, canned tuna (by the can) or smoked turkey / chicken breast deli slices (by the slice, ½ oz each) with rice (or brown rice, potato, sweet potato, quinoa, sourdough or a **lavash wrap**, by the sheet: 100 kcal, 6 g protein, 1 g fat, 19 g carbs) and veggies.
+  - Lunch and dinner: chicken, beef, salmon (farmed Atlantic or wild sockeye, which has about half the fat), cod, trout, canned tuna (by the can) or smoked turkey / chicken breast deli slices (by the slice, ½ oz each) with rice (or brown rice, potato, sweet potato, quinoa, sourdough or a **lavash wrap**, by the sheet: 100 kcal, 6 g protein, 1 g fat, 19 g carbs) and veggies.
 - **Swaps:** every item has a swap menu (e.g. almond butter for peanut butter, butter or avocado for fat, steak / chicken thigh / breast / ground beef / fish, sweet potato for rice), and swaps are remembered.
 - **Portions − / +:** each food has a grams box with − and + (one tap = the usual step; hold to keep going) or an exact weight. Your amount is locked 🔒 and the rest of the meal re-balances.
 - **Cooked or raw:**
