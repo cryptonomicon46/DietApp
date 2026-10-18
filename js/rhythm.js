@@ -1,7 +1,7 @@
 // 💞 The 2-2-2-2 rhythm for a close relationship: a date every 2 weeks, intimacy twice a week,
 // an overnight trip twice a year and a multi-night getaway every 2 years — just the two of you.
 // Either phone logs "we did it"; each phone keeps its own entries and both are combined. Home
-// and the Us tab show where you are, a gentle love note when one is coming up, and can
+// and the top of the Calendar tab show where you are, a gentle love note when one is coming up, and can
 // suggest it to your partner for the coming weekend (as a "Feeling like" plan).
 import { PROFILES, ownerId, profileStore } from './storage.js';
 import { pushNow } from './sync.js';
@@ -207,7 +207,7 @@ export function rhythmCard({ home = false } = {}) {
   const chips = `<div class="r-chips">${ORDER.map((k) => `<span class="r-chip ${st[k].level}" title="${RHYTHMS[k].label}, ${RHYTHMS[k].every}">${RHYTHMS[k].icon} ${k === 'close' ? `${st.close.count}/2` : st[k].level === 'ok' ? '✓' : st[k].level === 'due' ? 'due' : 'soon'}</span>`).join('')}</div>`;
   if (home) {
     return `<div class="card rhythm-card home-rhythm">
-      <div class="row between" style="margin-top:0"><div class="eyebrow">💞 Just the two of you</div><button type="button" class="linkish small" data-goto="notes">2-2-2-2 ›</button></div>
+      <div class="row between" style="margin-top:0"><div class="eyebrow">💞 Just the two of you</div><button type="button" class="linkish small" data-goto="calendar">2-2-2-2 ›</button></div>
       ${nudgeBlock}${chips}
     </div>`;
   }
@@ -230,7 +230,7 @@ export function rhythmCard({ home = false } = {}) {
 }
 
 export function renderRhythm() {
-  if ($('#usRhythm')) $('#usRhythm').innerHTML = rhythmCard();
+  if ($('#calRhythm')) $('#calRhythm').innerHTML = rhythmCard(); // top of the Calendar tab
   if ($('#homeRhythm')) $('#homeRhythm').innerHTML = rhythmCard({ home: true });
 }
 

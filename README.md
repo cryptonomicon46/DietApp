@@ -22,8 +22,8 @@
 | **🐕 Dogs** | Pavement temperature and the best walk windows, the Feed / Walk / Dog park / Treat buttons, golden days, dog profiles and documents, the dog-duty scoreboard, and the adoption board. |
 | **🍽 Food** | Your meal plan (with the morning weigh-in at the top), plus **Weight**, **Groceries** and **Scan** pages from the bar at the top. |
 | **🏋︎ Train** | Your training card (WHOOP / Garmin calories, workout fuel), the best run and ride windows, class schedules, and the lifting log. |
-| **📅 Calendar** | The shared family calendar, linked phone calendars, and the subscription link for Apple / Google Calendar. |
-| **💞 Us** | One page: 💞 the 2-2-2-2 rhythm, 💌 today's notes, ✨ feeling like (plans) and 📺 watching, each a compact section. |
+| **📅 Calendar** | 💞 The 2-2-2-2 card on top (❤️ Log a date), then the shared family calendar, linked phone calendars, and the subscription link for Apple / Google Calendar. |
+| **💞 Us** | One page: 💌 today's notes, ✨ feeling like (plans) and 📺 watching, each a compact section. |
 | **🔐 Privacy** | Privacy settings: your household code (show, change, send), sharing status, and how your data is kept. |
 
 ## How a family uses it: the secret phrase
@@ -191,6 +191,13 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 
 ## 📅 Calendar
 
+- **💞 The 2-2-2-2 rhythm** (top of the 📅 Calendar tab, and on Home): a date every **2** weeks, intimacy **2** times a week, an overnight trip **2** times a year, and a multi-night getaway every **2** years — just the two of you (book the dog sitter).
+  - A gentle, rotating love note for the one that's due or coming up: a date that falls due by the weekend, a second time this week (from Thursday on), or a trip that's due. Chips show all four at a glance (✓, soon, due, and 💗 count this week).
+  - **✓ We did it** logs it (either phone; trips and dates can be logged for an earlier day), **💗 +1** for intimacy, and **💡 Suggest for Saturday** sends it to your partner as a *Feeling like* plan for the coming weekend, which they answer 🙌 / 🤔 / ⏰.
+  - **❤️ Log a date** (top of the card): type what you did (movie, drinks, dinner, a bookshop… anything), where, and the day — no list to pick from. What you've typed before is suggested as you type.
+  - Every logged moment shows as a ❤️ on the shared **📅 Calendar**, next to the dogs' ⭐ golden days.
+  - **Fix or add later:** tap a day on the calendar (or a moment under *Logged moments*) and **✎ Edit** changes what, where or the day, or **Delete** removes it — from either phone, whoever logged it. **❤️ Log a date on this day** adds another one to that day.
+  - A multi-night getaway also counts as an overnight trip. Weeks run Monday to Sunday. Logged moments can be removed.
 - **Shared events:** either phone can add, edit or delete. Each event has a title, day, time or all-day, place, who it's for (both or either of you), a reminder and notes.
 - **Repeats:**
   - Every day, week or 2 weeks (paychecks).
@@ -210,13 +217,6 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 
 Everything for the two of you on one page, in compact sections; forms and history open only when you need them.
 
-- **💞 The 2-2-2-2 rhythm** (top of Us, and on Home): a date every **2** weeks, intimacy **2** times a week, an overnight trip **2** times a year, and a multi-night getaway every **2** years — just the two of you (book the dog sitter).
-  - A gentle, rotating love note for the one that's due or coming up: a date that falls due by the weekend, a second time this week (from Thursday on), or a trip that's due. Chips show all four at a glance (✓, soon, due, and 💗 count this week).
-  - **✓ We did it** logs it (either phone; trips and dates can be logged for an earlier day), **💗 +1** for intimacy, and **💡 Suggest for Saturday** sends it to your partner as a *Feeling like* plan for the coming weekend, which they answer 🙌 / 🤔 / ⏰.
-  - **❤️ Log a date** (top of the card): type what you did (movie, drinks, dinner, a bookshop… anything), where, and the day — no list to pick from. What you've typed before is suggested as you type.
-  - Every logged moment shows as a ❤️ on the shared **📅 Calendar**, next to the dogs' ⭐ golden days.
-  - **Fix or add later:** tap a day on the calendar (or a moment under *Logged moments*) and **✎ Edit** changes what, where or the day, or **Delete** removes it — from either phone, whoever logged it. **❤️ Log a date on this day** adds another one to that day.
-  - A multi-night getaway also counts as an overnight trip. Weeks run Monday to Sunday. Logged moments can be removed.
 - **💌 Notes:** a post-it board for each other.
   - It starts fresh every morning at 5 AM, and earlier notes move to *Earlier notes*. Unread notes stay until seen.
   - Emoji, colours, ↩ replies, ❤️ and a daily streak.

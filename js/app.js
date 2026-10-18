@@ -2499,7 +2499,7 @@ function showTab(name) {
   if (name === 'home') { renderHome(); renderBrief(); }
   if (name === 'lift') { renderLift(); if (state.profile) renderTraining(targets()); renderBrief(); }
   if (name === 'brief') renderBrief();
-  if (name === 'calendar') renderCal();
+  if (name === 'calendar') { renderRhythm(); renderCal(); }
   if (name === 'notes') {
     openUs();
     renderRhythm();
@@ -2830,9 +2830,9 @@ if (sync.enabled()) {
     updateNotesBadge();
     updateCalBadge();
     renderFeed(); // also colours the 🐕 tab
-    if (changed && currentTab === 'calendar') renderCal();
+    if (changed && currentTab === 'calendar') { renderRhythm(); renderCal(); }
     if (changed && currentTab === 'home') renderHome();
-    if (onNotes() && changed) { renderNotes(); renderRhythm(); }
+    if (onNotes() && changed) renderNotes();
     else if (onNotes()) { const l = document.querySelector('#tab-notes .sync-line'); if (l) l.outerHTML = syncLine(); }
     else if (changed && sync.readOnly()) location.reload();
   }).catch(() => {});
