@@ -3,6 +3,7 @@ import { EXERCISES, MUSCLES } from './lifting.js';
 import { SPORTS, INTENSITY } from './activity.js';
 import { scoreDay } from './rewards.js';
 import { FEELINGS } from './plan.js';
+import { sortScans } from './bodycomp.js';
 
 // A meal counts as "on target" when calories are within ±10% of the meal's target and
 // protein reaches 90% of it. Fat and carbs can trade places (salmon has more fat, oats
@@ -90,7 +91,11 @@ export function buildTables(data) {
     protein_change_g: c.delta?.p ?? '', fat_change_g: c.delta?.f ?? '', carbs_change_g: c.delta?.c ?? '',
   }));
 
-  return { meals, days, activities, lifting_sessions, lifting_sets, weigh_ins, checkins };
+  const dexa_scans = sortScans(data.dexa || []).map((d) => ({
+    date: d.date, where: d.where || '', weight_lb: d.weight ?? '', body_fat_pct: d.bf ?? '', fat_lb: d.fat ?? '', lean_lb: d.lean ?? '', bone_lb: d.bone ?? '', visceral_fat_lb: d.vat ?? '', notes: d.notes || '',
+  }));
+
+  return { meals, days, activities, lifting_sessions, lifting_sets, weigh_ins, checkins, dexa_scans };
 }
 
 export function toCsv(rows) {

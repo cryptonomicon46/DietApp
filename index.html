@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawMili">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=151">
+  <link rel="stylesheet" href="styles.css?v=154">
 </head>
 <body>
   <header class="top">
@@ -92,6 +92,7 @@
         </div>
         <div class="legend small"><span><i class="key key-avg"></i>7-day average</span><span><i class="key key-raw"></i>Daily weigh-in</span><span><i class="key key-goal"></i>Goal</span><span><i class="key key-plan"></i>Plan</span></div>
       </div>
+      <div class="card dexa-card" id="dexaCard"></div>
       <div class="card">
         <div class="row between" style="margin-top:0">
           <h2>Weekly check-ins</h2>
@@ -370,37 +371,39 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/activity.js": "./js/activity.js?v=151",
-    "./js/adopt.js": "./js/adopt.js?v=151",
-    "./js/analytics.js": "./js/analytics.js?v=151",
-    "./js/app.js": "./js/app.js?v=151",
-    "./js/brief.js": "./js/brief.js?v=151",
-    "./js/briefTab.js": "./js/briefTab.js?v=151",
-    "./js/calTab.js": "./js/calTab.js?v=151",
-    "./js/calendar.js": "./js/calendar.js?v=151",
-    "./js/commands.js": "./js/commands.js?v=151",
-    "./js/devices.js": "./js/devices.js?v=151",
-    "./js/dogs.js": "./js/dogs.js?v=151",
-    "./js/foods.js": "./js/foods.js?v=151",
-    "./js/household.js": "./js/household.js?v=151",
-    "./js/lift.js": "./js/lift.js?v=151",
-    "./js/lifting.js": "./js/lifting.js?v=151",
-    "./js/notes.js": "./js/notes.js?v=151",
-    "./js/plan.js": "./js/plan.js?v=151",
-    "./js/plans.js": "./js/plans.js?v=151",
-    "./js/poster.js": "./js/poster.js?v=151",
-    "./js/research.js": "./js/research.js?v=151",
-    "./js/review.js": "./js/review.js?v=151",
-    "./js/rewards.js": "./js/rewards.js?v=151",
-    "./js/rhythm.js": "./js/rhythm.js?v=151",
-    "./js/share.js": "./js/share.js?v=151",
-    "./js/shows.js": "./js/shows.js?v=151",
-    "./js/storage.js": "./js/storage.js?v=151",
-    "./js/sync.js": "./js/sync.js?v=151",
-    "./js/zip.js": "./js/zip.js?v=151"
+    "./js/activity.js": "./js/activity.js?v=154",
+    "./js/adopt.js": "./js/adopt.js?v=154",
+    "./js/analytics.js": "./js/analytics.js?v=154",
+    "./js/app.js": "./js/app.js?v=154",
+    "./js/bodycomp.js": "./js/bodycomp.js?v=154",
+    "./js/brief.js": "./js/brief.js?v=154",
+    "./js/briefTab.js": "./js/briefTab.js?v=154",
+    "./js/calTab.js": "./js/calTab.js?v=154",
+    "./js/calendar.js": "./js/calendar.js?v=154",
+    "./js/commands.js": "./js/commands.js?v=154",
+    "./js/devices.js": "./js/devices.js?v=154",
+    "./js/dexa.js": "./js/dexa.js?v=154",
+    "./js/dogs.js": "./js/dogs.js?v=154",
+    "./js/foods.js": "./js/foods.js?v=154",
+    "./js/household.js": "./js/household.js?v=154",
+    "./js/lift.js": "./js/lift.js?v=154",
+    "./js/lifting.js": "./js/lifting.js?v=154",
+    "./js/notes.js": "./js/notes.js?v=154",
+    "./js/plan.js": "./js/plan.js?v=154",
+    "./js/plans.js": "./js/plans.js?v=154",
+    "./js/poster.js": "./js/poster.js?v=154",
+    "./js/research.js": "./js/research.js?v=154",
+    "./js/review.js": "./js/review.js?v=154",
+    "./js/rewards.js": "./js/rewards.js?v=154",
+    "./js/rhythm.js": "./js/rhythm.js?v=154",
+    "./js/share.js": "./js/share.js?v=154",
+    "./js/shows.js": "./js/shows.js?v=154",
+    "./js/storage.js": "./js/storage.js?v=154",
+    "./js/sync.js": "./js/sync.js?v=154",
+    "./js/zip.js": "./js/zip.js?v=154"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=151"></script>
+  <script type="module" src="js/app.js?v=154"></script>
 </body>
 </html>

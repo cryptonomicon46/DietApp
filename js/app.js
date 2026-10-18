@@ -21,6 +21,7 @@ import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setO
 import { sync, newHouseholdCode, DEFAULT_CONNECTOR } from './sync.js';
 import { renderHousehold, initHousehold } from './household.js';
 import { renderRhythm, initRhythm } from './rhythm.js';
+import { renderDexa, initDexa, allScans } from './dexa.js';
 import { buildTables, toCsv, summary, weekRows } from './analytics.js';
 import { icsCalendar } from './calendar.js';
 import { makeZip } from './zip.js';
@@ -1809,6 +1810,7 @@ function renderWeight() {
     <div><b>${now.toFixed(1)}</b><span>current</span></div>
     <div><b>${Math.max(now - state.profile.goalLb, 0).toFixed(1)}</b><span>lb to goal</span></div>`;
   drawChart();
+  renderDexa(state.weights);
 }
 
 let chartRange = '90';
@@ -1866,6 +1868,7 @@ function drawChart() {
     <path class="raw-line" d="${path(w.map((e) => [x(e.date), y(e.weight)]))}"/>
     ${w.map((e) => `<circle class="raw" r="3" cx="${x(e.date)}" cy="${y(e.weight)}"/>`).join('')}
     <path class="trend" d="${path(avg.map((a) => [x(a.date), y(a.v)]))}"/>
+    ${allScans().filter((sc) => sc.date >= w[0].date && sc.date <= w[w.length - 1].date).map((sc) => `<g class="dexa-mark"><line x1="${x(sc.date)}" x2="${x(sc.date)}" y1="${pad.t}" y2="${H - pad.b}"/><text x="${x(sc.date)}" y="${pad.t + 8}" text-anchor="middle">DEXA</text></g>`).join('')}
     <circle class="trend-end" r="4.5" cx="${x(last.date)}" cy="${y(last.v)}"/>
     <text class="lbl strong" x="${W - pad.r + 4}" y="${y(last.v) + (Math.abs(y(last.v) - y(goal)) < 12 ? -8 : 3.5)}">${last.v.toFixed(1)}</text>
     <text class="tick" x="${pad.l}" y="${H - 6}">${fmt(w[0].date)}</text>
@@ -2481,6 +2484,7 @@ $('#exportData').onclick = async () => {
       'activities.csv: activities you added plus imported WHOOP/Garmin workouts.',
       'lifting_sessions.csv / lifting_sets.csv: finished workouts and every set (weight x reps).',
       'weigh_ins.csv, checkins.csv: weigh-ins and weekly check-ins.',
+      'dexa_scans.csv: DEXA scans (weight, body fat %, fat, lean and bone mass, visceral fat).',
     ].join('\n') });
     status.textContent = await deliver(new Blob([makeZip(files)], { type: 'application/zip' }), `${fileSlug()}.zip`);
   } catch (err) {
@@ -2592,6 +2596,7 @@ initBrief();
 initCal(document.querySelector('main'));
 initHousehold();
 initRhythm(document.querySelector('main'));
+initDexa(() => state.weights, () => { if (state.profile) drawChart(); });
 updateCalBadge();
 updateNotesBadge();
 // Weigh-ins said on the Lift tab ("weigh in 161.4").

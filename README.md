@@ -150,6 +150,11 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 - **Backup / Restore:** everything as one file.
 - **📤 Share…:** the day's meals, your combos or your progress, as text, a poster image or CSV.
 
+**🩻 Body composition (DEXA)** (Weight page, under the graph): add each DEXA scan — past ones too — with weight, body fat %, fat mass, lean mass, and optionally bone mass and visceral fat (VAT). Missing numbers are worked out (fat from weight × body fat %; lean = weight − fat − bone).
+- Tiles for the latest body fat %, fat mass and lean mass with the change since your first scan (green when fat goes down and lean goes up), and a one-line summary of the journey.
+- Four small charts on the same timeline: **Weight** (scan weights over your 7-day average weigh-ins), **Body fat %**, **Fat mass** and **Lean mass**; tap a dot for its value. Scan days are marked on the weight graph above.
+- **All scans** table with scan-to-scan changes; edit or remove a scan. Scans sync, back up, and export as `dexa_scans.csv`.
+
 **Groceries.** A weekly list built from the plan, grouped by store, with checkboxes.
 
 **Scan.** Scan a barcode (or type it) for macros from [Open Food Facts](https://world.openfoodfacts.org), see how it fits, and add it to a meal, a snack or the grocery list.
