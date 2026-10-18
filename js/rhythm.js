@@ -152,7 +152,8 @@ function suggest(kind) {
 
 // ---------- UI ----------
 let showAll = false;
-let dateForm = null; // {date, type, place} while logging a date
+// While logging or editing a moment: {kind, date, what, place, editId?, where: 'home' | 'us' | 'cal'}.
+let dateForm = null;
 let detailsOpen = false; // keep "Log it" open across redraws
 function rowStatus(st) {
   const r = RHYTHMS[st.kind];
@@ -162,19 +163,30 @@ function rowStatus(st) {
   return `Last ${short(st.last)} · <span class="${st.level === 'ok' ? 'muted' : st.level === 'due' ? 'tone-warn' : 'tone-good'}">${st.level === 'due' ? 'time for the next one' : `next ${inDays(st.daysLeft)}`}</span>${extra}`;
 }
 
-// Log a date: what you did, where and when — typed in, nothing to pick from.
-function dateFormHtml(entries) {
+// Log a date (what, where, when — typed in) or edit / delete any logged moment.
+export function momentFormHtml() {
   const f = dateForm;
+  if (!f) return '';
+  const entries = allRhythm();
   const past = (k) => [...new Set(entries.filter((e) => e.kind === 'date' && e[k]).reverse().map((e) => e[k]))].slice(0, 15);
-  return `<div class="r-dateform">
-    <div class="small"><b>❤️ Log a date</b> <span class="muted">— shows as a ❤️ on the calendar</span></div>
-    <input data-rwhat list="rWhats" maxlength="60" placeholder="What did you do? e.g. Movie, drinks & dinner" value="${esc(f.what || '')}" aria-label="What">
+  const isDate = f.kind === 'date';
+  return `<div class="r-dateform r-form">
+    <div class="small"><b>${f.editId ? `✎ Edit ${isDate ? 'date' : esc(RHYTHMS[f.kind]?.label.toLowerCase() || 'moment')}` : '❤️ Log a date'}</b> <span class="muted">— shows as a ❤️ on the calendar</span></div>
+    ${isDate ? `<input data-rwhat list="rWhats" maxlength="60" placeholder="What did you do? e.g. Movie, drinks & dinner" value="${esc(f.what || '')}" aria-label="What">
     <input data-rplace list="rPlaces" maxlength="60" placeholder="Where? e.g. Santana Row" value="${esc(f.place || '')}" aria-label="Where">
     <datalist id="rWhats">${past('what').map((p) => `<option value="${esc(p)}"></option>`).join('')}</datalist>
-    <datalist id="rPlaces">${past('place').map((p) => `<option value="${esc(p)}"></option>`).join('')}</datalist>
-    <div class="row"><input type="date" data-rdateform value="${f.date}" max="${todayIso()}" aria-label="When"><button type="button" class="ghost small" data-rdatecancel>Cancel</button><button type="button" class="small" data-rdatesave>Save ❤️</button></div>
+    <datalist id="rPlaces">${past('place').map((p) => `<option value="${esc(p)}"></option>`).join('')}</datalist>` : ''}
+    <div class="row wrap"><input type="date" data-rdateform value="${f.date}" max="${todayIso()}" aria-label="When">${f.editId ? '<button type="button" class="ghost small danger" data-rformdel>Delete</button>' : ''}<button type="button" class="ghost small" data-rdatecancel>Cancel</button><button type="button" class="small" data-rdatesave>Save ❤️</button></div>
   </div>`;
 }
+// Open the form: a new date (on `date`), or an existing moment by id. where: which card shows it.
+export function openMoment({ id, date, where }) {
+  const e = id && allRhythm().find((x) => x.id === id);
+  dateForm = e ? { kind: e.kind, date: e.date, what: e.what || (DATE_TYPES[e.type]?.label ?? ''), place: e.place || '', editId: e.id, where }
+    : { kind: 'date', date: date || todayIso(), what: '', place: '', where };
+}
+export const momentFormOpen = (where) => dateForm?.where === where;
+export function closeMoment(where) { if (dateForm?.where === where) dateForm = null; }
 
 export function rhythmCard({ home = false } = {}) {
   if (!ownerId()) return '';
@@ -187,7 +199,7 @@ export function rhythmCard({ home = false } = {}) {
   const suggestBtn = (k) => (k === 'close' ? '' : suggested(k)
     ? '<span class="small tone-good">✓ Suggested for the weekend</span>'
     : `<button type="button" class="ghost small" data-rsuggest="${k}">💡 Suggest for ${satText}</button>`);
-  const form = dateForm && dateForm.home === home ? dateFormHtml(entries) : '';
+  const form = momentFormOpen(home ? 'home' : 'us') ? momentFormHtml() : '';
   const nudgeBlock = form || (nudge ? `<div class="r-nudge r-${nudge.kind}">
       <p class="r-love">${esc(loveLine(nudge.kind, today))}</p>
       <div class="row wrap" style="margin-top:6px"><button type="button" class="small" data-rdid="${nudge.kind}">✓ We did it</button>${suggestBtn(nudge.kind)}</div>
@@ -211,7 +223,7 @@ export function rhythmCard({ home = false } = {}) {
       <span class="r-act">${k === 'close' ? `<button type="button" class="small ghost" data-rdid="close">💗 +1</button>`
         : `<input type="date" data-rdate="${k}" value="${today}" max="${today}" aria-label="When"><button type="button" class="small ghost" data-rdid="${k}">✓ Log</button>`}</span>
     </li>`).join('')}</ul>
-    ${recent.length ? `<details class="r-log" ${showAll ? 'open' : ''}><summary class="small muted">Logged moments</summary><ul>${recent.map((e) => `<li><span>${momentIcon(e)} ${esc(momentText(e))} · ${short(e.date)}</span><small class="muted">${e.by === ownerId() ? 'you' : esc(nameOf(e.by))}</small><button type="button" class="x" data-rdel="${e.id}" aria-label="Remove">✕</button></li>`).join('')}</ul>
+    ${recent.length ? `<details class="r-log" ${showAll ? 'open' : ''}><summary class="small muted">Logged moments · tap one to edit</summary><ul>${recent.map((e) => `<li><button type="button" class="linkish r-edit" data-redit="${e.id}" title="Edit">${momentIcon(e)} ${esc(momentText(e))} · ${short(e.date)} ✎</button><small class="muted">${e.by === ownerId() ? 'you' : esc(nameOf(e.by))}</small><button type="button" class="x" data-rdel="${e.id}" aria-label="Remove">✕</button></li>`).join('')}</ul>
       ${entries.length > 6 && !showAll ? '<button type="button" class="linkish small" data-rmore>Show more</button>' : ''}</details>` : ''}
     </details>
   </div>`;
@@ -225,28 +237,38 @@ export function renderRhythm() {
 export function initRhythm(root) {
   root.addEventListener('click', (e) => {
     const t = e.target.closest('button');
-    if (!t || !t.closest('.rhythm-card')) return;
-    detailsOpen = !!t.closest('.r-more');
+    if (!t || !t.closest('.rhythm-card, .r-cal')) return;
     const ds = t.dataset;
-    const card = t.closest('.rhythm-card');
+    const card = t.closest('.rhythm-card, .r-cal');
+    const where = card.classList.contains('r-cal') ? 'cal' : card.classList.contains('home-rhythm') ? 'home' : 'us';
+    if (where === 'us') detailsOpen = !!t.closest('.r-more');
     const keep = () => { if (dateForm) { dateForm.what = card.querySelector('[data-rwhat]')?.value ?? dateForm.what ?? ''; dateForm.place = card.querySelector('[data-rplace]')?.value ?? dateForm.place ?? ''; } };
     if (ds.rdid) {
       const input = card.querySelector(`[data-rdate="${ds.rdid}"]`);
-      const date = input?.value && input.value <= todayIso() ? input.value : todayIso();
-      // A date gets its kind and place; everything else logs in one tap.
-      if (ds.rdid === 'date') dateForm = { date, what: '', place: '', home: card.classList.contains('home-rhythm') };
+      const date = ds.rday || (input?.value && input.value <= todayIso() ? input.value : todayIso());
+      // A date gets what and where; everything else logs in one tap.
+      if (ds.rdid === 'date') openMoment({ date, where });
       else logIt(ds.rdid, date);
-    } else if (ds.rdatecancel != null) dateForm = null;
-    else if (ds.rdatesave != null) {
+    } else if (ds.redit) openMoment({ id: ds.redit, where });
+    else if (ds.rdatecancel != null) dateForm = null;
+    else if (ds.rformdel != null) {
+      if (!confirm('Delete this moment?')) return;
+      removeIt(dateForm.editId);
+      dateForm = null;
+    } else if (ds.rdatesave != null) {
       keep();
       const d = card.querySelector('[data-rdateform]')?.value;
+      const date = d && d <= todayIso() ? d : dateForm.date;
       const what = dateForm.what.trim().slice(0, 60), place = dateForm.place.trim().slice(0, 60);
-      logIt('date', d && d <= todayIso() ? d : dateForm.date, { ...(what ? { what } : {}), ...(place ? { place } : {}) });
+      // An edit replaces the old moment (whichever phone logged it) with the corrected one.
+      if (dateForm.editId) removeIt(dateForm.editId);
+      logIt(dateForm.kind, date, dateForm.kind === 'date' ? { ...(what ? { what } : {}), ...(place ? { place } : {}) } : {});
       dateForm = null;
     } else if (ds.rsuggest) suggest(ds.rsuggest);
     else if (ds.rdel) { if (!confirm('Remove this moment?')) return; removeIt(ds.rdel); }
     else if (ds.rmore != null) showAll = true;
     else return;
     renderRhythm();
+    window.dispatchEvent(new Event('lp:rhythm')); // the calendar shows these too
   });
 }

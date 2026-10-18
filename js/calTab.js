@@ -4,7 +4,7 @@
 import { PROFILES, ownerId, profileStore, seenItems, global } from './storage.js';
 import { sync, pushNow } from './sync.js';
 import { goldenDays } from './briefTab.js';
-import { allRhythm, momentText, momentIcon } from './rhythm.js';
+import { allRhythm, momentText, momentIcon, momentFormHtml, momentFormOpen, closeMoment } from './rhythm.js';
 import { REMINDERS, REPEATS, WHO_BOTH, mergeEvents, eventsOn, upcoming, icsCalendar, googleUrl, repeatText, repeatUnit, parseIcs } from './calendar.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -246,7 +246,7 @@ export function renderCal() {
   const dayHearts = marks.hearts[selected] || [];
   const dayDogs = marks.dogs[selected];
   const dayMarks = [
-    ...dayHearts.map((e) => `<li class="mark-row">❤️ <span>${momentIcon(e) === '❤️' ? '' : `${momentIcon(e)} `}${esc(momentText(e))}</span>${e.kind === 'date' && e.place ? ` <a class="small" href="https://maps.apple.com/?q=${encodeURIComponent(e.place)}" target="_blank" rel="noopener">map</a>` : ''}</li>`),
+    ...dayHearts.map((e) => `<li class="mark-row">❤️ <span>${momentIcon(e) === '❤️' ? '' : `${momentIcon(e)} `}${esc(momentText(e))}</span>${e.kind === 'date' && e.place ? ` <a class="small" href="https://maps.apple.com/?q=${encodeURIComponent(e.place)}" target="_blank" rel="noopener">map</a>` : ''}<button type="button" class="linkish small" data-redit="${e.id}">✎ Edit</button></li>`),
     ...(dayDogs?.best ? [`<li class="mark-row">⭐ <span>Golden day for the dogs · ${dayDogs.outings} outing${dayDogs.outings === 1 ? '' : 's'}${dayDogs.treat ? ' + a treat' : ''}</span></li>`]
       : dayDogs?.outings ? [`<li class="mark-row muted">🐾 <span>Dogs out ${dayDogs.outings}×${dayDogs.treat ? ' + a treat' : ''}</span></li>`] : []),
   ];
@@ -255,7 +255,10 @@ export function renderCal() {
     <button type="button" class="add-show" data-caladd>＋ Add an event</button>
     ${monthGrid(events, marks)}
     <div class="card"><div class="eyebrow">${esc(dayLabel(selected))}${selected !== isoDate() ? ` · ${new Date(`${selected}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })}` : ''}</div>
-      ${dayMarks.length ? `<ul class="mark-list">${dayMarks.join('')}</ul>` : ''}
+      <div class="r-cal">
+        ${dayMarks.length ? `<ul class="mark-list">${dayMarks.join('')}</ul>` : ''}
+        ${momentFormOpen('cal') ? momentFormHtml() : selected <= isoDate() ? `<button type="button" class="ghost small" data-rdid="date" data-rday="${selected}">❤️ Log a date on this day</button>` : ''}
+      </div>
       ${dayEvents.length ? `<ul class="ev-list">${dayEvents.map((e) => eventRow(e)).join('')}</ul>` : dayMarks.length ? '' : '<p class="small muted">Nothing planned. Tap ＋ to add something.</p>'}</div>
     ${next.length ? `<div class="card"><div class="eyebrow">Coming up</div><ul class="ev-list">${next.map((e) => eventRow(e, { showDay: true })).join('')}</ul></div>` : ''}
     ${note ? `<p class="small">${esc(note)}</p>` : ''}
@@ -301,6 +304,8 @@ function markAdded(id) {
 }
 
 export function initCal(root) {
+  // Logged / edited ❤️ moments redraw the calendar.
+  window.addEventListener('lp:rhythm', () => { if (document.querySelector('#tab-calendar.active')) renderCal(); });
   root.addEventListener('click', (ev) => {
     const t = ev.target.closest('button, a');
     if (!t || !t.closest('#calBoard')) return;
@@ -320,7 +325,7 @@ export function initCal(root) {
     else if (d.calcancel != null) { editing = null; renderCal(); }
     else if (d.calwho) { readForm(); editing.who = d.calwho; renderCal(); }
     else if (d.calmonth) { const m = new Date(`${month}-15T12:00:00`); m.setMonth(m.getMonth() + +d.calmonth); month = isoDate(m).slice(0, 7); renderCal(); }
-    else if (d.calday) { selected = d.calday; openId = null; renderCal(); }
+    else if (d.calday) { selected = d.calday; openId = null; closeMoment('cal'); renderCal(); }
     else if (d.calopen) { openId = openId === d.calopen ? null : d.calopen; note = ''; renderCal(); }
     else if (d.caledit) { editing = { ...allEvents().find((e) => e.id === d.caledit) }; renderCal(); }
     else if (d.caldel) {
