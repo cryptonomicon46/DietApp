@@ -13,7 +13,7 @@ export const RHYTHMS = {
   getaway:   { icon: '🌴', label: 'Multi-night getaway', every: 'every 2 years', days: 730, soon: 60 },
 };
 const ORDER = ['date', 'close', 'overnight', 'getaway'];
-// What kind of date it was (any of these counts as the fortnightly date).
+// Kinds older date logs were saved with (new ones are typed in freely as `what`).
 export const DATE_TYPES = {
   dinner: { icon: '🍷', label: 'Drinks & dinner' },
   lunch:  { icon: '🥗', label: 'Lunch date' },
@@ -25,9 +25,11 @@ export const DATE_TYPES = {
 // How a moment reads on the calendar and in the log.
 export function momentText(e) {
   if (e.kind !== 'date') return RHYTHMS[e.kind]?.label || e.kind;
-  const t = DATE_TYPES[e.type];
-  return `${t ? t.label : 'Date night'}${e.place ? ` · ${e.place}` : ''}`;
+  const what = e.what || DATE_TYPES[e.type]?.label || 'Date night';
+  return `${what}${e.place ? ` · ${e.place}` : ''}`;
 }
+// Icon for a moment: your own dates are simply ❤️ (older ones kept their kind's icon).
+export const momentIcon = (e) => (e.kind === 'date' ? (!e.what && DATE_TYPES[e.type]?.icon) || '❤️' : RHYTHMS[e.kind]?.icon || '💞');
 
 export const LOVE = {
   date: [
@@ -160,15 +162,16 @@ function rowStatus(st) {
   return `Last ${short(st.last)} · <span class="${st.level === 'ok' ? 'muted' : st.level === 'due' ? 'tone-warn' : 'tone-good'}">${st.level === 'due' ? 'time for the next one' : `next ${inDays(st.daysLeft)}`}</span>${extra}`;
 }
 
+// Log a date: what you did, where and when — typed in, nothing to pick from.
 function dateFormHtml(entries) {
   const f = dateForm;
-  const places = [...new Set(entries.filter((e) => e.kind === 'date' && e.place).reverse().map((e) => e.place))].slice(0, 12);
+  const past = (k) => [...new Set(entries.filter((e) => e.kind === 'date' && e[k]).reverse().map((e) => e[k]))].slice(0, 15);
   return `<div class="r-dateform">
-    <div class="small"><b>🍷 Log a date</b></div>
-    <div class="r-types">${Object.entries(DATE_TYPES).map(([k, v]) => `<button type="button" class="chip ${f.type === k ? 'on' : ''}" data-rtype="${k}">${v.icon} ${v.label}</button>`).join('')}</div>
-    <input data-rplace list="rPlaces" maxlength="60" placeholder="Where? e.g. Philz Coffee, Kepler's Books" value="${esc(f.place || '')}" aria-label="Where">
-    <datalist id="rPlaces">${places.map((p) => `<option value="${esc(p)}"></option>`).join('')}</datalist>
-    ${places.length ? `<div class="r-places">${places.slice(0, 5).map((p) => `<button type="button" class="chip small" data-rpick="${esc(p)}">📍 ${esc(p)}</button>`).join('')}</div>` : ''}
+    <div class="small"><b>❤️ Log a date</b> <span class="muted">— shows as a ❤️ on the calendar</span></div>
+    <input data-rwhat list="rWhats" maxlength="60" placeholder="What did you do? e.g. Movie, drinks & dinner" value="${esc(f.what || '')}" aria-label="What">
+    <input data-rplace list="rPlaces" maxlength="60" placeholder="Where? e.g. Santana Row" value="${esc(f.place || '')}" aria-label="Where">
+    <datalist id="rWhats">${past('what').map((p) => `<option value="${esc(p)}"></option>`).join('')}</datalist>
+    <datalist id="rPlaces">${past('place').map((p) => `<option value="${esc(p)}"></option>`).join('')}</datalist>
     <div class="row"><input type="date" data-rdateform value="${f.date}" max="${todayIso()}" aria-label="When"><button type="button" class="ghost small" data-rdatecancel>Cancel</button><button type="button" class="small" data-rdatesave>Save ❤️</button></div>
   </div>`;
 }
@@ -188,7 +191,7 @@ export function rhythmCard({ home = false } = {}) {
   const nudgeBlock = form || (nudge ? `<div class="r-nudge r-${nudge.kind}">
       <p class="r-love">${esc(loveLine(nudge.kind, today))}</p>
       <div class="row wrap" style="margin-top:6px"><button type="button" class="small" data-rdid="${nudge.kind}">✓ We did it</button>${suggestBtn(nudge.kind)}</div>
-    </div>` : `<p class="small muted">All four are on track — enjoy each other 💞</p>${home ? '' : '<button type="button" class="ghost small" data-rdid="date">🍷 Log a date</button>'}`);
+    </div>` : '<p class="small muted">All four are on track — enjoy each other 💞</p>');
   const chips = `<div class="r-chips">${ORDER.map((k) => `<span class="r-chip ${st[k].level}" title="${RHYTHMS[k].label}, ${RHYTHMS[k].every}">${RHYTHMS[k].icon} ${k === 'close' ? `${st.close.count}/2` : st[k].level === 'ok' ? '✓' : st[k].level === 'due' ? 'due' : 'soon'}</span>`).join('')}</div>`;
   if (home) {
     return `<div class="card rhythm-card home-rhythm">
@@ -198,7 +201,7 @@ export function rhythmCard({ home = false } = {}) {
   }
   const recent = [...entries].reverse().slice(0, showAll ? 40 : 6);
   return `<div class="card rhythm-card">
-    <div class="eyebrow">💞 The 2-2-2-2 rhythm</div>
+    <div class="row between" style="margin-top:0"><div class="eyebrow">💞 The 2-2-2-2 rhythm</div>${form ? '' : '<button type="button" class="small" data-rdid="date">❤️ Log a date</button>'}</div>
     ${nudgeBlock}${chips}
     <details class="r-more" ${detailsOpen ? 'open' : ''}><summary class="small">Log it · how you're doing</summary>
     <p class="small muted">A date every 2 weeks, intimacy twice a week, an overnight trip twice a year and a few nights away every 2 years — just the two of you. Either of you can log it.</p>
@@ -208,7 +211,7 @@ export function rhythmCard({ home = false } = {}) {
       <span class="r-act">${k === 'close' ? `<button type="button" class="small ghost" data-rdid="close">💗 +1</button>`
         : `<input type="date" data-rdate="${k}" value="${today}" max="${today}" aria-label="When"><button type="button" class="small ghost" data-rdid="${k}">✓ Log</button>`}</span>
     </li>`).join('')}</ul>
-    ${recent.length ? `<details class="r-log" ${showAll ? 'open' : ''}><summary class="small muted">Logged moments</summary><ul>${recent.map((e) => `<li><span>${e.kind === 'date' && DATE_TYPES[e.type] ? DATE_TYPES[e.type].icon : RHYTHMS[e.kind]?.icon || '💞'} ${esc(momentText(e))} · ${short(e.date)}</span><small class="muted">${e.by === ownerId() ? 'you' : esc(nameOf(e.by))}</small><button type="button" class="x" data-rdel="${e.id}" aria-label="Remove">✕</button></li>`).join('')}</ul>
+    ${recent.length ? `<details class="r-log" ${showAll ? 'open' : ''}><summary class="small muted">Logged moments</summary><ul>${recent.map((e) => `<li><span>${momentIcon(e)} ${esc(momentText(e))} · ${short(e.date)}</span><small class="muted">${e.by === ownerId() ? 'you' : esc(nameOf(e.by))}</small><button type="button" class="x" data-rdel="${e.id}" aria-label="Remove">✕</button></li>`).join('')}</ul>
       ${entries.length > 6 && !showAll ? '<button type="button" class="linkish small" data-rmore>Show more</button>' : ''}</details>` : ''}
     </details>
   </div>`;
@@ -226,20 +229,19 @@ export function initRhythm(root) {
     detailsOpen = !!t.closest('.r-more');
     const ds = t.dataset;
     const card = t.closest('.rhythm-card');
-    const keepPlace = () => { if (dateForm) dateForm.place = card.querySelector('[data-rplace]')?.value || dateForm.place || ''; };
+    const keep = () => { if (dateForm) { dateForm.what = card.querySelector('[data-rwhat]')?.value ?? dateForm.what ?? ''; dateForm.place = card.querySelector('[data-rplace]')?.value ?? dateForm.place ?? ''; } };
     if (ds.rdid) {
       const input = card.querySelector(`[data-rdate="${ds.rdid}"]`);
       const date = input?.value && input.value <= todayIso() ? input.value : todayIso();
       // A date gets its kind and place; everything else logs in one tap.
-      if (ds.rdid === 'date') dateForm = { date, type: 'dinner', place: '', home: card.classList.contains('home-rhythm') };
+      if (ds.rdid === 'date') dateForm = { date, what: '', place: '', home: card.classList.contains('home-rhythm') };
       else logIt(ds.rdid, date);
-    } else if (ds.rtype) { keepPlace(); dateForm.type = ds.rtype; }
-    else if (ds.rpick) { dateForm.place = ds.rpick; }
-    else if (ds.rdatecancel != null) dateForm = null;
+    } else if (ds.rdatecancel != null) dateForm = null;
     else if (ds.rdatesave != null) {
-      keepPlace();
+      keep();
       const d = card.querySelector('[data-rdateform]')?.value;
-      logIt('date', d && d <= todayIso() ? d : dateForm.date, { type: dateForm.type, ...(dateForm.place.trim() ? { place: dateForm.place.trim().slice(0, 60) } : {}) });
+      const what = dateForm.what.trim().slice(0, 60), place = dateForm.place.trim().slice(0, 60);
+      logIt('date', d && d <= todayIso() ? d : dateForm.date, { ...(what ? { what } : {}), ...(place ? { place } : {}) });
       dateForm = null;
     } else if (ds.rsuggest) suggest(ds.rsuggest);
     else if (ds.rdel) { if (!confirm('Remove this moment?')) return; removeIt(ds.rdel); }

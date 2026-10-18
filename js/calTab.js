@@ -4,7 +4,7 @@
 import { PROFILES, ownerId, profileStore, seenItems, global } from './storage.js';
 import { sync, pushNow } from './sync.js';
 import { goldenDays } from './briefTab.js';
-import { allRhythm, momentText, DATE_TYPES, RHYTHMS } from './rhythm.js';
+import { allRhythm, momentText, momentIcon } from './rhythm.js';
 import { REMINDERS, REPEATS, WHO_BOTH, mergeEvents, eventsOn, upcoming, icsCalendar, googleUrl, repeatText, repeatUnit, parseIcs } from './calendar.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -246,7 +246,7 @@ export function renderCal() {
   const dayHearts = marks.hearts[selected] || [];
   const dayDogs = marks.dogs[selected];
   const dayMarks = [
-    ...dayHearts.map((e) => `<li class="mark-row">❤️ <span>${e.kind === 'date' && DATE_TYPES[e.type] ? DATE_TYPES[e.type].icon : RHYTHMS[e.kind]?.icon || ''} ${esc(momentText(e))}</span>${e.kind === 'date' && e.place ? ` <a class="small" href="https://maps.apple.com/?q=${encodeURIComponent(e.place)}" target="_blank" rel="noopener">map</a>` : ''}</li>`),
+    ...dayHearts.map((e) => `<li class="mark-row">❤️ <span>${momentIcon(e) === '❤️' ? '' : `${momentIcon(e)} `}${esc(momentText(e))}</span>${e.kind === 'date' && e.place ? ` <a class="small" href="https://maps.apple.com/?q=${encodeURIComponent(e.place)}" target="_blank" rel="noopener">map</a>` : ''}</li>`),
     ...(dayDogs?.best ? [`<li class="mark-row">⭐ <span>Golden day for the dogs · ${dayDogs.outings} outing${dayDogs.outings === 1 ? '' : 's'}${dayDogs.treat ? ' + a treat' : ''}</span></li>`]
       : dayDogs?.outings ? [`<li class="mark-row muted">🐾 <span>Dogs out ${dayDogs.outings}×${dayDogs.treat ? ' + a treat' : ''}</span></li>`] : []),
   ];

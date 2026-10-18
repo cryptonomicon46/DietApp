@@ -53,5 +53,6 @@ test('2-2-2-2: a date reads as its kind and place', async () => {
   const { momentText } = await import('../js/rhythm.js');
   assert.equal(momentText({ kind: 'date', type: 'books', place: "Kepler's Books" }), "Bookshop · Kepler's Books");
   assert.equal(momentText({ kind: 'date' }), 'Date night');
+  assert.equal(momentText({ kind: 'date', what: 'Movie & drinks', place: 'Santana Row' }), 'Movie & drinks · Santana Row');
   assert.equal(momentText({ kind: 'overnight' }), 'Overnight trip');
 });
