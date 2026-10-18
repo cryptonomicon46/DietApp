@@ -928,3 +928,12 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .dx-form input { width: 100%; box-sizing: border-box; margin-top: 4px; }
 #chart .dexa-mark line { stroke: var(--dx-lean); stroke-width: 1; stroke-dasharray: 2 3; opacity: .7; }
 #chart .dexa-mark text { font-size: 7px; fill: var(--muted); }
+
+/* ＋ New food */
+.myfood-dialog { max-width: min(440px, calc(100vw - 32px)); }
+.myfood-dialog label { display: block; font-size: .85rem; margin-top: 8px; }
+.myfood-dialog input { width: 100%; box-sizing: border-box; margin-top: 4px; }
+.mf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.mf-cats { margin-top: 4px; }
+.mf-list { margin-top: 10px; }
+.mf-list summary { cursor: pointer; color: var(--brand); font-weight: 600; }

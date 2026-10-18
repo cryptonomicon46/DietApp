@@ -1,4 +1,4 @@
-import { FOODS, STORES, FOOD_GROUPS, addScannedFoods } from './foods.js';
+import { FOODS, STORES, FOOD_GROUPS, addScannedFoods, addMyFoods, makeMyFood, guessCategory, MY_CATS } from './foods.js';
 import {
   ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
@@ -32,6 +32,14 @@ import { programReview } from './review.js';
 // ---------- storage ----------
 // Each person's data is kept separately (see storage.js); `store` reads/writes the open profile.
 addScannedFoods(store.get('scannedFoods', {}));
+// Foods either of you entered with their own macros (shared: both phones' lists combined).
+function registerMyFoods() {
+  const list = {};
+  // Deleted ones stay known (meals that used them still add up) but leave the lists.
+  for (const p of PROFILES) for (const [id, e] of Object.entries(profileStore(p.id).get('myFoods', {}))) list[id] = { ...makeMyFood(e), by: p.id, ...(e.deleted ? { hidden: true } : {}) };
+  addMyFoods(list);
+}
+registerMyFoods();
 
 const state = {
   profile: store.get('profile', null),
@@ -825,10 +833,12 @@ function useCombo(meal, id) {
 }
 
 // ---- meals you build yourself ----
+const NEW_FOOD_OPTION = '<option value="__new">＋ New food (enter its macros)…</option>';
 function foodOptions(selected, placeholder) {
   return (placeholder ? `<option value="">${placeholder}</option>` : '')
     + Object.entries(FOOD_GROUPS).map(([g, keys]) => `<optgroup label="${g}">${keys.map((k) =>
-      `<option value="${k}" ${k === selected ? 'selected' : ''}>${esc(FOODS[k].name)}</option>`).join('')}</optgroup>`).join('');
+      `<option value="${k}" ${k === selected ? 'selected' : ''}>${esc(FOODS[k].name)}</option>`).join('')}</optgroup>`).join('')
+    + NEW_FOOD_OPTION;
 }
 
 function customBody(meal, m) {
@@ -1092,7 +1102,7 @@ function totalsLine(m) {
 function itemRow(x, meal) {
   const a = amountLabel(x.food, x.grams, meal);
   const name = x.options.length > 1
-    ? `<select data-pick="${x.slot}" aria-label="Swap ${esc(FOODS[x.food].name)}">${x.options.map((o) => `<option value="${o}" ${o === x.food ? 'selected' : ''}>${esc(FOODS[o].name)}</option>`).join('')}</select>`
+    ? `<select data-pick="${x.slot}" aria-label="Swap ${esc(FOODS[x.food].name)}">${x.options.map((o) => `<option value="${o}" ${o === x.food ? 'selected' : ''}>${esc(FOODS[o].name)}</option>`).join('')}${NEW_FOOD_OPTION}</select>`
     : `<span>${esc(FOODS[x.food].name)}</span>`;
   return `
     <li data-slot="${x.slot}" class="${x.locked ? 'locked' : ''}">
@@ -2002,6 +2012,81 @@ $('#weighList').addEventListener('click', (e) => {
   renderAll();
 });
 
+// ---------- ＋ NEW FOOD (your own macros) ----------
+let newFoodFor = null; // {meal, slot} for a swap menu, {meal, add: true} or {meal, ci} on your own meal
+let mfCat = '';
+function mfRender() {
+  const p = $('#mfP').value, c = $('#mfC').value, f = $('#mfF').value;
+  const guess = guessCategory(p, c, f);
+  const cat = mfCat || guess;
+  $('#mfCats').innerHTML = Object.entries(MY_CATS).map(([k, v]) => `<button type="button" class="${k === cat ? 'on' : ''}" data-mfcat="${k}">${esc(v.replace(' (protein, carbs & fat)', ''))}</button>`).join('');
+  const kcal = (+p || 0) * 4 + (+c || 0) * 4 + (+f || 0) * 9;
+  $('#mfKcal').placeholder = kcal ? `${Math.round(kcal)} (from macros)` : 'from macros';
+  $('#mfHint').textContent = cat === 'mixed' ? 'Mixed foods (like breaded tenders) show up with the proteins and in “+ Add a food”.'
+    : `Shows up as a ${MY_CATS[cat].toLowerCase()} choice in the meal lists and in “+ Add a food”.`;
+  const mine = profileStore(ownerId()).get('myFoods', {});
+  const all = Object.entries(FOODS).filter(([, x]) => x.mine && !x.hidden);
+  $('#mfList').innerHTML = all.length ? all.map(([id, x]) => `<li><span>${esc(x.name)} <small class="muted">${MY_CATS[x.cat] ? MY_CATS[x.cat].split(' ')[0] : ''} · 1 ${esc(x.unit.label)}: ${Math.round(x.p * x.unit.grams / 100)}P ${Math.round(x.c * x.unit.grams / 100)}C ${Math.round(x.f * x.unit.grams / 100)}F</small></span>${mine[id] ? `<button type="button" class="x" data-mfdel="${id}" aria-label="Delete ${esc(x.name)}">✕</button>` : ''}</li>`).join('') : '<li class="muted">None yet.</li>';
+}
+function openNewFood(ctx) {
+  newFoodFor = ctx; mfCat = '';
+  $('#myFoodForm').reset();
+  mfRender();
+  $('#myFoodDialog').showModal();
+  $('#mfName').focus();
+}
+$('#myFoodForm').addEventListener('input', (e) => { if (['mfP', 'mfC', 'mfF'].includes(e.target.id)) mfRender(); });
+$('#myFoodForm').addEventListener('click', (e) => {
+  const cat = e.target.closest('[data-mfcat]');
+  if (cat) { mfCat = cat.dataset.mfcat; mfRender(); return; }
+  const del = e.target.closest('[data-mfdel]');
+  if (del) {
+    const s2 = profileStore(ownerId());
+    const mine = s2.get('myFoods', {});
+    if (!confirm(`Delete “${mine[del.dataset.mfdel]?.name}” from your foods? Meals that use it keep their numbers until you change them.`)) return;
+    mine[del.dataset.mfdel] = { ...mine[del.dataset.mfdel], deleted: true };
+    s2.set('myFoods', mine);
+    registerMyFoods(); mfRender(); renderToday();
+  }
+});
+$('#mfCancel').onclick = () => $('#myFoodDialog').close();
+$('#myFoodForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const entry = { name: $('#mfName').value.trim(), serving: $('#mfServing').value.trim() || 'serving', grams: $('#mfGrams').value, p: $('#mfP').value, c: $('#mfC').value, f: $('#mfF').value, kcal: $('#mfKcal').value };
+  if (!entry.name) return;
+  entry.cat = mfCat || guessCategory(entry.p, entry.c, entry.f);
+  for (const k of ['grams', 'p', 'c', 'f', 'kcal']) entry[k] = entry[k] === '' ? '' : +entry[k];
+  const id = `my_${Date.now().toString(36)}`;
+  const s2 = profileStore(ownerId());
+  s2.set('myFoods', { ...s2.get('myFoods', {}), [id]: { ...entry, at: Date.now() } });
+  registerMyFoods();
+  $('#myFoodDialog').close();
+  const ctx = newFoodFor;
+  newFoodFor = null;
+  if (ctx?.meal) {
+    const grams = FOODS[id].unit.grams;
+    if (ctx.slot) {
+      const plan = todayPlan()[ctx.meal];
+      const fits = plan.portions?.find((x) => x.slot === ctx.slot)?.options?.includes(id);
+      if (fits) editMeal(ctx.meal, (c) => { if (ctx.meal === 'breakfast') c.template = plan.template; c.picks = { ...c.picks, [ctx.slot]: id }; if (c.grams) delete c.grams[ctx.slot]; });
+      else addToMeal(ctx.meal, id, grams);
+    } else if (ctx.ci != null) editCustom(ctx.meal, (c) => { c.items[ctx.ci].food = id; });
+    else editCustom(ctx.meal, (c) => c.items.push({ food: id, grams }));
+    resnap(ctx.meal);
+  }
+  renderToday();
+});
+// "＋ New food…" in any food menu opens the form instead of picking.
+$('#meals').addEventListener('change', (e) => {
+  if (e.target.value !== '__new') return;
+  e.stopPropagation();
+  const meal = e.target.closest('.meal')?.dataset.meal;
+  const ds = e.target.dataset;
+  const ctx = ds.pick ? { meal, slot: ds.pick } : ds.cfood != null ? { meal, ci: +ds.cfood } : { meal, add: true };
+  renderToday(); // puts the menu back on what it was
+  openNewFood(ctx);
+}, true);
+
 // ---------- GROCERIES ----------
 function renderGroceries() {
   const totals = groceryList(baseTargets(), new Date(), 7, state.prefs);
@@ -2014,7 +2099,7 @@ function renderGroceries() {
   const custom = store.get('customGrocery', []);
   if (custom.length) byStore['Scanned items'] = custom.map((c) => ({ custom: c }));
 
-  $('#groceryList').innerHTML = ['Costco', 'Sprouts', 'Safeway', 'Scanned items'].filter((k) => byStore[k]).map((name) => `
+  $('#groceryList').innerHTML = ['Costco', 'Sprouts', 'Safeway', 'My foods', 'Scanned items'].filter((k) => byStore[k]).map((name) => `
     <div class="store">
       <h3>${name}</h3>
       ${byStore[name].map((it) => {
@@ -2735,10 +2820,11 @@ if (!sync.readOnly() && (justConnected || Date.now() - store.get('lastSync', 0) 
 applyPendingLink();
 if (sync.enabled()) {
   sync.push().catch(() => {});
-  sync.pull().then((changed) => { updateNotesBadge(); updateCalBadge(); if (changed) renderHome(); if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
+  sync.pull().then((changed) => { if (changed) registerMyFoods(); updateNotesBadge(); updateCalBadge(); if (changed) renderHome(); if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
   const onNotes = () => document.querySelector('#tab-notes').classList.contains('active');
   const onBrief = () => document.querySelector('#tab-brief').classList.contains('active');
   const refresh = () => sync.pull().then((changed) => {
+    if (changed) registerMyFoods();
     updateNotesBadge();
     updateCalBadge();
     renderFeed(); // also colours the 🐕 tab

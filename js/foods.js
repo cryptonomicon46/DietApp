@@ -196,3 +196,58 @@ export function addScannedFoods(list) {
   FOOD_GROUPS.Scanned = ids;
   if (!ids.length) delete FOOD_GROUPS.Scanned;
 }
+
+// ---- Your own foods: entered once with the macros for one serving, then they show up in
+// the meal lists for both of you. cat = protein / carb / fat / mixed decides which swap
+// menus they join (mixed, e.g. breaded chicken tenders, sits with the proteins). ----
+export const MY_CATS = { protein: 'Protein', carb: 'Carbs', fat: 'Fat', mixed: 'Mixed (protein, carbs & fat)' };
+// The macro that brings most of the calories, or mixed when none brings 60%.
+export function guessCategory(p, c, f) {
+  const k = { protein: (+p || 0) * 4, carb: (+c || 0) * 4, fat: (+f || 0) * 9 };
+  const total = k.protein + k.carb + k.fat;
+  if (!total) return 'mixed';
+  const [top, v] = Object.entries(k).sort((a, b) => b[1] - a[1])[0];
+  return v / total >= 0.6 ? top : 'mixed';
+}
+// Entered per serving → stored per 100 g like every other food. Without a weight, one serving
+// counts as 100 "g" so amounts still read as servings.
+export function makeMyFood(e) {
+  const grams = +e.grams > 0 ? +e.grams : 100;
+  const k = 100 / grams;
+  const kcal = +e.kcal > 0 ? +e.kcal : (+e.p || 0) * 4 + (+e.c || 0) * 4 + (+e.f || 0) * 9;
+  const r = (v) => Math.round(v * 100) / 100;
+  // "3 tenders" = 3 pieces of a third of the serving each, so amounts read "6 tenders", not "2 3 tenders".
+  const label = String(e.serving || 'serving').trim().slice(0, 20) || 'serving';
+  const m = label.match(/^(\d+(?:\.\d+)?)\s+(.+)$/);
+  const pieces = m ? +m[1] : 1;
+  const word = m ? m[2].replace(/([^s])s$/i, '$1') : label;
+  const unit = { label: word, grams: r(grams / pieces) };
+  const step = m ? unit.grams : grams / 2;
+  return {
+    name: String(e.name || '').trim().slice(0, 60),
+    kcal: r(kcal * k), p: r((+e.p || 0) * k), f: r((+e.f || 0) * k), c: r((+e.c || 0) * k),
+    unit, range: [0, Math.round(grams * 6), r(step)],
+    cat: MY_CATS[e.cat] ? e.cat : guessCategory(e.p, e.c, e.f),
+    mine: true,
+  };
+}
+const SLOT_FOR = { protein: ['protein'], mixed: ['protein'], carb: ['carb'], fat: ['fat'] };
+let myIds = [];
+// list: {id: food from makeMyFood}. Re-registering replaces the previous set.
+export function addMyFoods(list) {
+  const templates = [MAIN_MEAL, ...Object.values(BREAKFASTS)];
+  for (const t of templates) for (const it of t.items) it.options = it.options.filter((o) => !myIds.includes(o));
+  for (const id of myIds) { delete FOODS[id]; delete STORES[id]; }
+  myIds = Object.keys(list || {});
+  for (const [id, f] of Object.entries(list || {})) {
+    FOODS[id] = f;
+    STORES[id] = { store: 'My foods', tip: f.name, packGrams: f.unit.grams, packLabel: f.unit.label };
+    if (f.hidden) continue;
+    for (const slot of SLOT_FOR[f.cat] || []) {
+      // Breakfast: only where that kind of food fits (toast-style carbs on eggs & toast, fats on both).
+      for (const t of templates) for (const it of t.items) if (it.slot === slot && (t === MAIN_MEAL || slot === 'fat' || (slot === 'carb' && t === BREAKFASTS.eggs))) it.options.push(id);
+    }
+  }
+  const shown = myIds.filter((id) => !list[id].hidden);
+  if (shown.length) FOOD_GROUPS['My foods'] = shown; else delete FOOD_GROUPS['My foods'];
+}

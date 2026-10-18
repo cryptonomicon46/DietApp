@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawMili">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=155">
+  <link rel="stylesheet" href="styles.css?v=157">
 </head>
 <body>
   <header class="top">
@@ -248,6 +248,28 @@
 
   <dialog id="hhDialog" class="hh-dialog"></dialog>
 
+  <!-- A FOOD OF YOUR OWN -->
+  <dialog id="myFoodDialog" class="myfood-dialog">
+    <form id="myFoodForm">
+      <h2>＋ New food</h2>
+      <p class="small muted">Not in the list? Enter the macros for one serving from the label or the store's website. It's saved for both of you and shows up in the meal lists from now on.</p>
+      <label>Name<input id="mfName" maxlength="60" required placeholder="e.g. Sprouts lightly breaded chicken tenders"></label>
+      <div class="mf-grid">
+        <label>One serving is<input id="mfServing" maxlength="20" placeholder="e.g. 3 tenders, 1 cup, serving"></label>
+        <label>Serving weight (g)<input id="mfGrams" type="number" min="1" step="any" inputmode="decimal" placeholder="optional, e.g. 84"></label>
+        <label>Protein g<input id="mfP" type="number" min="0" step="any" inputmode="decimal" required></label>
+        <label>Carbs g<input id="mfC" type="number" min="0" step="any" inputmode="decimal" required></label>
+        <label>Fat g<input id="mfF" type="number" min="0" step="any" inputmode="decimal" required></label>
+        <label>Calories<input id="mfKcal" type="number" min="0" step="any" inputmode="decimal" placeholder="from macros"></label>
+      </div>
+      <div class="small muted" style="margin-top:8px">It's mostly…</div>
+      <div class="seg mf-cats" id="mfCats"></div>
+      <p class="small muted" id="mfHint"></p>
+      <div class="row end"><button type="button" class="ghost" id="mfCancel">Cancel</button><button type="submit">Save &amp; add</button></div>
+      <details class="mf-list"><summary class="small">My foods</summary><ul class="list" id="mfList"></ul></details>
+    </form>
+  </dialog>
+
   <!-- PARTNER NOT SET UP -->
   <dialog id="partnerDialog">
     <h2 id="partnerTitle"></h2>
@@ -371,39 +393,39 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/activity.js": "./js/activity.js?v=155",
-    "./js/adopt.js": "./js/adopt.js?v=155",
-    "./js/analytics.js": "./js/analytics.js?v=155",
-    "./js/app.js": "./js/app.js?v=155",
-    "./js/bodycomp.js": "./js/bodycomp.js?v=155",
-    "./js/brief.js": "./js/brief.js?v=155",
-    "./js/briefTab.js": "./js/briefTab.js?v=155",
-    "./js/calTab.js": "./js/calTab.js?v=155",
-    "./js/calendar.js": "./js/calendar.js?v=155",
-    "./js/commands.js": "./js/commands.js?v=155",
-    "./js/devices.js": "./js/devices.js?v=155",
-    "./js/dexa.js": "./js/dexa.js?v=155",
-    "./js/dogs.js": "./js/dogs.js?v=155",
-    "./js/foods.js": "./js/foods.js?v=155",
-    "./js/household.js": "./js/household.js?v=155",
-    "./js/lift.js": "./js/lift.js?v=155",
-    "./js/lifting.js": "./js/lifting.js?v=155",
-    "./js/notes.js": "./js/notes.js?v=155",
-    "./js/plan.js": "./js/plan.js?v=155",
-    "./js/plans.js": "./js/plans.js?v=155",
-    "./js/poster.js": "./js/poster.js?v=155",
-    "./js/research.js": "./js/research.js?v=155",
-    "./js/review.js": "./js/review.js?v=155",
-    "./js/rewards.js": "./js/rewards.js?v=155",
-    "./js/rhythm.js": "./js/rhythm.js?v=155",
-    "./js/share.js": "./js/share.js?v=155",
-    "./js/shows.js": "./js/shows.js?v=155",
-    "./js/storage.js": "./js/storage.js?v=155",
-    "./js/sync.js": "./js/sync.js?v=155",
-    "./js/zip.js": "./js/zip.js?v=155"
+    "./js/activity.js": "./js/activity.js?v=157",
+    "./js/adopt.js": "./js/adopt.js?v=157",
+    "./js/analytics.js": "./js/analytics.js?v=157",
+    "./js/app.js": "./js/app.js?v=157",
+    "./js/bodycomp.js": "./js/bodycomp.js?v=157",
+    "./js/brief.js": "./js/brief.js?v=157",
+    "./js/briefTab.js": "./js/briefTab.js?v=157",
+    "./js/calTab.js": "./js/calTab.js?v=157",
+    "./js/calendar.js": "./js/calendar.js?v=157",
+    "./js/commands.js": "./js/commands.js?v=157",
+    "./js/devices.js": "./js/devices.js?v=157",
+    "./js/dexa.js": "./js/dexa.js?v=157",
+    "./js/dogs.js": "./js/dogs.js?v=157",
+    "./js/foods.js": "./js/foods.js?v=157",
+    "./js/household.js": "./js/household.js?v=157",
+    "./js/lift.js": "./js/lift.js?v=157",
+    "./js/lifting.js": "./js/lifting.js?v=157",
+    "./js/notes.js": "./js/notes.js?v=157",
+    "./js/plan.js": "./js/plan.js?v=157",
+    "./js/plans.js": "./js/plans.js?v=157",
+    "./js/poster.js": "./js/poster.js?v=157",
+    "./js/research.js": "./js/research.js?v=157",
+    "./js/review.js": "./js/review.js?v=157",
+    "./js/rewards.js": "./js/rewards.js?v=157",
+    "./js/rhythm.js": "./js/rhythm.js?v=157",
+    "./js/share.js": "./js/share.js?v=157",
+    "./js/shows.js": "./js/shows.js?v=157",
+    "./js/storage.js": "./js/storage.js?v=157",
+    "./js/sync.js": "./js/sync.js?v=157",
+    "./js/zip.js": "./js/zip.js?v=157"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=155"></script>
+  <script type="module" src="js/app.js?v=157"></script>
 </body>
 </html>

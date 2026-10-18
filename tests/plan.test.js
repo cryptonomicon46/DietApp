@@ -255,3 +255,31 @@ test('prepared / catered meals use the label: calories from the label or the mac
   assert.equal(day.lunch.totals.kcal, 448);
   assert.ok(typeof dailyTargets === 'function');
 });
+
+test('your own foods: per-serving macros become a food that joins the right meal lists', async () => {
+  const { makeMyFood, guessCategory, addMyFoods, FOODS, MAIN_MEAL, BREAKFASTS, FOOD_GROUPS } = await import('../js/foods.js');
+  assert.equal(guessCategory(40, 2, 3), 'protein');
+  assert.equal(guessCategory(2, 40, 1), 'carb');
+  assert.equal(guessCategory(1, 2, 14), 'fat');
+  assert.equal(guessCategory(18, 14, 8), 'mixed');
+  const tenders = makeMyFood({ name: 'Sprouts breaded chicken tenders', serving: '3 tenders', grams: 84, p: 18, c: 14, f: 8 });
+  assert.equal(tenders.cat, 'mixed');
+  assert.deepEqual(tenders.unit, { label: 'tender', grams: 28 }, '"3 tenders" → pieces');
+  assert.equal(tenders.range[2], 28, 'steps of one tender');
+  assert.equal(Math.round(tenders.p * 84 / 100), 18);
+  assert.deepEqual(makeMyFood({ name: 'x', serving: '1 cup', grams: 240, p: 1, c: 1, f: 1 }).unit, { label: 'cup', grams: 240 });
+  assert.deepEqual(makeMyFood({ name: 'x', serving: 'bowl', p: 1, c: 1, f: 1 }).unit, { label: 'bowl', grams: 100 });
+  assert.equal(Math.round(tenders.kcal * 84 / 100), 200);
+  const noWeight = makeMyFood({ name: 'Granola', p: 4, c: 30, f: 6, kcal: 190 });
+  assert.deepEqual([noWeight.unit.grams, noWeight.kcal, noWeight.cat], [100, 190, 'carb']);
+  addMyFoods({ my_t: tenders, my_g: noWeight, my_x: { ...makeMyFood({ name: 'Old', p: 20, c: 0, f: 1 }), hidden: true } });
+  const slot = (t, name) => t.items.find((it) => it.slot === name).options;
+  assert.ok(slot(MAIN_MEAL, 'protein').includes('my_t'));
+  assert.ok(slot(MAIN_MEAL, 'carb').includes('my_g'));
+  assert.ok(slot(BREAKFASTS.eggs, 'carb').includes('my_g'));
+  assert.ok(!slot(BREAKFASTS.oatmeal, 'carb').includes('my_g'), 'oatmeal stays oats');
+  assert.ok(FOODS.my_x && !slot(MAIN_MEAL, 'protein').includes('my_x'), 'deleted: known, not listed');
+  assert.deepEqual(FOOD_GROUPS['My foods'], ['my_t', 'my_g']);
+  addMyFoods({});
+  assert.ok(!slot(MAIN_MEAL, 'protein').includes('my_t') && !FOOD_GROUPS['My foods'] && !FOODS.my_t);
+});

@@ -163,6 +163,9 @@ export function portionMeal(template, target, custom = {}) {
       const others = sum(items.map((o, j) => ({ food: o.food, grams: j === i ? 0 : grams[j] })));
       const per = FOODS[it.food][it.drives] / 100;
       grams[i] = per > 0 ? clamp((target[it.drives] - others[it.drives]) / per, it.min, it.max) : it.min;
+      // A mixed food (breaded tenders) brings its own carbs and fat: sized for protein alone it
+      // would blow the meal's calories, so it gets at most ~¾ of them.
+      if (FOODS[it.food].cat === 'mixed' && it.drives === 'p') grams[i] = Math.min(grams[i], Math.max(it.min, target.kcal * 0.75 / (FOODS[it.food].kcal / 100)));
     });
   }
 
