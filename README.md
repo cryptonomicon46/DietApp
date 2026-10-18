@@ -14,7 +14,7 @@
 - **Looking for another dog?** A shared board of adoption ads you've each found, with reactions and a status.
 - **Private by design.** Your data lives on your phones and in your own small cloud store, readable only with your household phrase. Nothing personal is in this code repository.
 
-## The six tabs
+## The seven tabs
 
 | Tab | What it's for |
 |---|---|
@@ -23,7 +23,8 @@
 | **🍽 Food** | Your meal plan (with the morning weigh-in at the top), plus **Weight**, **Groceries** and **Scan** pages from the bar at the top. |
 | **🏋︎ Train** | Your training card (WHOOP / Garmin calories, workout fuel), the best run and ride windows, class schedules, and the lifting log. |
 | **📅 Calendar** | The shared family calendar, linked phone calendars, and the subscription link for Apple / Google Calendar. |
-| **💞 Us** | 💞 The 2-2-2-2 rhythm, 💌 Notes, ✨ Feeling like (plans), 📺 Watching, and 🔐 your household code. |
+| **💞 Us** | One page: 💞 the 2-2-2-2 rhythm, 💌 today's notes, ✨ feeling like (plans) and 📺 watching, each a compact section. |
+| **🔐 Privacy** | Privacy settings: your household code (show, change, send), sharing status, and how your data is kept. |
 
 ## How a family uses it: the secret phrase
 
@@ -38,7 +39,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
    *Or* skip the phrase: one phone taps **Send** to text its code, and the other enters it or taps the link.
 5. **Done.** Within a few minutes each phone shows the other's feedings, walks, notes, events and dog records.
 
-**Changing the code (now and then, or if it may have been seen):** go to **Us › 🔐 Our household code › 🔄 Change our code**. Either of you can do it.
+**Changing the code (now and then, or if it may have been seen):** go to **🔐 Privacy › Our household code › 🔄 Change our code**. Either of you can do it.
 
 - Everything moves to a new random code, and the old one is emptied, so an old screenshot or link shows nothing.
 - The other phone pauses sharing and pops up **New household code**.
@@ -207,6 +208,8 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 
 ## 💞 Us
 
+Everything for the two of you on one page, in compact sections; forms and history open only when you need them.
+
 - **💞 The 2-2-2-2 rhythm** (top of Us, and on Home): a date every **2** weeks, intimacy **2** times a week, an overnight trip **2** times a year, and a multi-night getaway every **2** years — just the two of you (book the dog sitter).
   - A gentle, rotating love note for the one that's due or coming up: a date that falls due by the weekend, a second time this week (from Thursday on), or a trip that's due. Chips show all four at a glance (✓, soon, due, and 💗 count this week).
   - **✓ We did it** logs it (either phone; trips and dates can be logged for an earlier day), **💗 +1** for intimacy, and **💡 Suggest for Saturday** sends it to your partner as a *Feeling like* plan for the coming weekend, which they answer 🙌 / 🤔 / ⏰.
@@ -223,7 +226,13 @@ Each phone keeps its owner's data, and the two phones share through a **househol
   - **📺 We watched tonight** counts each night, once even if you both tap.
   - Each of you rates ★1–5, and you can mark a title Finished or Dropped.
   - Views by month, plus a year recap (nights, titles, your favourite, top services).
-- **🔐 Our household code:** see it (masked until *Show*), when it was last changed, **🔄 Change our code**, and **Send to…**. See *How a family uses it* above.
+
+
+## 🔐 Privacy
+
+- **Our household code:** masked until *Show*, when it was last changed, **🔄 Change our code** and **Send to…** (see *How a family uses it* above).
+- **Sharing between your phones:** when this phone last sent and checked (with *Refresh*), whose phone it is, and a shortcut to the sharing, connector and device settings.
+- **How your data is kept:** a short summary of where your data lives and good habits.
 
 ## Profiles and sharing
 

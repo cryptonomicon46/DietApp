@@ -134,10 +134,9 @@ export function renderShows(el) {
   if (view === 'now') {
     const watching = shows.filter((s) => s.status === 'watching');
     const thisMonth = monthShows(shows, ym).filter((s) => s.status !== 'watching');
-    body = `${addForm()}
-      <h3 class="note-day">Watching now</h3>
-      ${watching.length ? watching.map((s) => showCard(s)).join('') : '<p class="small muted">Nothing on the go. Add what you\'re watching together.</p>'}
-      ${thisMonth.length ? `<h3 class="note-day">Also in ${monthName(ym, 'long').split(' ')[0]}</h3>${thisMonth.map((s) => showCard(s, { monthNights: s.monthNights })).join('')}` : ''}`;
+    body = `${watching.length ? watching.map((s) => showCard(s)).join('') : '<p class="small muted">Nothing on the go. Add what you\'re watching together.</p>'}
+      ${thisMonth.length ? `<details class="us-more"><summary>Also in ${monthName(ym, 'long').split(' ')[0]} · ${thisMonth.length}</summary>${thisMonth.map((s) => showCard(s, { monthNights: s.monthNights })).join('')}</details>` : ''}
+      ${addForm()}`;
   } else if (view === 'month') {
     const months = [...new Set(shows.flatMap(showMonths))].sort().reverse();
     body = months.length ? months.map((m) => {
@@ -162,7 +161,7 @@ export function renderShows(el) {
       <ul class="year-months">${r.months.map((m) => `<li><b>${monthName(m.month, 'short').split(' ')[0]}</b><span>${m.shows.map((s) => esc(s.title)).join(', ')}</span></li>`).join('')}</ul>`
       : '<p class="small muted">Nothing logged this year yet.</p>';
   }
-  el.innerHTML = `<div class="seg show-views">${views.map(([k, l]) => `<button type="button" class="${view === k ? 'on' : ''}" data-showview="${k}">${l}</button>`).join('')}</div>${body}`;
+  el.innerHTML = `<h2 class="us-h">📺 Watching</h2><div class="seg show-views">${views.map(([k, l]) => `<button type="button" class="${view === k ? 'on' : ''}" data-showview="${k}">${l}</button>`).join('')}</div>${body}`;
 }
 
 export function initShows(root, rerender) {

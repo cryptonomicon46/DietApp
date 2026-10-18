@@ -75,13 +75,9 @@ export function homeUs() {
     <span class="home-go">›</span></button>`;
 }
 
-// The tab has two pages: notes and "feeling like" plans.
-let page = 'notes';
 
-// Opening the tab: jump to whichever page has something new.
+// Opening the tab: everything is on one page.
 export function openUs() {
-  if (unreadPlans() && !unreadNotes()) page = 'plans';
-  else if (unreadNotes()) page = 'notes';
   renderNotes();
 }
 
@@ -100,11 +96,6 @@ export function renderNotes() {
   const draft = $('#noteText')?.value || '';
   const focused = document.activeElement?.id === 'noteText';
   queueMicrotask(() => { const ta = $('#noteText'); if (ta && draft && !ta.value) { ta.value = draft; $('#noteCount').textContent = `${[...draft].length}/${MAX}`; if (focused) ta.focus(); } });
-  const n = unreadNotes(), pl = unreadPlans();
-  $('#usPages').innerHTML = [['notes', '💌 Notes', n], ['plans', '✨ Feeling like', pl], ['shows', '📺 Watching', 0]].map(([k, label, c]) =>
-    `<button type="button" class="${k === page ? 'on' : ''}" data-page="${k}" aria-pressed="${k === page}">${label}${c && k !== page ? ` <b class="dot">${c}</b>` : ''}</button>`).join('');
-  if (page === 'plans') { renderPlans(el); updateNotesBadge(); return; }
-  if (page === 'shows') { el.innerHTML = syncLine() + '<div id="showsBoard"></div>'; renderShows($('#showsBoard')); updateNotesBadge(); return; }
   const start = boardStart();
   const fresh = unreadNoteList();
   for (const x of fresh) if (x.at < start) carried.add(key(x));
@@ -132,16 +123,17 @@ export function renderNotes() {
     return new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
   };
 
+  // One page: 💌 notes, ✨ feeling like and 📺 watching, each a compact section.
   el.innerHTML = `
     ${syncLine()}
-    <div class="card note-compose">
+    <section class="card us-sec note-compose">
       <div class="row between" style="margin-top:0">
-        <h2 style="margin:0">${wroteToday ? `Another note for ${esc(pName)}` : `Today's note for ${esc(pName)}`}</h2>
+        <h2 class="us-h">💌 ${wroteToday ? `Another note for ${esc(pName)}` : `Today's note for ${esc(pName)}`}</h2>
         ${streak ? `<span class="pill">💌 ${streak} day${streak > 1 ? 's' : ''}</span>` : ''}
       </div>
       <form id="noteForm">
         ${replyTo ? `<div class="reply-to small">↩ Replying to ${esc(nameOf(replyTo.from))}: “${esc(replyTo.text.slice(0, 60))}${replyTo.text.length > 60 ? '…' : ''}” <button type="button" class="linkish" data-cancelreply>Cancel</button></div>` : ''}
-        <textarea id="noteText" maxlength="${MAX}" rows="3" placeholder="Proud of you for hitting your protein today 💪" aria-label="Your note"></textarea>
+        <textarea id="noteText" maxlength="${MAX}" rows="2" placeholder="Proud of you for hitting your protein today 💪" aria-label="Your note"></textarea>
         <div class="emoji-row" role="group" aria-label="Add an emoji">
           ${NOTE_EMOJI.map((e) => `<button type="button" class="emoji" data-emoji="${e}" aria-label="Add ${e}">${e}</button>`).join('')}
         </div>
@@ -154,14 +146,18 @@ export function renderNotes() {
         </div>
       </form>
       ${linked ? '' : `<p class="small muted">${esc(pName)} sees your notes once your phones are linked (tap ${esc(pName)} at the top → Link).</p>`}
-    </div>
-    <h3 class="note-day">Today's board · ${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
-    ${board.length ? `<div class="note-grid">${board.map((x) => postit(x, { pName, hearts, theirHearts })).join('')}</div>`
-      : `<p class="muted small center">A fresh board for today. Leave the first note 💌</p>`}
-    ${earlier.length ? `<details class="past-notes"><summary class="note-day">Earlier notes</summary>
-      ${Object.entries(byDay).map(([d, notes]) => `<h4 class="note-day small">${dayLabel(d)}</h4>
-        <div class="note-grid">${notes.map((x) => postit(x, { pName, hearts, theirHearts })).join('')}</div>`).join('')}
-    </details>` : ''}`;
+      ${board.length ? `<div class="note-grid">${board.map((x) => postit(x, { pName, hearts, theirHearts })).join('')}</div>`
+        : `<p class="muted small">A fresh board for today. Leave the first note 💌</p>`}
+      ${earlier.length ? `<details class="past-notes"><summary class="small">Earlier notes</summary>
+        ${Object.entries(byDay).map(([d, notes]) => `<h4 class="note-day small">${dayLabel(d)}</h4>
+          <div class="note-grid">${notes.map((x) => postit(x, { pName, hearts, theirHearts })).join('')}</div>`).join('')}
+      </details>` : ''}
+    </section>
+    <section class="card us-sec" id="usPlans"></section>
+    <section class="card us-sec" id="usShows"></section>`;
+  renderPlans($('#usPlans'));
+  renderShows($('#usShows'));
+  updateNotesBadge(); // plans count as seen once shown
 }
 
 function postit(n, { pName, hearts, theirHearts }) {
@@ -184,10 +180,6 @@ export function initNotes() {
   const root = $('#tab-notes');
   initPlans(root, () => renderNotes());
   initShows(root, () => renderNotes());
-  $('#usPages').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-page]');
-    if (b) { page = b.dataset.page; renderNotes(); }
-  });
   root.addEventListener('click', (e) => {
     const t = e.target.closest('button');
     if (!t) return;

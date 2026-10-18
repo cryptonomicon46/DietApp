@@ -937,3 +937,16 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .mf-cats { margin-top: 4px; }
 .mf-list { margin-top: 10px; }
 .mf-list summary { cursor: pointer; color: var(--brand); font-weight: 600; }
+
+/* 💞 Us: one page of compact sections */
+.us-sec { margin-top: 12px; }
+.us-h { margin: 0 0 6px; font-size: 1.05rem; }
+.us-more { margin-top: 8px; }
+.us-more > summary { cursor: pointer; color: var(--brand); font-weight: 600; font-size: .88rem; padding: 4px 0; }
+.us-sec .emoji-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.us-sec .note-grid { margin-top: 10px; }
+.us-sec .show-views { margin: 4px 0 8px; }
+.us-sec .show-form.card { box-shadow: none; border: 1px solid var(--line); }
+#tab-privacy .card + .card { margin-top: 12px; }
+body[data-tab="privacy"] .daybar-wrap { display: none; }
+.us-sec .emoji-row .emoji { flex: 0 0 38px; }

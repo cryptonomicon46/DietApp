@@ -3,6 +3,7 @@
 // anyone who had the old code (an old screenshot, a shared calendar link) is locked out.
 import { PROFILES, ownerId, profileStore } from './storage.js';
 import { sync } from './sync.js';
+import { syncLine } from './plans.js';
 import { allDogs } from './dogs.js';
 import { allAdopt } from './adopt.js';
 
@@ -25,7 +26,7 @@ function movedCard(inDialog = false) {
   return `<div class="card hh-card hh-moved">
     <div class="eyebrow">🔐 New household code</div>
     <p><b>${esc(nameOf(by))} changed your household code.</b> Sharing is paused on this phone until you enter the new one.</p>
-    <p class="small muted">On ${esc(nameOf(by))}'s phone: Us › 🔐 Our household code › Send. Tap the link they send, or paste the code here.</p>
+    <p class="small muted">On ${esc(nameOf(by))}'s phone: 🔐 Privacy › Our household code › Send. Tap the link they send, or paste the code here.</p>
     <div class="row"><input class="hh-input" data-hhinput autocomplete="off" autocapitalize="none" placeholder="xxxx-xxxx-xxxx" style="flex:1">
       <button type="button" class="ghost small" data-hhpaste>📋 Paste</button></div>
     <div class="row"><button type="button" data-hhjoin ${busy ? 'disabled' : ''}>${busy ? 'Checking…' : 'Use the new code'}</button>${inDialog ? '<button type="button" class="ghost" data-hhlater>Later</button>' : ''}</div>
@@ -58,6 +59,27 @@ function codeCard() {
   </div>`;
 }
 
+// The rest of the Privacy tab: sharing status and how your data is kept.
+function privacyInfo() {
+  const s = sync.settings();
+  return `<div class="card">
+      <div class="eyebrow">📡 Sharing between your phones</div>
+      ${syncLine()}
+      <p class="small">This phone belongs to <b>${esc(nameOf(ownerId()))}</b>; it shares ${esc(nameOf(ownerId()))}'s data and shows ${esc(nameOf(partner()))}'s.${s?.url ? ` Connector: <code class="small">${esc(new URL(s.url).host)}</code>.` : ''}</p>
+      <div class="row"><button type="button" class="ghost small" data-hhdevices>Sharing, connector & devices…</button></div>
+    </div>
+    <div class="card">
+      <div class="eyebrow">🛡 How your data is kept</div>
+      <ul class="small privacy-list">
+        <li><b>On your phones.</b> Each phone keeps its owner's data in this browser; nothing personal is in the app's public code.</li>
+        <li><b>Shared through your connector</b>, filed under your household code and sent over HTTPS — readable only with the code.</li>
+        <li><b>Keys stay secret.</b> WHOOP, Strava and Claude keys live in Cloudflare's secret store; WHOOP and Strava sign-ins never leave the phone that made them.</li>
+        <li><b>Treat the code like a password:</b> share it only in a private message, never in a group, a post or a screenshot — and change it now and then (above).</li>
+        <li>Lock both phones with Face ID or a passcode, and don't keep passwords or ID numbers in notes or documents.</li>
+      </ul>
+    </div>`;
+}
+
 export function renderHousehold() {
   if (!ownerId()) return;
   const moved = !!sync.settings()?.moved;
@@ -77,6 +99,7 @@ export function renderHousehold() {
     } else if (dlg.open) dlg.close();
   }
   if ($('#usHousehold')) $('#usHousehold').innerHTML = moved ? movedCard() : codeCard();
+  if ($('#privacyInfo')) $('#privacyInfo').innerHTML = privacyInfo();
 }
 
 async function share(code) {
@@ -92,6 +115,8 @@ export function initHousehold() {
   $('#hhDialog')?.addEventListener('cancel', () => { dismissed = true; });
   document.addEventListener('click', async (e) => {
     const t = e.target.closest('button');
+    if (t?.dataset.hhdevices != null) { window.dispatchEvent(new Event('lp:opendevices')); return; }
+    if (t?.dataset.syncnow != null && t.closest('#tab-privacy')) { t.textContent = 'Checking…'; sync.push().then(() => sync.pull()).catch(() => {}).finally(renderHousehold); return; }
     if (!t || !t.closest('.hh-card')) return;
     const ds = t.dataset;
     if (ds.hhlater != null) { dismissed = true; renderHousehold(); }

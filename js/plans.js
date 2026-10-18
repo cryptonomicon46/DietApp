@@ -76,6 +76,7 @@ export function syncLine() {
 }
 
 let kind = 'dinner';
+let composeOpen = false; // the "I'm feeling like…" form stays open while you fill it in
 let when = 'tonight';
 
 export function renderPlans(el) {
@@ -113,9 +114,9 @@ export function renderPlans(el) {
   };
 
   el.innerHTML = `
-    ${syncLine()}
-    <div class="card plan-compose">
-      <h2 style="margin-top:0">I'm feeling like…</h2>
+    <div class="row between" style="margin-top:0"><h2 class="us-h">✨ Feeling like</h2></div>
+    ${upcoming.length ? upcoming.map(card).join('') : '<p class="muted small">Nothing planned yet.</p>'}
+    <details class="plan-compose us-more" ${composeOpen ? 'open' : ''} data-plancompose><summary>＋ I'm feeling like…</summary>
       <div class="kind-row" role="radiogroup" aria-label="What kind of plan">
         ${Object.entries(PLAN_KINDS).map(([key, v]) => `<button type="button" class="kind ${key === kind ? 'on' : ''}" data-kind="${key}" role="radio" aria-checked="${key === kind}"><span>${v.icon}</span>${v.label}</button>`).join('')}
       </div>
@@ -134,13 +135,12 @@ export function renderPlans(el) {
         <div class="row end"><button type="submit">Send to ${esc(pName)}</button></div>
       </form>
       ${linked ? '' : `<p class="small muted">${esc(pName)} sees this once your phones are linked (tap ${esc(pName)} at the top → Link).</p>`}
-    </div>
-    <h3 class="note-day">Coming up</h3>
-    ${upcoming.length ? upcoming.map(card).join('') : '<p class="muted small center">Nothing planned yet. Suggest something ✨</p>'}
-    ${past.length ? `<details class="past-plans"><summary class="note-day">Past plans</summary>${past.map(card).join('')}</details>` : ''}`;
+    </details>
+    ${past.length ? `<details class="past-plans us-more"><summary>Past plans</summary>${past.map(card).join('')}</details>` : ''}`;
 }
 
 export function initPlans(root, rerender) {
+  root.addEventListener('toggle', (e) => { if (e.target.dataset?.plancompose != null) composeOpen = e.target.open; }, true);
   root.addEventListener('click', (e) => {
     const t = e.target.closest('button');
     if (!t) return;
@@ -179,6 +179,7 @@ export function initPlans(root, rerender) {
     if (when === 'date') plan.day = val('feelDay') || isoDate();
     const s = profileStore(me());
     s.set('plans', [...s.get('plans', []), plan].slice(-100));
+    composeOpen = false;
     rerender();
     pushNow().then(rerender);
   });

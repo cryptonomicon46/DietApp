@@ -2507,6 +2507,7 @@ function showTab(name) {
     if (sync.enabled()) sync.pull().then((changed) => changed && renderNotes()).catch(() => {});
   }
   if (name === 'weight' && state.profile) renderStats();
+  if (name === 'privacy') renderHousehold();
   window.scrollTo(0, 0);
 }
 document.querySelectorAll('.tabs button').forEach((btn) => { btn.onclick = () => showTab(btn.dataset.tab); });
@@ -2744,6 +2745,7 @@ initNotes();
 initBrief();
 initCal(document.querySelector('main'));
 initHousehold();
+window.addEventListener('lp:opendevices', () => openDevices());
 initRhythm(document.querySelector('main'));
 initDexa(() => state.weights, () => { if (state.profile) drawChart(); });
 updateCalBadge();
