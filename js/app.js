@@ -20,6 +20,7 @@ import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
 import { sync, newHouseholdCode, DEFAULT_CONNECTOR } from './sync.js';
 import { renderHousehold, initHousehold } from './household.js';
+import { renderRhythm, initRhythm } from './rhythm.js';
 import { buildTables, toCsv, summary, weekRows } from './analytics.js';
 import { icsCalendar } from './calendar.js';
 import { makeZip } from './zip.js';
@@ -2349,6 +2350,7 @@ function showTab(name) {
   if (name === 'calendar') renderCal();
   if (name === 'notes') {
     openUs();
+    renderRhythm();
     renderHousehold();
     if (sync.enabled()) sync.pull().then((changed) => changed && renderNotes()).catch(() => {});
   }
@@ -2395,6 +2397,7 @@ function renderHome() {
   updateFoodBadge();
   $('#homeUs').innerHTML = homeUs();
   $('#homeGym').innerHTML = homeGym();
+  renderRhythm();
   renderHousehold();
   if (!state.profile) { $('#homeFood').innerHTML = ''; $('#homeTrain').innerHTML = ''; return; }
   // Food: the next meal not yet logged, and how many are done.
@@ -2588,6 +2591,7 @@ initNotes();
 initBrief();
 initCal(document.querySelector('main'));
 initHousehold();
+initRhythm(document.querySelector('main'));
 updateCalBadge();
 updateNotesBadge();
 // Weigh-ins said on the Lift tab ("weigh in 161.4").
@@ -2671,7 +2675,7 @@ if (sync.enabled()) {
     renderFeed(); // also colours the 🐕 tab
     if (changed && currentTab === 'calendar') renderCal();
     if (changed && currentTab === 'home') renderHome();
-    if (onNotes() && changed) renderNotes();
+    if (onNotes() && changed) { renderNotes(); renderRhythm(); }
     else if (onNotes()) { const l = document.querySelector('#tab-notes .sync-line'); if (l) l.outerHTML = syncLine(); }
     else if (changed && sync.readOnly()) location.reload();
   }).catch(() => {});

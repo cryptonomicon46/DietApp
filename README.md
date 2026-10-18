@@ -23,7 +23,7 @@
 | **🍽 Food** | Your meal plan (with the morning weigh-in at the top), plus **Weight**, **Groceries** and **Scan** pages from the bar at the top. |
 | **🏋︎ Train** | Your training card (WHOOP / Garmin calories, workout fuel), the best run and ride windows, class schedules, and the lifting log. |
 | **📅 Calendar** | The shared family calendar, linked phone calendars, and the subscription link for Apple / Google Calendar. |
-| **💞 Us** | 💌 Notes, ✨ Feeling like (plans), 📺 Watching, and 🔐 your household code. |
+| **💞 Us** | 💞 The 2-2-2-2 rhythm, 💌 Notes, ✨ Feeling like (plans), 📺 Watching, and 🔐 your household code. |
 
 ## How a family uses it: the secret phrase
 
@@ -67,6 +67,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 - **Your day:** the best run, ride and dog-walk windows in time order with the temperature range. A 🐾 marks a run or ride that overlaps a good walk window. Everything ends by 9 PM, and from 9 PM on, Home, Train and Dogs plan tomorrow.
 - **🧗 Gym classes:** each gym's live **🧘 Yoga** and **🏋️ Fitness** schedule one tap away, plus map links and the classes you take today (added under Train). The gyms are set in `js/brief.js`.
 - **Food:** the next meal, and the weekly check-in reminder (red when overdue).
+- **💞 Just the two of you:** a gentle love note when a date, intimacy or a trip is coming up (from the 2-2-2-2 rhythm), with **✓ We did it** and **💡 Suggest for Saturday**.
 - **Us:** your partner's latest note and next plan. **Train:** today's training.
 - Home works even before a diet profile is set up.
 
@@ -199,6 +200,10 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 
 ## 💞 Us
 
+- **💞 The 2-2-2-2 rhythm** (top of Us, and on Home): a date every **2** weeks, intimacy **2** times a week, an overnight trip **2** times a year, and a multi-night getaway every **2** years — just the two of you (book the dog sitter).
+  - A gentle, rotating love note for the one that's due or coming up: a date that falls due by the weekend, a second time this week (from Thursday on), or a trip that's due. Chips show all four at a glance (✓, soon, due, and 💗 count this week).
+  - **✓ We did it** logs it (either phone; trips and dates can be logged for an earlier day), **💗 +1** for intimacy, and **💡 Suggest for Saturday** sends it to your partner as a *Feeling like* plan for the coming weekend, which they answer 🙌 / 🤔 / ⏰.
+  - A multi-night getaway also counts as an overnight trip. Weeks run Monday to Sunday. Logged moments can be removed.
 - **💌 Notes:** a post-it board for each other.
   - It starts fresh every morning at 5 AM, and earlier notes move to *Earlier notes*. Unread notes stay until seen.
   - Emoji, colours, ↩ replies, ❤️ and a daily streak.
