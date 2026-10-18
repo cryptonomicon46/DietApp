@@ -122,6 +122,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
   - **🍎 Afternoon snack:** fruit, nuts, yogurt, shakes and bars. Its calories come out of lunch and dinner, so the day still adds up.
   - **☕ Coffee shop:** lattes, cappuccinos, cortados, flat whites, mochas, chai and a chocolate chip cookie.
   - **⚡ Bars & shakes:** common protein bars and shakes.
+- **📦 Prepared:** for pre-packaged or catered meals, type the label's protein, carbs and fat (and calories, or they're worked out from the macros), pick ½ / 1 / 1½ / 2 meals, and **☆ Save to my prepared meals** — next time pick it from the list on any meal. Your partner's saved prepared meals appear in the list too.
 - **🍴 Ate out:** estimate a restaurant meal (dish, portion, how much you ate; estimates lean generous) or enter the menu's calories. **🍷 Drinks with the meal** adds wine, beer or cocktails.
 - **Logging:**
   - **✓ I ate this** logs a meal and locks it until *Unlog to edit*.

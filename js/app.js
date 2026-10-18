@@ -3,7 +3,7 @@ import {
   ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
   FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek, checkinWindow, isCheckinDue, weeklyReview, deltaMacros,
-  EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE, DRINKS, drinksTotals, fitItems,
+  EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE, DRINKS, drinksTotals, fitItems, labelKcal,
 } from './plan.js';
 import {
   SESSION_TYPES, SPORTS, INTENSITY, trainingDay, applyTraining, parseGarminCsv, parseWhoopCsv,
@@ -643,16 +643,53 @@ function mealCard(meal, m) {
           ${meal === 'breakfast' ? `<select class="small-select" data-template aria-label="Breakfast type">
             ${Object.entries(MEAL_TEMPLATES).map(([k, v]) => `<option value="${k}" ${m.template === k ? 'selected' : ''}>${v}</option>`).join('')}
           </select>` : ''}
-          ${m.custom ? '' : '<button class="ghost small" data-customize title="Build this meal yourself">✎ Customize</button><button class="ghost small" data-eatout title="Log a restaurant meal">🍴 Ate out</button>'}
+          ${m.custom ? '' : '<button class="ghost small" data-customize title="Build this meal yourself">✎ Customize</button><button class="ghost small" data-prepared title="A pre-packaged or catered meal with its macros on the label">📦 Prepared</button><button class="ghost small" data-eatout title="Log a restaurant meal">🍴 Ate out</button>'}
           <button class="ghost small" data-reset ${edited ? '' : 'hidden'}>${m.custom ? 'Back to plan' : 'Reset'}</button>
         </div>
       </div>
       <div class="meal-macros" data-role="totals">${totalsLine(m)}${m.manual ? ' <small class="muted">(your numbers)</small>' : ''}</div>
       ${comboRow(meal, m)}
-      ${m.eatout ? eatOutBody(meal, m) : m.custom ? customBody(meal, m) : `<ul class="portions editable">${m.portions.map((x) => itemRow(x, meal)).join('')}</ul>`}
+      ${m.prepared ? preparedBody(meal, m) : m.eatout ? eatOutBody(meal, m) : m.custom ? customBody(meal, m) : `<ul class="portions editable">${m.portions.map((x) => itemRow(x, meal)).join('')}</ul>`}
       </div>
       ${eatButton(meal)}
     </div>`;
+}
+
+// ---- 📦 prepared / catered meals: type the label's macros once, pick it from the list after ----
+const preparedList = () => store.get('preparedMeals', []);
+const partnerPrepared = () => (sync.readOnly() ? [] : profileStore(partnerId()).get('preparedMeals', []));
+const sameMeal = (a, b) => a.name.trim().toLowerCase() === (b.name || '').trim().toLowerCase() && (a.kitchen || '').trim().toLowerCase() === (b.kitchen || '').trim().toLowerCase();
+function preparedBody(meal, m) {
+  const e = todaysCustom()[meal]?.prepared || {};
+  const mine = preparedList();
+  const theirs = partnerPrepared().filter((x) => !mine.some((y) => sameMeal(y, x)));
+  const saved = e.name && mine.some((x) => sameMeal(x, e));
+  const opt = (x, pre = '') => `<option value="${pre}${esc(x.id)}">${esc(x.name)}${x.kitchen ? ` · ${esc(x.kitchen)}` : ''} — ${x.kcal || labelKcal(x.p, x.c, x.f)} kcal, ${x.p}P ${x.c}C ${x.f}F</option>`;
+  const auto = labelKcal(e.p, e.c, e.f);
+  const over = m.totals.kcal - m.target.kcal;
+  return `
+    <div class="eatout prepared">
+      ${mine.length || theirs.length ? `<select data-pmpick aria-label="Pick a saved prepared meal"><option value="">📦 Pick one of your prepared meals…</option>
+        ${mine.length ? `<optgroup label="Your prepared meals">${mine.map((x) => opt(x)).join('')}</optgroup>` : ''}
+        ${theirs.length ? `<optgroup label="${esc(partnerName())}'s prepared meals">${theirs.map((x) => opt(x, 'p:')).join('')}</optgroup>` : ''}
+      </select>` : ''}
+      <input data-pm="name" maxlength="60" placeholder="Meal name, e.g. Chicken teriyaki bowl" value="${esc(e.name || '')}" aria-label="Meal name">
+      <input data-pm="kitchen" maxlength="40" placeholder="Kitchen / brand (optional)" value="${esc(e.kitchen || '')}" aria-label="Kitchen">
+      <div class="manual-grid">
+        ${[['p', 'Protein g'], ['c', 'Carbs g'], ['f', 'Fat g'], ['kcal', 'Calories']].map(([k, label]) =>
+          `<label>${label}<input type="number" min="0" step="0.5" inputmode="decimal" data-pm="${k}" value="${e[k] ?? ''}" placeholder="${k === 'kcal' ? (auto ? `${auto} (from macros)` : 'from label') : 'from label'}"></label>`).join('')}
+      </div>
+      <div class="small muted" style="margin-top:6px">How much you ate</div>
+      <div class="seg eo-seg">${[0.5, 1, 1.5, 2].map((v) => `<button type="button" class="${(+e.servings || 1) === v ? 'on' : ''}" data-pmserv="${v}">${v === 0.5 ? '½' : v === 1.5 ? '1½' : v} ${v > 1 ? 'meals' : 'meal'}</button>`).join('')}</div>
+      <div class="row wrap">${saved ? `<span class="small tone-good">✓ In your prepared meals</span><button type="button" class="linkish small" data-pmdel>Remove from list</button>` : '<button type="button" class="ghost small" data-pmsave>☆ Save to my prepared meals</button>'}</div>
+      <p class="small muted">Use the numbers printed on the meal's label (per container). No calories listed? They're worked out from the macros (4 per g protein and carbs, 9 per g fat).</p>
+      ${over > 100 ? `<p class="small">About <b>${over} kcal</b> over this meal's target — keep the other meals a little lighter.</p>` : ''}
+    </div>`;
+}
+function savePrepared(e) {
+  const list = preparedList().filter((x) => !sameMeal(x, e));
+  const item = { id: Date.now().toString(36), name: e.name.trim(), kitchen: (e.kitchen || '').trim(), p: +e.p || 0, c: +e.c || 0, f: +e.f || 0, kcal: +e.kcal || 0 };
+  store.set('preparedMeals', [...list, item].sort((a, b) => a.name.localeCompare(b.name)).slice(-100));
 }
 
 // ---- eating out ----
@@ -722,7 +759,7 @@ function comboRow(meal, m) {
   return `<div class="combo-row">
       ${pick}
       ${meal === 'snack' ? '' : quickPicker('data-quick', '⚡ Quick swap: bar or shake')}
-      ${m.eatout || viewLog().meals[meal] ? '' : `<button type="button" class="ghost small" data-savecombo>☆ Save ${label.toLowerCase()} combo</button>`}
+      ${m.eatout || m.prepared || viewLog().meals[meal] ? '' : `<button type="button" class="ghost small" data-savecombo>☆ Save ${label.toLowerCase()} combo</button>`}
       ${mine.length ? `<button type="button" class="linkish small" data-managecombos>${managingCombos === meal ? 'Done' : 'Edit list'}</button>` : ''}
     </div>
     ${managingCombos === meal ? `<ul class="list combo-list">${mine.map((c) => `<li><span>${esc(c.name)} <small class="muted">${MEAL_NAMES[comboMeal(c)]} · ${c.items.map((x) => FOODS[x.food]?.name).filter(Boolean).join(', ')}</small></span>
@@ -744,7 +781,7 @@ function quickPicker(attr, label, withSnacks = false) {
 function useQuick(meal, food) {
   const m = todayPlan()[meal];
   editMeal(meal, (c) => {
-    for (const k of ['eatout', 'picks', 'grams', 'manual']) delete c[k];
+    for (const k of ['eatout', 'prepared', 'picks', 'grams', 'manual']) delete c[k];
     if (meal === 'breakfast') c.template = m.template;
     c.items = [{ food, grams: FOODS[food].unit.grams }];
     c.title = FOODS[food].name;
@@ -777,7 +814,7 @@ function useCombo(meal, id) {
   if (!combo) return;
   const m = todayPlan()[meal];
   editMeal(meal, (c) => {
-    for (const k of ['eatout', 'picks', 'grams', 'manual']) delete c[k];
+    for (const k of ['eatout', 'prepared', 'picks', 'grams', 'manual']) delete c[k];
     if (meal === 'breakfast') c.template = m.template;
     c.items = combo.items.map((x) => ({ ...x }));
     if (combo.manual) c.manual = { ...combo.manual };
@@ -915,6 +952,23 @@ $('#meals').addEventListener('click', (e) => {
     editCustom(meal, (c) => { c.items = fitItems(c.items, m.target.kcal); });
     resnap(meal);
     renderToday();
+  } else if (e.target.closest('[data-prepared]')) {
+    editMeal(meal, (c) => { delete c.items; delete c.manual; delete c.eatout; c.prepared = { servings: 1 }; });
+    resnap(meal);
+    renderToday();
+  } else if (e.target.closest('[data-pmserv]')) {
+    editMeal(meal, (c) => { c.prepared = { ...c.prepared, servings: +e.target.closest('[data-pmserv]').dataset.pmserv }; });
+    resnap(meal);
+    renderToday();
+  } else if (e.target.closest('[data-pmsave]')) {
+    const p = todaysCustom()[meal]?.prepared;
+    if (!p?.name?.trim()) { alert('Give the meal a name first, so you can find it in the list.'); return; }
+    savePrepared(p);
+    renderToday();
+  } else if (e.target.closest('[data-pmdel]')) {
+    const p = todaysCustom()[meal]?.prepared;
+    if (p?.name && confirm(`Remove “${p.name}” from your prepared meals?`)) store.set('preparedMeals', preparedList().filter((x) => !sameMeal(x, p)));
+    renderToday();
   } else if (e.target.closest('[data-eatout]')) {
     editMeal(meal, (c) => { delete c.items; delete c.manual; c.eatout = { mode: 'estimate', dish: meal === 'breakfast' ? 'brunch' : 'plate', size: 'regular', ate: 1 }; });
     resnap(meal);
@@ -959,6 +1013,12 @@ $('#meals').addEventListener('change', (e) => {
   } else if (e.target.dataset.quick != null) {
     if (e.target.value) useQuick(meal, e.target.value);
     return;
+  } else if (e.target.dataset.pmpick != null) {
+    const id = e.target.value;
+    const x = id.startsWith('p:') ? partnerPrepared().find((y) => y.id === id.slice(2)) : preparedList().find((y) => y.id === id);
+    if (!x) return;
+    editMeal(meal, (c) => { c.prepared = { name: x.name, kitchen: x.kitchen, p: x.p, c: x.c, f: x.f, kcal: x.kcal || '', servings: 1 }; });
+    if (id.startsWith('p:') && !preparedList().some((y) => sameMeal(y, x))) savePrepared(x);
   } else if (e.target.dataset.eo === 'dish') {
     editMeal(meal, (c) => { c.eatout = { ...c.eatout, dish: e.target.value }; });
   } else if (e.target.dataset.cfood != null) {
@@ -980,6 +1040,10 @@ $('#meals').addEventListener('input', (e) => {
   if (e.target.dataset.eo === 'place' || e.target.dataset.eo === 'dishName') {
     const k = e.target.dataset.eo;
     editMeal(meal, (c) => { c.eatout = { ...c.eatout, [k]: e.target.value }; });
+  } else if (e.target.dataset.pm) {
+    const k = e.target.dataset.pm;
+    const num = !['name', 'kitchen'].includes(k);
+    editMeal(meal, (c) => { c.prepared = { ...c.prepared, [k]: num ? (e.target.value === '' ? '' : +e.target.value) : e.target.value }; });
   } else if (e.target.dataset.eomenu) {
     const k = e.target.dataset.eomenu;
     editMeal(meal, (c) => { c.eatout = { ...c.eatout, menu: { ...c.eatout.menu, [k]: e.target.value === '' ? '' : +e.target.value } }; });
@@ -1006,7 +1070,7 @@ function eatButton(meal) {
   if (viewingFuture()) return '<div class="eat-row"><span class="small muted">Planned · you can log it on the day</span></div>';
   const e = todaysLog().meals[meal];
   return e
-    ? `<div class="eat-row"><span class="tone-good">🔒 Logged at ${e.at} · ${e.kcal} kcal</span><span class="row" style="margin-top:0">${todaysCustom()[meal]?.eatout ? '' : `<button class="ghost small" data-savecombo>☆ Save combo</button>`}<button class="ghost small" data-uneat title="Unlock this meal to change it">Unlog to edit</button></span></div>`
+    ? `<div class="eat-row"><span class="tone-good">🔒 Logged at ${e.at} · ${e.kcal} kcal</span><span class="row" style="margin-top:0">${todaysCustom()[meal]?.eatout || todaysCustom()[meal]?.prepared ? '' : `<button class="ghost small" data-savecombo>☆ Save combo</button>`}<button class="ghost small" data-uneat title="Unlock this meal to change it">Unlog to edit</button></span></div>`
     : `<div class="eat-row"><button class="eat" data-eat>${meal === 'snack' ? '✓ Log snack' : '✓ I ate this'}</button></div>`;
 }
 

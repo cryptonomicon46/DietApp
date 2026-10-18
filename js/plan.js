@@ -304,6 +304,18 @@ export function eatOutMeal(c, target) {
   return { title: `Ate out${e.place ? ` at ${e.place}` : ''}: ${what}${drinksNote}`, portions: [], totals, custom: true, eatout: true, drinks: dr };
 }
 
+// 📦 A prepared / catered meal with its macros on the label. Calories come from the label,
+// or from 4·protein + 4·carbs + 9·fat when it only lists macros; servings scale it.
+export const labelKcal = (p, c, f) => Math.round((+p || 0) * 4 + (+c || 0) * 4 + (+f || 0) * 9);
+export function preparedMeal(cust) {
+  const e = cust.prepared || {};
+  const n = +e.servings || 1;
+  const kcal = +e.kcal > 0 ? +e.kcal : labelKcal(e.p, e.c, e.f);
+  const totals = { kcal: Math.round(kcal * n), p: Math.round((+e.p || 0) * n), f: Math.round((+e.f || 0) * n), c: Math.round((+e.c || 0) * n) };
+  const title = `📦 ${e.name || 'Prepared meal'}${e.kitchen ? ` · ${e.kitchen}` : ''}${n !== 1 ? ` ×${n}` : ''}`;
+  return { title, portions: [], totals, custom: true, prepared: true };
+}
+
 // Deterministic rotation so each day looks different.
 export function dayIndex(date) {
   const d = new Date(date);
@@ -319,7 +331,7 @@ export function planForDay(dayTargets, date, custom = {}, prefs = {}) {
   const bKey = BREAKFASTS[custom.breakfast?.template] ? custom.breakfast.template : bKeys[n % bKeys.length];
   const merge = (prefKey, c = {}, extra = {}) => ({ picks: { ...extra, ...prefs[prefKey], ...c.picks }, grams: c.grams });
   const rotate = (offset) => ({ protein: PROTEINS[(n + offset) % PROTEINS.length] });
-  const build = (name, auto) => (custom[name]?.eatout ? eatOutMeal(custom[name], meals[name])
+  const build = (name, auto) => (custom[name]?.prepared ? preparedMeal(custom[name]) : custom[name]?.eatout ? eatOutMeal(custom[name], meals[name])
     : custom[name]?.items ? customMeal(custom[name], meals[name]) : auto());
   // Optional afternoon snack: its calories come out of lunch and dinner, from whichever has
   // more carbs (rice, potato) to give — meals you built or ate out keep their size.
@@ -328,7 +340,7 @@ export function planForDay(dayTargets, date, custom = {}, prefs = {}) {
     const sm = customMeal(custom.snack, null);
     snack = { ...sm, title: custom.snack.items?.length ? sm.title : 'Afternoon snack', target: sm.totals, snack: true };
     const auto = { lunch: () => portionMeal(MAIN_MEAL, meals.lunch, merge('main', custom.lunch, rotate(0))), dinner: () => portionMeal(MAIN_MEAL, meals.dinner, merge('main', custom.dinner, rotate(2))) };
-    const room = Object.fromEntries(['lunch', 'dinner'].map((m) => [m, custom[m]?.items || custom[m]?.eatout ? 0 : auto[m]().totals.c * 4]));
+    const room = Object.fromEntries(['lunch', 'dinner'].map((m) => [m, custom[m]?.items || custom[m]?.eatout || custom[m]?.prepared ? 0 : auto[m]().totals.c * 4]));
     const total = room.lunch + room.dinner;
     for (const m of ['lunch', 'dinner']) {
       const share = total ? room[m] / total : 0.5;

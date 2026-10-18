@@ -238,3 +238,20 @@ test('weekly check-in: falls on the diet start weekday, suggests from intake and
   const m = deltaMacros(-250);
   assert.ok(Math.abs(m.f * 9 + m.c * 4 + 250) <= 4 && m.p === 0);
 });
+
+test('prepared / catered meals use the label: calories from the label or the macros, scaled by servings', async () => {
+  const { preparedMeal, labelKcal, planForDay, dailyTargets } = await import('../js/plan.js');
+  assert.equal(labelKcal(40, 45, 12), 448);
+  const m = preparedMeal({ prepared: { name: 'Teriyaki bowl', kitchen: 'Kitchen Co', p: 40, c: 45, f: 12, servings: 1 } });
+  assert.deepEqual(m.totals, { kcal: 448, p: 40, f: 12, c: 45 });
+  assert.equal(m.title, '📦 Teriyaki bowl · Kitchen Co');
+  const half = preparedMeal({ prepared: { name: 'Bowl', p: 40, c: 45, f: 12, kcal: 460, servings: 0.5 } });
+  assert.deepEqual(half.totals, { kcal: 230, p: 20, f: 6, c: 23 });
+  assert.match(half.title, /×0.5$/);
+  // In a day plan the prepared meal replaces the planned lunch.
+  const targets = { kcal: 2000, p: 180, f: 60, c: 180 };
+  const day = planForDay(targets, '2026-10-19', { lunch: { prepared: { name: 'Bowl', p: 40, c: 45, f: 12 } } });
+  assert.equal(day.lunch.prepared, true);
+  assert.equal(day.lunch.totals.kcal, 448);
+  assert.ok(typeof dailyTargets === 'function');
+});
