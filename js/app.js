@@ -637,6 +637,7 @@ function mealEditor(meal, m) {
     <h2 class="editor-title">${MEAL_NUM[meal] || ''} · ${MEAL_NAMES[meal]}</h2>
     <p class="small muted" style="margin:0 0 8px">Swap or add foods, pick a saved combo, or enter the macros yourself. Changes save as you go.</p>
     ${mealCard(meal, m)}
+    <button type="button" class="ghost back-bottom" data-closemeal>‹ Back to today's plan</button>
   </div>`;
 }
 $('#meals').addEventListener('click', (e) => {

@@ -1048,8 +1048,9 @@ details.fold[open] > summary { margin-bottom: 8px; }
 .meal-sum .open-go { font-size: .85rem; font-weight: 700; color: var(--brand); white-space: nowrap; }
 .sum-items { list-style: none; padding: 0; margin: 8px 0 0; }
 .sum-items li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-top: 1px solid var(--line); font-size: .9rem; }
-.editor-bar { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 6px 0; }
+.editor-bar { padding: 6px 0; }
 .editor-title { margin: 6px 0 2px; }
 body.meal-editing #tab-today > :not(#meals) { display: none !important; }
 .meal-sum .meal-open > .row > div { flex: 1; min-width: 0; }
 .meal-sum .meal-open > .row { flex-wrap: nowrap; gap: 10px; }
+.back-bottom { display: block; width: 100%; margin: 12px 0 4px; }
