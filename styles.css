@@ -1042,3 +1042,14 @@ details.fold[open] > summary { margin-bottom: 8px; }
 /* 💪 encouragement: inline, never a pop-up */
 .cheer { font-size: .85rem; color: var(--good, #1f8a4c); font-weight: 600; margin: 6px 0 2px; }
 .cheer-home { margin-top: 4px; color: var(--good, #1f8a4c); font-weight: 600; }
+
+/* Daily plan: meals as short summaries; a meal opens on its own page */
+.meal-sum .meal-open { cursor: pointer; }
+.meal-sum .open-go { font-size: .85rem; font-weight: 700; color: var(--brand); white-space: nowrap; }
+.sum-items { list-style: none; padding: 0; margin: 8px 0 0; }
+.sum-items li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-top: 1px solid var(--line); font-size: .9rem; }
+.editor-bar { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 6px 0; }
+.editor-title { margin: 6px 0 2px; }
+body.meal-editing #tab-today > :not(#meals) { display: none !important; }
+.meal-sum .meal-open > .row > div { flex: 1; min-width: 0; }
+.meal-sum .meal-open > .row { flex-wrap: nowrap; gap: 10px; }

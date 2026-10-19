@@ -526,9 +526,8 @@ function renderToday() {
     renderDayBar();
     if (past) { $('#meals').innerHTML = renderPastDay(day) + shareRow(); return; }
     const plan = todayPlan(t);
-    $('#meals').innerHTML = mealCardsWithAdd(plan)
-      + shareRow()
-      + `<p class="muted small">Changes here are saved for ${esc(dateOf(day).toLocaleDateString(undefined, { weekday: 'long' }))} and show up on Today when the day comes. Tap Reset on a meal to go back to the plan.</p>`;
+    $('#meals').innerHTML = mealCardsWithAdd(plan) + (editingMeal ? ''
+      : shareRow() + `<p class="muted small">Changes here are saved for ${esc(dateOf(day).toLocaleDateString(undefined, { weekday: 'long' }))} and show up on Today when the day comes. Tap a meal to change it.</p>`);
     return;
   }
   const t = targets();
@@ -557,10 +556,10 @@ function renderToday() {
   renderTraining(t);
 
   const plan = todayPlan(t);
-  $('#meals').innerHTML = mealCardsWithAdd(plan)
-    + extrasCard()
+  $('#meals').innerHTML = mealCardsWithAdd(plan) + (editingMeal ? ''
+    : extrasCard()
     + shareRow()
-    + `<details class="help small muted"><summary>How this works</summary>Pick a food from any menu to swap it. Use − / + or type grams to set a portion yourself (🔒) — the other items re-balance to keep the meal on target. Each item has its own cooked / raw switch; macros are the same either way. A logged meal is locked so it can't change by accident — tap Unlog to edit.</details>`;
+    + `<details class="help small muted"><summary>How this works</summary>Tap a meal to customize it on its own page: pick a food from any menu to swap it, add or swipe away foods, use a saved combo, or enter macros. Use − / + or type grams to set a portion yourself (🔒) — the other items re-balance to keep the meal on target. A logged meal is locked so it can't change by accident — tap Unlog to edit.</details>`);
   renderHome();
 }
 
@@ -603,9 +602,59 @@ $('#meals').addEventListener('click', (e) => {
   store.set('weighModes', modes);
   renderToday();
 });
+// The daily plan shows each meal as a short summary; tapping one opens it on its own page
+// (editingMeal) to swap foods, add or remove items, use a combo, or enter macros.
+let editingMeal = null;
+const MEAL_NUM = { breakfast: 'Meal 1', lunch: 'Meal 2', dinner: 'Meal 3' };
 function mealCardsWithAdd(plan) {
-  return mealOrder(plan).map((meal) => mealCard(meal, plan[meal]) + (meal === 'lunch' && !plan.snack ? addSnackCard() : '')).join('');
+  document.body.classList.toggle('meal-editing', !!(editingMeal && plan[editingMeal]));
+  if (editingMeal && plan[editingMeal]) return mealEditor(editingMeal, plan[editingMeal]);
+  editingMeal = null;
+  return mealOrder(plan).map((meal) => cardFor(meal, plan[meal]) + (meal === 'lunch' && !plan.snack ? addSnackCard() : '')).join('');
 }
+const cardFor = (meal, m) => (meal === 'snack' || editingMeal === meal ? mealCard(meal, m) : mealSummary(meal, m));
+function mealSummary(meal, m) {
+  const locked = !!viewLog().meals[meal];
+  const items = m.portions.filter((x) => x.grams > 0);
+  return `<div class="card meal meal-sum ${locked ? 'eaten' : ''}" data-meal="${meal}">
+    <div class="meal-open" data-openmeal="${meal}" role="button" tabindex="0" aria-label="Customize ${MEAL_NUM[meal] || meal}">
+      <div class="row between" style="margin-top:0;align-items:flex-start">
+        <div><div class="eyebrow">${MEAL_NUM[meal] || ''} · ${MEAL_NAMES[meal]}</div><h3 data-role="title">${esc(m.title)}</h3></div>
+        <span class="open-go">${locked ? 'View' : 'Customize'} ›</span>
+      </div>
+      <div class="meal-macros" data-role="totals">${totalsLine(m)}</div>
+      ${items.length ? `<ul class="sum-items">${items.map((x) => `<li><span>${esc(FOODS[x.food]?.name || x.food)}</span><span class="muted">${esc(amountLabel(x.food, x.grams, meal).main)}</span></li>`).join('')}</ul>` : ''}
+    </div>
+    ${eatButton(meal)}
+  </div>`;
+}
+function mealEditor(meal, m) {
+  return `<div class="meal-editor">
+    <div class="row between editor-bar" style="margin-top:0">
+      <button type="button" class="ghost small" data-closemeal>‹ Back to today's plan</button>
+      ${todaysCustom()[meal] && !viewLog().meals[meal] ? `<button type="button" class="linkish small" data-startover="${meal}">↺ Start over</button>` : ''}
+    </div>
+    <h2 class="editor-title">${MEAL_NUM[meal] || ''} · ${MEAL_NAMES[meal]}</h2>
+    <p class="small muted" style="margin:0 0 8px">Swap or add foods, pick a saved combo, or enter the macros yourself. Changes save as you go.</p>
+    ${mealCard(meal, m)}
+  </div>`;
+}
+$('#meals').addEventListener('click', (e) => {
+  const open = e.target.closest('[data-openmeal]');
+  if (open && !e.target.closest('button, select, input, a')) { editingMeal = open.dataset.openmeal; renderToday(); window.scrollTo(0, 0); return; }
+  if (e.target.closest('[data-closemeal]')) {
+    const was = editingMeal;
+    editingMeal = null; renderToday();
+    document.querySelector(`.meal[data-meal="${was}"]`)?.scrollIntoView({ block: 'center' });
+    return;
+  }
+  const so = e.target.closest('[data-startover]');
+  if (so) {
+    if (!confirm('Start this meal over with the suggested foods?')) return;
+    delete todaysCustom()[so.dataset.startover]; saveCustom(); renderToday();
+  }
+});
+$('#meals').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('[data-openmeal]')) e.target.click(); });
 function addSnackCard() {
   return `<div class="card add-snack"><button type="button" class="ghost" data-addsnack>＋ Add an afternoon snack</button>
     <span class="small muted">Fruit, nuts, yogurt, a shake… lunch and dinner shrink to make room.</span></div>`;
@@ -639,7 +688,6 @@ function snackCard(m) {
 
 function mealCard(meal, m) {
   if (meal === 'snack') return snackCard(m);
-  const edited = !!todaysCustom()[meal];
   const locked = !!viewLog().meals[meal];
   return `
     <div class="card meal ${locked ? 'eaten' : ''}" data-meal="${meal}">
@@ -654,7 +702,6 @@ function mealCard(meal, m) {
             ${Object.entries(MEAL_TEMPLATES).map(([k, v]) => `<option value="${k}" ${m.template === k ? 'selected' : ''}>${v}</option>`).join('')}
           </select>` : ''}
           ${m.custom ? '' : '<button class="ghost small" data-prepared title="A pre-packaged or catered meal with its macros on the label">📦 Prepared</button><button class="ghost small" data-eatout title="Log a restaurant meal">🍴 Ate out</button>'}
-          <button class="ghost small" data-reset ${edited ? '' : 'hidden'}>${m.custom ? 'Back to plan' : 'Reset'}</button>
         </div>
       </div>
       <div class="meal-macros" data-role="totals">${totalsLine(m)}${m.manual ? ' <small class="muted">(your numbers)</small>' : ''}</div>
@@ -895,7 +942,7 @@ function refreshCustom(meal) {
     const plan = todayPlan();
     for (const other of ['lunch', 'dinner']) {
       const el = document.querySelector(`.meal[data-meal="${other}"]`);
-      if (el) el.outerHTML = mealCard(other, plan[other]);
+      if (el) el.outerHTML = cardFor(other, plan[other]);
     }
   }
   m.portions.forEach((x, i) => {
@@ -1244,7 +1291,7 @@ function refreshMeal(meal, active) {
   }
   card.querySelector('[data-role="title"]').textContent = m.title;
   card.querySelector('[data-role="totals"]').innerHTML = totalsLine(m);
-  card.querySelector('[data-reset]').hidden = !todaysCustom()[meal];
+  card.querySelector('[data-reset]')?.toggleAttribute('hidden', !todaysCustom()[meal]);
   for (const x of m.portions) {
     const li = card.querySelector(`li[data-slot="${x.slot}"]`);
     const a = amountLabel(x.food, x.grams, meal);
@@ -2600,6 +2647,7 @@ function showTab(name) {
     renderHousehold();
     if (sync.enabled()) sync.pull().then((changed) => changed && renderNotes()).catch(() => {});
   }
+  if (name === 'today' && editingMeal) { editingMeal = null; if (state.profile) renderToday(); } // the Food tab opens on the daily plan
   if (name === 'weight' && state.profile) renderStats();
   if (name === 'privacy') renderHousehold();
   window.scrollTo(0, 0);
