@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawmily">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=181">
+  <link rel="stylesheet" href="styles.css?v=182">
 </head>
 <body>
   <header class="top">
@@ -266,9 +266,10 @@
         <label>One serving is<input id="mfServing" maxlength="20" placeholder="e.g. 3 tenders, 1 cup, serving"></label>
         <label>Serving weight (g)<input id="mfGrams" type="number" min="1" step="any" inputmode="decimal" placeholder="optional, e.g. 84"></label>
         <label>Protein g<input id="mfP" type="number" min="0" step="any" inputmode="decimal" required></label>
-        <label>Carbs g<input id="mfC" type="number" min="0" step="any" inputmode="decimal" required></label>
+        <label>Carbs g <small class="muted">(total)</small><input id="mfC" type="number" min="0" step="any" inputmode="decimal" required></label>
         <label>Fat g<input id="mfF" type="number" min="0" step="any" inputmode="decimal" required></label>
         <label>Calories<input id="mfKcal" type="number" min="0" step="any" inputmode="decimal" placeholder="from macros"></label>
+        <label>Fiber g <small class="muted">(optional)</small><input id="mfFiber" type="number" min="0" step="any" inputmode="decimal" placeholder="from label"></label>
       </div>
       <div class="small muted" style="margin-top:8px">It's mostly…</div>
       <div class="seg mf-cats" id="mfCats"></div>
@@ -401,42 +402,42 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/activity.js": "./js/activity.js?v=181",
-    "./js/adopt.js": "./js/adopt.js?v=181",
-    "./js/analytics.js": "./js/analytics.js?v=181",
-    "./js/app.js": "./js/app.js?v=181",
-    "./js/bodycomp.js": "./js/bodycomp.js?v=181",
-    "./js/brief.js": "./js/brief.js?v=181",
-    "./js/briefTab.js": "./js/briefTab.js?v=181",
-    "./js/calTab.js": "./js/calTab.js?v=181",
-    "./js/calendar.js": "./js/calendar.js?v=181",
-    "./js/cheer.js": "./js/cheer.js?v=181",
-    "./js/climb.js": "./js/climb.js?v=181",
-    "./js/commands.js": "./js/commands.js?v=181",
-    "./js/devices.js": "./js/devices.js?v=181",
-    "./js/dexa.js": "./js/dexa.js?v=181",
-    "./js/dogs.js": "./js/dogs.js?v=181",
-    "./js/foods.js": "./js/foods.js?v=181",
-    "./js/household.js": "./js/household.js?v=181",
-    "./js/lift.js": "./js/lift.js?v=181",
-    "./js/lifting.js": "./js/lifting.js?v=181",
-    "./js/notes.js": "./js/notes.js?v=181",
-    "./js/plan.js": "./js/plan.js?v=181",
-    "./js/plans.js": "./js/plans.js?v=181",
-    "./js/poster.js": "./js/poster.js?v=181",
-    "./js/progress.js": "./js/progress.js?v=181",
-    "./js/research.js": "./js/research.js?v=181",
-    "./js/review.js": "./js/review.js?v=181",
-    "./js/rewards.js": "./js/rewards.js?v=181",
-    "./js/rhythm.js": "./js/rhythm.js?v=181",
-    "./js/share.js": "./js/share.js?v=181",
-    "./js/shows.js": "./js/shows.js?v=181",
-    "./js/storage.js": "./js/storage.js?v=181",
-    "./js/sync.js": "./js/sync.js?v=181",
-    "./js/zip.js": "./js/zip.js?v=181"
+    "./js/activity.js": "./js/activity.js?v=182",
+    "./js/adopt.js": "./js/adopt.js?v=182",
+    "./js/analytics.js": "./js/analytics.js?v=182",
+    "./js/app.js": "./js/app.js?v=182",
+    "./js/bodycomp.js": "./js/bodycomp.js?v=182",
+    "./js/brief.js": "./js/brief.js?v=182",
+    "./js/briefTab.js": "./js/briefTab.js?v=182",
+    "./js/calTab.js": "./js/calTab.js?v=182",
+    "./js/calendar.js": "./js/calendar.js?v=182",
+    "./js/cheer.js": "./js/cheer.js?v=182",
+    "./js/climb.js": "./js/climb.js?v=182",
+    "./js/commands.js": "./js/commands.js?v=182",
+    "./js/devices.js": "./js/devices.js?v=182",
+    "./js/dexa.js": "./js/dexa.js?v=182",
+    "./js/dogs.js": "./js/dogs.js?v=182",
+    "./js/foods.js": "./js/foods.js?v=182",
+    "./js/household.js": "./js/household.js?v=182",
+    "./js/lift.js": "./js/lift.js?v=182",
+    "./js/lifting.js": "./js/lifting.js?v=182",
+    "./js/notes.js": "./js/notes.js?v=182",
+    "./js/plan.js": "./js/plan.js?v=182",
+    "./js/plans.js": "./js/plans.js?v=182",
+    "./js/poster.js": "./js/poster.js?v=182",
+    "./js/progress.js": "./js/progress.js?v=182",
+    "./js/research.js": "./js/research.js?v=182",
+    "./js/review.js": "./js/review.js?v=182",
+    "./js/rewards.js": "./js/rewards.js?v=182",
+    "./js/rhythm.js": "./js/rhythm.js?v=182",
+    "./js/share.js": "./js/share.js?v=182",
+    "./js/shows.js": "./js/shows.js?v=182",
+    "./js/storage.js": "./js/storage.js?v=182",
+    "./js/sync.js": "./js/sync.js?v=182",
+    "./js/zip.js": "./js/zip.js?v=182"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=181"></script>
+  <script type="module" src="js/app.js?v=182"></script>
 </body>
 </html>

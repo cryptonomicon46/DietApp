@@ -1,4 +1,4 @@
-import { FOODS, STORES, FOOD_GROUPS, addScannedFoods, addMyFoods, makeMyFood, guessCategory, MY_CATS } from './foods.js';
+import { FOODS, STORES, FOOD_GROUPS, addScannedFoods, addMyFoods, makeMyFood, guessCategory, MY_CATS, netCarbs } from './foods.js';
 import {
   ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList,
   weeklyTrend, suggestAdjustment, fitScore,
@@ -2201,10 +2201,10 @@ $('#myFoodForm').addEventListener('click', (e) => {
 $('#mfCancel').onclick = () => $('#myFoodDialog').close();
 $('#myFoodForm').addEventListener('submit', (e) => {
   e.preventDefault();
-  const entry = { name: $('#mfName').value.trim(), serving: $('#mfServing').value.trim() || 'serving', grams: $('#mfGrams').value, p: $('#mfP').value, c: $('#mfC').value, f: $('#mfF').value, kcal: $('#mfKcal').value };
+  const entry = { name: $('#mfName').value.trim(), serving: $('#mfServing').value.trim() || 'serving', grams: $('#mfGrams').value, p: $('#mfP').value, c: $('#mfC').value, f: $('#mfF').value, kcal: $('#mfKcal').value, fiber: $('#mfFiber').value };
   if (!entry.name) return;
   entry.cat = mfCat || guessCategory(entry.p, entry.c, entry.f);
-  for (const k of ['grams', 'p', 'c', 'f', 'kcal']) entry[k] = entry[k] === '' ? '' : +entry[k];
+  for (const k of ['grams', 'p', 'c', 'f', 'kcal', 'fiber']) entry[k] = entry[k] === '' ? '' : +entry[k];
   const id = `my_${Date.now().toString(36)}`;
   const s2 = profileStore(ownerId());
   s2.set('myFoods', { ...s2.get('myFoods', {}), [id]: { ...entry, at: Date.now() } });
@@ -2382,6 +2382,8 @@ function renderProduct(code, p) {
     f: +(n.fat_100g ?? 0).toFixed(1),
     c: +(n.carbohydrates_100g ?? 0).toFixed(1),
   };
+  // US labels list total carbs: count net carbs (minus fiber) like the rest of the app.
+  netCarbs(per100, +(n.fiber_100g ?? 0));
   const sq = parseFloat(p.serving_quantity);
   const serving = sq > 0 ? {
     kcal: Math.round(per100.kcal * sq / 100),

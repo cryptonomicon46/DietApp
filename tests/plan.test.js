@@ -303,3 +303,16 @@ test('meals rebalance: what a changed or logged meal runs over comes off the unt
   assert.equal(logged.lunch.balanced, undefined);
   assert.ok(logged.dinner.target.f < plan.dinner.target.f, 'dinner absorbs it all once lunch is logged');
 });
+
+test('carbs are net carbs (minus fiber), like most tracking apps', async () => {
+  const { FOODS, makeMyFood } = await import('../js/foods.js');
+  const { macrosOf } = await import('../js/plan.js');
+  const m = (food, g) => { const x = macrosOf(food, g); return [Math.round(x.kcal), Math.round(x.c)]; };
+  assert.deepEqual(m('oats', 40), [135, 23]);          // other app: 139 kcal, 23 C
+  assert.deepEqual(m('almondButter', 15), [86, 1]);    // 88 kcal, 1 C
+  assert.deepEqual(m('frozenBerries', 80), [30, 7]);   // 32 kcal, 7 C
+  assert.equal(FOODS.oats.cTotal, 67.7, 'the label value is kept');
+  assert.equal(FOODS.chicken.cTotal, undefined, 'no fiber, no change');
+  const bar = makeMyFood({ name: 'Bar', p: 20, c: 25, f: 8, fiber: 10, kcal: 230 });
+  assert.deepEqual([bar.c, bar.kcal], [15, 190]);
+});

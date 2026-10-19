@@ -86,6 +86,24 @@ export const FOODS = {
   oliveOil:   { name: 'Olive oil',                kcal: 884, p: 0,   f: 100,  c: 0,    unit: { label: 'tsp', grams: 4.5 }, range: [0, 31.5, 4.5] },
 };
 
+// Fiber (g per 100 g, USDA / labels). Carbs here are NET carbs — total carbs minus fiber —
+// and calories leave out fiber's 4 kcal/g, the way most tracking apps (and US low-carb
+// labels) count them: e.g. 40 g dry oats = 23 g carbs, ~136 kcal.
+export const FIBER = {
+  sourdough: 2.4, wheatBread: 6.0, avocado: 6.7, oats: 10.1, berries: 2.4, frozenBerries: 3.0, strawberries: 2.0,
+  banana: 2.6, pb: 5.0, apple: 2.4, orange: 2.4, pear: 3.1, grapes: 0.9, mixedNuts: 7.0, cashews: 3.3, almonds: 12.5,
+  almondButter: 10.3, walnuts: 6.7, rice: 0.4, brownRice: 1.8, sweetPotato: 3.3, potato: 2.2, quinoa: 2.8,
+  veggies: 4.0, broccoli: 3.3, cauliflower: 2.3, salad: 1.0, chocCookie: 2.0, oatMilk: 0.8,
+  clifBar: 5.9, clifBuilders: 2.9, questBar: 23.3, rxBar: 9.6, kirklandBar: 25.0,
+};
+// Turn a food's total carbs into net carbs (keeps the label numbers as cTotal / kcalTotal).
+export function netCarbs(f, fiber = f.fiber || 0) {
+  if (!(fiber > 0) || f.cTotal != null) return f;
+  const r = (v) => Math.round(v * 100) / 100;
+  return Object.assign(f, { fiber, cTotal: f.c, kcalTotal: f.kcal, c: r(Math.max(0, f.c - fiber)), kcal: r(Math.max(0, f.kcal - 4 * Math.min(fiber, f.c))) });
+}
+for (const [k, fiber] of Object.entries(FIBER)) if (FOODS[k]) netCarbs(FOODS[k], fiber);
+
 // Groups for the "add a food" picker when you build a meal yourself.
 export const FOOD_GROUPS = {
   Protein: ['whey', 'eggWhites', 'egg', 'chicken', 'thigh', 'beef', 'steak', 'salmon', 'wildSalmon', 'cod', 'trout', 'tuna', 'turkeyDeli', 'chickenDeli', 'cheddar'],
@@ -214,7 +232,9 @@ export function guessCategory(p, c, f) {
 export function makeMyFood(e) {
   const grams = +e.grams > 0 ? +e.grams : 100;
   const k = 100 / grams;
-  const kcal = +e.kcal > 0 ? +e.kcal : (+e.p || 0) * 4 + (+e.c || 0) * 4 + (+e.f || 0) * 9;
+  // Label carbs are total carbs: take the fiber out (and its calories) like every other food.
+  const fiber = Math.min(+e.fiber || 0, +e.c || 0);
+  const kcal = (+e.kcal > 0 ? +e.kcal : (+e.p || 0) * 4 + (+e.c || 0) * 4 + (+e.f || 0) * 9) - 4 * fiber;
   const r = (v) => Math.round(v * 100) / 100;
   // "3 tenders" = 3 pieces of a third of the serving each, so amounts read "6 tenders", not "2 3 tenders".
   const label = String(e.serving || 'serving').trim().slice(0, 20) || 'serving';
@@ -225,7 +245,7 @@ export function makeMyFood(e) {
   const step = m ? unit.grams : grams / 2;
   return {
     name: String(e.name || '').trim().slice(0, 60),
-    kcal: r(kcal * k), p: r((+e.p || 0) * k), f: r((+e.f || 0) * k), c: r((+e.c || 0) * k),
+    kcal: r(kcal * k), p: r((+e.p || 0) * k), f: r((+e.f || 0) * k), c: r(((+e.c || 0) - fiber) * k),
     unit, range: [0, Math.round(grams * 6), r(step)],
     cat: MY_CATS[e.cat] ? e.cat : guessCategory(e.p, e.c, e.f),
     mine: true,

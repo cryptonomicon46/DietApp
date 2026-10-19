@@ -118,6 +118,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
   - Meat, fish, eggs, rice and veggies are weighed cooked.
   - The grocery list converts back to raw amounts.
 - **The day rebalances itself:** when a meal you changed (or already logged) comes out over or under its protein, fat or carbs — say extra almond butter at breakfast, 19 g fat against 12 — the difference is taken from (or added to) the meals you haven't touched or logged yet, in proportion, so the day still adds up. Those meals show *⚖️ −3 g fat, +4 g carbs to balance your other meals*.
+- **Net carbs:** carbs are counted as **net carbs** (total carbs minus fiber), and calories leave fiber out, the way most tracking apps count them — e.g. 40 g dry oats = 23 g carbs, ~135 kcal. Fiber comes from USDA values for built-in foods, Open Food Facts for scans, and an optional *Fiber* box for foods you add.
 - **Daily plan at a glance:** Meal 1, Meal 2 and Meal 3 (breakfast, lunch, dinner) each show their foods, amounts and macros against the meal's target, with **✓ I ate this**. **Tap a meal to customize it** on its own page — swap foods, **+ Add a food…**, swipe a food left (or ✕) to remove it (with **Undo**), pick a saved combo, use 📦 Prepared or 🍴 Ate out — then **‹ Back to today's plan**. **↺ Start over** there returns that meal to the suggested foods.
 - **Your own meals:** **⭐ Saved combos** store a meal's foods by name (per meal; the partner's combos appear too). **⚖️ Fit to target** scales a combo to the meal.
 - **Snacks and extras:**
