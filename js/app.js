@@ -15,6 +15,7 @@ import { initNotes, renderNotes, updateNotesBadge, openUs, homeUs } from './note
 import { syncLine } from './plans.js';
 import { initCal, renderCal, homeCal, updateCalBadge } from './calTab.js';
 import { initBrief, renderBrief, renderFeed, homeDogs, homeGym } from './briefTab.js';
+import { initDress } from './dressTab.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
@@ -2969,6 +2970,7 @@ $('#shareOff').onclick = () => { sync.save(null); global.set('shareOff', true); 
 initLift();
 initNotes();
 initBrief();
+initDress();
 initCal(document.querySelector('main'));
 initHousehold();
 // Folding cards (Recent workouts, Exercise library): closed by default, remembered per phone.

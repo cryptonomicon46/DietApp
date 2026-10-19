@@ -4,6 +4,7 @@
 import { PROFILES, ownerId, profileStore, seenItems, global } from './storage.js';
 import { sync, pushNow } from './sync.js';
 import { goldenDays } from './briefTab.js';
+import { dressCard, renderDress } from './dressTab.js';
 import { strongDaysByPerson } from './cheer.js';
 import { allRhythm, momentText, momentIcon, momentFormHtml, momentFormOpen, closeMoment } from './rhythm.js';
 import { REMINDERS, REPEATS, WHO_BOTH, mergeEvents, eventsOn, upcoming, icsCalendar, googleUrl, repeatText, repeatUnit, parseIcs } from './calendar.js';
@@ -262,10 +263,12 @@ export function renderCal() {
         ${momentFormOpen('cal') ? momentFormHtml() : selected <= isoDate() ? `<button type="button" class="ghost small" data-rdid="date" data-rday="${selected}">❤️ Log a date on this day</button>` : ''}
       </div>
       ${dayEvents.length ? `<ul class="ev-list">${dayEvents.map((e) => eventRow(e)).join('')}</ul>` : dayMarks.length ? '' : '<p class="small muted">Nothing planned. Tap ＋ to add something.</p>'}</div>
+    ${dressCard(selected)}
     ${next.length ? `<div class="card"><div class="eyebrow">Coming up</div><ul class="ev-list">${next.map((e) => eventRow(e, { showDay: true })).join('')}</ul></div>` : ''}
     ${note ? `<p class="small">${esc(note)}</p>` : ''}
     ${bringInCard()}
     ${subscribeCard()}`;
+  renderDress(selected);
 }
 
 // Home: today's events (or the next one) in one card.

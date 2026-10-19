@@ -130,8 +130,8 @@ export function parseWeather(forecast, air) {
   }));
 }
 
-export function weatherUrls(place = PLACE) {
-  const common = `latitude=${place.lat}&longitude=${place.lon}&timezone=auto&forecast_days=2`;
+export function weatherUrls(place = PLACE, days = 2) {
+  const common = `latitude=${place.lat}&longitude=${place.lon}&timezone=auto&forecast_days=${days}`;
   return {
     forecast: `https://api.open-meteo.com/v1/forecast?${common}&hourly=temperature_2m,apparent_temperature,precipitation_probability,wind_speed_10m,wind_gusts_10m,uv_index,shortwave_radiation,cloud_cover,is_day&daily=sunrise,sunset&temperature_unit=fahrenheit&wind_speed_unit=mph`,
     air: `https://air-quality-api.open-meteo.com/v1/air-quality?${common}&hourly=us_aqi`,

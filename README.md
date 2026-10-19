@@ -22,7 +22,7 @@
 | **🐕 Dogs** | Pavement temperature and the best walk windows, the Feed / Walk / Dog park / Treat buttons, golden days, dog profiles and documents, the dog-duty scoreboard, and the adoption board. |
 | **🍽 Food** | Your meal plan (with the morning weigh-in at the top), plus **Weight**, **Groceries** and **Scan** pages from the bar at the top. |
 | **🏋︎ Train** | Your training card (WHOOP / Garmin calories, workout fuel), the best run and ride windows, class schedules, and the lifting log. |
-| **📅 Calendar** | 💞 The 2-2-2-2 card on top (❤️ Log a date), then the shared family calendar, linked phone calendars, and the subscription link for Apple / Google Calendar. |
+| **📅 Calendar** | 💞 The 2-2-2-2 card on top (❤️ Log a date), then the shared family calendar, 👔 how each of you should dress for the chosen day, linked phone calendars, and the subscription link for Apple / Google Calendar. |
 | **💞 Us** | One page: 💌 today's notes, ✨ feeling like (plans) and 📺 watching, each a compact section. |
 | **🔐 Privacy** | Privacy settings: your household code (show, change, send), sharing status, and how your data is kept. |
 
@@ -66,6 +66,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 - Greeting and date, then today's calendar events (or the next one).
 - **Dogs:** compact Feed / Walk / Dog park / Treats & toys buttons (tap your name), overdue vaccines or refills, a new dog on the adoption board, and how close today is to a ⭐ golden day.
 - **Your day:** the best run, ride and dog-walk windows in time order with the temperature range. A 🐾 marks a run or ride that overlaps a good walk window. Everything ends by 9 PM, and from 9 PM on, Home, Train and Dogs plan tomorrow.
+- **👔 Dress for work** (first row of *Your day*): where your calendar puts you (San Jose when it doesn't say), the feels-like temperature when you leave, at the warmest point and when you head home, what to wear, and when to take a layer off and put it back on. Tap it for the Calendar tab, which shows both of you.
 - **🧗 Gym classes:** each gym's live **🧘 Yoga** and **🏋️ Fitness** schedule one tap away, plus map links and the classes you take today (added under Train). The gyms are set in `js/brief.js`.
 - **Food:** the next meal, and the weekly check-in reminder (red when overdue).
 - **⚖️ Weight trend:** a small line of your 7-day average weight over the last 30 days, with today's weight, the 30-day change, the pace per week and how far to goal. Tap it for Food › Weight.
@@ -214,6 +215,11 @@ Each phone keeps its owner's data, and the two phones share through a **househol
   - Every logged moment shows as a ❤️ on the shared **📅 Calendar**, next to the dogs' ⭐ golden days.
   - **Fix or add later:** tap a day on the calendar (or a moment under *Logged moments*) and **✎ Edit** changes what, where or the day, or **Delete** removes it — from either phone, whoever logged it. **❤️ Log a date on this day** adds another one to that day.
   - A multi-night getaway also counts as an overnight trip. Weeks run Monday to Sunday. Logged moments can be removed.
+- **👔 Dress for the day** (under the chosen day, today through a week ahead): for each of you, where you'll be, the feels-like temperature when you leave, at the warmest point and when you get home, and how to layer.
+  - **Where:** an event for that person (or for both of you) whose title or location names a place puts them there for the day: *Office – SF*, *Oakland*, or an address in San Francisco. Otherwise it's **San Jose (95131)**. The menu next to each name changes a day by hand (**↺ Use the calendar** undoes it).
+  - **When:** an hour before your first event of the day until an hour after your last one, or 8 AM–6 PM when the calendar is empty.
+  - **How the day goes:** *cool start, warm midday, cool again by evening*, *hot all day*, *cold all day* or *steady*. Then the layers: a base (tee → long sleeves), a light layer or sweater, and a jacket or coat only when it's cold enough. A rain jacket when rain is likely, or a windbreaker when it's gusty. Layers you'll shed are marked *take off later*, with times, e.g. *Jacket off around 10 AM, back on by 6 PM*. Plus an umbrella, sunglasses and sunscreen, or warm socks when they're needed.
+  - **📍 Places:** San Jose, San Francisco and Oakland are built in. Add more by city or ZIP (e.g. *Palo Alto* or *94301*) and they're shared with your partner's phone. Weather comes from Open-Meteo, refreshed hourly.
 - **Shared events:** either phone can add, edit or delete. Each event has a title, day, time or all-day, place, who it's for (both or either of you), a reminder and notes.
 - **Repeats:**
   - Every day, week or 2 weeks (paychecks).
@@ -335,6 +341,7 @@ Run `node scripts/bump-version.mjs` before committing. It gives every app file a
 | `js/app.js` | Tabs, Home, Food, check-ins, profiles, sharing settings |
 | `js/plan.js`, `js/foods.js` | Targets, meal planning, foods, check-in math |
 | `js/brief.js`, `js/briefTab.js` | Weather, walk / run / ride windows, dog buttons, golden days, scoreboard |
+| `js/dress.js`, `js/dressTab.js` | 👔 Dress for the day: places from the calendar, layering for each person's weather |
 | `js/dogs.js`, `js/adopt.js` | Dog profiles and documents; adoption board |
 | `js/calendar.js`, `js/calTab.js` | Calendar rules, .ics import / export, Calendar tab |
 | `js/notes.js`, `js/plans.js`, `js/shows.js` | Us tab: notes, plans, watching |

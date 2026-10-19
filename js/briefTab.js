@@ -7,6 +7,7 @@ import {
 } from './brief.js';
 import { renderDogs, initDogs, allDogs, dogAlerts, retryUploads } from './dogs.js';
 import { renderAdopt, initAdopt, retryAdoptUploads, unseenAdopt } from './adopt.js';
+import { homeDressRow } from './dressTab.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -124,10 +125,11 @@ function dayPlan(hourly, from, end, today, late = false) {
     const t = new Date(today); t.setHours(hh, mm, 0, 0);
     items.push({ t, label: `${CLASS_TYPES[c.type]?.split(' ')[0] || '🧗'} ${c.name}`, note: GYMS[c.gym]?.short });
   }
-  if (!items.length) return '';
   items.sort((a, b) => a.t - b.t);
+  // 👔 Dress for the day first (filled in once that place's weather is in).
   return `<div class="card brief-card"><div class="eyebrow">${late ? `Tomorrow · ${today.toLocaleDateString(undefined, { weekday: 'long' })}` : 'Your day'}</div>
-    <ul class="list day-plan">${items.map((i) => `<li><span><b>${clock(i.t)}</b> ${esc(i.label)}${i.temp ? ` <span class="plan-temp">${i.temp}</span>` : ''}</span>${i.note ? `<small class="muted">${esc(i.note)}</small>` : ''}</li>`).join('')}</ul>
+    <ul class="list day-plan"><li class="dress-row" data-homedress data-goto="calendar" hidden></li>${items.map((i) => `<li><span><b>${clock(i.t)}</b> ${esc(i.label)}${i.temp ? ` <span class="plan-temp">${i.temp}</span>` : ''}</span>${i.note ? `<small class="muted">${esc(i.note)}</small>` : ''}</li>`).join('')}</ul>
+    ${items.length ? '' : '<p class="small muted">No good run, ride or walk windows left.</p>'}
     <p class="small muted">Run and ride are alternatives — pick whichever fits the day.${items.some((i) => i.label.endsWith('🐾')) ? ' 🐾 = a good time to walk the dogs too.' : ''}</p></div>`;
 }
 
@@ -530,7 +532,7 @@ export async function renderBrief(force = false) {
     ${classesCard(target)}
     <div class="card"><div class="eyebrow">Hour by hour</div>${strip(hourly, from)}
       <p class="small muted">Color = how good each hour is for a run. Weather and air quality: Open-Meteo.</p></div>`;
-  if (homeEl) homeEl.innerHTML = dayPlan(hourly, from, end, target, late);
+  if (homeEl) { homeEl.innerHTML = dayPlan(hourly, from, end, target, late); homeDressRow(new Date(target.getTime() - target.getTimezoneOffset() * 60000).toISOString().slice(0, 10)); }
 }
 
 export function initBrief() {
