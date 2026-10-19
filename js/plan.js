@@ -327,7 +327,8 @@ export function dayIndex(date) {
 
 // custom = {breakfast: {template, picks, grams}, lunch: {...}, dinner: {...}} for today.
 // prefs  = sticky swaps, e.g. {oatmeal: {fat: 'almondButter'}, main: {carb: 'sweetPotato'}}.
-export function planForDay(dayTargets, date, custom = {}, prefs = {}) {
+// opts.logged: meals already logged today (kept as they are).
+export function planForDay(dayTargets, date, custom = {}, prefs = {}, opts = {}) {
   const meals = mealTargets(dayTargets);
   const n = dayIndex(date);
   const bKeys = Object.keys(BREAKFASTS);
@@ -353,12 +354,35 @@ export function planForDay(dayTargets, date, custom = {}, prefs = {}) {
       meals[m] = { kcal: Math.round(kcal), p: Math.round(p), f: t.f, c: Math.round(Math.max((kcal - p * 4 - t.f * 9) / 4, 0)) };
     }
   }
-  return {
-    ...(snack ? { snack } : {}),
-    breakfast: { template: bKey, target: meals.breakfast, ...build('breakfast', () => portionMeal(BREAKFASTS[bKey], meals.breakfast, merge(bKey, custom.breakfast))) },
-    lunch: { target: meals.lunch, ...build('lunch', () => portionMeal(MAIN_MEAL, meals.lunch, merge('main', custom.lunch, rotate(0)))) },
-    dinner: { target: meals.dinner, ...build('dinner', () => portionMeal(MAIN_MEAL, meals.dinner, merge('main', custom.dinner, rotate(2)))) },
+  const autos = {
+    breakfast: (t) => portionMeal(BREAKFASTS[bKey], t, merge(bKey, custom.breakfast)),
+    lunch: (t) => portionMeal(MAIN_MEAL, t, merge('main', custom.lunch, rotate(0))),
+    dinner: (t) => portionMeal(MAIN_MEAL, t, merge('main', custom.dinner, rotate(2))),
   };
+  const out = {};
+  for (const m of ['breakfast', 'lunch', 'dinner']) out[m] = { target: meals[m], ...build(m, () => autos[m](meals[m])) };
+  // Rebalance the day: what meals you changed (or already logged) run over or under their
+  // protein, fat and carbs is taken from — or given to — the meals you haven't touched yet.
+  const fixed = (m) => (custom[m] && Object.keys(custom[m]).length) || (opts.logged || []).includes(m);
+  const flex = ['breakfast', 'lunch', 'dinner'].filter((m) => !fixed(m));
+  if (flex.length && flex.length < 3) {
+    const shift = { p: 0, f: 0, c: 0 };
+    for (const m of ['breakfast', 'lunch', 'dinner'].filter(fixed)) for (const k in shift) shift[k] += out[m].totals[k] - out[m].target[k];
+    if (Object.values(shift).some((v) => Math.abs(v) >= 2)) {
+      const MIN = { p: 15, f: 3, c: 0 };
+      for (const m of flex) {
+        const t = { ...meals[m] };
+        for (const k in shift) {
+          const total = flex.reduce((a, x) => a + meals[x][k], 0) || 1;
+          t[k] = Math.round(Math.max(MIN[k], t[k] - shift[k] * (meals[m][k] / total)));
+        }
+        t.kcal = Math.round(t.p * 4 + t.c * 4 + t.f * 9);
+        out[m] = { target: t, ...autos[m](t), balanced: { p: t.p - meals[m].p, f: t.f - meals[m].f, c: t.c - meals[m].c } };
+      }
+    }
+  }
+  out.breakfast.template = bKey;
+  return { ...(snack ? { snack } : {}), breakfast: out.breakfast, lunch: out.lunch, dinner: out.dinner };
 }
 
 export function groceryList(dayTargets, startDate, days = 7, prefs = {}) {

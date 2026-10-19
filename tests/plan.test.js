@@ -283,3 +283,23 @@ test('your own foods: per-serving macros become a food that joins the right meal
   addMyFoods({});
   assert.ok(!slot(MAIN_MEAL, 'protein').includes('my_t') && !FOOD_GROUPS['My foods'] && !FOODS.my_t);
 });
+
+test('meals rebalance: what a changed or logged meal runs over comes off the untouched meals', async () => {
+  const { planForDay } = await import('../js/plan.js');
+  const targets = { kcal: 2000, p: 160, f: 60, c: 200 };
+  const base = planForDay(targets, '2026-10-20');
+  assert.equal(base.lunch.balanced, undefined, 'nothing changed: no rebalancing');
+  // Breakfast with a lot more fat (a locked big spoon of peanut butter in oatmeal, or eggs & toast).
+  const grams = base.breakfast.portions.find((x) => x.slot === 'fat');
+  const plan = planForDay(targets, '2026-10-20', { breakfast: { template: base.breakfast.template, grams: { fat: grams.grams + 60 } } });
+  const over = plan.breakfast.totals.f - plan.breakfast.target.f;
+  assert.ok(over > 6, `breakfast is over on fat (${over})`);
+  assert.ok(plan.lunch.target.f < base.lunch.target.f && plan.dinner.target.f < base.dinner.target.f, 'lunch and dinner give up fat');
+  const dayFat = plan.breakfast.target.f + over + plan.lunch.target.f + plan.dinner.target.f;
+  assert.ok(Math.abs(dayFat - (base.breakfast.target.f + base.lunch.target.f + base.dinner.target.f)) <= 2, 'the day still adds up');
+  assert.ok(plan.lunch.balanced.f < 0);
+  // Logged meals stay as they are; only what's left moves.
+  const logged = planForDay(targets, '2026-10-20', { breakfast: { template: base.breakfast.template, grams: { fat: grams.grams + 60 } } }, {}, { logged: ['lunch'] });
+  assert.equal(logged.lunch.balanced, undefined);
+  assert.ok(logged.dinner.target.f < plan.dinner.target.f, 'dinner absorbs it all once lunch is logged');
+});

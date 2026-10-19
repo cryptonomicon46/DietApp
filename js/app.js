@@ -208,7 +208,7 @@ function saveCustom() {
 }
 // Future days use your base targets (no workouts known yet).
 function todayPlan(t = viewingToday() ? targets() : baseTargets()) {
-  return planForDay(t, dateOf(viewDay()), todaysCustom(), state.prefs);
+  return planForDay(t, dateOf(viewDay()), todaysCustom(), state.prefs, { logged: Object.keys(viewLog().meals || {}) });
 }
 // What you've logged for the day being shown (nothing for future days).
 function viewLog() {
@@ -613,6 +613,13 @@ function mealCardsWithAdd(plan) {
   return mealOrder(plan).map((meal) => cardFor(meal, plan[meal]) + (meal === 'lunch' && !plan.snack ? addSnackCard() : '')).join('');
 }
 const cardFor = (meal, m) => (meal === 'snack' || editingMeal === meal ? mealCard(meal, m) : mealSummary(meal, m));
+// "⚖️ −4 g fat, +6 g carbs" when a meal was resized to make up for another one.
+const balancedNote = (m) => {
+  const b = m.balanced;
+  if (!b) return '';
+  const parts = [['p', 'protein'], ['f', 'fat'], ['c', 'carbs']].filter(([k]) => Math.abs(b[k]) >= 1).map(([k, w]) => `${b[k] > 0 ? '+' : '−'}${Math.abs(b[k])} g ${w}`);
+  return parts.length ? `<div class="small balanced-note">⚖️ ${parts.join(', ')} to balance your other meals</div>` : '';
+};
 function mealSummary(meal, m) {
   const locked = !!viewLog().meals[meal];
   const items = m.portions.filter((x) => x.grams > 0);
@@ -622,7 +629,7 @@ function mealSummary(meal, m) {
         <div><div class="eyebrow">${MEAL_NUM[meal] || ''} · ${MEAL_NAMES[meal]}</div><h3 data-role="title">${esc(m.title)}</h3></div>
         <span class="open-go">${locked ? 'View' : 'Customize'} ›</span>
       </div>
-      <div class="meal-macros" data-role="totals">${totalsLine(m)}</div>
+      <div class="meal-macros" data-role="totals">${totalsLine(m)}</div>${balancedNote(m)}
       ${items.length ? `<ul class="sum-items">${items.map((x) => `<li><span>${esc(FOODS[x.food]?.name || x.food)}</span><span class="muted">${esc(amountLabel(x.food, x.grams, meal).main)}</span></li>`).join('')}</ul>` : ''}
     </div>
     ${eatButton(meal)}
@@ -705,7 +712,7 @@ function mealCard(meal, m) {
           ${m.custom ? '' : '<button class="ghost small" data-prepared title="A pre-packaged or catered meal with its macros on the label">📦 Prepared</button><button class="ghost small" data-eatout title="Log a restaurant meal">🍴 Ate out</button>'}
         </div>
       </div>
-      <div class="meal-macros" data-role="totals">${totalsLine(m)}${m.manual ? ' <small class="muted">(your numbers)</small>' : ''}</div>
+      <div class="meal-macros" data-role="totals">${totalsLine(m)}${m.manual ? ' <small class="muted">(your numbers)</small>' : ''}</div>${balancedNote(m)}
       ${comboRow(meal, m)}
       ${m.prepared ? preparedBody(meal, m) : m.eatout ? eatOutBody(meal, m) : m.custom ? customBody(meal, m) : `<ul class="portions editable">${m.portions.map((x) => itemRow(x, meal)).join('')}</ul>
       <div class="row" style="margin-top:6px"><select data-cadd aria-label="Add a food">${foodOptions('', '+ Add a food…')}</select></div>

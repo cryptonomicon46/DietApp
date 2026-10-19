@@ -1054,3 +1054,4 @@ body.meal-editing #tab-today > :not(#meals) { display: none !important; }
 .meal-sum .meal-open > .row > div { flex: 1; min-width: 0; }
 .meal-sum .meal-open > .row { flex-wrap: nowrap; gap: 10px; }
 .back-bottom { display: block; width: 100%; margin: 12px 0 4px; }
+.balanced-note { color: var(--muted); margin-top: 2px; }
