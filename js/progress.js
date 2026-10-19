@@ -53,6 +53,20 @@ export function bestBefore(sessions = [], from) {
 }
 export const prCount = (cur, before) => Object.entries(cur.best).filter(([ex, v]) => before[ex] && v > before[ex] + 0.5).length;
 
+// Hard sets per muscle group: the training-volume measure (about 10+ sets per muscle a week
+// grows muscle; Schoenfeld, Ogborn & Krieger 2017). exercises: {id: {muscle}}.
+export const WEEKLY_SETS_TARGET = 10;
+export function setsByMuscle(sessions = [], from, to, exercises = {}) {
+  const out = {};
+  for (const s of sessions) if (inRange(s.date, from, to)) for (const e of s.entries || []) {
+    const m = exercises[e.exercise]?.muscle;
+    if (m) out[m] = (out[m] || 0) + (e.sets || []).length;
+  }
+  return out;
+}
+// Weekly target scaled to the period (a month ≈ 4.3 weeks).
+export const setsTarget = (from, to) => Math.round(WEEKLY_SETS_TARGET * ((Date.parse(`${to}T12:00:00`) - Date.parse(`${from}T12:00:00`)) / 864e5 + 1) / 7);
+
 // ---------- cardio ----------
 // activities: added in the app ({date, sport, minutes, miles?}); history: synced WHOOP / Garmin workouts ({start, minutes}, sport by name).
 export function cardioStats(activities = [], history = [], sportOf, from, to) {

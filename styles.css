@@ -1011,3 +1011,10 @@ body[data-tab="privacy"] .daybar-wrap { display: none; }
 .fit-ico { font-size: 1.3rem; }
 .fit-main { flex: 1; display: grid; gap: 2px; min-width: 0; }
 .fit-row .score { margin-left: auto; }
+/* Sets per muscle: one bar per muscle, a tick at the target */
+.msets li { grid-template-columns: 82px 1fr 64px; }
+.gbar.solo { background: var(--bg); border: 1px solid var(--line); overflow: visible; }
+.gbar.solo i { background: color-mix(in srgb, var(--dx-lean) 60%, var(--card)); }
+.gbar.solo i.hit { background: var(--dx-lean); }
+.gbar.solo s { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: .55; text-decoration: none; }
+.msets .n small { font-size: .72rem; margin-left: 2px; }

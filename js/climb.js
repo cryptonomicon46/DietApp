@@ -4,8 +4,9 @@ import { profileStore, activeProfile } from './storage.js';
 import { sportOf } from './activity.js';
 import {
   DISCIPLINES, DEFAULT_GRADES, gradeRank, periodOf, liftStats, bestBefore, prCount, KEY_LIFTS,
-  cardioStats, paceText, climbStats, climbHighlights,
+  cardioStats, paceText, climbStats, climbHighlights, setsByMuscle, setsTarget,
 } from './progress.js';
+import { EXERCISES, MUSCLES } from './lifting.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -147,6 +148,15 @@ export function renderProgress() {
       ${tile('Volume', `${fmtK(L.volume)} lb`, Lp.volume ? `<small class="${L.volume >= Lp.volume ? 'up' : 'down'}">${pct(L.volume, Lp.volume)}</small>` : '')}
       ${tile('PRs', prs, '<small>est. 1RM</small>')}
     </div>
+    ${(() => {
+      const M = setsByMuscle(sessions, P.from, P.to, EXERCISES), Mp = setsByMuscle(sessions, P.prevFrom, P.prevTo, EXERCISES);
+      const target = setsTarget(P.from, P.to);
+      const rows = Object.keys(MUSCLES).filter((m) => M[m] || Mp[m]);
+      if (!rows.length) return '';
+      const top = Math.max(target, ...rows.map((m) => M[m] || 0)) * 1.1;
+      return `<div class="small muted gb-h">Sets per muscle group · the line marks ${target} sets (10 a week${period === 'week' ? '' : ' for the month'}), roughly what grows muscle</div>
+        <ul class="gbars msets">${rows.map((m) => { const n = M[m] || 0; return `<li><b>${esc(MUSCLES[m].replace(' & glutes', '/glutes').replace('Back (rows)', 'Back rows').replace('Back (lats)', 'Lats'))}</b><span class="gbar solo" role="img" aria-label="${esc(MUSCLES[m])}: ${n} sets, target ${target}"><i class="${n >= target ? 'hit' : ''}" style="width:${Math.round((n / top) * 100)}%"></i><s style="left:${Math.round((target / top) * 100)}%"></s></span><span class="n">${n} ${Mp[m] != null || n ? delta(n, Mp[m] || 0) : ''}</span></li>`; }).join('')}</ul>`;
+    })()}
     <ul class="lifts">${Object.entries(KEY_LIFTS).filter(([ex]) => L.best[ex] || Lp.best[ex]).map(([ex, name]) => `<li><span>${name} · est. 1RM</span><span>${L.best[ex] ? `<b>${Math.round(L.best[ex])}</b> ${Lp.best[ex] ? delta(Math.round(L.best[ex]), Math.round(Lp.best[ex])) : ''}` : '<span class="muted">—</span>'}</span></li>`).join('')}</ul>
 
     <div class="sec-h"><b>🏃 Cardio</b><span class="small muted">${C.sessions} session${C.sessions === 1 ? '' : 's'}</span></div>

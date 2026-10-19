@@ -54,3 +54,12 @@ test('climbing: attempts and sends per grade, top send, and highlights vs last p
   assert.equal(sportOf('Hot Yoga'), 'hotYoga');
   assert.equal(sportOf('Yoga'), 'yoga');
 });
+
+test('sets per muscle group, and the weekly target scaled to the period', async () => {
+  const { setsByMuscle, setsTarget } = await import('../js/progress.js');
+  const { EXERCISES } = await import('../js/lifting.js');
+  const sessions = [{ date: '2026-10-20', entries: [{ exercise: 'bench', sets: [{}, {}, {}] }, { exercise: 'backSquat', sets: [{}, {}] }, { exercise: 'dbBench', sets: [{}] }] }];
+  assert.deepEqual(setsByMuscle(sessions, '2026-10-19', '2026-10-25', EXERCISES), { chest: 4, quads: 2 });
+  assert.equal(setsTarget('2026-10-19', '2026-10-25'), 10);
+  assert.equal(setsTarget('2026-10-01', '2026-10-31'), 44);
+});

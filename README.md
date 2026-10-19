@@ -166,7 +166,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 - **Log a workout in one tap:** 🏋️ Lifting (jumps to today's session), 🔥 Hot yoga, 🏃 Run, 🚴 Bike (both ask for **miles**, so pace and weekly miles add up), 🧗 Climbing and ✨ Other.
 - **🧗 Climbing session:** its own card with a **Bouldering | Top rope | Lead** bar. Count **attempts** (and, optionally, **sends ✓**) per grade with − / + — V4–V6 for bouldering and 5.10a–5.11a for ropes by default, every other grade (V0–V10, 5.8–5.12d) one tap away. One session can mix all three; gym and minutes are saved with it, and **Done** adds it as the day's climbing activity for calories.
 - **📈 Progress** (button on the training card): **This week** or **this month**, against the one before:
-  - **Lifting:** sessions, sets, volume, new PRs, and estimated 1-rep max for squat, bench and deadlift.
+  - **Lifting:** sessions, sets, volume, new PRs, estimated 1-rep max for squat, bench and deadlift, and **sets per muscle group** against a line at 10 sets a week (scaled for the month), with the change from the last period — training volume rather than the weight itself.
   - **Cardio:** run miles and average pace, bike miles and rides, hot yoga classes and hours (synced WHOOP / Garmin workouts count too).
   - **Climbing:** sessions, top send per style, and sends out of attempts per grade, with highlights like a higher top send or a better send rate.
   - Climbing sessions export as `climbing.csv`.
