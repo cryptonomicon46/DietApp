@@ -176,7 +176,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
   - Synced workouts replace matching manual ones.
   - Training calories are added back as carbs.
   - Sessions of 45+ minutes get an **intra-workout carb** target (banana, sports drink, gel, dates).
-- **Best windows:** a 4-mile run (best hour) and a 25–30 mile ride (best 2½-hour daylight window). Scored on feels-like temperature, rain, wind, air quality, UV and daylight, with an hour-by-hour strip.
+- **Weather & best windows (one card):** the temperature, rain, wind and air quality, then one line each for the best 4-mile run hour and the best 25–30 mile ride window (daylight), with the temperature range, a score and any watch-outs. Scored on feels-like temperature, rain, wind, air quality, UV and daylight, with an hour-by-hour strip.
 - **Classes:** links to each gym's live yoga and fitness schedule, plus your regular classes (days and time), shown here and on Home on those days.
 - **Lifting:**
   - **Program:**

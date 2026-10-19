@@ -44,15 +44,24 @@ function hourLine(h) {
   return `${Math.round(h.temp)}°F${Math.abs(h.feels - h.temp) >= 3 ? ` (feels ${Math.round(h.feels)}°)` : ''} · ${h.rain}% rain · wind ${Math.round(h.wind)} mph${h.aqi != null ? ` · AQI ${h.aqi}` : ''}`;
 }
 
-function activityCard(icon, title, sub, hourly, activity, hours, from, until) {
-  const w = bestWindow(hourly, activity, hours, from, until);
-  if (!w || w.score <= 0) return `<div class="card brief-card"><div class="eyebrow">${icon} ${title}</div><p class="small muted">No good window left today — check tomorrow's.</p></div>`;
-  const a = hourly[w.start], b = new Date(hourly[w.start + w.hours - 1].time.getTime() + 3600000);
-  return `<div class="card brief-card">
-    <div class="row between" style="margin-top:0"><div class="eyebrow">${icon} ${title} <small class="muted">· ${sub}</small></div><span class="score ${tone(w.score)}">${w.score}</span></div>
-    <div class="brief-when">${range(a.time, b)}</div>
-    <div class="small">${hourLine(a)}</div>
-    ${w.why.length ? `<div class="small muted">Watch: ${esc(w.why.slice(0, 3).join(', '))}</div>` : '<div class="small tone-good">Great conditions</div>'}
+// Train: today's (or tomorrow's) weather and the best run and ride windows in one compact card.
+function fitCard(cur, sunLine, hourly, from, until, late) {
+  const row = (icon, label, activity, hours) => {
+    const w = bestWindow(hourly, activity, hours, from, until);
+    if (!w || w.score <= 0) return `<li class="fit-row"><span class="fit-ico">${icon}</span><span class="fit-main"><b>${label}</b><small class="muted">No good window left${late ? '' : ' today'}</small></span></li>`;
+    const a = hourly[w.start], b = new Date(hourly[w.start + w.hours - 1].time.getTime() + 3600000);
+    return `<li class="fit-row"><span class="fit-ico">${icon}</span>
+      <span class="fit-main"><b>${label} · ${range(a.time, b)}</b><small>${tempRange(hourly, w.start, hours)} · ${w.why.length ? `<span class="muted">watch ${esc(w.why.slice(0, 2).join(', '))}</span>` : '<span class="tone-good">great conditions</span>'}</small></span>
+      <span class="score ${tone(w.score)}">${w.score}</span></li>`;
+  };
+  return `<div class="card brief-card fit-card">
+    <div class="eyebrow">${late ? 'Tomorrow' : 'Today'} · ${PLACE.name}</div>
+    <div class="fit-now"><b>${Math.round(cur.temp)}°F</b> <small>${esc(hourLine(cur).split(' · ').slice(1).join(' · '))}</small></div>
+    <ul class="list fit-rows">
+      ${row('🏃', 'Run 4 mi', 'run', 1)}
+      ${row('🚴', 'Ride 25–30 mi', 'bike', 3)}
+    </ul>
+    ${sunLine}
   </div>`;
 }
 
@@ -513,17 +522,11 @@ export async function renderBrief(force = false) {
   const cur = hourly[Math.max(0, hourly.findIndex((h) => h.time.getTime() + 3600000 > now.getTime()))];
   const target = hourly[from].time;
   const sunIdx = weather.sunrise.findIndex((d) => d.toDateString() === target.toDateString());
-  const nowCard = `<div class="card brief-now">
-      <div class="eyebrow">${late ? 'Tomorrow' : 'Today'} · ${PLACE.name}</div>
-      <div class="big">${Math.round(cur.temp)}°F <small>${esc(hourLine(cur).split(' · ').slice(1).join(' · '))}</small></div>
-      ${sunIdx >= 0 ? `<div class="small muted">Sunrise ${clock(weather.sunrise[sunIdx])} · sunset ${clock(weather.sunset[sunIdx])} · updated ${clock(new Date(weather.fetchedAt))} <button type="button" class="linkish" data-briefrefresh>Refresh</button></div>` : ''}
-    </div>`;
   if ($('#dogWalkTop')) $('#dogWalkTop').innerHTML = dogCard(hourly, from, late);
   if (dogEl) dogEl.innerHTML = `<div class="card"><div class="eyebrow">🐾 Pavement, hour by hour</div>${strip(hourly, from, 'dog')}
       <p class="small muted">Color = how good each hour is for a dog walk. Weather: Open-Meteo.</p></div>`;
-  if (fitEl) fitEl.innerHTML = `${nowCard}
-    ${activityCard('🏃', `${late ? 'Tomorrow · ' : ''}Run 4 miles`, '~40 min', hourly, 'run', 1, from, end)}
-    ${activityCard('🚴', `${late ? 'Tomorrow · ' : ''}Ride 25–30 miles`, '~2½ h, daylight', hourly, 'bike', 3, from, end)}
+  const sunLine = sunIdx >= 0 ? `<div class="small muted">Sunrise ${clock(weather.sunrise[sunIdx])} · sunset ${clock(weather.sunset[sunIdx])} · updated ${clock(new Date(weather.fetchedAt))} <button type="button" class="linkish" data-briefrefresh>Refresh</button></div>` : '';
+  if (fitEl) fitEl.innerHTML = `${fitCard(cur, sunLine, hourly, from, end, late)}
     ${classesCard(target)}
     <div class="card"><div class="eyebrow">Hour by hour</div>${strip(hourly, from)}
       <p class="small muted">Color = how good each hour is for a run. Weather and air quality: Open-Meteo.</p></div>`;

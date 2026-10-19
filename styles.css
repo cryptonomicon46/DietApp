@@ -1002,3 +1002,12 @@ body[data-tab="privacy"] .daybar-wrap { display: none; }
 .gkey .k-sent { background: var(--dx-lean); } .gkey .k-att { background: color-mix(in srgb, var(--dx-lean) 22%, var(--card)); }
 .climb-seg button { white-space: nowrap; font-size: .8rem; padding: 8px 2px; }
 .climb-seg .dot-on { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-left: 4px; vertical-align: 2px; }
+
+/* Train: weather + run / ride windows in one card */
+.fit-now b { font-size: 1.6rem; }
+.fit-now small { color: var(--muted); }
+.fit-rows { margin: 6px 0; }
+.fit-row { display: flex; align-items: center; gap: 10px; }
+.fit-ico { font-size: 1.3rem; }
+.fit-main { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.fit-row .score { margin-left: auto; }
