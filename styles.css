@@ -1026,3 +1026,15 @@ details.fold > summary h2 { margin: 0; }
 details.fold > summary::after { content: 'Show ▾'; font-size: .82rem; font-weight: 600; color: var(--brand); }
 details.fold[open] > summary::after { content: 'Hide ▴'; }
 details.fold[open] > summary { margin-bottom: 8px; }
+
+/* Swipe a food left to remove it */
+.portions.editable > li { position: relative; touch-action: pan-y; transition: transform .15s ease; background: var(--card); }
+.portions.editable > li.swiping { transition: none; }
+.portions.editable > li.swipe-go { background: color-mix(in srgb, var(--alert) 14%, var(--card)); }
+.portions.editable .item-top .x { margin-left: 6px; flex: none; }
+.swipe-hint { margin: 4px 0 0; }
+.undo-toast { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 20; display: flex; gap: 14px; align-items: center; background: var(--ink); color: var(--card); padding: 10px 16px; border-radius: 999px; box-shadow: 0 6px 18px rgb(0 0 0 / .25); font-size: .9rem; }
+.undo-toast .linkish { color: #8fe0b4; font-weight: 700; }
+.undo-toast[hidden] { display: none; }
+.undo-toast { max-width: calc(100vw - 32px); white-space: nowrap; }
+.undo-toast span { overflow: hidden; text-overflow: ellipsis; }

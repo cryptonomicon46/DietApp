@@ -652,13 +652,15 @@ function mealCard(meal, m) {
           ${meal === 'breakfast' ? `<select class="small-select" data-template aria-label="Breakfast type">
             ${Object.entries(MEAL_TEMPLATES).map(([k, v]) => `<option value="${k}" ${m.template === k ? 'selected' : ''}>${v}</option>`).join('')}
           </select>` : ''}
-          ${m.custom ? '' : '<button class="ghost small" data-customize title="Build this meal yourself">✎ Customize</button><button class="ghost small" data-prepared title="A pre-packaged or catered meal with its macros on the label">📦 Prepared</button><button class="ghost small" data-eatout title="Log a restaurant meal">🍴 Ate out</button>'}
+          ${m.custom ? '' : '<button class="ghost small" data-prepared title="A pre-packaged or catered meal with its macros on the label">📦 Prepared</button><button class="ghost small" data-eatout title="Log a restaurant meal">🍴 Ate out</button>'}
           <button class="ghost small" data-reset ${edited ? '' : 'hidden'}>${m.custom ? 'Back to plan' : 'Reset'}</button>
         </div>
       </div>
       <div class="meal-macros" data-role="totals">${totalsLine(m)}${m.manual ? ' <small class="muted">(your numbers)</small>' : ''}</div>
       ${comboRow(meal, m)}
-      ${m.prepared ? preparedBody(meal, m) : m.eatout ? eatOutBody(meal, m) : m.custom ? customBody(meal, m) : `<ul class="portions editable">${m.portions.map((x) => itemRow(x, meal)).join('')}</ul>`}
+      ${m.prepared ? preparedBody(meal, m) : m.eatout ? eatOutBody(meal, m) : m.custom ? customBody(meal, m) : `<ul class="portions editable">${m.portions.map((x) => itemRow(x, meal)).join('')}</ul>
+      <div class="row" style="margin-top:6px"><select data-cadd aria-label="Add a food">${foodOptions('', '+ Add a food…')}</select></div>
+      <p class="small muted swipe-hint">Swipe a food left (or tap ✕) to remove it.</p>`}
       </div>
       ${eatButton(meal)}
     </div>`;
@@ -915,6 +917,81 @@ function editCustom(meal, fn) {
 
 // Add a food to a meal: a planned meal turns into your own version (its current foods
 // plus this one), so nothing you were going to eat disappears.
+// Remove a food: from your own meal by index, or from a planned meal by slot (the meal turns
+// into your own with the other foods kept). Undo puts it back.
+function removeFood(meal, { index, slot }) {
+  const before = todaysCustom()[meal] ? JSON.parse(JSON.stringify(todaysCustom()[meal])) : null;
+  const m = todayPlan()[meal];
+  let name = '';
+  editMeal(meal, (c) => {
+    if (!c.items) {
+      if (meal === 'breakfast') c.template = m.template;
+      const kept = m.portions.filter((x) => x.grams > 0);
+      name = FOODS[kept.find((x) => x.slot === slot)?.food]?.name || '';
+      c.items = kept.filter((x) => x.slot !== slot).map((x) => ({ food: x.food, grams: x.grams }));
+    } else {
+      name = FOODS[c.items[index]?.food]?.name || '';
+      c.items.splice(index, 1);
+    }
+  });
+  resnap(meal);
+  renderToday();
+  undoToast(`Removed ${name || 'it'}`, () => {
+    const meals = todaysCustom();
+    if (before) meals[meal] = before; else delete meals[meal];
+    saveCustom(); resnap(meal); renderToday();
+  });
+}
+let toastTimer = null;
+function undoToast(text, undo) {
+  let el = $('#undoToast');
+  if (!el) { el = document.createElement('div'); el.id = 'undoToast'; el.className = 'undo-toast'; document.body.append(el); }
+  el.innerHTML = `<span>${esc(text)}</span><button type="button" class="linkish">Undo</button>`;
+  el.hidden = false;
+  el.querySelector('button').onclick = () => { el.hidden = true; clearTimeout(toastTimer); undo(); };
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 5000);
+}
+// Swipe a food row left to remove it (touch or mouse); a short drag springs back.
+(function swipeToRemove() {
+  const root = $('#meals');
+  let drag = null;
+  root.addEventListener('pointerdown', (e) => {
+    const li = e.target.closest('.portions.editable > li');
+    // Start anywhere on the row except a grams box; a drag that becomes a swipe doesn't count as a tap.
+    if (!li || e.target.closest('input') || li.closest('[inert]')) return;
+    drag = { li, x: e.clientX, y: e.clientY, dx: 0, on: false, id: e.pointerId };
+  });
+  root.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.on) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { drag = null; return; } // scrolling
+      if (dx > -10) return;
+      drag.on = true;
+      drag.li.classList.add('swiping');
+    }
+    drag.dx = Math.min(0, dx);
+    drag.li.style.transform = `translateX(${drag.dx}px)`;
+    drag.li.classList.toggle('swipe-go', drag.dx < -90);
+  });
+  const end = () => {
+    if (!drag) return;
+    const { li, dx, on } = drag;
+    drag = null;
+    if (!on) return;
+    root.addEventListener('click', (ev) => { ev.stopPropagation(); ev.preventDefault(); }, { capture: true, once: true });
+    li.classList.remove('swiping');
+    if (dx < -90) {
+      li.style.transform = 'translateX(-110%)';
+      const meal = li.closest('.meal').dataset.meal;
+      setTimeout(() => (li.dataset.ci != null ? removeFood(meal, { index: +li.dataset.ci }) : removeFood(meal, { slot: li.dataset.slot })), 150);
+    } else { li.style.transform = ''; li.classList.remove('swipe-go'); }
+  };
+  root.addEventListener('pointerup', end);
+  root.addEventListener('pointercancel', end);
+})();
+
 function addToMeal(meal, food, grams) {
   const m = todayPlan()[meal];
   editMeal(meal, (c) => {
@@ -999,18 +1076,10 @@ $('#meals').addEventListener('click', (e) => {
     editMeal(meal, (c) => { c.eatout = { ...c.eatout, [field]: field === 'ate' ? +value : value }; });
     resnap(meal);
     renderToday();
-  } else if (e.target.closest('[data-customize]')) {
-    const m = todayPlan()[meal];
-    editMeal(meal, (c) => {
-      if (meal === 'breakfast') c.template = m.template;
-      c.items = m.portions.filter((x) => x.grams > 0).map((x) => ({ food: x.food, grams: x.grams }));
-    });
-    renderToday();
   } else if (e.target.closest('[data-cremove]')) {
-    const i = +e.target.closest('[data-cremove]').dataset.cremove;
-    editCustom(meal, (c) => c.items.splice(i, 1));
-    resnap(meal);
-    renderToday();
+    removeFood(meal, { index: +e.target.closest('[data-cremove]').dataset.cremove });
+  } else if (e.target.closest('[data-premove]')) {
+    removeFood(meal, { slot: e.target.closest('[data-premove]').dataset.premove });
   }
 });
 
@@ -1038,7 +1107,7 @@ $('#meals').addEventListener('change', (e) => {
   } else if (e.target.dataset.cadd != null) {
     const food = e.target.value;
     if (!food) return;
-    editCustom(meal, (c) => c.items.push({ food, grams: FOODS[food].unit?.grams || 100 }));
+    addToMeal(meal, food, FOODS[food].unit?.grams || 100); // a planned meal becomes your own, foods kept
   } else return;
   resnap(meal);
   renderToday();
@@ -1107,7 +1176,7 @@ function itemRow(x, meal) {
     : `<span>${esc(FOODS[x.food].name)}</span>`;
   return `
     <li data-slot="${x.slot}" class="${x.locked ? 'locked' : ''}">
-      <div class="item-top">${name}<span class="amt" data-role="amt">${a.main}<small>${a.sub}</small></span></div>
+      <div class="item-top">${name}<span class="amt" data-role="amt">${a.main}<small>${a.sub}</small></span><button type="button" class="x" data-premove="${x.slot}" aria-label="Remove ${esc(FOODS[x.food].name)}">✕</button></div>
       <div class="item-slider stepper">
         <button class="lock" data-unlock="${x.slot}" title="${x.locked ? 'Locked — tap to let the app size this' : 'Auto-sized'}">${x.locked ? '🔒' : 'auto'}</button>
         <span class="gfield">${weighWays(x.food) ? gramsUnit(x.food, meal) : ''}<input type="number" class="grams gbox" data-gbox="${x.slot}" data-food="${x.food}" min="0" step="any" inputmode="decimal" value="${shownG(x.food, x.grams, meal)}" aria-label="${esc(FOODS[x.food].name)} grams ${weighWord(x.food, meal)}"><span class="g">g</span></span>

@@ -117,7 +117,8 @@ Each phone keeps its owner's data, and the two phones share through a **househol
   - Each item has its own **cooked | raw** switch (oats: **dry | cooked**); macros are the same either way.
   - Meat, fish, eggs, rice and veggies are weighed cooked.
   - The grocery list converts back to raw amounts.
-- **✎ Customize:** turns a meal into your own list. **⭐ Saved combos** store a meal's foods by name (per meal; the partner's combos appear too). **⚖️ Fit to target** scales a combo to the meal.
+- **Edit any meal right away:** meals start pre-loaded with the plan; **+ Add a food…** under every meal adds anything from the list, and **swipe a food left** (or tap ✕) removes it, with **Undo** for a few seconds. Once you add or remove something the meal becomes your own list (**Back to plan** restores the suggestion).
+- **Your own meals:** **⭐ Saved combos** store a meal's foods by name (per meal; the partner's combos appear too). **⚖️ Fit to target** scales a combo to the meal.
 - **Snacks and extras:**
   - **🍎 Afternoon snack:** fruit, nuts, yogurt, shakes and bars. Its calories come out of lunch and dinner, so the day still adds up.
   - **☕ Coffee shop:** lattes, cappuccinos, cortados, flat whites, mochas, chai and a chocolate chip cookie.
