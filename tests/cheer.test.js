@@ -18,3 +18,10 @@ test('💪 day: weigh-in plus breakfast, lunch and dinner logged; streak runs ba
   assert.match(cheerFor({ strong: true }, '2026-10-19', 'dinner'), /^💪/);
   assert.equal(cheerFor({ strong: false }, '2026-10-19'), '');
 });
+
+test('a lower weigh-in gets a short congratulations', async () => {
+  const { lowerCheer } = await import('../js/cheer.js');
+  assert.match(lowerCheer(0.6, false, '2026-10-19'), /^📉 −0\.6 lb — you're on the right track\. \S/);
+  assert.match(lowerCheer(1.2, true, '2026-10-19'), /^🎉 New low −1\.2 lb/);
+  assert.equal(lowerCheer(0, false, '2026-10-19'), '');
+});

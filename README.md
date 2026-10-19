@@ -132,6 +132,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
   - **✓ I ate this** logs a meal and locks it until *Unlog to edit*.
   - The bar at the top shows calories and macros left today. It's hidden on Dogs, Us and Calendar.
   - **Any day:** ‹ › moves through past days (what was logged) and up to two weeks ahead (planned meals you can edit).
+- **Lower weigh-in = a short congrats:** whenever today's weight is lower than your last weigh-in, the weigh-in card says so with a line to keep going — e.g. *📉 −0.6 lb — you're on the right track. Trust the trend, not the day.* (🎉 *New low* when it's your lowest yet).
 - **💪 Encouragement for checking in:** after the morning weigh-in and each logged meal, a short line of encouragement appears right there (never a pop-up). A day with the **weigh-in and breakfast, lunch and dinner logged** gets a 💪 — on the Food day bar, on Home (with your streak) and on the shared 📅 Calendar, where tapping the day shows which of you checked in.
 - **Daily deficit game:** burned − eaten.
   - 🪙 10 for each deficit day, +5 if it's sustainable, and 🍪 for hitting protein.

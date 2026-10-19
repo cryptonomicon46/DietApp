@@ -35,6 +35,12 @@ const LINES = {
   strong: ['💪 Weigh-in + every meal logged — you took care of yourself today.', '💪 Full check-in today. This is what progress is made of.', '💪 Everything logged. Future you says thanks.'],
 };
 const pick = (list, date) => list[(+date.slice(8, 10)) % list.length];
+// A lower weigh-in than last time: a short "on track" plus a line to keep the momentum.
+const WISDOM = ['Small steps, every day.', 'Consistency beats intensity.', 'Trust the trend, not the day.', 'Protein first, then the rest.', 'Progress, not perfection.', 'Keep showing up.', 'One good meal at a time.'];
+export function lowerCheer(down, newLow, date) {
+  if (!(down > 0)) return '';
+  return `${newLow ? '🎉 New low' : '📉'} −${down.toFixed(1)} lb — you're on the right track. ${pick(WISDOM, date)}`;
+}
 // The line to show for what was just done (or the day so far).
 export function cheerFor(day, date, just) {
   if (day.strong) return pick(LINES.strong, date);

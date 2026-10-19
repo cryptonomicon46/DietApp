@@ -22,7 +22,7 @@ import { sync, newHouseholdCode, DEFAULT_CONNECTOR } from './sync.js';
 import { renderHousehold, initHousehold } from './household.js';
 import { renderRhythm, initRhythm } from './rhythm.js';
 import { renderDexa, initDexa, allScans } from './dexa.js';
-import { healthDay, strongStreak, cheerFor, personData } from './cheer.js';
+import { healthDay, strongStreak, cheerFor, personData, lowerCheer } from './cheer.js';
 import { renderPhotos, initPhotos } from './photos.js';
 import { renderClimb, initClimb, openClimb, climbSummary, renderProgress, initProgress, openProgress } from './climb.js';
 import { buildTables, toCsv, summary, weekRows } from './analytics.js';
@@ -2134,7 +2134,12 @@ function renderWeighStatus() {
   // Once today's weight is in, the card folds to one line; Change opens it again.
   if (t) $('#weighStatus').innerHTML += ' <button type="button" class="linkish small" data-weighedit>Change</button>';
   // A word of encouragement for checking in (inline, never a pop-up).
-  if (t && !sync.readOnly()) $('#weighStatus').innerHTML += `<div class="cheer">${cheerFor({ strong: false }, today, 'weigh')}</div>`;
+  if (t && !sync.readOnly()) {
+    // Lower than last time: congrats and a word to keep going; otherwise the usual check-in cheer.
+    const lowBefore = Math.min(...state.weights.filter((x) => x.date < today).map((x) => x.weight));
+    const lower = prev && t.weight < prev.weight ? lowerCheer(prev.weight - t.weight, t.weight < lowBefore, today) : '';
+    $('#weighStatus').innerHTML += `<div class="cheer">${lower || cheerFor({ strong: false }, today, 'weigh')}</div>`;
+  }
   $('#weighForm').classList.toggle('done', !!t);
   $('#weighForm').classList.remove('editing');
 }
