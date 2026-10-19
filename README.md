@@ -18,7 +18,7 @@
 
 | Tab | What it's for |
 |---|---|
-| **🏠 Home** | Today at a glance: the dog buttons and how close today is to a golden day, today's calendar, your day in time order (best run, ride and dog-walk windows with temperatures; after 9 PM it plans tomorrow), your gyms' yoga and fitness class schedules, your next meal and the weekly check-in, your partner's latest note and plan, and today's training. |
+| **🏠 Home** | Today at a glance: the dog buttons and how close today is to a golden day, today's calendar, your day in time order (best run, ride and dog-walk windows with temperatures; after 9 PM it plans tomorrow), your gyms' yoga and fitness class schedules, your next meal, the weekly check-in and your 30-day weight trend, your partner's latest note and plan, and today's training. |
 | **🐕 Dogs** | Pavement temperature and the best walk windows, the Feed / Walk / Dog park / Treat buttons, golden days, dog profiles and documents, the dog-duty scoreboard, and the adoption board. |
 | **🍽 Food** | Your meal plan (with the morning weigh-in at the top), plus **Weight**, **Groceries** and **Scan** pages from the bar at the top. |
 | **🏋︎ Train** | Your training card (WHOOP / Garmin calories, workout fuel), the best run and ride windows, class schedules, and the lifting log. |
@@ -68,6 +68,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 - **Your day:** the best run, ride and dog-walk windows in time order with the temperature range. A 🐾 marks a run or ride that overlaps a good walk window. Everything ends by 9 PM, and from 9 PM on, Home, Train and Dogs plan tomorrow.
 - **🧗 Gym classes:** each gym's live **🧘 Yoga** and **🏋️ Fitness** schedule one tap away, plus map links and the classes you take today (added under Train). The gyms are set in `js/brief.js`.
 - **Food:** the next meal, and the weekly check-in reminder (red when overdue).
+- **⚖️ Weight trend:** a small line of your 7-day average weight over the last 30 days, with today's weight, the 30-day change, the pace per week and how far to goal. Tap it for Food › Weight.
 - **💞 Just the two of you:** a gentle love note when a date, intimacy or a trip is coming up (from the 2-2-2-2 rhythm), with **✓ We did it** and **💡 Suggest for Saturday**.
 - **Us:** your partner's latest note and next plan. **Train:** today's training.
 - Home works even before a diet profile is set up.

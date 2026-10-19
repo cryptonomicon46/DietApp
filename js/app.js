@@ -2700,6 +2700,35 @@ function updateFoodBadge() {
   const b = $('#foodBadge');
   if (b) { const due = !!state.profile && checkinDue(); b.hidden = !due; b.textContent = '1'; }
 }
+// Home: the weight trend at a glance — 7-day average over the last 30 days as a sparkline.
+function homeWeight() {
+  const all = state.weights;
+  if (all.length < 2) return '';
+  const since = isoDate(new Date(Date.now() - 29 * DAY));
+  const day = (d) => new Date(`${d}T12:00`).getTime();
+  const avg = all.filter((e) => e.date >= since).map((e) => {
+    const t = day(e.date);
+    const win = all.filter((o) => day(o.date) <= t && day(o.date) > t - 7 * DAY);
+    return { t, v: win.reduce((a, o) => a + o.weight, 0) / win.length };
+  });
+  if (avg.length < 2) return '';
+  const W = 300, H = 56, pad = 4;
+  const lo = Math.min(...avg.map((a) => a.v)), hi = Math.max(...avg.map((a) => a.v));
+  const span = Math.max(hi - lo, 1);
+  const x = (t) => pad + ((t - avg[0].t) / Math.max(avg[avg.length - 1].t - avg[0].t, 1)) * (W - pad * 2 - 48);
+  const y = (v) => pad + (1 - (v - lo + span * 0.1) / (span * 1.2)) * (H - pad * 2);
+  const path = avg.map((a, i) => `${i ? 'L' : 'M'}${x(a.t).toFixed(1)},${y(a.v).toFixed(1)}`).join('');
+  const last = avg[avg.length - 1], first = avg[0];
+  const change = last.v - first.v;
+  const trend = weeklyTrend(all);
+  const goal = state.profile?.goalLb;
+  return `<button type="button" class="card home-card home-weight" data-goto="weight" aria-label="Weight trend">
+      <span class="home-ico">⚖️</span>
+      <span class="home-main"><b>${last.v.toFixed(1)} lb <small class="${change <= 0 ? 'tone-good' : 'muted'}">${change <= 0 ? '−' : '+'}${Math.abs(change).toFixed(1)} in 30 days</small></b>
+        <svg class="home-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="7-day average weight, last 30 days"><path d="${path}"/><circle r="3.5" cx="${x(last.t)}" cy="${y(last.v)}"/><text x="${x(last.t) + 8}" y="${y(last.v) + 4}">${last.v.toFixed(1)}</text></svg>
+        <small class="muted">7-day average${trend ? ` · ${trend.lbPerWeek <= 0 ? '−' : '+'}${Math.abs(trend.lbPerWeek).toFixed(1)} lb/wk` : ''}${goal ? ` · ${Math.max(last.v - goal, 0).toFixed(1)} lb to goal` : ''}</small></span>
+      <span class="home-go">›</span></button>`;
+}
 function renderHome() {
   if (!$('#homeHello')) return;
   const name = firstName();
@@ -2727,7 +2756,7 @@ function renderHome() {
       <span class="home-main"><b>${next ? `Next: ${label[next]}` : 'All meals logged 🎉'}</b>
         <small class="muted">${next ? `${esc(plan[next].title)} · ${plan[next].totals.kcal} kcal` : 'Nice work today.'}</small>
         <small class="muted">${done} of ${order.length} meals logged</small></span>
-      <span class="home-go">›</span></button>`;
+      <span class="home-go">›</span></button>` + homeWeight();
   $('#homeUs').innerHTML = homeUs();
   $('#homeCal').innerHTML = homeCal();
   const day = todaysTraining();
