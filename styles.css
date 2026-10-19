@@ -964,3 +964,41 @@ body[data-tab="privacy"] .daybar-wrap { display: none; }
 .r-types .chip { font-size: .82rem; padding: 6px 10px; }
 .r-places .chip { font-size: .78rem; padding: 4px 9px; }
 .r-dateform input[type=date] { width: 9.5em; }
+
+/* Train: quick picks, 🧗 climbing card, 📈 progress */
+.act-picks { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 10px 0 4px; }
+.act-pick { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); color: var(--ink); font-size: .68rem; font-weight: 600; min-width: 0; }
+.act-pick span { font-size: 1.3rem; line-height: 1.1; }
+.climb-meta { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.climb-meta select { flex: 1; }
+.climb-meta input { width: 64px; }
+.seg.full { display: flex; width: 100%; margin-top: 10px; }
+.seg.full button { flex: 1; padding: 8px 4px; font-size: .85rem; }
+.grade-rows { list-style: none; padding: 0; margin: 10px 0 6px; }
+.grade-rows li { display: grid; grid-template-columns: 58px 1fr 1fr; align-items: center; gap: 8px; padding: 5px 0; border-top: 1px solid var(--line); }
+.grade-rows .g { font-weight: 800; }
+.grade-rows .hdr { border-top: 0; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 0; }
+.cnt { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 2px; }
+.cnt button { width: 34px; height: 30px; padding: 0; border-radius: 8px; background: var(--card); color: var(--ink); border: 1px solid var(--line); font-size: 1.1rem; }
+.cnt b { font-variant-numeric: tabular-nums; }
+.cnt.send b { color: var(--brand); }
+.progress-card .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.progress-card .tile { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: grid; gap: 2px; min-width: 0; }
+.progress-card .tile b { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.progress-card .tile small { font-size: .72rem; color: var(--muted); }
+.progress-card .up, .progress-card .tile small.up { color: var(--good, #1f8a4c); font-weight: 600; }
+.progress-card .down, .progress-card .tile small.down { color: var(--alert); font-weight: 600; }
+.progress-card .sec-h { display: flex; justify-content: space-between; align-items: baseline; margin-top: 14px; gap: 8px; }
+.progress-card .lifts { list-style: none; padding: 0; margin: 6px 0 0; }
+.progress-card .lifts li { display: flex; justify-content: space-between; padding: 5px 0; border-top: 1px solid var(--line); font-size: .88rem; }
+.progress-card .gb-h { margin-top: 8px; }
+.gbars { list-style: none; padding: 0; margin: 4px 0 0; }
+.gbars li { display: grid; grid-template-columns: 48px 1fr 56px; align-items: center; gap: 8px; padding: 3px 0; font-size: .82rem; }
+.gbar { position: relative; height: 14px; border-radius: 4px; background: color-mix(in srgb, var(--dx-lean) 22%, var(--card)); overflow: hidden; }
+.gbar i { position: absolute; inset: 0 auto 0 0; background: var(--dx-lean); border-radius: 4px; }
+.gbars .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.gkey { display: flex; gap: 12px; font-size: .75rem; color: var(--muted); margin-top: 6px; }
+.gkey i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+.gkey .k-sent { background: var(--dx-lean); } .gkey .k-att { background: color-mix(in srgb, var(--dx-lean) 22%, var(--card)); }
+.climb-seg button { white-space: nowrap; font-size: .8rem; padding: 8px 2px; }
+.climb-seg .dot-on { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-left: 4px; vertical-align: 2px; }

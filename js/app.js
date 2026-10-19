@@ -22,6 +22,7 @@ import { sync, newHouseholdCode, DEFAULT_CONNECTOR } from './sync.js';
 import { renderHousehold, initHousehold } from './household.js';
 import { renderRhythm, initRhythm } from './rhythm.js';
 import { renderDexa, initDexa, allScans } from './dexa.js';
+import { renderClimb, initClimb, openClimb, climbSummary, renderProgress, initProgress, openProgress } from './climb.js';
 import { buildTables, toCsv, summary, weekRows } from './analytics.js';
 import { icsCalendar } from './calendar.js';
 import { makeZip } from './zip.js';
@@ -1666,8 +1667,8 @@ function renderTraining(t) {
   const weightKg = currentWeight() / 2.20462;
 
   const sessions = day.sessions.map((w) => `
-    <li><span class="cap">${esc(w.source === 'added' ? (SPORTS[w.sport]?.name || short(w.type)) : w.name)}<small class="muted"> · ${esc(w.source === 'added' ? `${INTENSITY[w.intensity]?.label.toLowerCase() || 'added'} · added by you` : w.source)}</small></span>
-    <span class="amt">${w.minutes} min<small>${w.kcal ? `${w.source === 'added' && !w.kcalFromYou ? '≈ ' : ''}${w.kcal} kcal` : 'estimated'}${w.strain != null ? ` · strain ${w.strain.toFixed(1)}` : ''}</small></span>
+    <li><span class="cap">${esc(w.source === 'added' ? (SPORTS[w.sport]?.name || short(w.type)) : w.name)}<small class="muted"> · ${esc(w.climb ? w.climb : w.source === 'added' ? `${INTENSITY[w.intensity]?.label.toLowerCase() || 'added'} · added by you` : w.source)}</small></span>
+    <span class="amt">${w.miles ? `${w.miles} mi · ` : ''}${w.minutes} min<small>${w.kcal ? `${w.source === 'added' && !w.kcalFromYou ? '≈ ' : ''}${w.kcal} kcal` : 'estimated'}${w.strain != null ? ` · strain ${w.strain.toFixed(1)}` : ''}</small></span>
     ${w.source === 'added' ? `<button class="x" data-rmact="${w.id}" aria-label="Remove activity">✕</button>` : ''}</li>`).join('');
   const hidden = state.activities.filter((a) => a.date === today).length - day.sessions.filter((w) => w.source === 'added').length;
 
@@ -1695,6 +1696,7 @@ function renderTraining(t) {
       <div class="row between" style="margin-top:0">
         <div><div class="eyebrow">Training</div><h3>${day.label}</h3></div>
         <div class="row" style="margin-top:0">
+          <button class="ghost small" id="openProgress">📈 Progress</button>
           ${connected.length ? '<button class="ghost small" id="syncNow">⟳ Sync</button>' : ''}
           <button class="ghost small" id="openDevices">Devices</button>
         </div>
@@ -1703,6 +1705,9 @@ function renderTraining(t) {
       ${hidden > 0 ? `<p class="small muted">${hidden} activit${hidden === 1 ? 'y you added was' : 'ies you added were'} matched to synced workouts, so ${hidden === 1 ? 'it isn\'t' : 'they aren\'t'} counted twice.</p>` : ''}
       ${extra}
       ${intra}
+      <div class="act-picks" role="group" aria-label="Log a workout">
+        ${[['lift', '🏋️', 'Lifting'], ['hotYoga', '🔥', 'Hot yoga'], ['running', '🏃', 'Run'], ['cycling', '🚴', 'Bike'], ['climb', '🧗', 'Climbing'], ['other', '✨', 'Other']].map(([k, i, l]) => `<button type="button" class="act-pick" data-actpick="${k}"><span>${i}</span>${l}</button>`).join('')}
+      </div>
       <form id="planForm" class="add-activity">
         <select id="planSport" aria-label="Activity">
           <option value="">Add an activity…</option>
@@ -1712,6 +1717,7 @@ function renderTraining(t) {
         <div class="row" style="margin-top:0">
           <select id="planIntensity" aria-label="Intensity">${Object.entries(INTENSITY).map(([k, v]) => `<option value="${k}" ${k === 'moderate' ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
           <input id="planMin" type="number" min="1" max="600" step="1" inputmode="numeric" placeholder="min" style="flex:0 0 72px" aria-label="Minutes">
+          <input id="planMiles" type="number" min="0" max="300" step="0.1" inputmode="decimal" placeholder="mi" style="flex:0 0 64px" aria-label="Distance (miles)" hidden>
           <input id="planKcal" type="number" min="0" max="5000" inputmode="numeric" placeholder="kcal" style="flex:0 0 84px" aria-label="Calories burned (from WHOOP)">
           <button type="submit" class="small">Add</button>
         </div>
@@ -1723,6 +1729,17 @@ function renderTraining(t) {
     </div>`;
 
   $('#openDevices').onclick = openDevices;
+  $('#openProgress').onclick = openProgress;
+  const showMiles = () => { const k = $('#planSport').value; $('#planMiles').hidden = !(k === 'running' || k === 'cycling'); };
+  $('#training').querySelectorAll('[data-actpick]').forEach((b) => b.onclick = () => {
+    const k = b.dataset.actpick;
+    if (k === 'lift') { $('#liftSession')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    if (k === 'climb') { openClimb(); return; }
+    if (k === 'other') { $('#planSport').value = ''; $('#planSport').focus(); showMiles(); return; }
+    $('#planSport').value = k;
+    $('#planSport').onchange();
+    $(k === 'hotYoga' ? '#planMin' : '#planMiles').focus();
+  });
   if ($('#ateFuel')) $('#ateFuel').onclick = () => {
     todaysLog().fuel = { title: 'Intra-workout fuel', kcal: t.intraC * 4, p: 0, f: 0, c: t.intraC };
     saveLog(); renderToday();
@@ -1746,6 +1763,7 @@ function renderTraining(t) {
       : `≈ <b>${est.kcal} kcal</b> burned, based on ${esc(est.basis)}${st?.strain != null && st.sessions >= 3 ? ` (typical strain ${st.strain})` : ''}. Type WHOOP's number in “kcal” to use it instead.`;
   };
   $('#planSport').onchange = () => {
+    showMiles();
     const st = stats[$('#planSport').value];
     if ($('#planSport').value && !$('#planMin').value) $('#planMin').value = st?.typicalMin || 60;
     showEstimate();
@@ -1764,7 +1782,8 @@ function renderTraining(t) {
     // Keep a year of activities for history and export.
     const cutoff = isoDate(new Date(Date.now() - 366 * DAY));
     state.activities = state.activities.filter((a) => a.date >= cutoff)
-      .concat({ id: `a${Date.now()}`, date: today, sport, intensity, minutes, type: sessionType(sport, intensity), kcal: est.kcal, kcalFromYou: typed > 0 });
+      .concat({ id: `a${Date.now()}`, date: today, sport, intensity, minutes, type: sessionType(sport, intensity), kcal: est.kcal, kcalFromYou: typed > 0,
+        ...(+$('#planMiles').value > 0 && !$('#planMiles').hidden ? { miles: +$('#planMiles').value } : {}) });
     store.set('activities', state.activities);
     renderAll();
   };
@@ -2497,7 +2516,7 @@ function showTab(name) {
   });
   if (name !== 'scan') stopScan();
   if (name === 'home') { renderHome(); renderBrief(); }
-  if (name === 'lift') { renderLift(); if (state.profile) renderTraining(targets()); renderBrief(); }
+  if (name === 'lift') { renderLift(); if (state.profile) renderTraining(targets()); renderBrief(); renderClimb(); renderProgress(); }
   if (name === 'brief') renderBrief();
   if (name === 'calendar') { renderRhythm(); renderCal(); }
   if (name === 'notes') {
@@ -2635,6 +2654,7 @@ $('#exportData').onclick = async () => {
       'lifting_sessions.csv / lifting_sets.csv: finished workouts and every set (weight x reps).',
       'weigh_ins.csv, checkins.csv: weigh-ins and weekly check-ins.',
       'dexa_scans.csv: DEXA scans (weight, body fat %, fat, lean and bone mass, visceral fat).',
+      'climbing.csv: climbing sessions — attempts and sends per grade (bouldering, top rope, lead).',
     ].join('\n') });
     status.textContent = await deliver(new Blob([makeZip(files)], { type: 'application/zip' }), `${fileSlug()}.zip`);
   } catch (err) {
@@ -2748,6 +2768,16 @@ initHousehold();
 window.addEventListener('lp:opendevices', () => openDevices());
 initRhythm(document.querySelector('main'));
 initDexa(() => state.weights, () => { if (state.profile) drawChart(); });
+// 🧗 A finished climbing session counts as that day's climbing activity (for calories).
+initClimb((c) => {
+  const minutes = +c.minutes || 60;
+  const est = estimateActivity('climbing', minutes, 'moderate', { weightKg: currentWeight() / 2.20462, stats: sportStats(state.history) });
+  state.activities = state.activities.filter((a) => a.id !== `climb-${c.date}`)
+    .concat({ id: `climb-${c.date}`, date: c.date, sport: 'climbing', intensity: 'moderate', minutes, type: sessionType('climbing', 'moderate'), kcal: est.kcal, climb: climbSummary(c) });
+  store.set('activities', state.activities);
+  if (state.profile) renderAll();
+});
+initProgress();
 updateCalBadge();
 updateNotesBadge();
 // Weigh-ins said on the Lift tab ("weigh in 161.4").

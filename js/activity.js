@@ -19,7 +19,8 @@ export const SESSION_TYPES = {
 export const SPORTS = {
   running:       { name: 'Running',          met: 9.8, fuel: true,  match: /run|jog|track/i },
   cycling:       { name: 'Cycling',          met: 8.0, fuel: true,  match: /cycl|bike|biking|spin|peloton|ride/i },
-  climbing:      { name: 'Rock climbing',    met: 7.5, fuel: false, match: /climb|boulder/i },
+  // A gym session (bouldering, top rope, lead) is mostly rest between climbs, so lower than steady climbing (7.5).
+  climbing:      { name: 'Rock climbing',    met: 5.8, fuel: false, match: /climb|boulder/i },
   weightlifting: { name: 'Weight lifting',   met: 5.0, fuel: false, match: /weight|strength|lift|powerlift|bodybuild|functional/i },
   hiit:          { name: 'HIIT / circuits',  met: 8.0, fuel: false, match: /hiit|circuit|crossfit|interval|bootcamp/i },
   swimming:      { name: 'Swimming',         met: 5.8, fuel: true,  match: /swim/i },
@@ -31,6 +32,8 @@ export const SPORTS = {
   basketball:    { name: 'Basketball',       met: 6.5, fuel: false, match: /basketball/i },
   soccer:        { name: 'Soccer',           met: 7.0, fuel: true,  match: /soccer|football/i },
   skiing:        { name: 'Skiing / snowboarding', met: 5.3, fuel: false, match: /ski|snowboard/i },
+  // Hot / Bikram yoga runs higher than regular yoga (heat raises heart rate; Pate & Buono 2014).
+  hotYoga:       { name: 'Hot yoga',         met: 5.0, fuel: false, match: /hot yoga|bikram|power yoga/i },
   yoga:          { name: 'Yoga',             met: 2.5, fuel: false, match: /yoga|stretch|mobility/i },
   pilates:       { name: 'Pilates',          met: 3.0, fuel: false, match: /pilates|barre/i },
 };

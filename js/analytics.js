@@ -59,11 +59,11 @@ export function buildTables(data) {
 
   const activities = [
     ...(data.activities || []).map((a) => ({
-      date: a.date, source: 'added by you', activity: SPORTS[a.sport]?.name || a.type, minutes: a.minutes,
+      date: a.date, source: 'added by you', activity: SPORTS[a.sport]?.name || a.type, minutes: a.minutes, miles: a.miles ?? '',
       kcal: a.kcal ?? '', intensity: INTENSITY[a.intensity]?.label || '', strain: '',
     })),
     ...(data.workoutHistory || []).map((w) => ({
-      date: String(w.start).slice(0, 10), source: String(w.id).split(':')[0].replace('whoopcsv', 'whoop'), activity: w.name, minutes: w.minutes,
+      date: String(w.start).slice(0, 10), source: String(w.id).split(':')[0].replace('whoopcsv', 'whoop'), activity: w.name, minutes: w.minutes, miles: '',
       kcal: w.kcal ?? '', intensity: '', strain: w.strain ?? '',
     })),
   ].sort((a, b) => a.date.localeCompare(b.date));
@@ -95,7 +95,12 @@ export function buildTables(data) {
     date: d.date, where: d.where || '', weight_lb: d.weight ?? '', body_fat_pct: d.bf ?? '', fat_lb: d.fat ?? '', lean_lb: d.lean ?? '', bone_lb: d.bone ?? '', visceral_fat_lb: d.vat ?? '', notes: d.notes || '',
   }));
 
-  return { meals, days, activities, lifting_sessions, lifting_sets, weigh_ins, checkins, dexa_scans };
+  // One row per climbing session, discipline and grade.
+  const climbing = (data.climbs || []).flatMap((c) => Object.entries(c.grades || {}).flatMap(([disc, gs]) => Object.entries(gs)
+    .filter(([, v]) => v.a || v.s).map(([grade, v]) => ({ date: c.date, gym: c.gym || '', minutes: c.minutes ?? '', discipline: { boulder: 'bouldering', toprope: 'top rope', lead: 'lead' }[disc] || disc, grade, attempts: Math.max(+v.a || 0, +v.s || 0), sends: +v.s || 0 }))))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return { meals, days, activities, lifting_sessions, lifting_sets, weigh_ins, checkins, dexa_scans, climbing };
 }
 
 export function toCsv(rows) {
