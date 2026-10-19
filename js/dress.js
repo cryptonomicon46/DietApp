@@ -13,15 +13,17 @@ const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // The place a piece of text names, if any (whole words, so "sf" doesn't match "transfer").
 export function matchPlace(text, places = PLACES) {
   const t = ` ${String(text || '').toLowerCase()} `;
-  let best = null;
-  for (const p of places) {
-    for (const k of [p.name.toLowerCase().split(',')[0], ...(p.keys || [])]) {
+  const find = (keysOf) => {
+    let best = null;
+    for (const p of places) for (const k of keysOf(p)) {
       if (!k) continue;
       const at = t.search(new RegExp(`(^|[^a-z0-9])${escRe(k)}(?=$|[^a-z0-9])`));
-      if (at >= 0 && (!best || at < best.at || (at === best.at && k.length > best.len))) best = { place: p, at, len: k.length };
+      if (at >= 0 && (!best || at < best.at)) best = { place: p, at };
     }
-  }
-  return best?.place || null;
+    return best?.place || null;
+  };
+  // A city's name beats a street or neighbourhood ("Market St, Oakland" is Oakland).
+  return find((p) => [p.name.toLowerCase().split(',')[0]]) || find((p) => p.keys || []);
 }
 
 const toH = (hhmm) => { const [h, m] = String(hhmm).split(':').map(Number); return h + (m || 0) / 60; };

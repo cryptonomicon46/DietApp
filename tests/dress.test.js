@@ -9,6 +9,7 @@ test('place names in calendar text, whole words only', () => {
   assert.equal(matchPlace('Team offsite, 1 Market St, San Francisco, CA')?.id, 'sf');
   assert.equal(matchPlace('Oakland office')?.id, 'oak');
   assert.equal(matchPlace('Bank transfer'), null);
+  assert.equal(matchPlace('Lunch, 500 Market St, Oakland')?.id, 'oak');
   assert.equal(matchPlace('Dentist'), null);
   const mine = [...PLACES, { id: 'pa', name: 'Palo Alto, CA', lat: 37.44, lon: -122.14 }];
   assert.equal(matchPlace('Lunch in Palo Alto', mine)?.id, 'pa');
