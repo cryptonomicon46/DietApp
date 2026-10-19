@@ -192,6 +192,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
     - "squats 3 sets of 5 at 185", "bench 135 for 8, 8, 7", "one more set of 8", "check all my sets for calves", "move rows after squats", "weigh in 160.8".
     - Anything it can't parse can go to **Claude** through the connector (optional).
     - Every command has **Undo**.
+- **Recent workouts** and the **Exercise library** fold away (tap the title: Show ▾ / Hide ▴), closed by default and remembered on each phone.
 - **Devices:**
   - **WHOOP** and **Garmin** (through Strava) sync automatically through the connector.
   - **WHOOP export** and **Garmin CSV** import with no setup.

@@ -2765,6 +2765,11 @@ initNotes();
 initBrief();
 initCal(document.querySelector('main'));
 initHousehold();
+// Folding cards (Recent workouts, Exercise library): closed by default, remembered per phone.
+document.querySelectorAll('details[data-fold]').forEach((d) => {
+  d.open = !!global.get(`fold.${d.dataset.fold}`, false);
+  d.addEventListener('toggle', () => global.set(`fold.${d.dataset.fold}`, d.open));
+});
 window.addEventListener('lp:opendevices', () => openDevices());
 initRhythm(document.querySelector('main'));
 initDexa(() => state.weights, () => { if (state.profile) drawChart(); });

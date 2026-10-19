@@ -1018,3 +1018,11 @@ body[data-tab="privacy"] .daybar-wrap { display: none; }
 .gbar.solo i.hit { background: var(--dx-lean); }
 .gbar.solo s { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: .55; text-decoration: none; }
 .msets .n small { font-size: .72rem; margin-left: 2px; }
+
+/* Folding cards: tap the title to open or close */
+details.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary h2 { margin: 0; }
+details.fold > summary::after { content: 'Show ▾'; font-size: .82rem; font-weight: 600; color: var(--brand); }
+details.fold[open] > summary::after { content: 'Hide ▴'; }
+details.fold[open] > summary { margin-bottom: 8px; }
