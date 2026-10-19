@@ -836,8 +836,9 @@ function drinksBlock(e) {
   </details>`;
 }
 
-// ---- saved combos: Breakfast / Lunch / Dinner combos. Lunch and dinner offer each other's
-// combos too, and the other person's combos show up as well (copied in when you pick one). ----
+// ---- saved combos: Breakfast / Lunch / Dinner combos. Any combo loads into any meal (eggs for
+// dinner is fine): this meal's combos come first, then the other meals', then the other person's
+// (copied in when you pick one). ----
 const comboKind = (meal) => (meal === 'breakfast' || meal === 'snack' ? meal : 'main');
 // Combos saved before they remembered their meal count as lunch ones.
 const comboMeal = (c) => c.meal || (c.kind === 'breakfast' || c.kind === 'snack' ? c.kind : 'lunch');
@@ -847,17 +848,20 @@ const partnerCombos = () => (sync.readOnly() ? [] : profileStore(partnerId()).ge
 let managingCombos = null; // meal whose combo list is open for deleting
 function comboRow(meal, m) {
   const label = MEAL_NAMES[meal];
-  const mine = state.combos.filter((c) => c.kind === comboKind(meal));
-  const theirs = partnerCombos().filter((c) => c.kind === comboKind(meal));
+  const mine = state.combos;
+  const theirs = partnerCombos();
   const opt = (c, prefix = '') => `<option value="${prefix}${esc(c.id)}">${esc(c.name)} · ${comboKcal(c)} kcal</option>`;
-  const here = mine.filter((c) => comboMeal(c) === meal), other = mine.filter((c) => comboMeal(c) !== meal);
+  const order = [meal, ...['breakfast', 'lunch', 'dinner', 'snack'].filter((k) => k !== meal)];
+  const groups = (list, who, prefix = '') => order.map((k) => {
+    const cs = list.filter((c) => comboMeal(c) === k);
+    return cs.length ? `<optgroup label="${who} ${MEAL_NAMES[k].toLowerCase()} combos">${cs.map((c) => opt(c, prefix)).join('')}</optgroup>` : '';
+  }).join('');
   const pName = partnerName();
   const total = mine.length + theirs.length;
-  const pick = total ? `<select data-combo aria-label="Use a saved ${label.toLowerCase()} combo">
-      <option value="">⭐ ${label} combos (${here.length + other.length})${theirs.length ? ` · ${esc(pName)}'s (${theirs.length})` : ''}</option>
-      ${here.length ? `<optgroup label="Your ${label.toLowerCase()} combos">${here.map((c) => opt(c)).join('')}</optgroup>` : ''}
-      ${other.length ? `<optgroup label="From your ${meal === 'lunch' ? 'dinner' : 'lunch'} combos">${other.map((c) => opt(c)).join('')}</optgroup>` : ''}
-      ${theirs.length ? `<optgroup label="${esc(pName)}'s ${meal === 'breakfast' || meal === 'snack' ? meal : 'lunch & dinner'} combos">${theirs.map((c) => opt(c, 'p:')).join('')}</optgroup>` : ''}
+  const pick = total ? `<select data-combo aria-label="Load a saved combo into ${label.toLowerCase()}">
+      <option value="">⭐ Load a combo (${mine.length})${theirs.length ? ` · ${esc(pName)}'s (${theirs.length})` : ''}</option>
+      ${groups(mine, 'Your')}
+      ${groups(theirs, `${esc(pName)}'s`, 'p:')}
     </select>` : '';
   return `<div class="combo-row">
       ${pick}
@@ -1124,7 +1128,7 @@ $('#meals').addEventListener('click', (e) => {
     if (c && confirm(`Delete the combo “${c.name}”?`)) {
       state.combos = state.combos.filter((x) => x.id !== id);
       store.set('combos', state.combos);
-      if (!state.combos.some((x) => x.kind === comboKind(meal))) managingCombos = null;
+      if (!state.combos.length) managingCombos = null;
       renderToday();
     }
   } else if (e.target.closest('[data-fit]')) {
