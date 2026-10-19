@@ -1,0 +1,152 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Train mockups</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+  :root { color-scheme: light; }
+  body { background: var(--bg); margin: 0; }
+  .screen { width: 390px; padding: 12px 12px 24px; box-sizing: border-box; }
+  .screen h2.brief-title { margin: 4px 4px 10px; }
+  .acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .act { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 4px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); font-weight: 600; font-size: .85rem; color: var(--ink); }
+  .act span { font-size: 1.5rem; }
+  .act.on { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, var(--card)); }
+  .fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .fields label { font-size: .78rem; color: var(--muted); display: grid; gap: 4px; }
+  .fields input, .fields select { width: 100%; box-sizing: border-box; }
+  .done-list li { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--line); font-size: .9rem; }
+  .done-list { list-style: none; padding: 0; margin: 8px 0 0; }
+  .seg.full { display: flex; width: 100%; margin-top: 10px; } .seg.full button { flex: 1; padding: 8px 4px; font-size: .85rem; }
+  .grade-rows { list-style: none; padding: 0; margin: 10px 0 0; }
+  .grade-rows li { display: grid; grid-template-columns: 64px 1fr 1fr; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+  .grade-rows .g { font-weight: 800; font-size: 1rem; }
+  .grade-rows .hdr { border-top: 0; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 0; }
+  .cnt { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 2px; }
+  .cnt button { width: 34px; height: 30px; padding: 0; border-radius: 8px; background: var(--card); color: var(--ink); border: 1px solid var(--line); font-size: 1.1rem; }
+  .cnt b { font-variant-numeric: tabular-nums; }
+  .cnt.send b { color: var(--brand); }
+  .more-grades { margin-top: 8px; font-size: .85rem; color: var(--brand); font-weight: 600; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .tile { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: grid; gap: 2px; }
+  .tile b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+  .tile small { font-size: .72rem; color: var(--muted); }
+  .up, .tile small.up { color: var(--good, #1f8a4c); font-weight: 600; }
+  .gbars { list-style: none; padding: 0; margin: 8px 0 0; }
+  .gbars li { display: grid; grid-template-columns: 48px 1fr 64px; align-items: center; gap: 8px; padding: 3px 0; font-size: .82rem; }
+  .gbar { position: relative; height: 14px; border-radius: 4px; background: color-mix(in srgb, #2a78d6 22%, var(--card)); overflow: hidden; }
+  .gbar i { position: absolute; inset: 0 auto 0 0; background: #2a78d6; border-radius: 4px; }
+  .gbars .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .gkey { display: flex; gap: 12px; font-size: .75rem; color: var(--muted); margin-top: 6px; }
+  .gkey i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+  .lifts li { display: flex; justify-content: space-between; padding: 5px 0; border-top: 1px solid var(--line); font-size: .88rem; }
+  .lifts { list-style: none; padding: 0; margin: 6px 0 0; }
+  .sec-h { display: flex; justify-content: space-between; align-items: baseline; margin-top: 14px; }
+  .note-pill { font-size: .72rem; background: #fff3cd; color: #6b5200; border-radius: 999px; padding: 2px 8px; }
+</style></head>
+<body>
+
+<!-- SCREEN 1: log a workout -->
+<section class="screen" id="s1">
+  <h2 class="brief-title">🏋︎ Train</h2>
+  <div class="card">
+    <div class="eyebrow">＋ Log a workout · Today</div>
+    <div class="acts">
+      <button class="act"><span>🏋️</span>Lifting</button>
+      <button class="act on"><span>🔥</span>Hot yoga</button>
+      <button class="act"><span>🏃</span>Run</button>
+      <button class="act"><span>🚴</span>Bike</button>
+      <button class="act"><span>🧗</span>Climbing</button>
+      <button class="act"><span>✨</span>Other</button>
+    </div>
+    <div class="fields">
+      <label>Minutes<input type="number" value="60"></label>
+      <label>Intensity<select><option>Hard</option></select></label>
+      <label>Where<input value="Movement SV"></label>
+    </div>
+    <div class="row end" style="margin-top:10px"><button>Save hot yoga · ~420 kcal</button></div>
+    <p class="small muted" style="margin-bottom:0">Run and bike also ask for <b>distance</b> (mi) so the stats can show your pace and weekly miles.</p>
+  </div>
+  <div class="card">
+    <div class="eyebrow">Today</div>
+    <ul class="done-list">
+      <li><span>🏃 Run · 4.1 mi · 36 min</span><span class="muted">8:47 /mi</span></li>
+      <li><span>🔥 Hot yoga · 60 min</span><span class="muted">~420 kcal</span></li>
+      <li><span>🧗 Bouldering · 14 attempts · 6 sends</span><span class="muted">top V5</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- SCREEN 2: the climbing bar -->
+<section class="screen" id="s2">
+  <h2 class="brief-title">🧗 Climbing session</h2>
+  <div class="card">
+    <div class="row between" style="margin-top:0"><div class="eyebrow">Today · Movement Santa Clara</div><span class="small muted">⏱ 90 min</span></div>
+    <div class="seg full"><button class="on">🪨 Bouldering</button><button>🧗 Top rope</button><button>🪢 Lead</button></div>
+    <ul class="grade-rows">
+      <li class="hdr"><span>Grade</span><span>Attempts</span><span>Sends ✓</span></li>
+      <li><span class="g">V4</span><span class="cnt"><button>−</button><b>5</b><button>+</button></span><span class="cnt send"><button>−</button><b>4</b><button>+</button></span></li>
+      <li><span class="g">V5</span><span class="cnt"><button>−</button><b>6</b><button>+</button></span><span class="cnt send"><button>−</button><b>2</b><button>+</button></span></li>
+      <li><span class="g">V6</span><span class="cnt"><button>−</button><b>3</b><button>+</button></span><span class="cnt send"><button>−</button><b>0</b><button>+</button></span></li>
+    </ul>
+    <div class="more-grades">＋ Other grades (V0–V3, V7+)</div>
+    <div class="row end" style="margin-top:10px"><button>Save session · 14 attempts, 6 sends</button></div>
+  </div>
+  <div class="card">
+    <div class="eyebrow">Lead / top rope look like this</div>
+    <div class="seg full"><button>🪨 Bouldering</button><button>🧗 Top rope</button><button class="on">🪢 Lead</button></div>
+    <ul class="grade-rows">
+      <li class="hdr"><span>Grade</span><span>Attempts</span><span>Sends ✓</span></li>
+      <li><span class="g">5.10a</span><span class="cnt"><button>−</button><b>2</b><button>+</button></span><span class="cnt send"><button>−</button><b>2</b><button>+</button></span></li>
+      <li><span class="g">5.10b</span><span class="cnt"><button>−</button><b>1</b><button>+</button></span><span class="cnt send"><button>−</button><b>1</b><button>+</button></span></li>
+      <li><span class="g">5.10c</span><span class="cnt"><button>−</button><b>2</b><button>+</button></span><span class="cnt send"><button>−</button><b>1</b><button>+</button></span></li>
+      <li><span class="g">5.10d</span><span class="cnt"><button>−</button><b>1</b><button>+</button></span><span class="cnt send"><button>−</button><b>0</b><button>+</button></span></li>
+      <li><span class="g">5.11a</span><span class="cnt"><button>−</button><b>1</b><button>+</button></span><span class="cnt send"><button>−</button><b>0</b><button>+</button></span></li>
+      <li><span class="g">5.11b+</span><span class="small muted">tap to show</span><span></span></li>
+    </ul>
+    <p class="small muted" style="margin-bottom:0">One session can mix all three — switch the bar and keep counting. Sends are optional; attempts alone are fine.</p>
+  </div>
+</section>
+
+<!-- SCREEN 3: weekly / monthly progress -->
+<section class="screen" id="s3">
+  <h2 class="brief-title">📈 Progress</h2>
+  <div class="card">
+    <div class="row between" style="margin-top:0"><div class="seg"><button>This week</button><button class="on">October</button></div><span class="small muted">vs September</span></div>
+
+    <div class="sec-h"><b>🏋️ Lifting</b><span class="small muted">11 sessions</span></div>
+    <div class="tiles">
+      <div class="tile"><small>Sets</small><b>196</b><small class="up">+18</small></div>
+      <div class="tile"><small>Volume</small><b>148k lb</b><small class="up">+9%</small></div>
+      <div class="tile"><small>PRs</small><b>3</b><small>est. 1RM</small></div>
+    </div>
+    <ul class="lifts">
+      <li><span>Squat · est. 1RM</span><span><b>245</b> <small class="up">+10</small></span></li>
+      <li><span>Bench · est. 1RM</span><span><b>185</b> <small class="up">+5</small></span></li>
+      <li><span>Deadlift · est. 1RM</span><span><b>295</b> <small class="muted">±0</small></span></li>
+    </ul>
+
+    <div class="sec-h"><b>🏃 Cardio</b><span class="small muted">14 sessions</span></div>
+    <div class="tiles">
+      <div class="tile"><small>Run</small><b>38.2 mi</b><small class="up">8:52 /mi avg</small></div>
+      <div class="tile"><small>Bike</small><b>112 mi</b><small>4 rides</small></div>
+      <div class="tile"><small>Hot yoga</small><b>6</b><small>classes · 6 h</small></div>
+    </div>
+
+    <div class="sec-h"><b>🧗 Climbing</b><span class="small muted">7 sessions · top send V5 · 5.10c</span></div>
+    <div class="small muted" style="margin-top:6px">Bouldering — sends of attempts</div>
+    <ul class="gbars">
+      <li><b>V4</b><span class="gbar"><i style="width:80%"></i></span><span class="n">16 / 20</span></li>
+      <li><b>V5</b><span class="gbar"><i style="width:37%"></i></span><span class="n">7 / 19</span></li>
+      <li><b>V6</b><span class="gbar"><i style="width:9%"></i></span><span class="n">1 / 11</span></li>
+    </ul>
+    <div class="small muted" style="margin-top:8px">Lead</div>
+    <ul class="gbars">
+      <li><b>5.10a</b><span class="gbar"><i style="width:100%"></i></span><span class="n">5 / 5</span></li>
+      <li><b>5.10c</b><span class="gbar"><i style="width:50%"></i></span><span class="n">3 / 6</span></li>
+      <li><b>5.11a</b><span class="gbar"><i style="width:0%"></i></span><span class="n">0 / 3</span></li>
+    </ul>
+    <div class="gkey"><span><i style="background:#2a78d6"></i>Sent</span><span><i style="background:color-mix(in srgb,#2a78d6 22%,#fff)"></i>Attempted</span><span>Top rope below ▾</span></div>
+    <p class="small" style="margin:10px 0 0">💪 First V6 send this month, and V5 send rate up from 22% to 37%.</p>
+  </div>
+</section>
+</body></html>
