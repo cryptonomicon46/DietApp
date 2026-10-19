@@ -1,6 +1,6 @@
-# OurPawMili
+# OurPawmily
 
-**One shared app for a couple and their dogs.** OurPawMili keeps the everyday life of a two-person household with dogs in one place: who fed and walked the dogs, the dogs' health records, a shared calendar, notes and plans for each other, and each person's own food and training. It runs in the phone's browser (add it to the Home Screen and it works like an app), needs no account, and keeps the two phones in step through a private phrase only the two of you know.
+**One shared app for a couple and their dogs.** OurPawmily keeps the everyday life of a two-person household with dogs in one place: who fed and walked the dogs, the dogs' health records, a shared calendar, notes and plans for each other, and each person's own food and training. It runs in the phone's browser (add it to the Home Screen and it works like an app), needs no account, and keeps the two phones in step through a private phrase only the two of you know.
 
 ## Why it's useful for a family with dogs
 

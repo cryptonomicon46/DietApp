@@ -12,7 +12,7 @@ so the app gets Garmin data two other ways:
    *Settings → Connected Apps → Strava*. Every Garmin activity then lands in
    Strava, and this worker reads it from there (including calories).
 2. **CSV import (no setup):** Garmin Connect website → *Activities → All
-   Activities → Export CSV*, then in OurPawMili tap *Devices → Import Garmin CSV*.
+   Activities → Export CSV*, then in OurPawmily tap *Devices → Import Garmin CSV*.
 
 ## Household sharing (two phones)
 

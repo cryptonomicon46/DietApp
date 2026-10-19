@@ -103,7 +103,7 @@ export function renderHousehold() {
 }
 
 async function share(code) {
-  const text = `Our new OurPawMili household code. Tap to switch (open it in the browser you use for OurPawMili): ${linkFor(code)}\nOr paste this code when the app asks: ${prettyCode(code)}`;
+  const text = `Our new OurPawmily household code. Tap to switch (open it in the browser you use for OurPawmily): ${linkFor(code)}\nOr paste this code when the app asks: ${prettyCode(code)}`;
   try {
     if (navigator.share) await navigator.share({ text });
     else { await navigator.clipboard.writeText(text); msg = 'Copied — paste it in a private message.'; renderHousehold(); }
