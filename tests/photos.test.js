@@ -11,3 +11,16 @@ test('progress photos: first, middle and latest of the most common pose, or the 
   const starred = list.map((p) => (p.id === 'b' || p.id === 'd' ? { ...p, star: true } : p));
   assert.deepEqual(pickCompare(starred).map((p) => p.id), ['b', 'd']);
 });
+
+test('photos for a shared summary: the period, else the program, flagged as outside', async () => {
+  const { photosFor } = await import('../js/photos.js');
+  const ph = (date, pose = 'front') => ({ id: date, date, pose, at: 0 });
+  const all = [ph('2026-07-01'), ph('2026-08-01'), ph('2026-09-01'), ph('2026-10-13'), ph('2026-10-16')];
+  const week = photosFor(all, '2026-10-12', '2026-10-18', '2026-07-01');
+  assert.deepEqual(week.list.map((p) => p.date), ['2026-10-13', '2026-10-16']);
+  assert.equal(week.outside, false);
+  const day = photosFor(all, '2026-10-16', '2026-10-16', '2026-07-01');
+  assert.deepEqual(day.list.map((p) => p.date), ['2026-07-01', '2026-09-01', '2026-10-16']);
+  assert.equal(day.outside, true);
+  assert.deepEqual(photosFor([], '2026-10-01', '2026-10-18').list, []);
+});

@@ -1,7 +1,7 @@
 // 📸 Progress photos. Kept ONLY on this phone (IndexedDB): never synced, never sent to the
 // connector, not in backups — body photos are private. Shown on Food › Weight and in the
-// weekly check-in, with a side-by-side of the first, middle and latest (or the ones you pick),
-// which can be saved or shared as one image.
+// weekly check-in, with a side-by-side of the first, middle and latest (or the ones you pick).
+// 📤 Share progress sends a summary with or without them — photos leave the phone only then.
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const isoDate = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -22,6 +22,15 @@ export function pickCompare(photos, from = '', to = '9999', pose = null) {
   if (list.length <= 3) return list;
   return [list[0], list[Math.floor((list.length - 1) / 2)], list[list.length - 1]];
 }
+// Photos to go with a shared progress summary for [from, to]: that period's, or — when it has
+// fewer than two — the program's / all of them (outside: true, so the summary can say so).
+export function photosFor(photos, from, to, programStart = '') {
+  const inPeriod = pickCompare(photos, from, to);
+  if (inPeriod.length >= 2) return { list: inPeriod, outside: false };
+  let list = pickCompare(photos, programStart, to);
+  if (list.length < 2) list = pickCompare(photos);
+  return { list, outside: list.some((p) => p.date < from || p.date > to) };
+}
 
 // ---------- storage (this phone only) ----------
 let dbp = null;
@@ -34,6 +43,7 @@ const db = () => (dbp ||= new Promise((res, rej) => {
 const tx = async (mode, fn) => { const d = await db(); return new Promise((res, rej) => { const t = d.transaction('photos', mode); const q = fn(t.objectStore('photos')); t.oncomplete = () => res(q?.result); t.onerror = () => rej(t.error); }); };
 let cache = null; // [{id, owner, date, pose, star, at, blob}]
 export async function allPhotos(owner) {
+  if (!owner) return [];
   cache ||= (await tx('readonly', (s) => s.getAll()).catch(() => [])) || [];
   return cache.filter((p) => p.owner === owner);
 }
@@ -80,8 +90,21 @@ export async function compareImage(list, weightOn, title) {
   return new Promise((res) => c.toBlob(res, 'image/jpeg', 0.9));
 }
 
+// Images stacked top to bottom at one width (a progress poster with the photos under it).
+export async function stackImages(blobs, width = 1080) {
+  const bmps = await Promise.all(blobs.filter(Boolean).map((b) => createImageBitmap(b)));
+  const hs = bmps.map((b) => Math.round(b.height * (width / b.width)));
+  const c = document.createElement('canvas');
+  c.width = width; c.height = hs.reduce((a, h) => a + h, 0);
+  const g = c.getContext('2d');
+  let y = 0;
+  bmps.forEach((b, i) => { g.drawImage(b, 0, y, width, hs[i]); y += hs[i]; });
+  return new Promise((res) => c.toBlob(res, 'image/jpeg', 0.9));
+}
+export const photoTitle = (list) => `${fmt(list[0].date)} → ${fmt(list[list.length - 1].date)}`;
+
 // ---------- UI ----------
-let ctx = { owner: () => null, weightOn: () => null, programStart: () => '', deliver: async () => '' };
+let ctx = { owner: () => null, weightOn: () => null, programStart: () => '' };
 let pose = 'front';
 let phDate = isoDate(); // older photos can be added with their own date
 let showAll = false;
@@ -107,8 +130,8 @@ export async function renderPhotos() {
   if (cmp.length < 2) cmp = pickCompare(photos);
   if (full) {
     const list = [...photos].sort((a, b) => b.date.localeCompare(a.date) || b.at - a.at);
-    full.innerHTML = `<div class="row between" style="margin-top:0"><h2 style="margin:0">📸 Progress photos</h2>${cmp.length >= 2 ? '<button type="button" class="ghost small" data-phshare>Share side-by-side</button>' : ''}</div>
-      <p class="small muted">Only on this phone — never synced or uploaded. ${photos.length ? 'Tap ☆ to pick which ones to compare (up to 3).' : ''}</p>
+    full.innerHTML = `<div class="row between" style="margin-top:0"><h2 style="margin:0">📸 Progress photos</h2><button type="button" class="ghost small" data-shareprogress>📤 Share progress</button></div>
+      <p class="small muted">Only on this phone — never synced or uploaded; they leave it only if you share them. ${photos.length ? 'Tap ☆ to pick which ones to compare (up to 3).' : ''}</p>
       ${compareStrip(cmp, ctx.weightOn)}
       ${addRow()}
       ${list.length ? `<div class="ph-grid">${list.slice(0, showAll ? 200 : 9).map((p) => `<figure class="${p.star ? 'star' : ''}"><img src="${urlOf(p)}" alt="${esc(POSES[p.pose] || '')} ${fmt(p.date)}"><figcaption>${fmt(p.date)} · ${esc(POSES[p.pose] || '')}</figcaption>
@@ -141,12 +164,6 @@ export function initPhotos(opts) {
       if (!confirm('Delete this photo from this phone?')) return;
       await remove(d.phdel);
       if (urls.has(d.phdel)) { URL.revokeObjectURL(urls.get(d.phdel)); urls.delete(d.phdel); }
-    } else if (d.phshare != null) {
-      const mine = await allPhotos(ctx.owner());
-      let list = pickCompare(mine, ctx.programStart() || '', isoDate());
-      if (list.length < 2) list = pickCompare(mine);
-      const blob = await compareImage(list, ctx.weightOn, `${fmt(list[0].date)} → ${fmt(list[list.length - 1].date)}`);
-      msg = await ctx.deliver(blob, `progress-${isoDate()}.jpg`);
     } else return;
     renderPhotos();
   });

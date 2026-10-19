@@ -156,14 +156,14 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 - **Stats:** meals on target, deficit and protein days, and workouts over 7/30/90/365 days.
 - **Export data:** a zip of CSVs (meals, days, activities, lifting sessions and sets, weigh-ins, check-ins).
 - **Backup / Restore:** everything as one file.
-- **📤 Share…:** the day's meals, your combos or your progress, as text, a poster image or CSV.
+- **📤 Share…:** the day's meals, your combos or your progress, as text, a poster image or CSV. Progress can be shared **📸 with photos** (your first, middle and latest progress photos side by side — under the poster, or as one image alongside the text) or **without photos**.
 
 **🩻 Body composition (DEXA)** (Weight page, under the graph): add each DEXA scan — past ones too — with weight, body fat %, fat mass, lean mass, and optionally bone mass and visceral fat (VAT). Missing numbers are worked out (fat from weight × body fat %; lean = weight − fat − bone).
 - Tiles for the latest body fat %, fat mass and lean mass with the change since your first scan (green when fat goes down and lean goes up), and a one-line summary of the journey.
 - Four small charts on the same timeline: **Weight** (scan weights over your 7-day average weigh-ins), **Body fat %**, **Fat mass** and **Lean mass**; tap a dot for its value. Scan days are marked on the weight graph above.
 - **All scans** table with scan-to-scan changes; edit or remove a scan. Scans sync, back up, and export as `dexa_scans.csv`.
 
-**📸 Progress photos** (Weight page, and in the weekly check-in): add a photo (front, side or back; today or an earlier date). The **first, middle and latest** of the program show side by side with their dates and weights — or tap ☆ on up to three to compare those — and **Share side-by-side** makes one image to save or send. Photos stay **only on that phone**: never synced, uploaded or included in backups.
+**📸 Progress photos** (Weight page, and in the weekly check-in): add a photo (front, side or back; today or an earlier date). The **first, middle and latest** of the program show side by side with their dates and weights — or tap ☆ on up to three to compare those — and **📤 Share progress** sends your progress summary with or without them. Photos stay **only on that phone**: never synced, uploaded or included in backups; they leave it only when you choose *With photos* and share.
 
 **Groceries.** A weekly list built from the plan, grouped by store, with checkboxes.
 

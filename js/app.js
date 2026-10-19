@@ -23,7 +23,7 @@ import { renderHousehold, initHousehold } from './household.js';
 import { renderRhythm, initRhythm } from './rhythm.js';
 import { renderDexa, initDexa, allScans } from './dexa.js';
 import { healthDay, strongStreak, cheerFor, personData, lowerCheer } from './cheer.js';
-import { renderPhotos, initPhotos } from './photos.js';
+import { renderPhotos, initPhotos, allPhotos, photosFor, compareImage, stackImages, photoTitle } from './photos.js';
 import { renderClimb, initClimb, openClimb, climbSummary, renderProgress, initProgress, openProgress } from './climb.js';
 import { buildTables, toCsv, summary, weekRows } from './analytics.js';
 import { icsCalendar } from './calendar.js';
@@ -371,7 +371,8 @@ function dayForSharing() {
 // ---- the Share panel ----
 const SHARE_WHAT = { day: "This day's meals", combos: 'My combos', progress: 'My progress' };
 const SHARE_FORMAT = { text: 'Text', poster: 'Poster', csv: 'CSV' };
-const share = { what: 'day', range: 'week', format: 'text' };
+const SHARE_PHOTOS = { without: 'Without photos', with: '📸 With photos' };
+const share = { what: 'day', range: 'week', format: 'text', photos: 'without' };
 const MEAL_NAMES = { breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Snack', dinner: 'Dinner' };
 
 function comboGroups() {
@@ -404,6 +405,7 @@ function dayText(d) {
 }
 // What the panel would share right now: {text?, blob?, filename}.
 async function shareContent(preview = false) {
+  share.photoNote = '';
   const name = firstName();
   const stamp = isoDate();
   if (share.what === 'day') {
@@ -426,7 +428,20 @@ async function shareContent(preview = false) {
     return { blob: preview ? null : await drawPoster(poster), filename: `meal-combos-${stamp}.png`, text: `A poster of your ${count} combos.` };
   }
   const r = progressReport();
-  if (share.format === 'text') return { text: reportText(r, name) };
+  // Progress photos (this phone only) go along only when "With photos" is picked.
+  let pics = null;
+  if (share.photos === 'with' && share.format !== 'csv') {
+    const found = photosFor(await allPhotos(sync.readOnly() ? null : ownerId()), r.from, r.to, programStartDay() || '');
+    pics = found.list.length ? found : null;
+    const when = pics ? pics.list.map((p) => dateOf(p.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })).join(', ') : '';
+    share.photoNote = !pics ? 'No progress photos on this phone yet — add them on Food › Weight.'
+      : `${pics.list.length} photo${pics.list.length > 1 ? 's' : ''} side by side: ${when}${pics.outside ? ' (fewer than two in this period, so from your whole program)' : ''}. Your ★ starred ones are used if you picked any.`;
+  } else share.photoNote = '';
+  const photoBlob = async () => (pics ? compareImage(pics.list, (d) => state.weights.find((w) => w.date === d)?.weight ?? null, photoTitle(pics.list)) : null);
+  if (share.format === 'text') {
+    const text = reportText(r, name);
+    return pics ? { text, withText: true, blob: preview ? null : await photoBlob(), filename: `progress-photos-${r.from}-to-${r.to}.jpg` } : { text };
+  }
   if (share.format === 'csv') return { blob: new Blob([toCsv(reportCsvRows(r))], { type: 'text/csv' }), filename: `progress-${r.from}-to-${r.to}.csv`, text: `${r.totalDays} days, one row each: macros eaten, targets, weigh-ins and meals.` };
   const weekly = r.totalDays > 14;
   const fmt = (d) => dateOf(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
@@ -434,22 +449,35 @@ async function shareContent(preview = false) {
     ? weeklyRows(r).map((w) => ({ label: w.label, kcal: w.logged ? w.kcal : null, p: w.p, f: w.f, c: w.c, note: w.logged ? `${w.logged} of ${w.of} days logged` : '' }))
     : r.days.map((d) => ({ label: fmt(d.date), kcal: d.logged ? d.kcal : null, p: d.p, f: d.f, c: d.c, note: d.meals.map((m) => m.title).concat(d.extras).join(' · ') }));
   const heading = `${name ? `${name}'s ` : 'My '}${(PHASE_NAMES[r.phase] || 'Cut').toLowerCase()}`;
-  return { blob: preview ? null : await drawReportPoster({ heading, period: rangeTitle(r), report: r, rows, weekly }), filename: `progress-${r.from}-to-${r.to}.png`,
-    text: `A poster of ${rangeTitle(r)}: average macros, your weight chart and ${weekly ? 'week-by-week' : 'day-by-day'} totals.` };
+  const poster = async () => {
+    const img = await drawReportPoster({ heading, period: rangeTitle(r), report: r, rows, weekly });
+    return pics ? stackImages([img, await photoBlob()]) : img;
+  };
+  return { blob: preview ? null : await poster(), filename: `progress-${r.from}-to-${r.to}.${pics ? 'jpg' : 'png'}`,
+    text: `A poster of ${rangeTitle(r)}: average macros, your weight chart and ${weekly ? 'week-by-week' : 'day-by-day'} totals${pics ? `, with your progress photos at the bottom` : ''}.` };
 }
 function renderSharePanel() {
   const seg = (el, options, value, field) => { $(el).innerHTML = Object.entries(options).map(([k, v]) => `<button type="button" class="${k === value ? 'on' : ''}" data-${field}="${k}">${esc(v.label || v)}</button>`).join(''); };
   seg('#shareWhat', SHARE_WHAT, share.what, 'what');
   seg('#shareRange', RANGES, share.range, 'range');
   seg('#shareFormat', SHARE_FORMAT, share.format, 'format');
+  seg('#sharePhotos', SHARE_PHOTOS, share.photos, 'photos');
   $('#shareRangeWrap').hidden = share.what !== 'progress';
+  $('#sharePhotosWrap').hidden = share.what !== 'progress' || share.format === 'csv';
   $('#shareMsg').textContent = '';
-  shareContent(true).then((c) => { $('#sharePreview').textContent = c.text || ''; $('#shareGo').disabled = !!c.empty; });
-  $('#shareGo').textContent = share.format === 'text' ? 'Share text' : share.format === 'poster' ? 'Share poster' : 'Download CSV';
+  shareContent(true).then((c) => {
+    $('#sharePreview').textContent = c.text || '';
+    $('#shareGo').disabled = !!c.empty;
+    $('#sharePhotosNote').textContent = share.photoNote || '';
+    $('#sharePhotosNote').hidden = !share.photoNote;
+  });
+  const withPics = share.what === 'progress' && share.photos === 'with' && share.format !== 'csv';
+  $('#shareGo').textContent = share.format === 'text' ? (withPics ? 'Share text + photos' : 'Share text') : share.format === 'poster' ? 'Share poster' : 'Download CSV';
 }
 $('#shareDialog').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-what], [data-range], [data-format]');
+  const b = e.target.closest('[data-what], [data-range], [data-format], [data-photos]');
   if (!b) return;
+  if (b.dataset.photos) share.photos = b.dataset.photos;
   if (b.dataset.what) share.what = b.dataset.what;
   if (b.dataset.range) share.range = b.dataset.range;
   if (b.dataset.format) share.format = b.dataset.format;
@@ -461,6 +489,12 @@ $('#shareGo').onclick = async () => {
   msg.textContent = 'Preparing…';
   try {
     const c = await shareContent();
+    if (c.blob && c.withText) {
+      // Text + photos: one share sheet on phones; elsewhere save the image and copy the text.
+      const shared = await deliver(c.blob, c.filename, c.text);
+      if (shared.startsWith('Saved')) { await navigator.clipboard.writeText(c.text).catch(() => {}); msg.textContent = `${shared} The summary is copied — paste it with the photo.`; } else msg.textContent = shared;
+      return;
+    }
     if (c.blob) { msg.textContent = await deliver(c.blob, c.filename); return; }
     if (navigator.share && /iphone|ipad|android/i.test(navigator.userAgent)) {
       try { await navigator.share({ text: c.text }); msg.textContent = 'Shared.'; return; } catch (err) { if (err.name === 'AbortError') { msg.textContent = 'Cancelled.'; return; } }
@@ -2796,10 +2830,10 @@ $('#statsRange').onchange = renderStats;
 const fileSlug = () => `ourpawmily-${(state.profile?.name || activeProfile().name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${isoDate()}`;
 
 // Share sheet on phones (Save to Files, AirDrop, email…), plain download elsewhere.
-async function deliver(blob, filename) {
+async function deliver(blob, filename, text = '') {
   const file = new File([blob], filename, { type: blob.type });
   if (navigator.canShare?.({ files: [file] }) && /iphone|ipad|android/i.test(navigator.userAgent)) {
-    try { await navigator.share({ files: [file], title: filename }); return 'Shared.'; } catch (err) { if (err.name === 'AbortError') return 'Cancelled.'; }
+    try { await navigator.share(text ? { files: [file], text } : { files: [file], title: filename }); return 'Shared.'; } catch (err) { if (err.name === 'AbortError') return 'Cancelled.'; }
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -2960,7 +2994,13 @@ initPhotos({
   owner: () => (sync.readOnly() ? null : ownerId()),
   weightOn: (d) => state.weights.find((w) => w.date === d)?.weight ?? null,
   programStart: () => (state.profile ? programStartDay() : ''),
-  deliver: (blob, name) => deliver(blob, name),
+});
+// 📤 Share progress from Food › Weight: the Share panel, set to your progress.
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-shareprogress]') || !state.profile) return;
+  Object.assign(share, { what: 'progress', range: 'program', photos: 'with' });
+  renderSharePanel();
+  $('#shareDialog').showModal();
 });
 updateCalBadge();
 updateNotesBadge();

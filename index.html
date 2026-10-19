@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawmily">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=188">
+  <link rel="stylesheet" href="styles.css?v=190">
 </head>
 <body>
   <header class="top">
@@ -353,6 +353,11 @@
     </div>
     <div class="small muted">As</div>
     <div class="seg share-seg" id="shareFormat"></div>
+    <div id="sharePhotosWrap" hidden>
+      <div class="small muted">Progress photos</div>
+      <div class="seg share-seg" id="sharePhotos"></div>
+      <p class="small muted" id="sharePhotosNote" hidden></p>
+    </div>
     <pre class="share-preview" id="sharePreview"></pre>
     <p class="small" id="shareMsg"></p>
     <div class="row end">
@@ -403,43 +408,43 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/activity.js": "./js/activity.js?v=188",
-    "./js/adopt.js": "./js/adopt.js?v=188",
-    "./js/analytics.js": "./js/analytics.js?v=188",
-    "./js/app.js": "./js/app.js?v=188",
-    "./js/bodycomp.js": "./js/bodycomp.js?v=188",
-    "./js/brief.js": "./js/brief.js?v=188",
-    "./js/briefTab.js": "./js/briefTab.js?v=188",
-    "./js/calTab.js": "./js/calTab.js?v=188",
-    "./js/calendar.js": "./js/calendar.js?v=188",
-    "./js/cheer.js": "./js/cheer.js?v=188",
-    "./js/climb.js": "./js/climb.js?v=188",
-    "./js/commands.js": "./js/commands.js?v=188",
-    "./js/devices.js": "./js/devices.js?v=188",
-    "./js/dexa.js": "./js/dexa.js?v=188",
-    "./js/dogs.js": "./js/dogs.js?v=188",
-    "./js/foods.js": "./js/foods.js?v=188",
-    "./js/household.js": "./js/household.js?v=188",
-    "./js/lift.js": "./js/lift.js?v=188",
-    "./js/lifting.js": "./js/lifting.js?v=188",
-    "./js/notes.js": "./js/notes.js?v=188",
-    "./js/photos.js": "./js/photos.js?v=188",
-    "./js/plan.js": "./js/plan.js?v=188",
-    "./js/plans.js": "./js/plans.js?v=188",
-    "./js/poster.js": "./js/poster.js?v=188",
-    "./js/progress.js": "./js/progress.js?v=188",
-    "./js/research.js": "./js/research.js?v=188",
-    "./js/review.js": "./js/review.js?v=188",
-    "./js/rewards.js": "./js/rewards.js?v=188",
-    "./js/rhythm.js": "./js/rhythm.js?v=188",
-    "./js/share.js": "./js/share.js?v=188",
-    "./js/shows.js": "./js/shows.js?v=188",
-    "./js/storage.js": "./js/storage.js?v=188",
-    "./js/sync.js": "./js/sync.js?v=188",
-    "./js/zip.js": "./js/zip.js?v=188"
+    "./js/activity.js": "./js/activity.js?v=190",
+    "./js/adopt.js": "./js/adopt.js?v=190",
+    "./js/analytics.js": "./js/analytics.js?v=190",
+    "./js/app.js": "./js/app.js?v=190",
+    "./js/bodycomp.js": "./js/bodycomp.js?v=190",
+    "./js/brief.js": "./js/brief.js?v=190",
+    "./js/briefTab.js": "./js/briefTab.js?v=190",
+    "./js/calTab.js": "./js/calTab.js?v=190",
+    "./js/calendar.js": "./js/calendar.js?v=190",
+    "./js/cheer.js": "./js/cheer.js?v=190",
+    "./js/climb.js": "./js/climb.js?v=190",
+    "./js/commands.js": "./js/commands.js?v=190",
+    "./js/devices.js": "./js/devices.js?v=190",
+    "./js/dexa.js": "./js/dexa.js?v=190",
+    "./js/dogs.js": "./js/dogs.js?v=190",
+    "./js/foods.js": "./js/foods.js?v=190",
+    "./js/household.js": "./js/household.js?v=190",
+    "./js/lift.js": "./js/lift.js?v=190",
+    "./js/lifting.js": "./js/lifting.js?v=190",
+    "./js/notes.js": "./js/notes.js?v=190",
+    "./js/photos.js": "./js/photos.js?v=190",
+    "./js/plan.js": "./js/plan.js?v=190",
+    "./js/plans.js": "./js/plans.js?v=190",
+    "./js/poster.js": "./js/poster.js?v=190",
+    "./js/progress.js": "./js/progress.js?v=190",
+    "./js/research.js": "./js/research.js?v=190",
+    "./js/review.js": "./js/review.js?v=190",
+    "./js/rewards.js": "./js/rewards.js?v=190",
+    "./js/rhythm.js": "./js/rhythm.js?v=190",
+    "./js/share.js": "./js/share.js?v=190",
+    "./js/shows.js": "./js/shows.js?v=190",
+    "./js/storage.js": "./js/storage.js?v=190",
+    "./js/sync.js": "./js/sync.js?v=190",
+    "./js/zip.js": "./js/zip.js?v=190"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=188"></script>
+  <script type="module" src="js/app.js?v=190"></script>
 </body>
 </html>
