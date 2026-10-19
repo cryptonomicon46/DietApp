@@ -22,6 +22,7 @@ import { sync, newHouseholdCode, DEFAULT_CONNECTOR } from './sync.js';
 import { renderHousehold, initHousehold } from './household.js';
 import { renderRhythm, initRhythm } from './rhythm.js';
 import { renderDexa, initDexa, allScans } from './dexa.js';
+import { healthDay, strongStreak, cheerFor, personData } from './cheer.js';
 import { renderClimb, initClimb, openClimb, climbSummary, renderProgress, initProgress, openProgress } from './climb.js';
 import { buildTables, toCsv, summary, weekRows } from './analytics.js';
 import { icsCalendar } from './calendar.js';
@@ -306,7 +307,7 @@ function renderDayNav() {
     : dateOf(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   $('#dayNav').innerHTML = `
     <button type="button" class="ghost small" data-day="${shiftDay(d, -1)}" ${d <= min ? 'disabled' : ''} aria-label="Previous day">‹</button>
-    <label class="day-pick"><span>${esc(label)}</span><small>${d < today ? 'Review' : d > today ? 'Plan ahead' : 'Log your day'}</small>
+    <label class="day-pick"><span>${esc(label)}${healthDay(personData(activeProfile().id), d).strong ? ' 💪' : ''}</span><small>${d < today ? 'Review' : d > today ? 'Plan ahead' : 'Log your day'}</small>
       <input type="date" id="dayPick" value="${d}" min="${min}" max="${max}" aria-label="Pick a day"></label>
     <button type="button" class="ghost small" data-day="${shiftDay(d, 1)}" ${d >= max ? 'disabled' : ''} aria-label="Next day">›</button>
     ${d !== today ? `<button type="button" class="small today-btn" data-day="${today}">Today</button>` : ''}`;
@@ -1149,8 +1150,11 @@ function resnap(meal) {
 function eatButton(meal) {
   if (viewingFuture()) return '<div class="eat-row"><span class="small muted">Planned · you can log it on the day</span></div>';
   const e = todaysLog().meals[meal];
+  // The most recent main meal logged gets a cheer (the whole day's 💪 once all three and the weigh-in are in).
+  const day = healthDay(personData(activeProfile().id), isoDate());
+  const cheer = e && !sync.readOnly() && day.meals[day.meals.length - 1] === meal ? `<div class="cheer">${cheerFor(day, isoDate(), meal)}</div>` : '';
   return e
-    ? `<div class="eat-row"><span class="tone-good">🔒 Logged at ${e.at} · ${e.kcal} kcal</span><span class="row" style="margin-top:0">${todaysCustom()[meal]?.eatout || todaysCustom()[meal]?.prepared ? '' : `<button class="ghost small" data-savecombo>☆ Save combo</button>`}<button class="ghost small" data-uneat title="Unlock this meal to change it">Unlog to edit</button></span></div>`
+    ? `${cheer}<div class="eat-row"><span class="tone-good">🔒 Logged at ${e.at} · ${e.kcal} kcal</span><span class="row" style="margin-top:0">${todaysCustom()[meal]?.eatout || todaysCustom()[meal]?.prepared ? '' : `<button class="ghost small" data-savecombo>☆ Save combo</button>`}<button class="ghost small" data-uneat title="Unlock this meal to change it">Unlog to edit</button></span></div>`
     : `<div class="eat-row"><button class="eat" data-eat>${meal === 'snack' ? '✓ Log snack' : '✓ I ate this'}</button></div>`;
 }
 
@@ -2070,6 +2074,8 @@ function renderWeighStatus() {
     : `Not logged yet today${prev ? ` · last ${prev.weight.toFixed(1)} lb on ${fmtShort(prev.date)}` : ''}`;
   // Once today's weight is in, the card folds to one line; Change opens it again.
   if (t) $('#weighStatus').innerHTML += ' <button type="button" class="linkish small" data-weighedit>Change</button>';
+  // A word of encouragement for checking in (inline, never a pop-up).
+  if (t && !sync.readOnly()) $('#weighStatus').innerHTML += `<div class="cheer">${cheerFor({ strong: false }, today, 'weigh')}</div>`;
   $('#weighForm').classList.toggle('done', !!t);
   $('#weighForm').classList.remove('editing');
 }
@@ -2631,7 +2637,8 @@ function renderHome() {
   if (!$('#homeHello')) return;
   const name = firstName();
   $('#homeHello').innerHTML = `<div class="greeting">${name ? `${greetingWord()}, ${esc(name)}` : greetingWord()}</div>
-    <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>`;
+    <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+    ${(() => { const data = personData(ownerId() || activeProfile().id); const d = healthDay(data, isoDate()); const n = strongStreak(data, isoDate()); return d.strong || n ? `<div class="small cheer-home">💪 ${d.strong ? 'Checked in today' : 'Weigh in and log your meals to keep it going'}${n > 1 ? ` · ${n}-day streak` : ''}</div>` : ''; })()}`;
   // Dogs, calendar and notes don't need a diet profile.
   $('#homeDogs').innerHTML = homeDogs();
   $('#homeCal').innerHTML = homeCal();

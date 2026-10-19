@@ -1038,3 +1038,7 @@ details.fold[open] > summary { margin-bottom: 8px; }
 .undo-toast[hidden] { display: none; }
 .undo-toast { max-width: calc(100vw - 32px); white-space: nowrap; }
 .undo-toast span { overflow: hidden; text-overflow: ellipsis; }
+
+/* 💪 encouragement: inline, never a pop-up */
+.cheer { font-size: .85rem; color: var(--good, #1f8a4c); font-weight: 600; margin: 6px 0 2px; }
+.cheer-home { margin-top: 4px; color: var(--good, #1f8a4c); font-weight: 600; }

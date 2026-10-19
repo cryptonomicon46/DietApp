@@ -4,6 +4,7 @@
 import { PROFILES, ownerId, profileStore, seenItems, global } from './storage.js';
 import { sync, pushNow } from './sync.js';
 import { goldenDays } from './briefTab.js';
+import { strongDaysByPerson } from './cheer.js';
 import { allRhythm, momentText, momentIcon, momentFormHtml, momentFormOpen, closeMoment } from './rhythm.js';
 import { REMINDERS, REPEATS, WHO_BOTH, mergeEvents, eventsOn, upcoming, icsCalendar, googleUrl, repeatText, repeatUnit, parseIcs } from './calendar.js';
 
@@ -136,7 +137,7 @@ let note = '';
 function marksByDay() {
   const hearts = {};
   for (const e of allRhythm()) (hearts[e.date] ||= []).push(e);
-  return { hearts, dogs: goldenDays() };
+  return { hearts, dogs: goldenDays(), strong: strongDaysByPerson(`${month}-01`, `${month}-31`) };
 }
 
 function monthGrid(events, marks) {
@@ -148,13 +149,13 @@ function monthGrid(events, marks) {
     const k = `${month}-${String(i).padStart(2, '0')}`;
     const evs = eventsOn(events, k);
     cells.push(`<button type="button" class="cd ${k === selected ? 'sel' : ''} ${k === today ? 'today' : ''}" data-calday="${k}" aria-label="${k}${evs.length ? `, ${evs.length} events` : ''}">
-      <span>${i}</span><span class="dots">${evs.slice(0, 3).map((e) => `<i class="${whoClass(e.who)}"></i>`).join('')}</span>${marks.hearts[k] || marks.dogs[k]?.best ? `<span class="marks">${marks.dogs[k]?.best ? '⭐' : ''}${marks.hearts[k] ? '❤️' : ''}</span>` : ''}</button>`);
+      <span>${i}</span><span class="dots">${evs.slice(0, 3).map((e) => `<i class="${whoClass(e.who)}"></i>`).join('')}</span>${marks.hearts[k] || marks.dogs[k]?.best || marks.strong[k] ? `<span class="marks">${marks.strong[k] ? '💪' : ''}${marks.dogs[k]?.best ? '⭐' : ''}${marks.hearts[k] ? '❤️' : ''}</span>` : ''}</button>`);
   }
   const title = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   return `<div class="card">
     <div class="row between" style="margin-top:0"><button type="button" class="ghost small" data-calmonth="-1" aria-label="Previous month">‹</button><b>${title}</b><button type="button" class="ghost small" data-calmonth="1" aria-label="Next month">›</button></div>
     <div class="cal-grid month">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((x) => `<span class="cal-h">${x}</span>`).join('')}${cells.join('')}</div>
-    <div class="cal-key small muted"><i class="w-both"></i> Both <i class="w-p0"></i> ${esc(nameOf(PROFILES[0].id))} <i class="w-p1"></i> ${esc(nameOf(PROFILES[1].id))} <span class="mk">❤️ Us time</span> <span class="mk">⭐ Dogs' golden day</span></div>
+    <div class="cal-key small muted"><i class="w-both"></i> Both <i class="w-p0"></i> ${esc(nameOf(PROFILES[0].id))} <i class="w-p1"></i> ${esc(nameOf(PROFILES[1].id))} <span class="mk">❤️ Us time</span> <span class="mk">⭐ Dogs' golden day</span> <span class="mk">💪 Weigh-in + meals logged</span></div>
     ${(() => { const hearts = Object.entries(marks.hearts).filter(([d]) => d.startsWith(month)); const dates = hearts.flatMap(([, l]) => l).filter((e) => e.kind === 'date').length; const gold = Object.entries(marks.dogs).filter(([d, x]) => d.startsWith(month) && x.best).length;
       return hearts.length || gold ? `<p class="small cal-month-sum">This month: ${dates ? `❤️ ${dates} date${dates === 1 ? '' : 's'}` : ''}${dates && gold ? ' · ' : ''}${gold ? `⭐ ${gold} golden day${gold === 1 ? '' : 's'} for the dogs` : ''}</p>` : ''; })()}
   </div>`;
@@ -247,6 +248,7 @@ export function renderCal() {
   const dayDogs = marks.dogs[selected];
   const dayMarks = [
     ...dayHearts.map((e) => `<li class="mark-row">❤️ <span>${momentIcon(e) === '❤️' ? '' : `${momentIcon(e)} `}${esc(momentText(e))}</span>${e.kind === 'date' && e.place ? ` <a class="small" href="https://maps.apple.com/?q=${encodeURIComponent(e.place)}" target="_blank" rel="noopener">map</a>` : ''}<button type="button" class="linkish small" data-redit="${e.id}">✎ Edit</button></li>`),
+    ...((marks.strong[selected] || []).length ? [`<li class="mark-row">💪 <span>${marks.strong[selected].map((id) => esc(nameOf(id))).join(' & ')} checked in: weigh-in and all meals logged</span></li>`] : []),
     ...(dayDogs?.best ? [`<li class="mark-row">⭐ <span>Golden day for the dogs · ${dayDogs.outings} outing${dayDogs.outings === 1 ? '' : 's'}${dayDogs.treat ? ' + a treat' : ''}</span></li>`]
       : dayDogs?.outings ? [`<li class="mark-row muted">🐾 <span>Dogs out ${dayDogs.outings}×${dayDogs.treat ? ' + a treat' : ''}</span></li>`] : []),
   ];
