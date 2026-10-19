@@ -23,6 +23,7 @@ import { renderHousehold, initHousehold } from './household.js';
 import { renderRhythm, initRhythm } from './rhythm.js';
 import { renderDexa, initDexa, allScans } from './dexa.js';
 import { healthDay, strongStreak, cheerFor, personData } from './cheer.js';
+import { renderPhotos, initPhotos } from './photos.js';
 import { renderClimb, initClimb, openClimb, climbSummary, renderProgress, initProgress, openProgress } from './climb.js';
 import { buildTables, toCsv, summary, weekRows } from './analytics.js';
 import { icsCalendar } from './calendar.js';
@@ -1647,6 +1648,7 @@ function renderCheckin() {
         ${stat(r.tdee ? `~${r.tdee}` : '—', 'your real maintenance')}
       </div>
       <div class="row wrap ck-tools"><button type="button" class="ghost small" id="ckCsv">⇩ Week as CSV</button><button type="button" class="ghost small" id="ckClaude">📋 Copy for Claude</button><button type="button" class="ghost small" id="ckRemind">🔔 Weekly reminder</button></div>
+      <div id="ckPhotos"></div>
       <p class="small muted" id="ckToolsNote"></p>
       ${phase === 'cut' ? `<p class="small muted">Week ${win.week} of a planned ${plannedWeeks}-week cut. Cuts work best at 0.5–1% of body weight a week for about 8–12 weeks, followed by 1–2 weeks at maintenance before the next block.</p>` : ''}
       <div class="chips" role="group" aria-label="How the week felt">
@@ -1682,6 +1684,7 @@ function renderCheckin() {
         <button type="button" class="ghost" id="snoozeCheckin">Not now</button>
       </div>
     </div>`;
+  renderPhotos();
 
   el.querySelectorAll('[data-feel]').forEach((b) => b.onclick = () => { draft.feeling = b.dataset.feel; draft.choice = null; renderCheckin(); });
   $('#checkinNote').oninput = (e) => { draft.note = e.target.value; };
@@ -2032,6 +2035,7 @@ function renderWeight() {
     <div><b>${Math.max(now - state.profile.goalLb, 0).toFixed(1)}</b><span>lb to goal</span></div>`;
   drawChart();
   renderDexa(state.weights);
+  renderPhotos();
 }
 
 let chartRange = '90';
@@ -2917,6 +2921,13 @@ initClimb((c) => {
   if (state.profile) renderAll();
 });
 initProgress();
+// 📸 Progress photos stay on this phone (only the owner's, never synced).
+initPhotos({
+  owner: () => (sync.readOnly() ? null : ownerId()),
+  weightOn: (d) => state.weights.find((w) => w.date === d)?.weight ?? null,
+  programStart: () => (state.profile ? programStartDay() : ''),
+  deliver: (blob, name) => deliver(blob, name),
+});
 updateCalBadge();
 updateNotesBadge();
 // Weigh-ins said on the Lift tab ("weigh in 161.4").

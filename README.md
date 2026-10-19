@@ -161,6 +161,8 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 - Four small charts on the same timeline: **Weight** (scan weights over your 7-day average weigh-ins), **Body fat %**, **Fat mass** and **Lean mass**; tap a dot for its value. Scan days are marked on the weight graph above.
 - **All scans** table with scan-to-scan changes; edit or remove a scan. Scans sync, back up, and export as `dexa_scans.csv`.
 
+**📸 Progress photos** (Weight page, and in the weekly check-in): add a photo (front, side or back; today or an earlier date). The **first, middle and latest** of the program show side by side with their dates and weights — or tap ☆ on up to three to compare those — and **Share side-by-side** makes one image to save or send. Photos stay **only on that phone**: never synced, uploaded or included in backups.
+
 **Groceries.** A weekly list built from the plan, grouped by store, with checkboxes.
 
 **Scan.** Scan a barcode (or type it) for macros from [Open Food Facts](https://world.openfoodfacts.org), see how it fits, and add it to a meal, a snack or the grocery list.

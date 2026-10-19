@@ -1055,3 +1055,19 @@ body.meal-editing #tab-today > :not(#meals) { display: none !important; }
 .meal-sum .meal-open > .row { flex-wrap: nowrap; gap: 10px; }
 .back-bottom { display: block; width: 100%; margin: 12px 0 4px; }
 .balanced-note { color: var(--muted); margin-top: 2px; }
+
+/* 📸 Progress photos (this phone only) */
+.ph-compare { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin: 8px 0; }
+.ph-compare figure, .ph-grid figure { margin: 0; position: relative; }
+.ph-compare img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 10px; display: block; background: var(--line); }
+.ph-compare figcaption { font-size: .72rem; color: var(--muted); margin-top: 3px; }
+.ph-compare figcaption b { color: var(--ink); }
+.ph-add { align-items: center; gap: 8px; margin-top: 8px; }
+.ph-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+.ph-grid img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 8px; display: block; background: var(--line); }
+.ph-grid figure.star img { outline: 3px solid var(--brand); outline-offset: -3px; }
+.ph-grid figcaption { font-size: .68rem; color: var(--muted); }
+.ph-star, .ph-del { position: absolute; top: 4px; width: 28px; height: 28px; padding: 0; border-radius: 50%; background: rgb(0 0 0 / .45); color: #fff; border: 0; font-size: .9rem; }
+.ph-star { left: 4px; } .ph-del { right: 4px; }
+.ph-mini { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.ph-add input[type=date] { width: 9.5em; font-size: .85rem; }
