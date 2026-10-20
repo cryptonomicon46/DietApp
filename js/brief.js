@@ -300,3 +300,37 @@ export function happyMonths(days, year, month) {
   const top = Math.max(0, ...months.map((m) => m.best));
   return { months, happiest: top ? months.find((m) => m.best === top).month : null };
 }
+
+// 📞 Calling Mom in India: when a good hour there (7–10 AM or 8–10 PM IST) falls in a good
+// hour here (7:30–9:30 AM or 6–9:30 PM Pacific). Follows daylight saving on the US side.
+export const CALL = {
+  here: { tz: 'America/Los_Angeles', windows: [['07:30', '09:30'], ['18:00', '21:30']] },
+  there: { tz: 'Asia/Kolkata', windows: [['07:00', '10:00'], ['20:00', '22:00']] },
+};
+// Minutes east of UTC for a time zone at an instant.
+function tzOffset(tz, at) {
+  const s = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' }).formatToParts(at).find((p) => p.type === 'timeZoneName').value;
+  const m = s.match(/([+-])(\d\d):?(\d\d)?/);
+  return m ? (m[1] === '-' ? -1 : 1) * (+m[2] * 60 + +(m[3] || 0)) : 0;
+}
+// A wall-clock time on a date in a time zone → the instant.
+function at(tz, date, hhmm) {
+  const guess = Date.parse(`${date}T${hhmm}:00Z`);
+  return new Date(guess - tzOffset(tz, new Date(guess - tzOffset(tz, new Date(guess)) * 60000)) * 60000);
+}
+const shift = (date, n) => { const d = new Date(`${date}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+// date: the Pacific day (YYYY-MM-DD). → [{start, end}] instants, earliest first.
+export function callWindows(date, cfg = CALL) {
+  const out = [];
+  for (const [hs, he] of cfg.here.windows) {
+    const a = at(cfg.here.tz, date, hs), b = at(cfg.here.tz, date, he);
+    for (const n of [-1, 0, 1]) for (const [ts, te] of cfg.there.windows) {
+      const c = at(cfg.there.tz, shift(date, n), ts), d = at(cfg.there.tz, shift(date, n), te);
+      const s = Math.max(a, c), e = Math.min(b, d);
+      if (e - s >= 15 * 60000) out.push({ start: new Date(s), end: new Date(e) });
+    }
+  }
+  return out.sort((x, y) => x.start - y.start);
+}
+// "8:30 AM" in a time zone.
+export const clockIn = (tz, d) => d.toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' }).replace(':00', '');

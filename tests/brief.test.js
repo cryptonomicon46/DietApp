@@ -179,3 +179,12 @@ test('a walk or park trip done together gives each of you a point, but counts as
   const day = dogDays(recs)['2026-10-17'];
   assert.equal(day.outings, 3, 'together = one outing');
 });
+
+test('call Mom in India: good hours there inside good hours here, through daylight saving', async () => {
+  const { callWindows, clockIn } = await import('../js/brief.js');
+  const show = (w) => w.map((x) => `${clockIn('America/Los_Angeles', x.start)}–${clockIn('America/Los_Angeles', x.end)} (${clockIn('Asia/Kolkata', x.start)}–${clockIn('Asia/Kolkata', x.end)})`);
+  // October (PDT, India 12½ h ahead): her 8–10 PM is our 7:30–9:30 AM; her 7–10 AM is our 6:30–9:30 PM.
+  assert.deepEqual(show(callWindows('2026-10-20')), ['7:30 AM–9:30 AM (8 PM–10 PM)', '6:30 PM–9:30 PM (7 AM–10 AM)']);
+  // December (PST, 13½ h ahead): the windows shrink to 7:30–8:30 AM and 6–8:30 PM.
+  assert.deepEqual(show(callWindows('2026-12-15')), ['7:30 AM–8:30 AM (9 PM–10 PM)', '6 PM–8:30 PM (7:30 AM–10 AM)']);
+});
