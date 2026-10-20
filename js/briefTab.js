@@ -125,9 +125,9 @@ function dayPlan(hourly, from, end, today, late = false) {
     const t = new Date(today); t.setHours(hh, mm, 0, 0);
     items.push({ t, label: `${CLASS_TYPES[c.type]?.split(' ')[0] || '🧗'} ${c.name}`, note: GYMS[c.gym]?.short });
   }
-  // 📞 Good times to call Mom in India (still to come today).
+  // 📞 Good times to call Mom in India (still to come today) — only on the phone of the profile in CALL.who.
   const day = new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  for (const w of callWindows(day)) {
+  for (const w of ownerId() === CALL.who ? callWindows(day) : []) {
     if (w.end <= new Date()) continue;
     items.push({ t: w.start, label: '📞 Call Mom', temp: `${clockIn(CALL.there.tz, w.start).replace(new RegExp(` ${clockIn(CALL.there.tz, w.end).slice(-2)}$`), '')}–${clockIn(CALL.there.tz, w.end)} in India`, note: `until ${clock(w.end)}` });
   }

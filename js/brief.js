@@ -301,10 +301,11 @@ export function happyMonths(days, year, month) {
   return { months, happiest: top ? months.find((m) => m.best === top).month : null };
 }
 
-// 📞 Calling Mom in India: when a good hour there (7–10 AM or 8–10 PM IST) falls in a good
-// hour here (7:30–9:30 AM or 6–9:30 PM Pacific). Follows daylight saving on the US side.
+// 📞 Calling Mom in India (only on the first profile's phone): when a good hour there (7–10 AM
+// or 8–10 PM IST) falls in the morning here (7:30–9:30 AM Pacific). Follows daylight saving.
 export const CALL = {
-  here: { tz: 'America/Los_Angeles', windows: [['07:30', '09:30'], ['18:00', '21:30']] },
+  who: 'sandman',
+  here: { tz: 'America/Los_Angeles', windows: [['07:30', '09:30']] },
   there: { tz: 'Asia/Kolkata', windows: [['07:00', '10:00'], ['20:00', '22:00']] },
 };
 // Minutes east of UTC for a time zone at an instant.
