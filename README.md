@@ -61,6 +61,22 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 
 # Detailed specifications
 
+## 👨‍👩‍👧 OurPawmily Families (preview)
+
+The next version of the app, at `/family/` (also linked from 🔐 Privacy). It runs alongside the current app, which keeps working unchanged.
+
+- **Sign in with Google.** Your account is protected by Google's sign-in, including its 2-Step Verification. No shared phrase is needed.
+- **Families:** one person creates the family and becomes its creator.
+  - **People:** add a partner, kids, parents and others. Grown-ups get an **invite by email**, and only that Google account can accept it (once, within 14 days). Young kids can be added without an account and managed by the grown-ups.
+  - **Pets:** add each pet with its breed and birthday. Everyone in the family sees the pets.
+- **Feed:** a private, Instagram-style feed with photos, captions, tags for the people and pets in a photo, likes and comments. A family's posts are seen only by that family.
+- **Connected families:** anyone can invite a close friend, who then creates their own family (or uses one they run). The two families are then connected, and a post shared with *+ connected families* shows up for them too. Nothing else is shared with them, not even email addresses.
+- **Privacy:** your diet & fitness (weight, meals, training) is private until you turn sharing on for a specific person in **Me › Who can see my diet & fitness**.
+- **Profiles:** each person's profile shows their posts and, if they've shared it with you, their weight trend and how many days they logged meals. Each pet's profile shows its breed, age, food, vaccines (with a heads-up when one is due) and vet.
+- **Bring over the current app** (Me tab): copies everything the current app keeps on that phone into the family. Your own data goes to you, your partner's shared copy is held for them until they accept their invite, and each dog becomes a pet. **Download a backup** first saves the whole current app as a file. Nothing is deleted, and running it again refreshes the copies.
+- **Demo:** until the connector is updated and given a Google client ID (see server/README.md), **Try it on this phone** runs the whole thing on the phone itself. You can sign in as different people to try invites.
+- **Still in the current app:** the trackers (food, training, dogs' duties, calendar). Moving them in, a shared calendar between families, and notifications come next.
+
 ## 🏠 Home
 
 - Greeting and date, then today's calendar events (or the next one).
@@ -342,6 +358,8 @@ Run `node scripts/bump-version.mjs` before committing. It gives every app file a
 | `js/app.js` | Tabs, Home, Food, check-ins, profiles, sharing settings |
 | `js/plan.js`, `js/foods.js` | Targets, meal planning, foods, check-in math |
 | `js/brief.js`, `js/briefTab.js` | Weather, walk / run / ride windows, dog buttons, golden days, scoreboard |
+| `family/` | 👨‍👩‍👧 OurPawmily Families (preview): sign-in, families, invites, feed, privacy, bringing data over |
+| `server/family.js` | The family API (`/v2/…` on the connector; also runs on the phone for the demo) |
 | `js/dress.js`, `js/dressTab.js` | 👔 Dress for the day: places from the calendar, layering for each person's weather |
 | `js/dogs.js`, `js/adopt.js` | Dog profiles and documents; adoption board |
 | `js/calendar.js`, `js/calTab.js` | Calendar rules, .ics import / export, Calendar tab |

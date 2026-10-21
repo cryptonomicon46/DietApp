@@ -9,8 +9,10 @@
 //           WHOOP_CLIENT_ID, WHOOP_CLIENT_SECRET,
 //           STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET,
 //           ANTHROPIC_API_KEY (optional: "Ask Claude" for workout commands)
+//           GOOGLE_CLIENT_ID (OurPawmily Families: Google sign-in, see family.js)
 
 import { assist } from './assistant.js';
+import { familyApi } from './family.js';
 import { mergeEvents, icsCalendar } from '../js/calendar.js';
 
 const WHOOP = {
@@ -40,6 +42,13 @@ export default {
     const callback = `${url.origin}/${url.pathname.split('/')[1]}/callback`;
 
     try {
+      // ---- OurPawmily Families (v2): Google sign-in, families, invites, feed — see family.js ----
+      if (url.pathname.startsWith('/v2/')) {
+        if (!env.HOUSEHOLD) return json({ error: 'HOUSEHOLD storage not set up — see server/README.md' }, 501);
+        const r = await familyApi(req, env, url.pathname.slice(3));
+        return json(r.data, r.status);
+      }
+
       // ---- Linked calendars: GET /ics?code=<household>&url=<public iCloud / Google calendar link> ----
       // The phone can't fetch another site's calendar directly (browsers block it), so the
       // connector does — only for a known household, and only from calendar hosts.

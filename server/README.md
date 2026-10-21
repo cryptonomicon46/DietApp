@@ -112,3 +112,24 @@ to set up beyond `npx wrangler deploy`.
 The update also adds `GET /ics?code=<household>&url=<calendar link>`, which fetches a
 public iCloud (`*.icloud.com`), Google (`calendar.google.com`) or Outlook calendar for
 a known household — phones can't fetch those directly because of browser rules.
+
+## OurPawmily Families (preview): Google sign-in
+
+The family app at `/family/` (families, invites by email, pets, a private feed, who-sees-what) uses this same connector under `/v2/…` and the same `HOUSEHOLD` storage — no new database. Until the steps below are done it runs as an on-phone demo.
+
+1. **Deploy the update:** `cd server && npm install && npx wrangler deploy`.
+2. **Create a Google sign-in client (free, once):**
+   - Go to <https://console.cloud.google.com/> → create a project (e.g. "OurPawmily").
+   - **APIs & Services → OAuth consent screen:** *External*, app name *OurPawmily*, your email as support and developer contact. While it's in *Testing*, add each person's Gmail under **Test users** (up to 100), or **Publish** it — basic sign-in (name, email, picture) doesn't need Google's review.
+   - **APIs & Services → Credentials → Create credentials → OAuth client ID:** type *Web application*. Under **Authorized JavaScript origins** add your app's origin (e.g. `https://you.github.io`, no path). No redirect URI is needed.
+   - Copy the **Client ID** (ends in `.apps.googleusercontent.com`). It isn't a password, but keep it out of the repo anyway:
+3. **Give it to the connector:** `npx wrangler secret put GOOGLE_CLIENT_ID` and paste it.
+
+Open `/family/` and **Continue with Google** appears. Accounts are protected by Google's own sign-in, including 2-Step Verification (turn it on at <https://myaccount.google.com/security> — that's the "two-factor" for the app).
+
+**How it's kept private:**
+- Sign-in sessions are random 32-character tokens kept for 30 days, and signing out deletes the session.
+- An invite works only for the Google account it was sent to, only once, and only for 14 days.
+- Each person's diet & fitness data is visible only to the family members they turn sharing on for.
+- Connected families see only the posts marked *+ connected families*, and never anyone's email address.
+
