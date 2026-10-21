@@ -61,7 +61,7 @@ Each phone keeps its owner's data, and the two phones share through a **househol
 
 # Detailed specifications
 
-## 👨‍👩‍👧 OurPawmily Families (preview)
+## 👨‍👩‍👧 OurPawmily Families (beta)
 
 The next version of the app, at `/family/` (also linked from 🔐 Privacy). It runs alongside the current app, which keeps working unchanged.
 
@@ -75,7 +75,13 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
 - **Profiles:** each person's profile shows their posts and, if they've shared it with you, their weight trend and how many days they logged meals. Each pet's profile shows its breed, age, food, vaccines (with a heads-up when one is due) and vet.
 - **Bring over the current app** (Me tab): copies everything the current app keeps on that phone into the family. Your own data goes to you, your partner's shared copy is held for them until they accept their invite, and each dog becomes a pet. **Download a backup** first saves the whole current app as a file. Nothing is deleted, and running it again refreshes the copies.
 - **Demo:** until the connector is updated and given a Google client ID (see server/README.md), **Try it on this phone** runs the whole thing on the phone itself. You can sign in as different people to try invites.
-- **Still in the current app:** the trackers (food, training, dogs' duties, calendar). Moving them in, a shared calendar between families, and notifications come next.
+- **Choose what to manage:** when creating a family, pick from 🐶 Dogs, 📸 Feed, 🥗 Diet & fitness and 📅 Calendar. Change it later in Me › Family settings, where the creator can also rename the family, hand it over or delete it.
+- **🐾 Today's care** (Pets tab): one shared log for the family. Tap 🍳 Breakfast, 🍲 Dinner, 🦮 Walk, 🌳 Dog park, 🦴 Treat or 💊 Meds; 👫 logs it for both of you. You can undo your own entries. It shows ⭐ Golden day and a week strip. Bringing over the current app also brings its feeding, walk, park and treat history into this log.
+- **Safety:** every post has ⋯ → Hide, Report (flagged 🚩 to the family's creator) or Block its author (unblock in Me).
+- **Your account:** see where you're signed in, sign out on all devices, download all your data, or **delete your account**. Deleting removes your data, posts, comments and likes everywhere, and families you created pass to another grown-up.
+- **First sign-in:** confirm you're 13+ and accept the [Terms](family/terms.html) and [Privacy Policy](family/privacy.html). Younger kids are profiles their parents manage. [How account deletion works](family/delete-account.html).
+- What's in place for the App Store and Google Play, and what's left, is in [family/STORE-READINESS.md](family/STORE-READINESS.md).
+- **Still in the current app:** the food, training and calendar trackers, and editing vet records. Moving those in, a shared calendar between families, and notifications come next.
 
 ## 🏠 Home
 

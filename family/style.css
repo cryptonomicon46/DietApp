@@ -141,3 +141,28 @@ blockquote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--brand); 
 .sheet { border: 0; border-radius: 22px 22px 0 0; width: 100%; max-width: 560px; margin: auto auto 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); background: var(--card); color: var(--ink); max-height: 92vh; overflow: auto; }
 .sheet::backdrop { background: rgba(0,0,0,.4); }
 .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: .9rem; font-weight: 600; z-index: 20; max-width: calc(100% - 32px); }
+
+/* beta: consent, modules, dog care, menus, account */
+.check { display: flex; flex-direction: row; align-items: center; gap: 10px; font-weight: 500; }
+.check input { width: 20px; height: 20px; accent-color: var(--brand); flex: none; }
+fieldset.modules { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; margin: 0; }
+fieldset.modules legend { font-weight: 700; font-size: .9rem; padding: 0 4px; }
+.care { display: grid; gap: 10px; }
+.care-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.care-btn { flex-direction: column; gap: 2px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 10px 4px; font-size: .82rem; position: relative; }
+.care-btn span { font-size: 1.5rem; }
+.care-btn small { position: absolute; top: 4px; right: 8px; font-size: .72rem; color: var(--brand); }
+.care-btn.done { background: var(--brand-soft); border-color: var(--brand); }
+.care-log { list-style: none; padding: 0; margin: 0; font-size: .88rem; }
+.care-log li { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-top: 1px solid var(--line); }
+.week { display: flex; gap: 6px; justify-content: space-between; }
+.wk { flex: 1; text-align: center; font-size: .72rem; font-weight: 700; padding: 6px 0; border-radius: 8px; background: var(--bg); color: var(--muted); }
+.wk.some { background: var(--brand-soft); color: var(--brand); }
+.wk.gold { background: #fbe7a6; color: #7a5800; }
+.both { font-weight: 600; }
+.menu { display: grid; gap: 8px; }
+.menu button { width: 100%; }
+button.ghost.danger, .danger { color: #c0392b; }
+.danger-btn { background: #c0392b; color: #fff; }
+.pill.warn { background: #fde2dc; color: #a12d1c; }
+@media (prefers-color-scheme: dark) { .wk.gold { background: #4a3c12; color: #f3d68a; } .pill.warn { background: #4a201a; color: #f5b3a8; } }

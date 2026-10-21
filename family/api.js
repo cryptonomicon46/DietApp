@@ -25,8 +25,9 @@ export const api = {
     let status, data;
     if (api.mode() === 'demo') {
       demoApi ||= (await import('../server/family.js')).familyApi;
-      const req = new Request('https://demo.local/', { method, headers: api.token() ? { Authorization: `Bearer ${api.token()}` } : {}, body: body ? JSON.stringify(body) : undefined });
-      ({ status, data } = await demoApi(req, { HOUSEHOLD: demoKv, DEMO: true }, path));
+      const u = new URL(`https://demo.local${path}`);
+      const req = new Request(u, { method, headers: api.token() ? { Authorization: `Bearer ${api.token()}` } : {}, body: body ? JSON.stringify(body) : undefined });
+      ({ status, data } = await demoApi(req, { HOUSEHOLD: demoKv, DEMO: true }, u.pathname));
     } else {
       const res = await fetch(`${connectorUrl()}/v2${path}`, { method, headers: { 'Content-Type': 'application/json', ...(api.token() ? { Authorization: `Bearer ${api.token()}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
       status = res.status;
@@ -40,7 +41,7 @@ export const api = {
   post: (p, b = {}) => api.call('POST', p, b),
   put: (p, b) => api.call('PUT', p, b),
   patch: (p, b) => api.call('PATCH', p, b),
-  del: (p) => api.call('DELETE', p),
+  del: (p, b) => api.call('DELETE', p, b),
   // Is the live connector updated for families? {ready, googleClientId} or {missing: true}.
   async liveConfig() {
     try {

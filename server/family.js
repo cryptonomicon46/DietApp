@@ -15,11 +15,23 @@
 //   feed:<fid>                 [postId] newest first (last 300)
 //   post:<fid>:<postId>        {id, fid, by, byName, text, photo, tags, audience, likes, comments, at}
 //   data:<fid>:<memberId>      {savedAt, data}            a member's tracker data (diet, dogs…)
+//   care:<fid>:<date>          [{id, kind, pets, by, byName, at}]   the family's dog-care log
+//   careidx:<fid>              [date]                     days that have a care log
+//   report:<fid>:<postId>      [{uid, reason, at}]        posts someone reported
+//   rate:<uid>:<minute>        count of changes (limits runaway clients and abuse)
+//
+// Store rules this follows (Apple App Store 5.1.1, Google Play User Data): people can delete
+// their account and everything tied to it from inside the app, download a copy of their data,
+// and accept the terms (13+) before using it; shared posts can be reported, hidden, and their
+// authors blocked (Apple 1.2).
 
 const SESSION_TTL = 30 * 86400;
 const INVITE_TTL = 14 * 86400;
 const RELATIONS = ['spouse', 'partner', 'child', 'parent', 'sibling', 'grandparent', 'relative', 'friend', 'other'];
 const SPECIES = ['dog', 'cat', 'other'];
+export const TERMS_VERSION = '2026-10';
+const CARE = ['breakfast', 'dinner', 'walk', 'park', 'treat', 'meds'];
+const MAX_WRITES_PER_MIN = 120;
 
 const enc = new TextEncoder();
 const b64urlBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
@@ -74,27 +86,27 @@ export async function familyApi(req, env, path) {
   const json = (data, status = 200) => ({ status, data });
   const method = req.method;
   let body = {};
-  if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
+  if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
     const text = await req.text();
     if (text.length > 6_000_000) return json({ error: 'too large' }, 413);
     try { body = text ? JSON.parse(text) : {}; } catch { return json({ error: 'not JSON' }, 400); }
   }
 
-  if (path === '/config') return json({ googleClientId: env.GOOGLE_CLIENT_ID || '', ready: !!env.GOOGLE_CLIENT_ID });
+  if (path === '/config') return json({ googleClientId: env.GOOGLE_CLIENT_ID || '', ready: !!env.GOOGLE_CLIENT_ID, supportEmail: env.SUPPORT_EMAIL || '', termsVersion: TERMS_VERSION });
 
   // ---- sign in ----
   if (path === '/auth/google' && method === 'POST') {
     if (!env.GOOGLE_CLIENT_ID) return json({ error: 'Google sign-in is not set up on the connector yet' }, 501);
     let who;
     try { who = await verifyGoogle(body.credential, env.GOOGLE_CLIENT_ID, env.__googleKeys || null); } catch (err) { return json({ error: `sign-in failed: ${err.message}` }, 401); }
-    return json(await startSession(db, who));
+    return json(await startSession(db, { ...who, device: body.device }));
   }
   // The on-phone demo signs in without Google (never enabled on the real connector).
   if (path === '/auth/demo' && method === 'POST') {
     if (!env.DEMO) return json({ error: 'not found' }, 404);
     const email = emailOf(body.email);
     if (!email) return json({ error: 'enter an email address' }, 400);
-    return json(await startSession(db, { uid: `d${email.replace(/[^a-z0-9]/g, '')}`, email, name: clean(body.name || email.split('@')[0], 60), picture: '' }));
+    return json(await startSession(db, { uid: `d${email.replace(/[^a-z0-9]/g, '')}`, email, name: clean(body.name || email.split('@')[0], 60), picture: '', device: body.device }));
   }
 
   // ---- everything else needs a session ----
@@ -104,8 +116,33 @@ export async function familyApi(req, env, path) {
   const user = await db.get(`user:${session.uid}`);
   if (!user) return json({ error: 'sign in first' }, 401);
   const saveUser = () => db.put(`user:${user.uid}`, user);
+  let m;
 
-  if (path === '/auth/logout' && method === 'POST') { await db.del(`session:${token}`); return json({ ok: true }); }
+  if (path === '/auth/logout' && method === 'POST') {
+    await db.del(`session:${token}`);
+    user.sessions = (user.sessions || []).filter((x) => x.t !== token); await saveUser();
+    return json({ ok: true });
+  }
+  if (path === '/auth/logout-all' && method === 'POST') {
+    for (const x of user.sessions || []) await db.del(`session:${x.t}`);
+    await db.del(`session:${token}`);
+    user.sessions = []; await saveUser();
+    return json({ ok: true });
+  }
+  if (path === '/account/consent' && method === 'POST') {
+    if (body.version !== TERMS_VERSION || body.age13 !== true) return json({ error: 'please confirm you are 13 or older and accept the terms' }, 400);
+    user.consent = { version: TERMS_VERSION, at: Date.now() }; await saveUser();
+    return json({ ok: true });
+  }
+  const consented = user.consent?.version === TERMS_VERSION;
+  if (!consented && !['/me', '/account/export', '/account/delete'].includes(path)) return json({ error: 'accept the terms first', consent: true }, 403);
+  // A steady stream of changes from one account is a bug or abuse: slow it down.
+  if (method !== 'GET') {
+    const key = `rate:${user.uid}:${Math.floor(Date.now() / 60000)}`;
+    const n = ((await db.get(key)) || 0) + 1;
+    if (n > MAX_WRITES_PER_MIN) return json({ error: 'too many changes — try again in a minute' }, 429);
+    await db.put(key, n, 120);
+  }
 
   const families = async () => (await Promise.all(user.families.map((f) => db.get(`family:${f}`)))).filter(Boolean);
   const meIn = (fam) => fam.members.find((m) => m.uid === user.uid);
@@ -116,7 +153,38 @@ export async function familyApi(req, env, path) {
 
   if (path === '/me' && method === 'GET') {
     const fams = await families();
-    return json({ user: { uid: user.uid, email: user.email, name: user.name, picture: user.picture }, families: fams.map((f) => familyOut(f, user)) });
+    return json({ user: { uid: user.uid, email: user.email, name: user.name, picture: user.picture, needsConsent: !consented, termsVersion: TERMS_VERSION, blocked: user.blocked || [] }, families: fams.map((f) => familyOut(f, user)) });
+  }
+
+  // ---- your account: devices, a copy of your data, deleting it ----
+  if (path === '/account/sessions' && method === 'GET') {
+    return json({ sessions: (user.sessions || []).map((x) => ({ at: x.at, device: x.device || '', current: x.t === token })) });
+  }
+  if (path === '/account/export' && method === 'GET') {
+    const fams = await families();
+    const out = { app: 'OurPawmily', exportedAt: new Date().toISOString(), account: { email: user.email, name: user.name, createdAt: user.createdAt, consent: user.consent || null }, families: [] };
+    for (const f of fams) {
+      const mine = meIn(f);
+      const posts = [], comments = [];
+      for (const id of (await db.get(`feed:${f.fid}`)) || []) {
+        const p = await db.get(`post:${f.fid}:${id}`);
+        if (!p) continue;
+        if (p.by === mine.id) posts.push({ text: p.text, photo: p.photo, at: new Date(p.at).toISOString(), audience: p.audience, likes: p.likes.length, comments: p.comments.length });
+        for (const c of p.comments) if (c.uid === user.uid) comments.push({ text: c.text, at: new Date(c.at).toISOString() });
+      }
+      out.families.push({ name: f.name, role: mine.role, me: memberView(mine, true), myData: (await db.get(`data:${f.fid}:${mine.id}`))?.data || {}, posts, comments,
+        members: f.members.map((x) => ({ name: x.name, kind: x.kind, relation: x.relation })) });
+    }
+    return json(out);
+  }
+  if (path === '/account/delete' && method === 'POST') {
+    if (body.confirm !== 'DELETE') return json({ error: 'type DELETE to confirm' }, 400);
+    return json(await deleteAccount(db, user));
+  }
+  m = path.match(/^\/account\/blocks\/([a-z0-9]+)$/);
+  if (m && method === 'DELETE') {
+    user.blocked = (user.blocked || []).filter((b) => b.uid !== m[1]); await saveUser();
+    return json({ blocked: user.blocked });
   }
 
   // ---- families ----
@@ -131,13 +199,112 @@ export async function familyApi(req, env, path) {
     user.families.push(fam.fid); await saveUser();
     return json({ family: familyOut(fam, user) });
   }
-  let m = path.match(/^\/families\/([a-z0-9]+)$/);
+  m = path.match(/^\/families\/([a-z0-9]+)$/);
   if (m && method === 'GET') {
     const fam = await loadFamily(m[1]);
     if (!fam) return json({ error: 'not found' }, 404);
     const connected = (await Promise.all(fam.connections.map((f) => db.get(`family:${f}`)))).filter(Boolean)
       .map((f) => ({ fid: f.fid, name: f.name, members: f.members.map((x) => memberView(x, false)) }));
     return json({ family: familyOut(fam, user), connected });
+  }
+
+  m = path.match(/^\/families\/([a-z0-9]+)(\/leave|\/owner|\/disconnect)?$/);
+  if (m && (method === 'PATCH' || method === 'DELETE' || (method === 'POST' && m[2]))) {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const me = meIn(fam);
+    const owner = me.role === 'owner';
+    if (method === 'PATCH') {
+      if (!owner) return json({ error: "only the family's creator can change that" }, 403);
+      if (body.name != null) fam.name = clean(body.name, 40) || fam.name;
+      if (Array.isArray(body.modules)) fam.modules = body.modules.filter((x) => MODULES.includes(x));
+      await db.put(`family:${fam.fid}`, fam);
+      return json({ family: familyOut(fam, user) });
+    }
+    if (method === 'DELETE') {
+      if (!owner) return json({ error: "only the family's creator can delete it" }, 403);
+      if (clean(body.confirm || '', 40) !== fam.name) return json({ error: `type the family's name (${fam.name}) to confirm` }, 400);
+      await deleteFamily(db, fam);
+      user.families = user.families.filter((f) => f !== fam.fid); await saveUser();
+      return json({ ok: true });
+    }
+    if (m[2] === '/leave') {
+      if (owner) return json({ error: 'hand the family to someone else first (or delete it)' }, 400);
+      await removeMember(db, fam, me, { keepPosts: false });
+      user.families = user.families.filter((f) => f !== fam.fid); await saveUser();
+      return json({ ok: true });
+    }
+    if (m[2] === '/owner') {
+      if (!owner) return json({ error: 'not allowed' }, 403);
+      const t = fam.members.find((x) => x.id === body.memberId && x.kind === 'person' && x.uid && x.relation !== 'child');
+      if (!t) return json({ error: 'pick a grown-up who has joined' }, 400);
+      me.role = 'member'; t.role = 'owner';
+      await db.put(`family:${fam.fid}`, fam);
+      return json({ family: familyOut(fam, user) });
+    }
+    if (m[2] === '/disconnect') {
+      if (me.relation === 'child') return json({ error: 'ask a grown-up' }, 403);
+      const other = await db.get(`family:${clean(body.fid, 24)}`);
+      fam.connections = (fam.connections || []).filter((f) => f !== body.fid);
+      await db.put(`family:${fam.fid}`, fam);
+      if (other) { other.connections = (other.connections || []).filter((f) => f !== fam.fid); await db.put(`family:${other.fid}`, other); }
+      return json({ ok: true });
+    }
+  }
+
+  // ---- 🐾 the family's dog-care log: fed, walks, park, treats, meds ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/care(?:\/(\d{4}-\d{2}-\d{2})\/([a-z0-9]+))?$/);
+  if (m) {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const me = meIn(fam);
+    if (method === 'GET') {
+      const to = /^\d{4}-\d{2}-\d{2}$/.test(url(req).searchParams.get('to') || '') ? url(req).searchParams.get('to') : null;
+      const days = Math.min(31, Math.max(1, +url(req).searchParams.get('days') || 1));
+      if (!to) return json({ error: 'which day?' }, 400);
+      const out = {};
+      for (let i = 0; i < days; i++) { const d = shiftDay(to, -i); out[d] = (await db.get(`care:${fam.fid}:${d}`)) || []; }
+      return json({ days: out });
+    }
+    if (method === 'POST' && !m[2]) {
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? body.date : null;
+      if (!date || !CARE.includes(body.kind)) return json({ error: 'what and which day?' }, 400);
+      const pets = (Array.isArray(body.pets) ? body.pets : []).filter((id) => fam.members.some((x) => x.id === id && x.kind === 'pet'));
+      const who = body.by === 'both' ? fam.members.filter((x) => x.kind === 'person' && x.uid && x.relation !== 'child').map((x) => x.id).slice(0, 2) : [me.id];
+      const entry = { id: randomId(6), kind: body.kind, pets, by: who, byName: who.map((id) => fam.members.find((x) => x.id === id)?.name).join(' & '), note: clean(body.note, 80), at: Date.now() };
+      const list = [...((await db.get(`care:${fam.fid}:${date}`)) || []), entry].slice(-100);
+      await db.put(`care:${fam.fid}:${date}`, list);
+      const idx = (await db.get(`careidx:${fam.fid}`)) || [];
+      if (!idx.includes(date)) await db.put(`careidx:${fam.fid}`, [...idx, date].slice(-800));
+      return json({ entry });
+    }
+    // Bringing over the current app's history: replaces what an earlier import added, day by day.
+    if (method === 'PUT' && !m[2]) {
+      if (me.relation === 'child') return json({ error: 'ask a grown-up' }, 403);
+      const entries = (Array.isArray(body.entries) ? body.entries : []).slice(0, 5000);
+      const byDay = {};
+      for (const e of entries) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date || '') || !CARE.includes(e.kind)) continue;
+        const by = (Array.isArray(e.by) ? e.by : []).filter((id) => fam.members.some((x) => x.id === id && x.kind === 'person'));
+        (byDay[e.date] ||= []).push({ id: randomId(6), kind: e.kind, pets: [], by, byName: by.map((id) => fam.members.find((x) => x.id === id).name).join(' & '), note: '', at: +e.at || Date.parse(`${e.date}T12:00:00Z`), src: 'import' });
+      }
+      const idx = new Set((await db.get(`careidx:${fam.fid}`)) || []);
+      for (const [d, list] of Object.entries(byDay)) {
+        const kept = ((await db.get(`care:${fam.fid}:${d}`)) || []).filter((x) => x.src !== 'import');
+        await db.put(`care:${fam.fid}:${d}`, [...kept, ...list].sort((a, b) => a.at - b.at).slice(-100));
+        idx.add(d);
+      }
+      await db.put(`careidx:${fam.fid}`, [...idx].sort().slice(-800));
+      return json({ days: Object.keys(byDay).length, entries: Object.values(byDay).flat().length });
+    }
+    if (method === 'DELETE' && m[2]) {
+      const list = (await db.get(`care:${fam.fid}:${m[2]}`)) || [];
+      const e = list.find((x) => x.id === m[3]);
+      if (!e) return json({ error: 'not found' }, 404);
+      if (!(e.by.includes(me.id) || me.role === 'owner')) return json({ error: 'only who logged it can undo it' }, 403);
+      await db.put(`care:${fam.fid}:${m[2]}`, list.filter((x) => x !== e));
+      return json({ ok: true });
+    }
   }
 
   // ---- members ----
@@ -288,13 +455,16 @@ export async function familyApi(req, env, path) {
     const sources = [...fams.map((f) => ({ fid: f.fid, own: true }))];
     for (const f of fams) for (const c of f.connections || []) if (!mineIds.has(c) && !sources.some((s) => s.fid === c)) sources.push({ fid: c, own: false });
     const posts = [];
+    const blocked = new Set((user.blocked || []).map((b) => b.uid)), hidden = new Set(user.hidden || []);
     for (const s of sources) {
       const ids = ((await db.get(`feed:${s.fid}`)) || []).slice(0, 40);
       const fam = s.own ? fams.find((f) => f.fid === s.fid) : await db.get(`family:${s.fid}`);
       for (const id of ids) {
         const p = await db.get(`post:${s.fid}:${id}`);
         if (!p || (!s.own && p.audience !== 'connections')) continue;
-        posts.push({ ...p, familyName: fam?.name || '', own: s.own, liked: p.likes.includes(user.uid), likes: p.likes.length });
+        if (blocked.has(p.byUid) || hidden.has(p.id)) continue;
+        const owner = s.own && meIn(fam)?.role === 'owner';
+        posts.push({ ...p, reports: undefined, reported: owner ? (p.reports || 0) : 0, comments: p.comments.filter((c) => !blocked.has(c.uid)), familyName: fam?.name || '', own: s.own, mine: p.byUid === user.uid, liked: p.likes.includes(user.uid), likes: p.likes.length });
       }
     }
     posts.sort((a, b) => b.at - a.at);
@@ -308,15 +478,15 @@ export async function familyApi(req, env, path) {
     const text = clean(body.text, 2000).replace(/ {2,}/g, ' ');
     const photo = typeof body.photo === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(body.photo) && body.photo.length < 2_500_000 ? body.photo : '';
     if (!text && !photo) return json({ error: 'write something or add a photo' }, 400);
-    const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byName: me.name, byAvatar: me.avatar || '', text, photo,
+    const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '', text, photo,
       tags: (Array.isArray(body.tags) ? body.tags : []).filter((id) => fam.members.some((x) => x.id === id)).slice(0, 10),
       tagNames: {}, audience: body.audience === 'connections' ? 'connections' : 'family', likes: [], comments: [], at: Date.now() };
     for (const id of post.tags) post.tagNames[id] = fam.members.find((x) => x.id === id).name;
     await db.put(`post:${fam.fid}:${post.id}`, post);
     await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
-    return json({ post: { ...post, familyName: fam.name, own: true, liked: false, likes: 0 } });
+    return json({ post: { ...post, familyName: fam.name, own: true, mine: true, liked: false, likes: 0 } });
   }
-  m = path.match(/^\/posts\/([a-z0-9]+)\/([a-z0-9]+)(\/like|\/comments)?$/);
+  m = path.match(/^\/posts\/([a-z0-9]+)\/([a-z0-9]+)(\/like|\/comments|\/report|\/hide|\/block)?$/);
   if (m) {
     const [, fid, id, action] = m;
     const p = await db.get(`post:${fid}:${id}`);
@@ -339,10 +509,29 @@ export async function familyApi(req, env, path) {
       await db.put(`post:${fid}:${id}`, p);
       return json({ comment: c });
     }
+    // Reporting hides it for you and flags it to the family's creator.
+    if (action === '/report' && method === 'POST') {
+      const list = (await db.get(`report:${fid}:${id}`)) || [];
+      if (!list.some((r) => r.uid === user.uid)) list.push({ uid: user.uid, reason: clean(body.reason, 200), at: Date.now() });
+      await db.put(`report:${fid}:${id}`, list);
+      p.reports = list.length; await db.put(`post:${fid}:${id}`, p);
+      user.hidden = [...new Set([id, ...(user.hidden || [])])].slice(0, 500); await saveUser();
+      return json({ ok: true });
+    }
+    if (action === '/hide' && method === 'POST') {
+      user.hidden = [...new Set([id, ...(user.hidden || [])])].slice(0, 500); await saveUser();
+      return json({ ok: true });
+    }
+    if (action === '/block' && method === 'POST') {
+      if (!p.byUid || p.byUid === user.uid) return json({ error: "can't block that" }, 400);
+      user.blocked = [...(user.blocked || []).filter((b) => b.uid !== p.byUid), { uid: p.byUid, name: p.byName }].slice(-200); await saveUser();
+      return json({ blocked: user.blocked });
+    }
     if (!action && method === 'DELETE') {
       const mine = own && meIn(own).id === p.by;
       if (!(mine || (own && meIn(own).role === 'owner'))) return json({ error: 'not allowed' }, 403);
       await db.del(`post:${fid}:${id}`);
+      await db.del(`report:${fid}:${id}`);
       await db.put(`feed:${fid}`, ((await db.get(`feed:${fid}`)) || []).filter((x) => x !== id));
       return json({ ok: true });
     }
@@ -356,6 +545,11 @@ async function startSession(db, who) {
   await db.put(`user:${user.uid}`, user);
   const token = randomId(32);
   await db.put(`session:${token}`, { uid: user.uid, at: Date.now() }, SESSION_TTL);
+  // Remember the sign-ins (newest 10), so "sign out everywhere" can end them all.
+  const live = [...(user.sessions || []).filter((x) => Date.now() - x.at < SESSION_TTL * 1000), { t: token, at: Date.now(), device: clean(who.device, 60) }];
+  for (const x of live.slice(0, -10)) await db.del(`session:${x.t}`);
+  user.sessions = live.slice(-10);
+  await db.put(`user:${user.uid}`, user);
   return { token, user: { uid: user.uid, email: user.email, name: user.name, picture: user.picture } };
 }
 async function makeInvite(db, inv) {
@@ -365,5 +559,81 @@ async function makeInvite(db, inv) {
 }
 function familyOut(fam, user) {
   const me = fam.members.find((m) => m.uid === user.uid);
-  return { fid: fam.fid, name: fam.name, createdBy: fam.createdBy, me: me?.id || '', myRole: me?.role || '', connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
+  return { fid: fam.fid, name: fam.name, createdBy: fam.createdBy, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
+}
+const url = (req) => new URL(req.url);
+const shiftDay = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+export const MODULES = ['dogs', 'feed', 'health', 'calendar'];
+
+// Takes someone out of a family: their spot, their data, and (unless kept) their posts,
+// comments and likes there.
+async function removeMember(db, fam, t, { keepPosts = true } = {}) {
+  fam.members = fam.members.filter((x) => x.id !== t.id);
+  for (const x of fam.members) x.shareWith = (x.shareWith || []).filter((id) => id !== t.id);
+  await db.put(`family:${fam.fid}`, fam);
+  await db.del(`data:${fam.fid}:${t.id}`);
+  if (keepPosts || !t.uid) return;
+  // The family keeps its dog-care log, without their name on it.
+  for (const d of (await db.get(`careidx:${fam.fid}`)) || []) {
+    const list = (await db.get(`care:${fam.fid}:${d}`)) || [];
+    if (!list.some((e) => e.by.includes(t.id))) continue;
+    await db.put(`care:${fam.fid}:${d}`, list.map((e) => {
+      if (!e.by.includes(t.id)) return e;
+      const by = e.by.filter((id) => id !== t.id);
+      return { ...e, by, byName: by.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ') || 'Former member' };
+    }));
+  }
+  await scrubPosts(db, fam.fid, t.uid, t.id);
+  for (const c of fam.connections || []) await scrubPosts(db, c, t.uid, null);
+}
+// Removes one person's posts (by member id) and comments / likes (by account) from a family's feed.
+async function scrubPosts(db, fid, uid, memberId) {
+  const ids = (await db.get(`feed:${fid}`)) || [];
+  const keep = [];
+  for (const id of ids) {
+    const p = await db.get(`post:${fid}:${id}`);
+    if (!p) continue;
+    if ((memberId && p.by === memberId) || p.byUid === uid) { await db.del(`post:${fid}:${id}`); await db.del(`report:${fid}:${id}`); continue; }
+    keep.push(id);
+    const comments = p.comments.filter((c) => c.uid !== uid), likes = p.likes.filter((u) => u !== uid);
+    if (comments.length !== p.comments.length || likes.length !== p.likes.length) await db.put(`post:${fid}:${id}`, { ...p, comments, likes });
+  }
+  if (keep.length !== ids.length) await db.put(`feed:${fid}`, keep);
+}
+// Everything a family has: posts, member data, the care log, and its links to other families.
+async function deleteFamily(db, fam) {
+  for (const id of (await db.get(`feed:${fam.fid}`)) || []) { await db.del(`post:${fam.fid}:${id}`); await db.del(`report:${fam.fid}:${id}`); }
+  await db.del(`feed:${fam.fid}`);
+  for (const x of fam.members) await db.del(`data:${fam.fid}:${x.id}`);
+  for (const d of (await db.get(`careidx:${fam.fid}`)) || []) await db.del(`care:${fam.fid}:${d}`);
+  await db.del(`careidx:${fam.fid}`);
+  for (const c of fam.connections || []) {
+    const o = await db.get(`family:${c}`);
+    if (o) { o.connections = (o.connections || []).filter((f) => f !== fam.fid); await db.put(`family:${o.fid}`, o); }
+  }
+  for (const x of fam.members) if (x.uid) {
+    const u = await db.get(`user:${x.uid}`);
+    if (u) { u.families = u.families.filter((f) => f !== fam.fid); await db.put(`user:${u.uid}`, u); }
+  }
+  await db.del(`family:${fam.fid}`);
+}
+// Deleting an account: families you run pass to another grown-up who has joined (or are deleted
+// with everything in them if there's nobody), you leave the rest, and your posts, comments,
+// likes, data, sign-ins and account record are removed.
+export async function deleteAccount(db, user) {
+  const summary = { familiesDeleted: [], familiesHandedOver: [], familiesLeft: [] };
+  for (const fid of user.families) {
+    const fam = await db.get(`family:${fid}`);
+    const me = fam?.members.find((x) => x.uid === user.uid);
+    if (!me) continue;
+    if (me.role === 'owner') {
+      const next = fam.members.find((x) => x.kind === 'person' && x.uid && x.uid !== user.uid && x.relation !== 'child');
+      if (!next) { await deleteFamily(db, fam); summary.familiesDeleted.push(fam.name); continue; }
+      next.role = 'owner'; summary.familiesHandedOver.push({ family: fam.name, to: next.name });
+    } else summary.familiesLeft.push(fam.name);
+    await removeMember(db, fam, me, { keepPosts: false });
+  }
+  for (const x of user.sessions || []) await db.del(`session:${x.t}`);
+  await db.del(`user:${user.uid}`);
+  return { deleted: true, ...summary };
 }

@@ -3,7 +3,7 @@
 // The trackers (food, training, dogs, calendar) stay in the current app for now; their data
 // comes over with "Bring over the current app".
 import { api } from './api.js';
-import { planImport, legacySnapshot, backupBlob, runImport } from './migrate.js';
+import { planImport, legacySnapshot, backupBlob, runImport, importCare } from './migrate.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -11,6 +11,10 @@ const LS = { get: (k) => { try { return localStorage.getItem(k); } catch { retur
 const RELATION = { self: 'You', spouse: 'Spouse', partner: 'Partner', child: 'Child', parent: 'Parent', sibling: 'Sibling', grandparent: 'Grandparent', relative: 'Relative', friend: 'Close friend', other: 'Family', pet: 'Pet' };
 const SPECIES = { dog: '🐶 Dog', cat: '🐱 Cat', other: '🐾 Other' };
 const HUES = [152, 18, 210, 280, 340, 45, 190];
+const MODULES = { dogs: '🐶 Dogs — feeding, walks, vet & meds', feed: '📸 Family feed — photos and updates', health: '🥗 Diet & fitness — weight, meals, training', calendar: '📅 Family calendar' };
+const CARE = { breakfast: ['🍳', 'Breakfast'], dinner: ['🍲', 'Dinner'], walk: ['🦮', 'Walk'], park: ['🌳', 'Dog park'], treat: ['🦴', 'Treat'], meds: ['💊', 'Meds'] };
+const deviceName = () => { const u = navigator.userAgent; return `${/iPhone/.test(u) ? 'iPhone' : /iPad/.test(u) ? 'iPad' : /Android/.test(u) ? 'Android' : /Mac/.test(u) ? 'Mac' : /Windows/.test(u) ? 'Windows' : 'Browser'} · ${/CriOS|Chrome/.test(u) ? 'Chrome' : /Safari/.test(u) ? 'Safari' : /Firefox/.test(u) ? 'Firefox' : 'browser'}`; };
+const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
 
 const state = { user: null, families: [], fid: LS.get('fam.fid'), family: null, connected: [], feed: [], view: 'feed', memberId: null, invite: null, open: {} };
 const fam = () => state.family;
@@ -49,7 +53,7 @@ const isoLocal = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset(
 const inviteLink = (code) => `${location.origin}${location.pathname}#invite=${code}`;
 function openSheet(html) { $('#sheetBody').innerHTML = html; if (!$('#sheet').open) $('#sheet').showModal(); }
 const closeSheet = () => $('#sheet').open && $('#sheet').close();
-async function act(fn) { try { return await fn(); } catch (err) { if (err.status === 401) return boot(); toast(err.message); return null; } }
+async function act(fn) { try { return await fn(); } catch (err) { if (err.status === 401 || err.data?.consent) return boot(); toast(err.message); return null; } }
 
 // ---------- start ----------
 async function boot() {
@@ -60,6 +64,8 @@ async function boot() {
   const r = await api.get('/me').catch((err) => (err.status === 401 ? null : Promise.reject(err)));
   if (!r) return signIn();
   state.user = r.user; state.families = r.families;
+  if (state.support == null) api.liveConfig().then((c) => { state.support = c.supportEmail || ''; }).catch(() => {});
+  if (r.user.needsConsent) return consentView();
   if (state.invite) return inviteView();
   if (!state.families.length) return onboard();
   if (!state.families.some((f) => f.fid === state.fid)) state.fid = state.families[0].fid;
@@ -74,6 +80,7 @@ async function loadFamily() {
 function chrome(on) {
   $('#bar').hidden = !on; $('#nav').hidden = !on;
   document.body.classList.toggle('with-nav', on);
+  if (on) document.querySelector('#nav [data-view=pets]').hidden = !(fam().modules || []).includes('dogs');
   if (on) $('#famSwitch').innerHTML = `<b>${esc(fam().name)}</b><span class="caret">▾</span>${api.mode() === 'demo' ? '<span class="pill demo">Demo</span>' : ''}`;
 }
 
@@ -100,7 +107,7 @@ function loadGoogle(clientId) {
   const go = () => {
     window.google.accounts.id.initialize({ client_id: clientId, callback: (r) => act(async () => {
       api.setMode('live');
-      const s = await api.post('/auth/google', { credential: r.credential });
+      const s = await api.post('/auth/google', { credential: r.credential, device: deviceName() });
       api.setToken(s.token); boot();
     }) });
     window.google.accounts.id.renderButton($('#gbtn'), { theme: 'outline', size: 'large', shape: 'pill', text: 'continue_with', width: 280 });
@@ -121,6 +128,23 @@ function demoSignIn() {
     </form>`);
 }
 
+// ---------- terms (13+), shown once per version ----------
+function consentView() {
+  chrome(false);
+  $('#view').innerHTML = `<section class="hero">
+      <div class="logo">🤝</div>
+      <h1>Before you start</h1>
+      <p class="lede">OurPawmily is private by design: only the people you invite see your family, your diet & fitness stays yours until you share it, and you can download or delete everything at any time.</p>
+      <form id="consentForm" class="stack card">
+        <label class="check"><input type="checkbox" name="age13" required><span>I'm 13 or older</span></label>
+        <label class="check"><input type="checkbox" name="agree" required><span>I agree to the <a href="terms.html" target="_blank">Terms</a> and <a href="privacy.html" target="_blank">Privacy Policy</a></span></label>
+        <button class="wide">Continue</button>
+      </form>
+      <p class="small muted">Under 13? A parent can add you to their family as a profile they manage.</p>
+      <button type="button" class="linkish small" data-act="signout">Sign out (${esc(state.user.email)})</button>
+    </section>`;
+}
+
 // ---------- first family / invites ----------
 function onboard() {
   chrome(false);
@@ -131,6 +155,9 @@ function onboard() {
       <form id="famForm" class="stack card">
         <label>Family name<input name="name" required maxlength="40" placeholder="e.g. The Pawsome Family"></label>
         <label>Your name in the family<input name="myName" maxlength="40" value="${esc(state.user.name.split(' ')[0])}"></label>
+        <fieldset class="modules"><legend>What would you like to manage?</legend>
+          ${Object.entries(MODULES).map(([k, v]) => `<label class="check"><input type="checkbox" name="mod" value="${k}" ${k === 'calendar' ? '' : 'checked'}><span>${v}</span></label>`).join('')}
+          <small class="muted">You can change this any time in Me › Family settings.</small></fieldset>
         <button class="wide">Create family</button>
       </form>
       <p class="small muted">Got an invite instead? Open the link from the email or message.</p>
@@ -198,12 +225,11 @@ function renderPosts() {
 function postCard(p) {
   const author = p.own && p.fid === state.fid ? member(p.by) : null;
   const who = author || { id: p.by, name: p.byName, avatar: p.byAvatar };
-  const canDelete = p.own && p.fid === state.fid && (p.by === fam().me || me().role === 'owner');
   const open = state.open[p.id];
   const comments = open ? p.comments : p.comments.slice(-2);
   return `<article class="post card" data-post="${p.id}" data-fid="${p.fid}">
     <header><button type="button" class="who" ${author ? `data-member="${author.id}"` : ''}>${avatar(who, 38)}<span><b>${esc(who.name)}</b><small class="muted">${p.fid !== state.fid ? `${esc(p.familyName)} · ` : ''}${ago(p.at)} · ${p.audience === 'connections' ? '👥 Family & friends' : '🏠 Family'}</small></span></button>
-      ${canDelete ? '<button type="button" class="icon-btn" data-act="postmenu" aria-label="Post options">⋯</button>' : ''}</header>
+      ${p.reported ? `<span class="pill warn" title="Reported by someone in the family">🚩 ${p.reported}</span>` : ''}<button type="button" class="icon-btn" data-act="postmenu" aria-label="Post options">⋯</button></header>
     ${p.photo ? `<img class="photo" src="${p.photo}" alt="" loading="lazy">` : ''}
     <div class="actions"><button type="button" data-act="like" class="${p.liked ? 'liked' : ''}" aria-label="Like">${p.liked ? '❤️' : '🤍'}</button><button type="button" data-act="comment" aria-label="Comment">💬</button>
       <span class="small muted">${p.likes ? `${p.likes} like${p.likes > 1 ? 's' : ''}` : ''}</span></div>
@@ -258,16 +284,44 @@ function familyView() {
 
 async function petsView() {
   const pets = fam().members.filter((m) => m.kind === 'pet');
-  $('#view').innerHTML = `${demoBanner()}<h3>Pets</h3>${pets.length ? pets.map((p) => `<button type="button" class="card pet-card" data-member="${p.id}">${avatar(p, 64)}<span><b>${esc(p.name)}</b><small class="muted">${esc([p.breed, ageOf(p.born)].filter(Boolean).join(' · ') || SPECIES[p.species] || '')}</small><small class="pet-alerts" data-alerts="${p.id}"></small></span><span class="go">›</span></button>`).join('')
+  $('#view').innerHTML = `${demoBanner()}${pets.length ? '<section class="card care" id="care"><div class="skeleton line"></div></section>' : ''}<h3>Pets</h3>${pets.length ? pets.map((p) => `<button type="button" class="card pet-card" data-member="${p.id}">${avatar(p, 64)}<span><b>${esc(p.name)}</b><small class="muted">${esc([p.breed, ageOf(p.born)].filter(Boolean).join(' · ') || SPECIES[p.species] || '')}</small><small class="pet-alerts" data-alerts="${p.id}"></small></span><span class="go">›</span></button>`).join('')
     : '<div class="empty card"><div class="big">🐾</div><b>No pets yet</b><p class="small muted">Add your dogs (or cats) — everyone in the family sees them.</p></div>'}
     <button type="button" class="ghost wide" data-act="addpet">＋ Add a pet</button>
-    <p class="small muted pad">Feeding, walks and vet records are still tracked in the current app's Dogs tab. <a href="../">Open it ›</a></p>`;
+    <p class="small muted pad">Vet records and documents are still edited in the current app's Dogs tab. <a href="../">Open it ›</a></p>`;
+  if (pets.length) renderCare();
   for (const p of pets) {
     const d = await api.get(`/families/${state.fid}/members/${p.id}/data`).catch(() => null);
     const el = document.querySelector(`[data-alerts="${p.id}"]`);
     if (el && d?.data?.profile) el.innerHTML = vaccineLine(d.data.profile);
   }
 }
+// 🐾 Today's dog care, shared by the whole family: tap what you did; 👫 logs it for both of you.
+let careBoth = false;
+async function renderCare() {
+  const el = $('#care');
+  if (!el) return;
+  const today = isoLocal();
+  const r = await act(() => api.get(`/families/${state.fid}/care?to=${today}&days=7`));
+  if (!r) return;
+  const list = r.days[today] || [];
+  const count = (k) => list.filter((e) => e.kind === k).length;
+  const fedBoth = count('breakfast') && count('dinner');
+  const outings = count('walk') + count('park');
+  const golden = outings >= 2 || (outings >= 1 && count('treat'));
+  const week = Object.entries(r.days).sort().map(([d, l]) => {
+    const o = l.filter((e) => e.kind === 'walk' || e.kind === 'park').length;
+    return `<span class="wk ${o >= 2 || (o && l.some((e) => e.kind === 'treat')) ? 'gold' : o ? 'some' : ''}" title="${d}">${new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}</span>`;
+  }).join('');
+  const adults = fam().members.filter((m) => m.kind === 'person' && m.status === 'active' && m.relation !== 'child');
+  el.innerHTML = `<div class="row between"><b>Today's care</b><span class="small ${golden ? 'good' : 'muted'}">${golden ? '⭐ Golden day' : `${outings} outing${outings === 1 ? '' : 's'}`}</span></div>
+    <div class="care-grid">${Object.entries(CARE).map(([k, [ico, label]]) => `<button type="button" class="care-btn ${count(k) ? 'done' : ''}" data-care="${k}"><span>${ico}</span>${label}${count(k) ? `<small>${count(k) > 1 ? `×${count(k)}` : '✓'}</small>` : ''}</button>`).join('')}</div>
+    ${adults.length > 1 ? `<label class="switch-row small both"><span>👫 Log for both of us</span><input type="checkbox" data-careboth ${careBoth ? 'checked' : ''}><i class="switch"></i></label>` : ''}
+    ${list.length ? `<ul class="care-log">${list.slice().reverse().map((e) => `<li><span>${CARE[e.kind]?.[0] || ''} ${esc(CARE[e.kind]?.[1] || e.kind)} · <b>${esc(e.byName)}</b> <small class="muted">${new Date(e.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</small></span>${e.by.includes(fam().me) || me().role === 'owner' ? `<button type="button" class="linkish small" data-careundo="${e.id}">Undo</button>` : ''}</li>`).join('')}</ul>`
+      : '<p class="small muted">Nothing logged yet today.</p>'}
+    <div class="week" aria-label="This week">${week}</div>
+    <p class="tiny muted">${fedBoth ? '✓ Fed twice today. ' : ''}⭐ = two outings, or one plus a treat.</p>`;
+}
+
 function vaccineLine(dog) {
   const today = Date.now();
   const due = (dog.vaccines || []).map((v) => ({ name: v.name, at: v.due ? Date.parse(`${v.due}T12:00:00`) : null })).filter((v) => v.at).sort((a, b) => a.at - b.at)[0];
@@ -344,9 +398,30 @@ function meView() {
     <h3>Families</h3>
     <section class="card"><ul class="list">${state.families.map((x) => `<li><button type="button" class="member-row" data-fam="${x.fid}"><span class="av" style="width:36px;height:36px;--h:${hue(x.fid)}">${esc(x.name[0])}</span><span><b>${esc(x.name)}</b><small class="muted">${x.members.length} members${x.myRole === 'owner' ? ' · you created it' : ''}</small></span>${x.fid === state.fid ? '<span class="pill">Open</span>' : '<span class="go">›</span>'}</button></li>`).join('')}</ul>
       <button type="button" class="linkish small" data-act="newfamily">＋ Create another family</button></section>
+    ${my.role === 'owner' ? `<h3>Family settings</h3><section class="card stack">
+      <form id="famSettings" class="stack"><label>Family name<input name="name" maxlength="40" value="${esc(f.name)}"></label>
+        <fieldset class="modules"><legend>What ${esc(f.name)} manages</legend>${Object.entries(MODULES).map(([k, v]) => `<label class="check"><input type="checkbox" name="mod" value="${k}" ${(f.modules || []).includes(k) ? 'checked' : ''}><span>${v}</span></label>`).join('')}</fieldset>
+        <button class="ghost">Save</button></form>
+      ${others.filter((o) => o.relation !== 'child').length ? `<button type="button" class="linkish small" data-act="handover">Hand ${esc(f.name)} over to someone else</button>` : ''}
+      <button type="button" class="linkish small danger" data-act="deletefamily">Delete ${esc(f.name)}…</button></section>`
+      : `<section class="card"><button type="button" class="linkish small danger" data-act="leavefamily">Leave ${esc(f.name)}</button></section>`}
+    <h3>Account & security</h3>
+    <section class="card stack">
+      <div id="sessions" class="small muted">Loading your sign-ins…</div>
+      <button type="button" class="ghost" data-act="logoutall">Sign out on all devices</button>
+      ${(state.user.blocked || []).length ? `<div><b class="small">Blocked</b><ul class="list">${state.user.blocked.map((b) => `<li class="row between small"><span>${esc(b.name)}</span><button type="button" class="linkish" data-unblock="${b.uid}">Unblock</button></li>`).join('')}</ul></div>` : ''}
+      <button type="button" class="ghost" data-act="export">⬇️ Download my data</button>
+      <button type="button" class="ghost danger" data-act="deleteaccount">Delete my account…</button>
+      ${state.support ? `<a class="small" href="mailto:${esc(state.support)}?subject=OurPawmily%20support">✉️ Email support</a>` : ''}
+      <p class="tiny muted"><a href="privacy.html" target="_blank">Privacy Policy</a> · <a href="terms.html" target="_blank">Terms</a> · <a href="delete-account.html" target="_blank">How deletion works</a></p>
+    </section>
     <section class="card links"><a href="../">📊 Open the trackers (food, training, dogs, calendar) ›</a></section>
     <button type="button" class="ghost wide" data-act="signout">Sign out</button>
-    <p class="tiny muted center pad">OurPawmily Families · preview</p>`;
+    <p class="tiny muted center pad">OurPawmily Families · beta</p>`;
+  api.get('/account/sessions').then((r) => {
+    const el = $('#sessions');
+    if (el) el.innerHTML = `<b>Signed in on</b><ul class="list">${r.sessions.slice().reverse().map((x) => `<li class="row between"><span>${esc(x.device || 'A device')}${x.current ? ' <span class="pill">This one</span>' : ''}</span><small>${ago(x.at)}</small></li>`).join('')}</ul>`;
+  }).catch(() => {});
 }
 
 // ---------- add people & pets, invites ----------
@@ -393,7 +468,27 @@ async function runTheImport() {
   if (!ops.length) { log.innerHTML = '<div class="muted">Nothing to bring over.</div>'; return; }
   await runImport(api, state.fid, ops, say);
   await loadFamily();
+  await importCare(api, state.fid, legacy, fam(), say);
   say('Done. Your partner can claim theirs by accepting an invite — open them under Family and tap "Invite by email".');
+}
+
+async function postAction(kind, { fid, pid }) {
+  const name = state.feed.find((x) => x.id === pid)?.byName || 'them';
+  const drop = () => { state.feed = state.feed.filter((x) => x.id !== pid); closeSheet(); renderPosts(); };
+  return act(async () => {
+    if (kind === 'delete') { if (!confirm('Delete this post?')) return; await api.del(`/posts/${fid}/${pid}`); drop(); return; }
+    if (kind === 'hide') { await api.post(`/posts/${fid}/${pid}/hide`); drop(); toast('Hidden'); return; }
+    if (kind === 'report') {
+      const reason = prompt("What's wrong with this post? (The family's creator sees that it was reported.)", '');
+      if (reason == null) return;
+      await api.post(`/posts/${fid}/${pid}/report`, { reason }); drop(); toast('Reported — thanks for letting us know'); return;
+    }
+    if (kind === 'block') {
+      if (!confirm(`Block ${name}? You won't see their posts or comments. You can unblock them in Me.`)) return;
+      const r = await api.post(`/posts/${fid}/${pid}/block`);
+      state.user.blocked = r.blocked; state.feed = state.feed.filter((x) => x.byUid !== state.feed.find((y) => y.id === pid)?.byUid); closeSheet(); renderPosts(); toast(`${name} is blocked`);
+    }
+  });
 }
 
 // ---------- events ----------
@@ -401,6 +496,10 @@ document.addEventListener('click', (e) => {
   const t = e.target.closest('button, [data-view], [data-member], [data-fam]');
   if (!t) return;
   const d = t.dataset;
+  if (d.pact) return postAction(d.pact, t.closest('.menu').dataset);
+  if (d.care) return act(async () => { await api.post(`/families/${state.fid}/care`, { kind: d.care, date: isoLocal(), by: careBoth ? 'both' : 'me' }); renderCare(); });
+  if (d.careundo) return act(async () => { await api.del(`/families/${state.fid}/care/${isoLocal()}/${d.careundo}`); renderCare(); });
+  if (d.unblock) return act(async () => { await api.del(`/account/blocks/${d.unblock}`); state.user.blocked = state.user.blocked.filter((b) => b.uid !== d.unblock); meView(); });
   if (d.view) { e.preventDefault(); return show(d.view); }
   if (d.member) { closeSheet(); return show('member', d.member); }
   if (d.fam) { state.fid = d.fam; return act(async () => { await loadFamily(); show('feed'); }); }
@@ -429,10 +528,16 @@ document.addEventListener('click', (e) => {
     });
     case 'comment': return post.querySelector('.comment-form input').focus();
     case 'allcomments': state.open[post.dataset.post] = true; return renderPosts();
-    case 'postmenu': if (!confirm('Delete this post?')) return; return act(async () => {
-      await api.del(`/posts/${post.dataset.fid}/${post.dataset.post}`);
-      state.feed = state.feed.filter((x) => x.id !== post.dataset.post); renderPosts();
-    });
+    case 'postmenu': {
+      const p = state.feed.find((x) => x.id === post.dataset.post);
+      const canDelete = p.mine || (p.own && p.fid === state.fid && me().role === 'owner');
+      return openSheet(`<div class="menu" data-fid="${p.fid}" data-pid="${p.id}">
+        ${canDelete ? '<button type="button" class="ghost danger" data-pact="delete">🗑 Delete post</button>' : ''}
+        ${p.mine ? '' : `<button type="button" class="ghost" data-pact="hide">🙈 Hide this post</button>
+          <button type="button" class="ghost" data-pact="report">🚩 Report…</button>
+          <button type="button" class="ghost danger" data-pact="block">⛔ Block ${esc(p.byName)}</button>`}
+        <button type="button" data-act="close">Cancel</button></div>`);
+    }
     case 'invitefamily': return openSheet(`<h2>💌 Invite a friend's family</h2>
       <p class="small muted">They'll create their own family (or use one they already have), and your two families can share the posts you choose.</p>
       <form id="famInviteForm" class="stack"><label>Their email (Google account)<input name="email" type="email" required maxlength="120"></label>
@@ -453,6 +558,25 @@ document.addEventListener('click', (e) => {
       a.href = URL.createObjectURL(backupBlob()); a.download = `ourpawmily-backup-${new Date().toISOString().slice(0, 10)}.json`;
       document.body.append(a); a.click(); a.remove(); return toast('Backup saved');
     }
+    case 'export': return act(async () => { const r = await api.get('/account/export'); download(new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }), `ourpawmily-my-data-${isoLocal()}.json`); toast('Your data is downloaded'); });
+    case 'logoutall': if (!confirm('Sign out on every device, including this one?')) return; return act(async () => { await api.post('/auth/logout-all'); api.setToken(null); boot(); });
+    case 'deleteaccount': return openSheet(`<h2>Delete your account</h2>
+      <p class="small">This permanently deletes:</p>
+      <ul class="small"><li>your account and sign-ins on every device</li><li>your diet & fitness data in every family</li><li>your posts, comments and likes</li></ul>
+      <p class="small">${state.families.filter((x) => x.myRole === 'owner').length ? 'Families you created pass to another grown-up who has joined them; a family with nobody else is deleted with everything in it (pets, posts, care log). ' : ''}It can't be undone. <button type="button" class="linkish" data-act="export">Download your data first</button></p>
+      <form id="deleteForm" class="stack"><label>Type DELETE to confirm<input name="confirm" autocomplete="off" autocapitalize="characters" required></label>
+        <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button class="danger-btn">Delete my account</button></div></form>`);
+    case 'deletefamily': return openSheet(`<h2>Delete ${esc(fam().name)}</h2>
+      <p class="small">Removes the family for everyone: its pets, posts, comments, care log and everyone's data in it. Members keep their accounts. This can't be undone.</p>
+      <form id="deleteFamForm" class="stack"><label>Type the family's name to confirm<input name="confirm" autocomplete="off" required placeholder="${esc(fam().name)}"></label>
+        <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button class="danger-btn">Delete family</button></div></form>`);
+    case 'leavefamily': if (!confirm(`Leave ${fam().name}? Your data, posts and comments in it are removed.`)) return; return act(async () => { await api.post(`/families/${state.fid}/leave`); state.fid = null; boot(); });
+    case 'handover': {
+      const options = fam().members.filter((m) => m.kind === 'person' && m.status === 'active' && m.id !== fam().me && m.relation !== 'child');
+      return openSheet(`<h2>Hand over ${esc(fam().name)}</h2><p class="small muted">They become the family's creator (settings, deleting it). You stay in the family.</p>
+        <form id="handoverForm" class="stack"><label>New creator<select name="memberId">${options.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></label>
+        <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Hand over</button></div></form>`);
+    }
     case 'newfamily': return openSheet(`<h2>Create another family</h2><form id="famForm" class="stack"><label>Family name<input name="name" required maxlength="40"></label><div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Create</button></div></form>`);
     default:
   }
@@ -467,6 +591,7 @@ document.addEventListener('change', async (e) => {
     draft.photo = await shrinkPhoto(t.files[0]).catch(() => '');
     return compose();
   }
+  if (t.dataset.careboth != null) { careBoth = t.checked; return; }
   if (t.dataset.share) {
     const ids = [...document.querySelectorAll('[data-share]')].filter((x) => x.checked).map((x) => x.dataset.share);
     return act(async () => { await api.patch(`/families/${state.fid}/members/${fam().me}`, { shareWith: ids }); await loadFamily(); toast(ids.length ? 'Sharing updated' : 'Your diet & fitness is private'); });
@@ -482,11 +607,40 @@ document.addEventListener('submit', (e) => {
   const v = Object.fromEntries(new FormData(f));
   if (f.id === 'demoForm') {
     e.preventDefault();
-    return act(async () => { api.setMode('demo'); const s = await api.post('/auth/demo', v); api.setToken(s.token); closeSheet(); state.view = 'feed'; boot(); });
+    return act(async () => { api.setMode('demo'); const s = await api.post('/auth/demo', { ...v, device: deviceName() }); api.setToken(s.token); closeSheet(); state.view = 'feed'; boot(); });
   }
   if (f.id === 'famForm') {
     e.preventDefault();
-    return act(async () => { const r = await api.post('/families', v); state.fid = r.family.fid; closeSheet(); toast(`${r.family.name} is ready`); state.view = 'family'; boot(); });
+    const mods = new FormData(f).getAll('mod');
+    return act(async () => {
+      const r = await api.post('/families', v); state.fid = r.family.fid;
+      if (mods.length) await api.patch(`/families/${r.family.fid}`, { modules: mods });
+      closeSheet(); toast(`${r.family.name} is ready`); state.view = 'family'; boot();
+    });
+  }
+  if (f.id === 'consentForm') {
+    e.preventDefault();
+    return act(async () => { await api.post('/account/consent', { version: state.user.termsVersion, age13: !!v.age13 }); boot(); });
+  }
+  if (f.id === 'famSettings') {
+    e.preventDefault();
+    return act(async () => { await api.patch(`/families/${state.fid}`, { name: v.name, modules: new FormData(f).getAll('mod') }); await loadFamily(); chrome(true); toast('Saved'); });
+  }
+  if (f.id === 'deleteForm') {
+    e.preventDefault();
+    return act(async () => {
+      const r = await api.post('/account/delete', { confirm: v.confirm.trim() });
+      api.setToken(null); LS.set('fam.fid', null); closeSheet(); state.fid = null; state.family = null;
+      boot().then(() => toast(`Account deleted${r.familiesHandedOver?.length ? ` · ${r.familiesHandedOver.map((x) => `${x.family} → ${x.to}`).join(', ')}` : ''}`));
+    });
+  }
+  if (f.id === 'deleteFamForm') {
+    e.preventDefault();
+    return act(async () => { await api.del(`/families/${state.fid}`, { confirm: v.confirm.trim() }); closeSheet(); state.fid = null; toast('Family deleted'); boot(); });
+  }
+  if (f.id === 'handoverForm') {
+    e.preventDefault();
+    return act(async () => { await api.post(`/families/${state.fid}/owner`, { memberId: v.memberId }); closeSheet(); await boot(); toast('Handed over'); });
   }
   if (f.id === 'connectForm') {
     e.preventDefault();

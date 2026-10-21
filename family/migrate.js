@@ -28,6 +28,33 @@ export function planImport(legacy, family) {
   return ops;
 }
 
+// The current app's dog duties (each phone's own taps: feedings, walks, park trips, treats)
+// as one care log. memberOf(legacyId) → the family member id. Feedings count once per meal
+// (the first tap), walks and park trips each tap, treats once a day when on.
+export function careFromLegacy(people, memberOf) {
+  const out = [];
+  const who = (w, person) => (w === 'both' ? people.map((p) => memberOf(p.legacyId)) : [memberOf(w || person)]).filter(Boolean);
+  const fed = {};
+  for (const p of people) for (const [key, v] of Object.entries(p.data.dogFed || {})) {
+    const [date, meal] = key.split(':');
+    if (!v?.at || !['breakfast', 'dinner'].includes(meal)) continue;
+    if (!fed[key] || v.at < fed[key].at) fed[key] = { date, kind: meal, by: who(v.who, p.legacyId), at: v.at };
+  }
+  out.push(...Object.values(fed));
+  for (const p of people) for (const [field, kind] of [['dogWalked', 'walk'], ['dogPark', 'park']]) {
+    for (const [date, v] of Object.entries(p.data[field] || {})) {
+      for (const e of Array.isArray(v) ? v : v?.at ? [v] : []) {
+        const at = typeof e === 'number' ? e : e.at;
+        if (at) out.push({ date, kind, by: who(typeof e === 'object' ? e.who : null, p.legacyId), at });
+      }
+    }
+  }
+  const treats = {};
+  for (const p of people) for (const [date, t] of Object.entries(p.data.dogTreats || {})) if (t?.at && (!treats[date] || t.at > treats[date].t.at)) treats[date] = { t, person: p.legacyId };
+  for (const [date, { t, person }] of Object.entries(treats)) if (t.on !== false) out.push({ date, kind: 'treat', by: who(t.who, person), at: t.at });
+  return out.filter((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.date)).sort((a, b) => a.at - b.at);
+}
+
 // ---------- this phone ----------
 // Everything the current app keeps on this phone (both profiles, since sharing keeps a copy of
 // the partner's), read without changing anything.
@@ -61,4 +88,12 @@ export async function runImport(api, fid, ops, report = () => {}) {
     await api.put(`/families/${fid}/members/${id}/data`, { data: o.data });
     report(`Brought over ${o.name}'s data`);
   }
+}
+// After the people are in: their dog-duty history becomes the family's care log.
+export async function importCare(api, fid, legacy, family, report = () => {}) {
+  const memberOf = (legacyId) => family.members.find((m) => m.legacyId === legacyId)?.id || (legacyId === legacy.owner ? family.me : null);
+  const entries = careFromLegacy(legacy.people, memberOf);
+  if (!entries.length) return;
+  const r = await api.put(`/families/${fid}/care`, { entries });
+  report(`Brought over the dogs' feeding & walk history (${r.entries} entries over ${r.days} days)`);
 }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../server/worker.js';
-import { verifyGoogle } from '../server/family.js';
+import { verifyGoogle, TERMS_VERSION } from '../server/family.js';
 
 const kv = () => { const m = new Map(); return { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); }, list: async ({ prefix }) => ({ keys: [...m.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })) }) }; };
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
@@ -19,7 +19,11 @@ const api = async (path, { token, method = 'GET', body } = {}) => {
   const res = await worker.fetch(new Request(`https://w.test/v2${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env);
   return { status: res.status, ...(await res.json()) };
 };
-const signIn = async (sub, email, name) => (await api('/auth/google', { method: 'POST', body: { credential: await idToken({ sub, email, name }) } })).token;
+const signIn = async (sub, email, name, consent = true) => {
+  const { token } = await api('/auth/google', { method: 'POST', body: { credential: await idToken({ sub, email, name }) } });
+  if (consent) await api('/account/consent', { token, method: 'POST', body: { version: TERMS_VERSION, age13: true } });
+  return token;
+};
 
 test('Google ID tokens: signature, audience and expiry are checked', async () => {
   const ok = await verifyGoogle(await idToken({ sub: '1', email: 'A@x.com' }), 'client-1', [pub]);
@@ -106,4 +110,82 @@ test('bringing the current app over: you, your partner and the dogs, without dup
   // On the partner's phone (after they joined), only their own data and the dogs are copied.
   const theirs = { me: 'm2', members: done.members.map((m) => ({ ...m, status: m.kind === 'person' ? 'active' : 'managed' })) };
   assert.deepEqual(planImport({ ...legacy, owner: 'amani' }, theirs).map((o) => `${o.op}:${o.memberId}`), ['data:m2', 'data:m3']);
+});
+
+test('terms first: 13+ and accepting the terms before anything else', async () => {
+  const t = await signIn('500', 'new@gmail.com', 'New', false);
+  assert.equal((await api('/me', { token: t })).user.needsConsent, true);
+  assert.equal((await api('/families', { token: t, method: 'POST', body: { name: 'X' } })).status, 403);
+  assert.equal((await api('/account/consent', { token: t, method: 'POST', body: { version: TERMS_VERSION } })).status, 400, 'must confirm 13+');
+  await api('/account/consent', { token: t, method: 'POST', body: { version: TERMS_VERSION, age13: true } });
+  assert.equal((await api('/families', { token: t, method: 'POST', body: { name: 'X' } })).status, 200);
+});
+
+test('report, hide and block on posts; dog-care log', async () => {
+  const me = await signIn('100', 'me@gmail.com', 'Me Person');
+  const partner = await signIn('200', 'partner@gmail.com', 'Partner');
+  const fam = (await api('/me', { token: me })).families[0];
+  const { post } = await api(`/families/${fam.fid}/posts`, { token: partner, method: 'POST', body: { text: 'hello' } });
+  await api(`/posts/${fam.fid}/${post.id}/report`, { token: me, method: 'POST', body: { reason: 'test' } });
+  assert.ok(!(await api('/feed', { token: me })).posts.some((p) => p.id === post.id), 'hidden for the reporter');
+  assert.equal((await api('/feed', { token: partner })).posts.find((p) => p.id === post.id).reported, 0, 'not the creator');
+  const { post: p2 } = await api(`/families/${fam.fid}/posts`, { token: partner, method: 'POST', body: { text: 'again' } });
+  await api(`/posts/${fam.fid}/${p2.id}/block`, { token: me, method: 'POST' });
+  assert.ok(!(await api('/feed', { token: me })).posts.some((p) => p.byUid === 'g200'), "blocked person's posts are gone");
+  assert.equal((await api('/me', { token: me })).user.blocked[0].name, 'Partner');
+  await api('/account/blocks/g200', { token: me, method: 'DELETE' });
+
+  const dog = fam.members.find((m) => m.kind === 'pet');
+  const { entry } = await api(`/families/${fam.fid}/care`, { token: partner, method: 'POST', body: { kind: 'breakfast', date: '2026-10-21', pets: [dog.id] } });
+  await api(`/families/${fam.fid}/care`, { token: me, method: 'POST', body: { kind: 'walk', date: '2026-10-21', by: 'both' } });
+  const day = (await api(`/families/${fam.fid}/care?to=2026-10-21&days=2`, { token: me })).days;
+  assert.deepEqual(day['2026-10-21'].map((e) => `${e.kind}:${e.byName}`), ['breakfast:Partner', 'walk:Me Person & Partner']);
+  assert.deepEqual(day['2026-10-20'], []);
+  assert.equal((await api(`/families/${fam.fid}/care/2026-10-21/${entry.id}`, { token: me, method: 'DELETE' })).status, 200, "the creator can undo anyone's");
+});
+
+test('export and delete an account: data, posts, comments and sign-ins go; the family passes on', async () => {
+  const me = await signIn('100', 'me@gmail.com', 'Me Person');
+  const partner = await signIn('200', 'partner@gmail.com', 'Partner');
+  const fam = (await api('/me', { token: me })).families[0];
+  const { post } = await api(`/families/${fam.fid}/posts`, { token: partner, method: 'POST', body: { text: 'mine' } });
+  const { post: other } = await api(`/families/${fam.fid}/posts`, { token: me, method: 'POST', body: { text: 'theirs' } });
+  await api(`/posts/${fam.fid}/${other.id}/comments`, { token: partner, method: 'POST', body: { text: 'a comment' } });
+  await api(`/families/${fam.fid}/care`, { token: partner, method: 'POST', body: { kind: 'walk', date: '2026-10-22' } });
+  const ex = await api('/account/export', { token: partner });
+  assert.equal(ex.account.email, 'partner@gmail.com');
+  assert.ok(ex.families[0].posts.some((p) => p.text === 'mine'));
+  assert.ok(ex.families[0].comments.some((c) => c.text === 'a comment'));
+  assert.equal(ex.families[0].myData.weights[0].weight, 140);
+
+  assert.equal((await api('/account/delete', { token: partner, method: 'POST', body: {} })).status, 400, 'needs DELETE typed');
+  const del = await api('/account/delete', { token: partner, method: 'POST', body: { confirm: 'DELETE' } });
+  assert.deepEqual(del.familiesLeft, ['OurPawMily']);
+  assert.equal((await api('/me', { token: partner })).status, 401, 'signed out everywhere');
+  const after = await api(`/families/${fam.fid}`, { token: me });
+  assert.ok(!after.family.members.some((m) => m.email === 'partner@gmail.com'));
+  const feed = (await api('/feed', { token: me })).posts;
+  assert.ok(!feed.some((p) => p.text === 'mine'));
+  assert.equal(feed.find((p) => p.id === other.id).comments.length, 0);
+  assert.equal(await env.HOUSEHOLD.get('v2:user:g200'), null);
+  const care = (await api(`/families/${fam.fid}/care?to=2026-10-22`, { token: me })).days['2026-10-22'];
+  assert.equal(care[0].byName, 'Former member', 'the care log stays, without their name');
+
+  // The creator deleting their account with nobody else grown-up there deletes the family.
+  const del2 = await api('/account/delete', { token: me, method: 'POST', body: { confirm: 'DELETE' } });
+  assert.deepEqual(del2.familiesDeleted, ['OurPawMily']);
+  assert.equal(await env.HOUSEHOLD.get(`v2:family:${fam.fid}`), null);
+  assert.equal(await env.HOUSEHOLD.get(`v2:feed:${fam.fid}`), null);
+  assert.equal(await env.HOUSEHOLD.get(`v2:careidx:${fam.fid}`), null);
+});
+
+test("the current app's dog duties become one care log", async () => {
+  const { careFromLegacy } = await import('../family/migrate.js');
+  const people = [
+    { legacyId: 'a', data: { dogFed: { '2026-10-20:breakfast': { at: 10 }, '2026-10-20:dinner': { at: 50 } }, dogWalked: { '2026-10-20': [{ at: 20 }, { at: 30, who: 'both' }] }, dogTreats: { '2026-10-20': { at: 5, on: true } } } },
+    { legacyId: 'b', data: { dogFed: { '2026-10-20:breakfast': { at: 12 } }, dogPark: { '2026-10-20': [40] }, dogTreats: { '2026-10-20': { at: 60, on: false } } } },
+  ];
+  const ids = { a: 'm1', b: 'm2' };
+  const log = careFromLegacy(people, (id) => ids[id]);
+  assert.deepEqual(log.map((e) => `${e.kind}:${e.by.join('+')}`), ['breakfast:m1', 'walk:m1', 'walk:m1+m2', 'park:m2', 'dinner:m1'], 'first feeding counts; a treat later undone is dropped');
 });

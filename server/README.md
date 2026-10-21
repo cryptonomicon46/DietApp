@@ -125,6 +125,8 @@ The family app at `/family/` (families, invites by email, pets, a private feed, 
    - Copy the **Client ID** (ends in `.apps.googleusercontent.com`). It isn't a password, but keep it out of the repo anyway:
 3. **Give it to the connector:** `npx wrangler secret put GOOGLE_CLIENT_ID` and paste it.
 
+4. **Support email (optional for the beta, needed for the stores):** `npx wrangler secret put SUPPORT_EMAIL` with the address people should write to. It shows in the app under Me › Account & security.
+
 Open `/family/` and **Continue with Google** appears. Accounts are protected by Google's own sign-in, including 2-Step Verification (turn it on at <https://myaccount.google.com/security> — that's the "two-factor" for the app).
 
 **How it's kept private:**
