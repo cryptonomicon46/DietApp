@@ -11,8 +11,14 @@ const LS = { get: (k) => { try { return localStorage.getItem(k); } catch { retur
 const RELATION = { self: 'You', spouse: 'Spouse', partner: 'Partner', child: 'Child', parent: 'Parent', sibling: 'Sibling', grandparent: 'Grandparent', relative: 'Relative', friend: 'Close friend', other: 'Family', pet: 'Pet' };
 const SPECIES = { dog: '🐶 Dog', cat: '🐱 Cat', other: '🐾 Other' };
 const HUES = [152, 18, 210, 280, 340, 45, 190];
-const MODULES = { dogs: '🐶 Dogs — feeding, walks, vet & meds', feed: '📸 Family feed — photos and updates', health: '🥗 Diet & fitness — weight, meals, training', calendar: '📅 Family calendar' };
-const CARE = { breakfast: ['🍳', 'Breakfast'], dinner: ['🍲', 'Dinner'], walk: ['🦮', 'Walk'], park: ['🌳', 'Dog park'], treat: ['🦴', 'Treat'], meds: ['💊', 'Meds'] };
+const MODULES = { dogs: '🐶 Dogs — feeding, walks, vet & meds', chores: '🧺 Chores — laundry, garbage, groceries, cleaning, with a monthly 🏆 Gold Card', feed: '📸 Family feed — photos and updates', health: '🥗 Diet & fitness — weight, meals, training', calendar: '📅 Family calendar' };
+const CARE = { breakfast: ['🍳', 'Breakfast'], dinner: ['🍲', 'Dinner'], walk: ['🦮', 'Walk'], park: ['🌳', 'Dog park'], treat: ['🦴', 'Treat'], meds: ['💊', 'Meds'],
+  poop: ['💩', 'Poop patrol'], trash: ['🗑️', 'Garbage'], laundry: ['🧺', 'Laundry'], groceries: ['🛒', 'Groceries'], cleaning: ['🧽', 'Cleaning'], dishes: ['🍽️', 'Dishes'] };
+const DOG_KINDS = ['breakfast', 'dinner', 'walk', 'park', 'treat', 'meds'], HOUSE_KINDS = ['poop', 'trash', 'laundry', 'groceries', 'cleaning', 'dishes'];
+const PTS = { breakfast: 1, dinner: 1, walk: 2, park: 2, treat: 0, meds: 1, poop: 2, trash: 1, laundry: 3, groceries: 3, cleaning: 4, dishes: 1 };
+const HELP = { petsit: ['🐾', 'Pet sitting'], babysit: ['🧸', 'Babysitting'], walk: ['🦮', 'Dog walk'], ride: ['🚗', 'A ride'], meal: ['🍲', 'A meal'], other: ['🙋', 'A hand'] };
+const dayRange = (a, b) => { const f = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); return !b || b === a ? f(a) : `${f(a)} – ${f(b)}`; };
+const monthName = (m) => new Date(`${m}-15T12:00:00`).toLocaleDateString(undefined, { month: 'long' });
 const deviceName = () => { const u = navigator.userAgent; return `${/iPhone/.test(u) ? 'iPhone' : /iPad/.test(u) ? 'iPad' : /Android/.test(u) ? 'Android' : /Mac/.test(u) ? 'Mac' : /Windows/.test(u) ? 'Windows' : 'Browser'} · ${/CriOS|Chrome/.test(u) ? 'Chrome' : /Safari/.test(u) ? 'Safari' : /Firefox/.test(u) ? 'Firefox' : 'browser'}`; };
 const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
 
@@ -80,7 +86,7 @@ async function loadFamily() {
 function chrome(on) {
   $('#bar').hidden = !on; $('#nav').hidden = !on;
   document.body.classList.toggle('with-nav', on);
-  if (on) document.querySelector('#nav [data-view=pets]').hidden = !(fam().modules || []).includes('dogs');
+  if (on) document.querySelector('#nav [data-view=pets]').hidden = !(fam().modules || []).some((x) => x === 'dogs' || x === 'chores');
   if (on) $('#famSwitch').innerHTML = `<b>${esc(fam().name)}</b><span class="caret">▾</span>${api.mode() === 'demo' ? '<span class="pill demo">Demo</span>' : ''}`;
 }
 
@@ -210,16 +216,35 @@ async function feedView() {
     <div class="stories">${people.map((m) => `<button type="button" class="story" data-member="${m.id}">${avatar(m, 58)}<span>${esc(m.id === fam().me ? 'You' : m.name)}</span></button>`).join('')}
       <button type="button" class="story add" data-act="addperson"><span class="av plus" style="width:58px;height:58px">＋</span><span>Add</span></button></div>
     <button type="button" class="card composer" data-view="compose">${avatar(me(), 36)}<span>Share something with the family…</span><span class="cam">📷</span></button>
+    <div id="goldNews"></div>
     <div id="posts"><div class="skeleton card"></div><div class="skeleton card"></div></div>`;
+  goldNews();
   const r = await act(() => api.get('/feed'));
   if (!r) return;
   state.feed = r.posts;
   renderPosts();
 }
+// The first week of a month: last month's Gold Card winner tops the feed.
+async function goldNews() {
+  if (!(fam().modules || []).some((x) => x === 'dogs' || x === 'chores')) return;
+  const today = isoLocal();
+  if (+today.slice(8, 10) > 7) return;
+  const d = new Date(`${today}T12:00:00`); d.setDate(0);
+  const last = isoLocal(d).slice(0, 7);
+  const r = await api.get(`/families/${state.fid}/chores?month=${last}&today=${today}`).catch(() => null);
+  const g = r?.gold.find((x) => x.month === last);
+  const el = $('#goldNews');
+  if (!g || !el) return;
+  el.innerHTML = `<section class="card gold gold-news"><div class="gold-shine"></div><div class="lbl gold-lbl">🏆 ${monthName(last)} Gold Card</div>
+    <div class="gold-title">${g.winners.map((w) => esc(w.id === fam().me ? 'You' : w.name)).join(' & ')} won${g.winners.some((w) => w.id === fam().me) ? '! 🎉' : ' 🎉'}</div>
+    <div class="small">${g.points} points of chores${g.prize ? ` · 🎁 ${esc(g.prize)}` : ''}</div></section>`;
+}
 function renderPosts() {
   const el = $('#posts');
   if (!el) return;
-  el.innerHTML = state.feed.length ? state.feed.map(postCard).join('')
+  const asks = state.feed.filter((p) => p.help?.status === 'open' && !p.mine && p.help.to >= isoLocal());
+  const rest = state.feed.filter((p) => !asks.includes(p));
+  el.innerHTML = state.feed.length ? (asks.length ? `<h3>🙋 Can you help?</h3>${asks.map(postCard).join('')}${rest.length ? '<h3>Latest</h3>' : ''}` : '') + rest.map(postCard).join('')
     : `<div class="empty card"><div class="big">📸</div><b>No posts yet</b><p class="small muted">Share a photo of the dogs, a win at the gym, or what's for dinner. Only your family${state.connected.length ? ' (and the families you connect with, if you choose)' : ''} can see it.</p><button type="button" data-view="compose">Make the first post</button></div>`;
 }
 function postCard(p) {
@@ -230,23 +255,40 @@ function postCard(p) {
   return `<article class="post card" data-post="${p.id}" data-fid="${p.fid}">
     <header><button type="button" class="who" ${author ? `data-member="${author.id}"` : ''}>${avatar(who, 38)}<span><b>${esc(who.name)}</b><small class="muted">${p.fid !== state.fid ? `${esc(p.familyName)} · ` : ''}${ago(p.at)} · ${p.audience === 'connections' ? '👥 Family & friends' : '🏠 Family'}</small></span></button>
       ${p.reported ? `<span class="pill warn" title="Reported by someone in the family">🚩 ${p.reported}</span>` : ''}<button type="button" class="icon-btn" data-act="postmenu" aria-label="Post options">⋯</button></header>
+    ${p.help ? helpBlock(p) : ''}
     ${p.photo ? `<img class="photo" src="${p.photo}" alt="" loading="lazy">` : ''}
     <div class="actions"><button type="button" data-act="like" class="${p.liked ? 'liked' : ''}" aria-label="Like">${p.liked ? '❤️' : '🤍'}</button><button type="button" data-act="comment" aria-label="Comment">💬</button>
       <span class="small muted">${p.likes ? `${p.likes} like${p.likes > 1 ? 's' : ''}` : ''}</span></div>
     ${p.text ? `<p class="caption"><b>${esc(who.name)}</b> ${esc(p.text)}</p>` : ''}
-    ${p.tags?.length ? `<p class="tags">${p.tags.map((id) => `<button type="button" class="chip" ${member(id) ? `data-member="${id}"` : ''}>${member(id)?.kind === 'pet' ? '🐾' : '👤'} ${esc(p.tagNames?.[id] || member(id)?.name || '')}</button>`).join('')}</p>` : ''}
+    ${p.tags?.length ? `<p class="tags">${p.tags.map((id) => `<button type="button" class="chip" ${member(id) ? `data-member="${id}"` : ''}>${(member(id)?.kind || p.tagKinds?.[id]) === 'pet' ? '🐾' : '👤'} ${esc(p.tagNames?.[id] || member(id)?.name || '')}</button>`).join('')}</p>` : ''}
     ${p.comments.length > 2 && !open ? `<button type="button" class="linkish small" data-act="allcomments">View all ${p.comments.length} comments</button>` : ''}
     <ul class="comments">${comments.map((c) => `<li><b>${esc(c.name)}</b> ${esc(c.text)} <small class="muted">${ago(c.at)}</small></li>`).join('')}</ul>
     <form class="comment-form"><input name="text" maxlength="500" placeholder="Add a comment…" aria-label="Add a comment"><button class="linkish">Post</button></form>
   </article>`;
 }
 
+// 🙋 A request for help inside a post: what, when, who offered, and who's helping.
+function helpBlock(p) {
+  const h = p.help, [ico, label] = HELP[h.type] || HELP.other;
+  const mine = p.mine, offered = h.offers.some((o) => o.uid === state.user.uid);
+  return `<div class="help ${h.status}">
+    <div class="help-top"><span class="help-ico">${ico}</span><div><div class="help-k">${h.status === 'filled' ? 'Sorted ✓' : 'Can anyone help?'}</div><b>${esc(label)}</b><small>${esc(dayRange(h.from, h.to))}${h.time ? ` · ${esc(h.time)}` : ''}</small></div></div>
+    ${h.status === 'filled' ? `<p class="small">💛 ${esc(h.helper.name)}${h.helper.family ? ` (${esc(h.helper.family)})` : ''} is helping.</p>`
+      : mine ? (h.offers.length ? `<ul class="offers">${h.offers.map((o) => `<li><span><b>${esc(o.name)}</b>${o.family ? ` <small class="muted">${esc(o.family)}</small>` : ''}${o.msg ? `<br><small>“${esc(o.msg)}”</small>` : ''}</span><button type="button" class="small" data-pick="${o.uid}">✓ Choose</button></li>`).join('')}</ul>` : '<p class="small muted">No offers yet. Your network sees this in their feed.</p>')
+      : `<div class="row">${offered ? '<span class="pill">🙋 You offered</span><button type="button" class="linkish small" data-act="withdraw">Withdraw</button>' : '<button type="button" data-act="offer">🙋 I can help</button>'}<span class="small muted">${h.offers.length ? `${h.offers.length} offer${h.offers.length > 1 ? 's' : ''}` : ''}</span></div>`}
+  </div>`;
+}
+
 let draft = { text: '', photo: '', tags: [], audience: 'family' };
 function compose() {
   const tags = fam().members.filter((m) => m.id !== fam().me);
-  openSheet(`<h2>New post</h2>
+  const h = draft.help;
+  openSheet(`<div class="seg compose-kind"><button type="button" class="${h ? '' : 'on'}" data-kind="post">📸 Post</button><button type="button" class="${h ? 'on' : ''}" data-kind="help">🙋 Ask for help</button></div>
     <form id="postForm" class="stack">
-      <div class="row top">${avatar(me(), 40)}<textarea name="text" rows="4" maxlength="2000" placeholder="What's new with the family?">${esc(draft.text)}</textarea></div>
+      ${h ? `<div><div class="small muted">What do you need?</div><div class="chips">${Object.entries(HELP).map(([k, [i, l]]) => `<button type="button" class="chip ${h.type === k ? 'on' : ''}" data-htype="${k}">${i} ${l}</button>`).join('')}</div></div>
+        <div class="row"><label style="flex:1">From<input type="date" name="from" required value="${esc(h.from || '')}" min="${isoLocal()}"></label><label style="flex:1">To<input type="date" name="to" value="${esc(h.to || '')}" min="${isoLocal()}"></label></div>
+        <label>Time <small class="muted">(optional)</small><input name="time" maxlength="40" placeholder="e.g. 6–10 PM, or overnight" value="${esc(h.time || '')}"></label>` : ''}
+      <div class="row top">${avatar(me(), 40)}<textarea name="text" rows="${h ? 3 : 4}" maxlength="2000" placeholder="${h ? 'A few details: feeding, meds, bedtime, where the leash is…' : "What's new with the family?"}">${esc(draft.text)}</textarea></div>
       ${draft.photo ? `<div class="preview"><img src="${draft.photo}" alt=""><button type="button" class="icon-btn" data-act="nophoto" aria-label="Remove photo">✕</button></div>` : ''}
       <label class="filebtn">📷 ${draft.photo ? 'Change photo' : 'Add a photo'}<input type="file" accept="image/*" name="photo" hidden></label>
       ${tags.length ? `<div><div class="small muted">Who's in it?</div><div class="chips">${tags.map((m) => `<button type="button" class="chip ${draft.tags.includes(m.id) ? 'on' : ''}" data-tag="${m.id}">${m.kind === 'pet' ? '🐾' : '👤'} ${esc(m.name)}</button>`).join('')}</div></div>` : ''}
@@ -277,18 +319,27 @@ function familyView() {
     <h3>Pets</h3>${pets.length ? `<ul class="card list">${pets.map(row).join('')}</ul>` : ''}
     <button type="button" class="ghost wide" data-act="addpet">＋ Add a pet</button>
     <h3>Connected families</h3>
-    ${state.connected.length ? `<ul class="card list">${state.connected.map((c) => `<li><div class="member-row static"><span class="stack-av">${c.members.slice(0, 3).map((m) => avatar(m, 30)).join('')}</span><span><b>${esc(c.name)}</b><small class="muted">${c.members.length} members · sees posts you share with connected families</small></span></div></li>`).join('')}</ul>`
+    <section class="card"><b>What friends' families can see</b>
+      <p class="small muted">Posts you share with connected families, and your family's members. Kids are private unless you choose otherwise; a post that tags someone private stays in the family.</p>
+      <ul class="list toggles">
+        <li><label class="switch-row"><span>🧸 Kids <small class="muted">· names, photos and posts about them</small></span><input type="checkbox" data-sharewhat="kids" ${f.share?.kids ? 'checked' : ''} ${me().role === 'owner' ? '' : 'disabled'}><i class="switch"></i></label></li>
+        <li><label class="switch-row"><span>🐾 Pets <small class="muted">· names and posts about them</small></span><input type="checkbox" data-sharewhat="pets" ${f.share?.pets !== false ? 'checked' : ''} ${me().role === 'owner' ? '' : 'disabled'}><i class="switch"></i></label></li>
+      </ul>${me().role === 'owner' ? '' : '<p class="tiny muted">The family\'s creator chooses this.</p>'}</section>
+    ${state.connected.length ? `<ul class="card list">${state.connected.map((c) => `<li><div class="member-row static"><span class="stack-av">${c.members.slice(0, 3).map((m) => avatar(m, 30)).join('')}</span><span><b>${esc(c.name)}</b><small class="muted">${c.members.length} member${c.members.length === 1 ? '' : 's'} · sees posts you share with connected families</small></span></div></li>`).join('')}</ul>`
       : '<p class="small muted pad">Close friends can have their own family here too. Invite them and your families can share updates — only the posts you choose.</p>'}
     <button type="button" class="ghost wide" data-act="invitefamily">💌 Invite a friend's family</button>`;
 }
 
 async function petsView() {
   const pets = fam().members.filter((m) => m.kind === 'pet');
-  $('#view').innerHTML = `${demoBanner()}${pets.length ? '<section class="card care" id="care"><div class="skeleton line"></div></section>' : ''}<h3>Pets</h3>${pets.length ? pets.map((p) => `<button type="button" class="card pet-card" data-member="${p.id}">${avatar(p, 64)}<span><b>${esc(p.name)}</b><small class="muted">${esc([p.breed, ageOf(p.born)].filter(Boolean).join(' · ') || SPECIES[p.species] || '')}</small><small class="pet-alerts" data-alerts="${p.id}"></small></span><span class="go">›</span></button>`).join('')
+  const mods = fam().modules || [];
+  $('#view').innerHTML = `${demoBanner()}<section class="card gold" id="race"><div class="skeleton line"></div></section>
+    <section class="card care" id="care"><div class="skeleton line"></div></section>
+    ${mods.includes('dogs') ? `<h3>Pets</h3>${pets.length ? pets.map((p) => `<button type="button" class="card pet-card" data-member="${p.id}">${avatar(p, 64)}<span><b>${esc(p.name)}</b><small class="muted">${esc([p.breed, ageOf(p.born)].filter(Boolean).join(' · ') || SPECIES[p.species] || '')}</small><small class="pet-alerts" data-alerts="${p.id}"></small></span><span class="go">›</span></button>`).join('')
     : '<div class="empty card"><div class="big">🐾</div><b>No pets yet</b><p class="small muted">Add your dogs (or cats) — everyone in the family sees them.</p></div>'}
-    <button type="button" class="ghost wide" data-act="addpet">＋ Add a pet</button>
-    <p class="small muted pad">Vet records and documents are still edited in the current app's Dogs tab. <a href="../">Open it ›</a></p>`;
-  if (pets.length) renderCare();
+    <button type="button" class="ghost wide" data-act="addpet">＋ Add a pet</button>` : ''}
+    <section id="fame"></section>`;
+  renderCare(); renderRace();
   for (const p of pets) {
     const d = await api.get(`/families/${state.fid}/members/${p.id}/data`).catch(() => null);
     const el = document.querySelector(`[data-alerts="${p.id}"]`);
@@ -313,13 +364,51 @@ async function renderCare() {
     return `<span class="wk ${o >= 2 || (o && l.some((e) => e.kind === 'treat')) ? 'gold' : o ? 'some' : ''}" title="${d}">${new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}</span>`;
   }).join('');
   const adults = fam().members.filter((m) => m.kind === 'person' && m.status === 'active' && m.relation !== 'child');
-  el.innerHTML = `<div class="row between"><b>Today's care</b><span class="small ${golden ? 'good' : 'muted'}">${golden ? '⭐ Golden day' : `${outings} outing${outings === 1 ? '' : 's'}`}</span></div>
-    <div class="care-grid">${Object.entries(CARE).map(([k, [ico, label]]) => `<button type="button" class="care-btn ${count(k) ? 'done' : ''}" data-care="${k}"><span>${ico}</span>${label}${count(k) ? `<small>${count(k) > 1 ? `×${count(k)}` : '✓'}</small>` : ''}</button>`).join('')}</div>
+  const mods = fam().modules || [];
+  const grid = (kinds) => `<div class="care-grid">${kinds.map((k) => { const [ico, label] = CARE[k]; return `<button type="button" class="care-btn ${count(k) ? 'done' : ''}" data-care="${k}"><span>${ico}</span>${label}<em class="pts">${PTS[k] ? `+${PTS[k]}` : '♡'}</em>${count(k) ? `<small>${count(k) > 1 ? `×${count(k)}` : '✓'}</small>` : ''}</button>`; }).join('')}</div>`;
+  el.innerHTML = `<div class="row between"><b>Today</b><span class="small ${golden ? 'good' : 'muted'}">${mods.includes('dogs') ? (golden ? '⭐ Golden day' : `${outings} outing${outings === 1 ? '' : 's'}`) : ''}</span></div>
+    ${mods.includes('dogs') ? `<div class="care-sec">🐾 The dogs</div>${grid(DOG_KINDS)}` : ''}
+    ${mods.includes('chores') ? `<div class="care-sec">🏠 The house</div>${grid(HOUSE_KINDS)}` : ''}
     ${adults.length > 1 ? `<label class="switch-row small both"><span>👫 Log for both of us</span><input type="checkbox" data-careboth ${careBoth ? 'checked' : ''}><i class="switch"></i></label>` : ''}
     ${list.length ? `<ul class="care-log">${list.slice().reverse().map((e) => `<li><span>${CARE[e.kind]?.[0] || ''} ${esc(CARE[e.kind]?.[1] || e.kind)} · <b>${esc(e.byName)}</b> <small class="muted">${new Date(e.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</small></span>${e.by.includes(fam().me) || me().role === 'owner' ? `<button type="button" class="linkish small" data-careundo="${e.id}">Undo</button>` : ''}</li>`).join('')}</ul>`
       : '<p class="small muted">Nothing logged yet today.</p>'}
-    <div class="week" aria-label="This week">${week}</div>
-    <p class="tiny muted">${fedBoth ? '✓ Fed twice today. ' : ''}⭐ = two outings, or one plus a treat.</p>`;
+    ${mods.includes('dogs') ? `<div class="week" aria-label="This week">${week}</div>
+    <p class="tiny muted">${fedBoth ? '✓ Fed twice today. ' : ''}⭐ = two outings, or one plus a treat.</p>` : ''}`;
+}
+// 🏆 This month's race for the Gold Card, and the hall of fame.
+let race = null;
+async function renderRace() {
+  const el = $('#race');
+  if (!el) return;
+  const today = isoLocal(), month = today.slice(0, 7);
+  race = await act(() => api.get(`/families/${state.fid}/chores?month=${month}&today=${today}`));
+  if (!race) return;
+  const left = new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate() - +today.slice(8, 10);
+  const [a, b] = race.board;
+  const lead = !a?.points ? 'Log something to get on the board' : b && a.points === b.points ? "It's a tie!" : b ? `${a.id === fam().me ? 'You lead' : `${esc(a.name)} leads`} by ${a.points - b.points}` : `${a.id === fam().me ? "You're" : `${esc(a.name)} is`} in the lead`;
+  el.innerHTML = `<div class="gold-shine"></div>
+    <div class="row between"><div><div class="lbl gold-lbl">🏆 ${monthName(month)} Gold Card</div><div class="gold-title">${lead}</div></div><div class="gold-days">${left}<small>day${left === 1 ? '' : 's'} left</small></div></div>
+    <ul class="race">${race.board.map((r, i) => `<li><span class="rank">${i === 0 && r.points ? '👑' : i + 1}</span>${avatar(member(r.id), 34)}<span class="rname"><b>${esc(r.id === fam().me ? 'You' : r.name)}</b><small>${r.count} chore${r.count === 1 ? '' : 's'}${r.streak > 1 ? ` · 🔥 ${r.streak}-day streak` : ''}</small><i class="rbar"><i style="width:${race.top ? Math.round((r.points / race.top) * 100) : 0}%"></i></i></span><span class="rpts">${r.points}<small>pts</small></span></li>`).join('')}</ul>
+    <div class="row between prize"><span>🎁 Prize: <b>${esc(race.prize || 'set a prize!')}</b></span>${me().role === 'owner' ? '<button type="button" class="linkish small" data-act="prize">✎</button>' : ''}</div>`;
+  const fame = $('#fame');
+  if (fame) fame.innerHTML = race.gold.length ? `<h3>Hall of fame</h3><div class="fame">${race.gold.map((g) => `<div class="mini-gold"><b>${esc(monthName(g.month))}</b><span>${g.winners.map((w) => esc(w.name)).join(' & ')}</span><small>${g.points} pts${g.prize ? ` · ${esc(g.prize)}` : ''}</small></div>`).join('')}</div>` : '';
+}
+// A little burst of joy for every chore logged.
+function celebrate(kind, x, y) {
+  const pts = PTS[kind] || 0;
+  const mine = race?.board.find((r) => r.id === fam().me), other = race?.board.find((r) => r.id !== fam().me);
+  const after = (mine?.points || 0) + pts;
+  const lead = other ? (after > other.points ? ` · ${after - other.points} ahead of ${other.name}` : after === other.points ? ` · tied with ${other.name}` : ` · ${other.points - after} behind ${other.name}`) : '';
+  toast(`${CARE[kind][0]} ${pts ? `+${pts} ✨` : '♡'} ${CARE[kind][1]}${lead}`);
+  for (let i = 0; i < 14; i++) {
+    const c = document.createElement('i');
+    c.className = 'burst';
+    c.textContent = ['✨', '⭐', '💛', '🎉'][i % 4];
+    c.style.left = `${x}px`; c.style.top = `${y}px`;
+    c.style.setProperty('--dx', `${Math.cos((i / 14) * 6.28) * (50 + Math.random() * 40)}px`);
+    c.style.setProperty('--dy', `${Math.sin((i / 14) * 6.28) * (50 + Math.random() * 40) - 30}px`);
+    document.body.append(c); setTimeout(() => c.remove(), 900);
+  }
 }
 
 function vaccineLine(dog) {
@@ -496,16 +585,23 @@ document.addEventListener('click', (e) => {
   const t = e.target.closest('button, [data-view], [data-member], [data-fam]');
   if (!t) return;
   const d = t.dataset;
+  const post = t.closest('[data-post]');
   if (d.pact) return postAction(d.pact, t.closest('.menu').dataset);
-  if (d.care) return act(async () => { await api.post(`/families/${state.fid}/care`, { kind: d.care, date: isoLocal(), by: careBoth ? 'both' : 'me' }); renderCare(); });
-  if (d.careundo) return act(async () => { await api.del(`/families/${state.fid}/care/${isoLocal()}/${d.careundo}`); renderCare(); });
+  if (d.care) {
+    const box = t.getBoundingClientRect();
+    celebrate(d.care, box.left + box.width / 2, box.top + box.height / 2);
+    return act(async () => { await api.post(`/families/${state.fid}/care`, { kind: d.care, date: isoLocal(), by: careBoth ? 'both' : 'me' }); renderCare(); renderRace(); });
+  }
+  if (d.careundo) return act(async () => { await api.del(`/families/${state.fid}/care/${isoLocal()}/${d.careundo}`); renderCare(); renderRace(); });
   if (d.unblock) return act(async () => { await api.del(`/account/blocks/${d.unblock}`); state.user.blocked = state.user.blocked.filter((b) => b.uid !== d.unblock); meView(); });
   if (d.view) { e.preventDefault(); return show(d.view); }
   if (d.member) { closeSheet(); return show('member', d.member); }
   if (d.fam) { state.fid = d.fam; return act(async () => { await loadFamily(); show('feed'); }); }
   if (d.tag) { draft.tags = draft.tags.includes(d.tag) ? draft.tags.filter((x) => x !== d.tag) : [...draft.tags, d.tag]; t.classList.toggle('on'); return; }
+  if (d.kind) { draft.text = $('#postForm textarea')?.value || draft.text; draft.help = d.kind === 'help' ? (draft.help || { type: 'petsit', from: '', to: '', time: '' }) : null; if (draft.help && state.connected.length) draft.audience = 'connections'; return compose(); }
+  if (d.htype) { const f = $('#postForm'); Object.assign(draft.help, { type: d.htype, from: f.from.value, to: f.to.value, time: f.time.value }); draft.text = f.text.value; return compose(); }
+  if (d.pick) return act(async () => { const r = await api.post(`/posts/${post.dataset.fid}/${post.dataset.post}/accept`, { uid: d.pick }); const p = state.feed.find((x) => x.id === post.dataset.post); p.help = r.help; post.outerHTML = postCard(p); toast(`💛 ${r.help.helper.name} is helping`); });
   if (d.aud) { draft.audience = d.aud; t.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === t)); return; }
-  const post = t.closest('[data-post]');
   switch (d.act) {
     case 'close': return closeSheet();
     case 'demo': return demoSignIn();
@@ -527,6 +623,15 @@ document.addEventListener('click', (e) => {
       Object.assign(p, { liked: r.liked, likes: r.likes }); post.outerHTML = postCard(p);
     });
     case 'comment': return post.querySelector('.comment-form input').focus();
+    case 'offer': case 'withdraw': {
+      const msg = d.act === 'offer' ? prompt('Add a note? (optional)', "Happy to help — tell me what they need!") : '';
+      if (msg == null) return;
+      return act(async () => {
+        const r = await api.post(`/posts/${post.dataset.fid}/${post.dataset.post}/offer`, d.act === 'offer' ? { msg } : { withdraw: true });
+        const p = state.feed.find((x) => x.id === post.dataset.post); p.help = r.help; post.outerHTML = postCard(p);
+        if (d.act === 'offer') toast('💛 Offer sent');
+      });
+    }
     case 'allcomments': state.open[post.dataset.post] = true; return renderPosts();
     case 'postmenu': {
       const p = state.feed.find((x) => x.id === post.dataset.post);
@@ -557,6 +662,11 @@ document.addEventListener('click', (e) => {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(backupBlob()); a.download = `ourpawmily-backup-${new Date().toISOString().slice(0, 10)}.json`;
       document.body.append(a); a.click(); a.remove(); return toast('Backup saved');
+    }
+    case 'prize': {
+      const v = prompt("What does this month's Gold Card winner get?", race?.prize || 'Picks date night + breakfast in bed');
+      if (v == null) return;
+      return act(async () => { await api.patch(`/families/${state.fid}`, { goldPrize: v }); renderRace(); });
     }
     case 'export': return act(async () => { const r = await api.get('/account/export'); download(new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }), `ourpawmily-my-data-${isoLocal()}.json`); toast('Your data is downloaded'); });
     case 'logoutall': if (!confirm('Sign out on every device, including this one?')) return; return act(async () => { await api.post('/auth/logout-all'); api.setToken(null); boot(); });
@@ -592,6 +702,10 @@ document.addEventListener('change', async (e) => {
     return compose();
   }
   if (t.dataset.careboth != null) { careBoth = t.checked; return; }
+  if (t.dataset.sharewhat) {
+    const share = { kids: !!document.querySelector('[data-sharewhat=kids]')?.checked, pets: !!document.querySelector('[data-sharewhat=pets]')?.checked };
+    return act(async () => { await api.patch(`/families/${state.fid}`, { share }); await loadFamily(); toast(`Friends' families ${share.kids ? 'can' : "can't"} see the kids, ${share.pets ? 'can' : "can't"} see the pets`); });
+  }
   if (t.dataset.share) {
     const ids = [...document.querySelectorAll('[data-share]')].filter((x) => x.checked).map((x) => x.dataset.share);
     return act(async () => { await api.patch(`/families/${state.fid}/members/${fam().me}`, { shareWith: ids }); await loadFamily(); toast(ids.length ? 'Sharing updated' : 'Your diet & fitness is private'); });
@@ -674,9 +788,11 @@ document.addEventListener('submit', (e) => {
   if (f.id === 'postForm') {
     e.preventDefault();
     return act(async () => {
-      const r = await api.post(`/families/${state.fid}/posts`, { text: v.text, photo: draft.photo, tags: draft.tags, audience: draft.audience });
+      const help = draft.help ? { type: draft.help.type, from: v.from, to: v.to || v.from, time: v.time } : null;
+      const r = await api.post(`/families/${state.fid}/posts`, { text: v.text, photo: draft.photo, tags: draft.tags, audience: draft.audience, help });
       draft = { text: '', photo: '', tags: [], audience: 'family' };
       state.view = 'feed'; closeSheet(); state.feed = [r.post, ...state.feed]; show('feed');
+      if (r.note) toast(r.note); else if (help) toast(r.post.audience === 'connections' ? 'Asked your family and connected families 🙋' : 'Asked your family 🙋');
     });
   }
   if (f.classList.contains('comment-form')) {

@@ -17,6 +17,7 @@
 //   data:<fid>:<memberId>      {savedAt, data}            a member's tracker data (diet, dogs…)
 //   care:<fid>:<date>          [{id, kind, pets, by, byName, at}]   the family's dog-care log
 //   careidx:<fid>              [date]                     days that have a care log
+//   gold:<fid>                 [{month, winners, points}] Gold Card hall of fame
 //   report:<fid>:<postId>      [{uid, reason, at}]        posts someone reported
 //   rate:<uid>:<minute>        count of changes (limits runaway clients and abuse)
 //
@@ -30,7 +31,9 @@ const INVITE_TTL = 14 * 86400;
 const RELATIONS = ['spouse', 'partner', 'child', 'parent', 'sibling', 'grandparent', 'relative', 'friend', 'other'];
 const SPECIES = ['dog', 'cat', 'other'];
 export const TERMS_VERSION = '2026-10';
-const CARE = ['breakfast', 'dinner', 'walk', 'park', 'treat', 'meds'];
+// Dog care and house chores, with points by effort; the month's top scorer gets the Gold Card.
+export const POINTS = { breakfast: 1, dinner: 1, walk: 2, park: 2, treat: 0, meds: 1, poop: 2, trash: 1, laundry: 3, groceries: 3, cleaning: 4, dishes: 1 };
+const CARE = Object.keys(POINTS);
 const MAX_WRITES_PER_MIN = 120;
 
 const enc = new TextEncoder();
@@ -204,7 +207,7 @@ export async function familyApi(req, env, path) {
     const fam = await loadFamily(m[1]);
     if (!fam) return json({ error: 'not found' }, 404);
     const connected = (await Promise.all(fam.connections.map((f) => db.get(`family:${f}`)))).filter(Boolean)
-      .map((f) => ({ fid: f.fid, name: f.name, members: f.members.map((x) => memberView(x, false)) }));
+      .map((f) => ({ fid: f.fid, name: f.name, members: f.members.filter((x) => sharedWithFriends(f, x)).map((x) => memberView(x, false)) }));
     return json({ family: familyOut(fam, user), connected });
   }
 
@@ -218,6 +221,8 @@ export async function familyApi(req, env, path) {
       if (!owner) return json({ error: "only the family's creator can change that" }, 403);
       if (body.name != null) fam.name = clean(body.name, 40) || fam.name;
       if (Array.isArray(body.modules)) fam.modules = body.modules.filter((x) => MODULES.includes(x));
+      if (body.goldPrize != null) fam.goldPrize = clean(body.goldPrize, 80);
+      if (body.share && typeof body.share === 'object') fam.share = { kids: !!body.share.kids, pets: body.share.pets !== false };
       await db.put(`family:${fam.fid}`, fam);
       return json({ family: familyOut(fam, user) });
     }
@@ -305,6 +310,32 @@ export async function familyApi(req, env, path) {
       await db.put(`care:${fam.fid}:${m[2]}`, list.filter((x) => x !== e));
       return json({ ok: true });
     }
+  }
+
+  // ---- 🏆 the month's chores race: points per person, and the Gold Card ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/chores$/);
+  if (m && method === 'GET') {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const month = /^\d{4}-\d{2}$/.test(url(req).searchParams.get('month') || '') ? url(req).searchParams.get('month') : null;
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(url(req).searchParams.get('today') || '') ? url(req).searchParams.get('today') : null;
+    if (!month || !today) return json({ error: 'which month?' }, 400);
+    const days = new Date(Date.UTC(+month.slice(0, 4), +month.slice(5, 7), 0)).getUTCDate();
+    const logs = {};
+    for (let d = 1; d <= days; d++) {
+      const date = `${month}-${String(d).padStart(2, '0')}`;
+      if (date > today) break;
+      logs[date] = (await db.get(`care:${fam.fid}:${date}`)) || [];
+    }
+    const race = choresRace(logs, fam.members.filter((x) => x.kind === 'person'));
+    let gold = (await db.get(`gold:${fam.fid}`)) || [];
+    // A finished month crowns its winner once (shared on a tie).
+    const ended = today.slice(0, 7) > month;
+    if (ended && race.leaders.length && race.top > 0 && !gold.some((g) => g.month === month)) {
+      gold = [{ month, winners: race.leaders.map((id) => ({ id, name: fam.members.find((x) => x.id === id)?.name || '' })), points: race.top, prize: fam.goldPrize || '' }, ...gold].slice(0, 36);
+      await db.put(`gold:${fam.fid}`, gold);
+    }
+    return json({ month, ended, ...race, gold, prize: fam.goldPrize || '', points: POINTS });
   }
 
   // ---- members ----
@@ -462,6 +493,8 @@ export async function familyApi(req, env, path) {
       for (const id of ids) {
         const p = await db.get(`post:${s.fid}:${id}`);
         if (!p || (!s.own && p.audience !== 'connections')) continue;
+        // A friends' family never sees posts about the kids (or pets) that family keeps private.
+        if (!s.own && (p.tags || []).some((id) => { const x = fam?.members.find((y) => y.id === id); return x && !sharedWithFriends(fam, x); })) continue;
         if (blocked.has(p.byUid) || hidden.has(p.id)) continue;
         const owner = s.own && meIn(fam)?.role === 'owner';
         posts.push({ ...p, reports: undefined, reported: owner ? (p.reports || 0) : 0, comments: p.comments.filter((c) => !blocked.has(c.uid)), familyName: fam?.name || '', own: s.own, mine: p.byUid === user.uid, liked: p.likes.includes(user.uid), likes: p.likes.length });
@@ -477,16 +510,29 @@ export async function familyApi(req, env, path) {
     const me = meIn(fam);
     const text = clean(body.text, 2000).replace(/ {2,}/g, ' ');
     const photo = typeof body.photo === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(body.photo) && body.photo.length < 2_500_000 ? body.photo : '';
-    if (!text && !photo) return json({ error: 'write something or add a photo' }, 400);
+    // 🙋 A request for help: pet sitting, babysitting, a ride… with the dates it's for.
+    let help = null;
+    if (body.help) {
+      const day = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '');
+      help = { type: HELP[body.help.type] ? body.help.type : 'other', from: day(body.help.from), to: day(body.help.to) || day(body.help.from), time: clean(body.help.time, 40), offers: [], status: 'open' };
+      if (!help.from) return json({ error: 'which day do you need help?' }, 400);
+    }
+    if (!text && !photo && !help) return json({ error: 'write something or add a photo' }, 400);
     const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '', text, photo,
       tags: (Array.isArray(body.tags) ? body.tags : []).filter((id) => fam.members.some((x) => x.id === id)).slice(0, 10),
-      tagNames: {}, audience: body.audience === 'connections' ? 'connections' : 'family', likes: [], comments: [], at: Date.now() };
-    for (const id of post.tags) post.tagNames[id] = fam.members.find((x) => x.id === id).name;
+      tagNames: {}, audience: body.audience === 'connections' ? 'connections' : 'family', likes: [], comments: [], at: Date.now(), ...(help ? { help } : {}) };
+    post.tagKinds = {};
+    for (const id of post.tags) { const x = fam.members.find((y) => y.id === id); post.tagNames[id] = x.name; post.tagKinds[id] = x.kind; }
+    // Tagging a kid (or pet) the family keeps private keeps the post in the family.
+    let note = '';
+    if (post.audience === 'connections' && post.tags.some((id) => !sharedWithFriends(fam, fam.members.find((x) => x.id === id)))) {
+      post.audience = 'family'; note = 'Kept in the family: it tags someone your family keeps private from friends.';
+    }
     await db.put(`post:${fam.fid}:${post.id}`, post);
     await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
-    return json({ post: { ...post, familyName: fam.name, own: true, mine: true, liked: false, likes: 0 } });
+    return json({ post: { ...post, familyName: fam.name, own: true, mine: true, liked: false, likes: 0 }, note });
   }
-  m = path.match(/^\/posts\/([a-z0-9]+)\/([a-z0-9]+)(\/like|\/comments|\/report|\/hide|\/block)?$/);
+  m = path.match(/^\/posts\/([a-z0-9]+)\/([a-z0-9]+)(\/like|\/comments|\/report|\/hide|\/block|\/offer|\/accept)?$/);
   if (m) {
     const [, fid, id, action] = m;
     const p = await db.get(`post:${fid}:${id}`);
@@ -517,6 +563,22 @@ export async function familyApi(req, env, path) {
       p.reports = list.length; await db.put(`post:${fid}:${id}`, p);
       user.hidden = [...new Set([id, ...(user.hidden || [])])].slice(0, 500); await saveUser();
       return json({ ok: true });
+    }
+    // Offering to help, and the one who asked picking who helps (which closes the request).
+    if (action === '/offer' && method === 'POST' && p.help) {
+      if (p.byUid === user.uid) return json({ error: "that's your own request" }, 400);
+      const others = p.help.offers.filter((o) => o.uid !== user.uid);
+      const myFam = own || fams.find((f) => (f.connections || []).includes(fid));
+      p.help.offers = body.withdraw ? others : [...others, { uid: user.uid, name: myName, family: myFam?.name || '', msg: clean(body.msg, 140), at: Date.now() }].slice(-30);
+      await db.put(`post:${fid}:${id}`, p);
+      return json({ help: p.help });
+    }
+    if (action === '/accept' && method === 'POST' && p.help) {
+      if (p.byUid !== user.uid) return json({ error: 'only who asked can choose' }, 403);
+      const o = p.help.offers.find((x) => x.uid === body.uid);
+      p.help.status = o ? 'filled' : 'open'; p.help.helper = o ? { uid: o.uid, name: o.name, family: o.family } : null;
+      await db.put(`post:${fid}:${id}`, p);
+      return json({ help: p.help });
     }
     if (action === '/hide' && method === 'POST') {
       user.hidden = [...new Set([id, ...(user.hidden || [])])].slice(0, 500); await saveUser();
@@ -559,11 +621,42 @@ async function makeInvite(db, inv) {
 }
 function familyOut(fam, user) {
   const me = fam.members.find((m) => m.uid === user.uid);
-  return { fid: fam.fid, name: fam.name, createdBy: fam.createdBy, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
+  return { fid: fam.fid, name: fam.name, createdBy: fam.createdBy, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
 }
 const url = (req) => new URL(req.url);
+export const HELP = { petsit: '🐾 Pet sitting', babysit: '🧸 Babysitting', walk: '🦮 Dog walk', ride: '🚗 A ride', meal: '🍲 A meal', other: '🙋 A hand' };
+// What a friends' family may see of someone: kids are private unless the family shares them,
+// pets are shared unless the family keeps them private.
+export function sharedWithFriends(fam, m) {
+  if (!m) return true;
+  const share = fam.share || {};
+  if (m.kind === 'pet') return share.pets !== false;
+  if (m.relation === 'child') return !!share.kids;
+  return true;
+}
+// logs: {date: [care entries]}; people: family members. → per-person points and counts, the leaders.
+export function choresRace(logs, people) {
+  const by = Object.fromEntries(people.map((p) => [p.id, { id: p.id, name: p.name, points: 0, count: 0, kinds: {}, streak: 0 }]));
+  const active = {};
+  for (const [date, list] of Object.entries(logs)) for (const e of list) for (const id of e.by || []) {
+    const r = by[id];
+    if (!r) continue;
+    r.points += POINTS[e.kind] ?? 0; r.count += 1; r.kinds[e.kind] = (r.kinds[e.kind] || 0) + 1;
+    (active[id] ||= new Set()).add(date);
+  }
+  // Days in a row (ending on the last logged day of the month so far) each person did something.
+  const dates = Object.keys(logs).sort();
+  for (const r of Object.values(by)) {
+    let n = 0;
+    for (let i = dates.length - 1; i >= 0; i--) { if (active[r.id]?.has(dates[i])) n++; else if (i === dates.length - 1) continue; else break; }
+    r.streak = n;
+  }
+  const board = Object.values(by).filter((r) => r.count || people.find((p) => p.id === r.id)?.uid).sort((a, b) => b.points - a.points || b.count - a.count);
+  const top = board[0]?.points || 0;
+  return { board, top, leaders: top > 0 ? board.filter((r) => r.points === top).map((r) => r.id) : [] };
+}
 const shiftDay = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
-export const MODULES = ['dogs', 'feed', 'health', 'calendar'];
+export const MODULES = ['dogs', 'chores', 'feed', 'health', 'calendar'];
 
 // Takes someone out of a family: their spot, their data, and (unless kept) their posts,
 // comments and likes there.

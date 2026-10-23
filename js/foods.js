@@ -70,6 +70,8 @@ export const FOODS = {
   // Deli slices, ready to eat (USDA deli turkey / chicken breast; label values are similar). One slice ≈ ½ oz.
   turkeyDeli: { name: 'Smoked turkey breast (deli slices)', kcal: 104, p: 17.1, f: 1.7, c: 4.2, unit: { label: 'slice', grams: 14 }, range: [0, 280, 14] },
   chickenDeli:{ name: 'Chicken breast (deli slices)',       kcal: 90,  p: 17.0, f: 1.5, c: 2.5, unit: { label: 'slice', grams: 14 }, range: [0, 280, 14] },
+  // Shrimp, cooked (USDA, moist heat): very lean, almost all protein.
+  shrimp:     { name: 'Shrimp',                      kcal: 99,  p: 24.0, f: 0.3,  c: 0.2, oz: true, yield: 0.8, range: [0, 340, 5] },
   trout:      { name: 'Rainbow trout',               kcal: 168, p: 23.8, f: 7.4,  c: 0, oz: true, yield: 0.8,  range: [0, 340, 5] },
   // Lavash wrap (whole grain & flax): label per sheet (57 g) = 100 kcal, 6 g protein, 1 g fat, 19 g carbs; steps of ½ sheet.
   lavash:     { name: 'Lavash wrap',             kcal: 175.4, p: 10.53, f: 1.75, c: 33.33, unit: { label: 'sheet', grams: 57 }, range: [0, 228, 28.5] },
@@ -82,6 +84,8 @@ export const FOODS = {
   veggies:    { name: 'Mixed veggies',            kcal: 35,  p: 2.5, f: 0.3,  c: 7.0,  unit: { label: 'cup', grams: 100 }, raw: 0.9, range: [0, 400, 25] },
   broccoli:   { name: 'Broccoli',                 kcal: 35,  p: 2.4, f: 0.4,  c: 7.2,  unit: { label: 'cup', grams: 156 }, raw: 0.9, range: [0, 400, 25] },
   salad:      { name: 'Salad (butter lettuce & cucumber)', kcal: 14, p: 1.0, f: 0.2, c: 2.9, unit: { label: 'bowl', grams: 150 }, range: [0, 400, 25] },
+  // Zucchini, cooked (USDA, boiled); 1 cup sliced ≈ 180 g.
+  zucchini:   { name: 'Zucchini',                 kcal: 15,  p: 1.1, f: 0.4,  c: 2.7,  unit: { label: 'cup', grams: 180 }, raw: 0.9, range: [0, 400, 25] },
   cauliflower:{ name: 'Cauliflower',              kcal: 23,  p: 1.8, f: 0.5,  c: 4.1,  unit: { label: 'cup', grams: 124 }, raw: 0.9, range: [0, 400, 25] },
   oliveOil:   { name: 'Olive oil',                kcal: 884, p: 0,   f: 100,  c: 0,    unit: { label: 'tsp', grams: 4.5 }, range: [0, 31.5, 4.5] },
 };
@@ -93,7 +97,7 @@ export const FIBER = {
   sourdough: 2.4, wheatBread: 6.0, avocado: 6.7, oats: 10.1, berries: 2.4, frozenBerries: 3.0, strawberries: 2.0,
   banana: 2.6, pb: 5.0, apple: 2.4, orange: 2.4, pear: 3.1, grapes: 0.9, mixedNuts: 7.0, cashews: 3.3, almonds: 12.5,
   almondButter: 10.3, walnuts: 6.7, rice: 0.4, brownRice: 1.8, sweetPotato: 3.3, potato: 2.2, quinoa: 2.8,
-  veggies: 4.0, broccoli: 3.3, cauliflower: 2.3, salad: 1.0, chocCookie: 2.0, oatMilk: 0.8,
+  veggies: 4.0, broccoli: 3.3, cauliflower: 2.3, zucchini: 1.0, salad: 1.0, chocCookie: 2.0, oatMilk: 0.8,
   clifBar: 5.9, clifBuilders: 2.9, questBar: 23.3, rxBar: 9.6, kirklandBar: 25.0,
 };
 // Turn a food's total carbs into net carbs (keeps the label numbers as cTotal / kcalTotal).
@@ -106,9 +110,9 @@ for (const [k, fiber] of Object.entries(FIBER)) if (FOODS[k]) netCarbs(FOODS[k],
 
 // Groups for the "add a food" picker when you build a meal yourself.
 export const FOOD_GROUPS = {
-  Protein: ['whey', 'eggWhites', 'egg', 'chicken', 'thigh', 'beef', 'steak', 'salmon', 'wildSalmon', 'cod', 'trout', 'tuna', 'turkeyDeli', 'chickenDeli', 'cheddar'],
+  Protein: ['whey', 'eggWhites', 'egg', 'chicken', 'thigh', 'beef', 'steak', 'salmon', 'wildSalmon', 'cod', 'trout', 'shrimp', 'tuna', 'turkeyDeli', 'chickenDeli', 'cheddar'],
   Carbs: ['oats', 'sourdough', 'wheatBread', 'lavash', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'banana'],
-  'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'cauliflower', 'salad'],
+  'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'zucchini', 'cauliflower', 'salad'],
   Milk: ['oatMilk', 'almondMilk', 'milk2'],
   'Coffee shop': ['latte', 'cappuccino', 'icedLatte', 'cortado', 'flatWhite', 'oatLatte', 'mocha', 'chaiLatte', 'americano', 'espresso', 'dripCoffee', 'chocCookie'],
   Snacks: ['apple', 'banana', 'orange', 'pear', 'grapes', 'strawberries', 'berries', 'mixedNuts', 'cashews', 'almonds', 'greekYogurt'],
@@ -118,7 +122,7 @@ export const FOOD_GROUPS = {
 
 // Default protein rotation (one per day); every protein below can be picked.
 export const PROTEINS = ['chicken', 'beef', 'salmon', 'cod', 'trout'];
-const PROTEIN_OPTIONS = ['chicken', 'thigh', 'steak', 'beef', 'salmon', 'wildSalmon', 'cod', 'trout', 'tuna', 'turkeyDeli', 'chickenDeli'];
+const PROTEIN_OPTIONS = ['chicken', 'thigh', 'steak', 'beef', 'salmon', 'wildSalmon', 'cod', 'trout', 'shrimp', 'tuna', 'turkeyDeli', 'chickenDeli'];
 
 // Meal templates. Each item is a slot with swappable `options` (first = default).
 // `drives` = the macro that slot is sized to hit; `fixed` = default grams for a fixed slot.
@@ -149,7 +153,7 @@ export const MAIN_MEAL = {
   items: [
     { slot: 'protein', options: PROTEIN_OPTIONS, drives: 'p', min: 60, max: 260 },
     { slot: 'carb', options: ['rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'sourdough', 'lavash'], drives: 'c', max: 450 },
-    { slot: 'veggies', options: ['veggies', 'broccoli', 'cauliflower', 'salad'], fixed: 200 },
+    { slot: 'veggies', options: ['veggies', 'broccoli', 'zucchini', 'cauliflower', 'salad'], fixed: 200 },
     { slot: 'fat', options: ['oliveOil', 'butter', 'avocado', 'mixedNuts', 'cashews'], drives: 'f' },
   ],
 };
@@ -173,10 +177,12 @@ export const STORES = {
   turkeyDeli:  { store: 'Costco',  tip: 'Smoked or oven-roasted turkey breast, sliced (deli counter at Safeway / Sprouts too); low-sodium if you can', packGrams: 454, packLabel: 'lb' },
   chickenDeli: { store: 'Safeway', tip: 'Oven-roasted chicken breast deli slices (deli counter or pre-packed)', packGrams: 454, packLabel: 'lb' },
   trout:     { store: 'Sprouts', tip: 'Rainbow trout fillets at the seafood counter', packGrams: 454, packLabel: 'lb' },
+  shrimp:    { store: 'Costco',  tip: 'Kirkland frozen raw shrimp (peeled & deveined); fresh at the Sprouts seafood counter', packGrams: 454, packLabel: 'lb' },
   rice:      { store: 'Costco',  tip: 'Jasmine rice bag (1 cup dry ≈ 3 cups cooked)', packGrams: 454 * 2.8, packLabel: 'lb dry' },
   veggies:   { store: 'Costco',  tip: 'Frozen stir-fry / mixed vegetables; fresh at Sprouts', packGrams: 454, packLabel: 'lb' },
   broccoli:  { store: 'Costco',  tip: 'Kirkland frozen broccoli florets, or fresh crowns at Sprouts', packGrams: 454, packLabel: 'lb' },
   salad:       { store: 'Sprouts', tip: 'Butter lettuce (living heads or clamshell) + cucumbers — half and half by weight', packGrams: 454, packLabel: 'lb' },
+  zucchini:  { store: 'Sprouts', tip: 'Fresh zucchini (Costco and Safeway too); about 1 medium = 1½ cups cooked', packGrams: 454, packLabel: 'lb' },
   cauliflower:{ store: 'Sprouts', tip: 'Fresh cauliflower head or frozen florets (Costco, Safeway too)', packGrams: 454, packLabel: 'lb' },
   oliveOil:  { store: 'Costco',  tip: 'Kirkland extra virgin olive oil', packGrams: 1000, packLabel: 'bottle' },
   lavash:      { store: 'Sprouts', tip: 'Lavash flatbread (e.g. Atoria\'s whole grain & flax, ~100 kcal a sheet); Costco and Safeway carry it too', packGrams: 57 * 4, packLabel: 'pack of 4 sheets' },

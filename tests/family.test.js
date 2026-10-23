@@ -189,3 +189,65 @@ test("the current app's dog duties become one care log", async () => {
   const log = careFromLegacy(people, (id) => ids[id]);
   assert.deepEqual(log.map((e) => `${e.kind}:${e.by.join('+')}`), ['breakfast:m1', 'walk:m1', 'walk:m1+m2', 'park:m2', 'dinner:m1'], 'first feeding counts; a treat later undone is dropped');
 });
+
+test('chores race: points by effort, streaks, ties, and the Gold Card once a month ends', async () => {
+  const { choresRace, POINTS } = await import('../server/family.js');
+  const people = [{ id: 'a', name: 'A', uid: 'u1' }, { id: 'b', name: 'B', uid: 'u2' }];
+  const logs = {
+    '2026-10-01': [{ kind: 'laundry', by: ['a'] }, { kind: 'walk', by: ['a', 'b'] }],
+    '2026-10-02': [{ kind: 'groceries', by: ['b'] }, { kind: 'trash', by: ['b'] }],
+    '2026-10-03': [{ kind: 'cleaning', by: ['a'] }],
+  };
+  const r = choresRace(logs, people);
+  assert.equal(POINTS.cleaning, 4);
+  assert.deepEqual(r.board.map((x) => `${x.name}:${x.points}`), ['A:9', 'B:6']);
+  assert.deepEqual(r.leaders, ['a']);
+  assert.equal(r.board[1].streak, 2, 'B did something on the 1st and 2nd, then the 3rd is the last day and B skipped it');
+  assert.deepEqual(choresRace({ '2026-10-01': [{ kind: 'walk', by: ['a', 'b'] }] }, people).leaders, ['a', 'b'], 'a tie shares the card');
+
+  const me = await signIn('600', 'gold@gmail.com', 'Gold');
+  const { family } = await api('/families', { token: me, method: 'POST', body: { name: 'Golds' } });
+  await api(`/families/${family.fid}`, { token: me, method: 'PATCH', body: { goldPrize: 'Picks date night' } });
+  await api(`/families/${family.fid}/care`, { token: me, method: 'POST', body: { kind: 'laundry', date: '2026-09-30' } });
+  const now = await api(`/families/${family.fid}/chores?month=2026-09&today=2026-09-30`, { token: me });
+  assert.equal(now.ended, false); assert.equal(now.gold.length, 0);
+  const later = await api(`/families/${family.fid}/chores?month=2026-09&today=2026-10-01`, { token: me });
+  assert.equal(later.gold[0].winners[0].name, 'Gold');
+  assert.equal(later.gold[0].prize, 'Picks date night');
+  const again = await api(`/families/${family.fid}/chores?month=2026-09&today=2026-10-02`, { token: me });
+  assert.equal(again.gold.length, 1, 'crowned once');
+});
+
+test("privacy with friends' families: kids private by default, pets shareable; help requests", async () => {
+  const a = await signIn('700', 'pa@gmail.com', 'Parent A');
+  const { family: fa } = await api('/families', { token: a, method: 'POST', body: { name: 'Fam A' } });
+  const kid = (await api(`/families/${fa.fid}/members`, { token: a, method: 'POST', body: { kind: 'person', name: 'Kiddo', relation: 'child' } })).member;
+  const pup = (await api(`/families/${fa.fid}/members`, { token: a, method: 'POST', body: { kind: 'pet', name: 'Pup' } })).member;
+  const inv = await api(`/families/${fa.fid}/invites`, { token: a, method: 'POST', body: { kind: 'family', email: 'pb@gmail.com' } });
+  const b = await signIn('701', 'pb@gmail.com', 'Parent B');
+  const { family: fb } = await api(`/invites/${inv.invite.code}/accept`, { token: b, method: 'POST', body: { familyName: 'Fam B' } });
+
+  // What B sees of A: no kid by default; the pup, yes.
+  let seen = (await api(`/families/${fb.fid}`, { token: b })).connected[0].members.map((x) => x.name);
+  assert.ok(!seen.includes('Kiddo')); assert.ok(seen.includes('Pup'));
+  const kidPost = await api(`/families/${fa.fid}/posts`, { token: a, method: 'POST', body: { text: 'First day of school!', tags: [kid.id], audience: 'connections' } });
+  assert.equal(kidPost.post.audience, 'family'); assert.match(kidPost.note, /private/);
+  await api(`/families/${fa.fid}/posts`, { token: a, method: 'POST', body: { text: 'Dog park!', tags: [pup.id], audience: 'connections' } });
+  assert.deepEqual((await api('/feed', { token: b })).posts.map((x) => x.text), ['Dog park!']);
+  // A keeps pets private too: the pup and the dog-park post disappear for B.
+  await api(`/families/${fa.fid}`, { token: a, method: 'PATCH', body: { share: { kids: false, pets: false } } });
+  seen = (await api(`/families/${fb.fid}`, { token: b })).connected[0].members.map((x) => x.name);
+  assert.ok(!seen.includes('Pup'));
+  assert.deepEqual((await api('/feed', { token: b })).posts.map((x) => x.text), []);
+
+  // 🙋 A asks for pet sitting; B offers; A picks B.
+  assert.equal((await api(`/families/${fa.fid}/posts`, { token: a, method: 'POST', body: { help: { type: 'petsit' }, audience: 'connections' } })).status, 400, 'needs a day');
+  const req = await api(`/families/${fa.fid}/posts`, { token: a, method: 'POST', body: { text: 'Away for a wedding', help: { type: 'petsit', from: '2026-11-07', to: '2026-11-08' }, audience: 'connections' } });
+  const r = (await api('/feed', { token: b })).posts.find((x) => x.help);
+  assert.equal(r.help.type, 'petsit');
+  const off = await api(`/posts/${fa.fid}/${req.post.id}/offer`, { token: b, method: 'POST', body: { msg: 'Happy to!' } });
+  assert.equal(off.help.offers[0].family, 'Fam B');
+  assert.equal((await api(`/posts/${fa.fid}/${req.post.id}/accept`, { token: b, method: 'POST', body: { uid: 'g701' } })).status, 403);
+  const acc = await api(`/posts/${fa.fid}/${req.post.id}/accept`, { token: a, method: 'POST', body: { uid: 'g701' } });
+  assert.equal(acc.help.status, 'filled'); assert.equal(acc.help.helper.name, 'Parent B');
+});

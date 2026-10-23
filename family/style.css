@@ -166,3 +166,42 @@ button.ghost.danger, .danger { color: #c0392b; }
 .danger-btn { background: #c0392b; color: #fff; }
 .pill.warn { background: #fde2dc; color: #a12d1c; }
 @media (prefers-color-scheme: dark) { .wk.gold { background: #4a3c12; color: #f3d68a; } .pill.warn { background: #4a201a; color: #f5b3a8; } }
+
+/* 🏆 chores race & Gold Card */
+.gold { position: relative; overflow: hidden; color: #3b2a00; border: 0; background: linear-gradient(135deg, #FFE9A8 0%, #F6C453 38%, #FFE7A0 62%, #E9B23C 100%); box-shadow: 0 14px 30px -18px rgba(150,100,0,.7); }
+.gold-shine { position: absolute; inset: -40% auto -40% -60%; width: 40%; transform: rotate(20deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent); animation: shine 3.6s ease-in-out infinite; pointer-events: none; }
+@keyframes shine { 0%, 60% { left: -60%; } 100% { left: 130%; } }
+.gold-lbl { font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .75; }
+.gold-title { font-size: 1.25rem; font-weight: 800; letter-spacing: -.01em; margin-top: 2px; }
+.gold-days { text-align: center; font-weight: 800; font-size: 1.4rem; line-height: 1; background: rgba(255,255,255,.5); border-radius: 14px; padding: 8px 10px; }
+.gold-days small { display: block; font-size: .62rem; font-weight: 700; opacity: .7; margin-top: 2px; }
+.race { list-style: none; padding: 0; margin: 12px 0 6px; display: grid; gap: 8px; position: relative; }
+.race li { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.55); border-radius: 16px; padding: 8px 10px; }
+.race .rank { width: 22px; text-align: center; font-weight: 800; }
+.race .rname { flex: 1; display: grid; line-height: 1.2; } .race .rname small { font-size: .74rem; opacity: .75; }
+.rbar { display: block; height: 6px; border-radius: 99px; background: rgba(120,80,0,.15); margin-top: 5px; overflow: hidden; }
+.rbar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #E9A92B, #B9780B); }
+.rpts { font-weight: 800; font-size: 1.2rem; text-align: right; line-height: 1; } .rpts small { display: block; font-size: .62rem; opacity: .7; }
+.prize { font-size: .85rem; position: relative; }
+.care-sec { font-size: .78rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.care-btn .pts { position: absolute; top: 4px; left: 8px; font-style: normal; font-size: .66rem; font-weight: 800; color: #B9780B; }
+.fame { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.mini-gold { flex: none; min-width: 130px; border-radius: 16px; padding: 10px 12px; display: grid; gap: 2px; color: #3b2a00; background: linear-gradient(135deg, #FFE9A8, #F2BE4E); }
+.mini-gold span { font-weight: 700; } .mini-gold small { font-size: .72rem; opacity: .75; }
+.burst { position: fixed; z-index: 30; pointer-events: none; font-style: normal; font-size: 18px; transform: translate(-50%, -50%); animation: burst .9s ease-out forwards; }
+@keyframes burst { to { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.6); opacity: 0; } }
+@media (prefers-color-scheme: dark) { .gold, .mini-gold { color: #3b2a00; } }
+
+/* 🙋 help requests & compose */
+.compose-kind { margin-bottom: 12px; }
+.help { margin: 0 12px 8px; padding: 12px; border-radius: 16px; background: linear-gradient(135deg, #FFF1E6, #FCE4EC); border: 1px solid #F7D3DD; color: #3a2433; }
+.help.filled { background: linear-gradient(135deg, #E9F6EE, #EEF6FF); border-color: #CFE7DA; }
+.help-top { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+.help-top > div { display: grid; line-height: 1.25; }
+.help-ico { width: 46px; height: 46px; border-radius: 16px; background: #fff; display: grid; place-items: center; font-size: 1.5rem; box-shadow: 0 6px 14px -10px rgba(0,0,0,.4); }
+.help-k { font-size: .7rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #C2577A; }
+.help.filled .help-k { color: #2f7d5b; }
+.help small { color: #6b5a63; }
+.offers { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 6px; }
+.offers li { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: rgba(255,255,255,.7); border-radius: 12px; padding: 8px 10px; }
+.offers button { padding: 6px 12px; }

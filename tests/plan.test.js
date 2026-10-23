@@ -148,8 +148,19 @@ test('broccoli and cauliflower swap in for mixed veggies', async () => {
   const m = portionMeal(MAIN_MEAL, { kcal: 600, p: 45, f: 15, c: 60 }, { picks: { protein: 'chicken', veggies: 'broccoli' } });
   const veg = m.portions.find((x) => x.slot === 'veggies');
   assert.equal(veg.food, 'broccoli');
-  assert.deepEqual(veg.options, ['veggies', 'broccoli', 'cauliflower', 'salad']);
+  assert.deepEqual(veg.options, ['veggies', 'broccoli', 'zucchini', 'cauliflower', 'salad']);
   assert.ok(FOODS.cauliflower.kcal < FOODS.broccoli.kcal);
+});
+
+test('shrimp as the protein and zucchini as the veggie', async () => {
+  const { portionMeal } = await import('../js/plan.js');
+  const { MAIN_MEAL, FOODS } = await import('../js/foods.js');
+  const m = portionMeal(MAIN_MEAL, { kcal: 600, p: 45, f: 15, c: 60 }, { picks: { protein: 'shrimp', veggies: 'zucchini' } });
+  const prot = m.portions.find((x) => x.slot === 'protein');
+  assert.equal(prot.food, 'shrimp');
+  assert.equal(m.portions.find((x) => x.slot === 'veggies').food, 'zucchini');
+  assert.ok(Math.abs(m.totals.p - 45) <= 5 && prot.grams > 100, 'meal sized to the protein target with shrimp');
+  assert.ok(FOODS.zucchini.c < FOODS.broccoli.c, 'net carbs');
 });
 
 test('eating out: estimates and menu numbers', async () => {
