@@ -111,6 +111,17 @@ export function mealTargets(day) {
   return out;
 }
 
+// 🥑 A low-carb meal for a light / rest day. Protein stays the same (it protects muscle while
+// cutting; Morton et al. 2018). Carbs drop to about 10% of the meal's calories — low-carb is
+// under ~26% of energy from carbs (Feinman et al. 2015) — matching carbs to the day's activity
+// ("fuel for the work required", Impey et al. 2018). Half of the carb calories come back as fat
+// for fullness, so the meal ends up a little lighter, which suits a less active day.
+export function lowCarbTarget(t) {
+  const c = Math.min(t.c, Math.max(10, Math.round((t.kcal * 0.10) / 4)));
+  const f = t.f + Math.round(((t.c - c) * 4 * 0.5) / 9);
+  return { p: t.p, c, f, kcal: Math.round(t.p * 4 + c * 4 + f * 9) };
+}
+
 export function macrosOf(food, grams) {
   const d = FOODS[food];
   const k = grams / 100;
@@ -332,7 +343,8 @@ export function planForDay(dayTargets, date, custom = {}, prefs = {}, opts = {})
   const meals = mealTargets(dayTargets);
   const n = dayIndex(date);
   const bKeys = Object.keys(BREAKFASTS);
-  const bKey = BREAKFASTS[custom.breakfast?.template] ? custom.breakfast.template : bKeys[n % bKeys.length];
+  // A low-carb breakfast is eggs (oatmeal can't go low-carb).
+  const bKey = BREAKFASTS[custom.breakfast?.template] ? custom.breakfast.template : custom.breakfast?.lowCarb ? 'eggs' : bKeys[n % bKeys.length];
   const merge = (prefKey, c = {}, extra = {}) => ({ picks: { ...extra, ...prefs[prefKey], ...c.picks }, grams: c.grams });
   const rotate = (offset) => ({ protein: PROTEINS[(n + offset) % PROTEINS.length] });
   const build = (name, auto) => (custom[name]?.prepared ? preparedMeal(custom[name]) : custom[name]?.eatout ? eatOutMeal(custom[name], meals[name])
@@ -354,6 +366,7 @@ export function planForDay(dayTargets, date, custom = {}, prefs = {}, opts = {})
       meals[m] = { kcal: Math.round(kcal), p: Math.round(p), f: t.f, c: Math.round(Math.max((kcal - p * 4 - t.f * 9) / 4, 0)) };
     }
   }
+  for (const m of ['breakfast', 'lunch', 'dinner']) if (custom[m]?.lowCarb) meals[m] = { ...lowCarbTarget(meals[m]), lowCarb: true };
   const autos = {
     breakfast: (t) => portionMeal(BREAKFASTS[bKey], t, merge(bKey, custom.breakfast)),
     lunch: (t) => portionMeal(MAIN_MEAL, t, merge('main', custom.lunch, rotate(0))),
@@ -385,12 +398,13 @@ export function planForDay(dayTargets, date, custom = {}, prefs = {}, opts = {})
   return { ...(snack ? { snack } : {}), breakfast: out.breakfast, lunch: out.lunch, dinner: out.dinner };
 }
 
-export function groceryList(dayTargets, startDate, days = 7, prefs = {}) {
+// custom: meals that are the same every day (your locked daily meals).
+export function groceryList(dayTargets, startDate, days = 7, prefs = {}, custom = {}) {
   const totals = {};
   for (let i = 0; i < days; i++) {
     const d = new Date(startDate);
     d.setDate(d.getDate() + i);
-    const plan = planForDay(dayTargets, d, {}, prefs);
+    const plan = planForDay(dayTargets, d, custom, prefs);
     for (const meal of Object.values(plan)) {
       // Portions are cooked weights; shop by raw weight.
       for (const { food, grams } of meal.portions) {

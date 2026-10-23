@@ -327,3 +327,20 @@ test('carbs are net carbs (minus fiber), like most tracking apps', async () => {
   const bar = makeMyFood({ name: 'Bar', p: 20, c: 25, f: 8, fiber: 10, kcal: 230 });
   assert.deepEqual([bar.c, bar.kcal], [15, 190]);
 });
+
+test('low-carb meal for a rest day: same protein, ~10% carbs, some fat back, a bit lighter', async () => {
+  const { lowCarbTarget, planForDay, mealTargets } = await import('../js/plan.js');
+  const t = lowCarbTarget({ kcal: 600, p: 45, f: 15, c: 71 });
+  assert.deepEqual(t, { p: 45, c: 15, f: 27, kcal: 483 });
+  assert.equal(lowCarbTarget({ kcal: 300, p: 30, f: 10, c: 8 }).c, 8, 'never raises carbs');
+  const day = { kcal: 2000, p: 160, f: 60, c: 200 };
+  const normal = planForDay(day, new Date('2026-10-23T12:00:00'), {});
+  const rest = planForDay(day, new Date('2026-10-23T12:00:00'), { dinner: { lowCarb: true } });
+  assert.ok(rest.dinner.target.lowCarb);
+  assert.ok(rest.dinner.totals.c < normal.dinner.totals.c - 30, 'dinner carbs drop');
+  assert.ok(Math.abs(rest.dinner.totals.p - normal.dinner.totals.p) <= 5, 'protein holds');
+  assert.equal(rest.lunch.totals.c, normal.lunch.totals.c, 'other meals are not padded with the carbs');
+  assert.deepEqual(rest.lunch.target, mealTargets(day).lunch);
+  const lowBreakfast = planForDay(day, new Date('2026-10-24T12:00:00'), { breakfast: { lowCarb: true } });
+  assert.equal(lowBreakfast.breakfast.template, 'eggs');
+});

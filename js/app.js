@@ -1,6 +1,6 @@
 import { FOODS, STORES, FOOD_GROUPS, addScannedFoods, addMyFoods, makeMyFood, guessCategory, MY_CATS, netCarbs } from './foods.js';
 import {
-  ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList,
+  ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList, lowCarbTarget,
   weeklyTrend, suggestAdjustment, fitScore,
   FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek, checkinWindow, isCheckinDue, weeklyReview, deltaMacros,
   EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE, DRINKS, drinksTotals, fitItems, labelKcal,
@@ -210,8 +210,32 @@ function saveCustom() {
 }
 // Future days use your base targets (no workouts known yet).
 function todayPlan(t = viewingToday() ? targets() : baseTargets()) {
-  return planForDay(t, dateOf(viewDay()), todaysCustom(), state.prefs, { logged: Object.keys(viewLog().meals || {}) });
+  return planForDay(t, dateOf(viewDay()), withDaily(todaysCustom()), state.prefs, { logged: Object.keys(viewLog().meals || {}) });
 }
+// 🔒 Meals you eat the same every day: they fill in each day unless you change that meal for
+// the day (then today's version wins). The other meals balance around them.
+const dailyMeals = () => store.get('dailyMeals', {});
+const clone = (x) => JSON.parse(JSON.stringify(x));
+function withDaily(custom) {
+  const out = { ...custom };
+  for (const [meal, d] of Object.entries(dailyMeals())) {
+    const c = custom[meal] || {};
+    if (c.items || c.prepared || c.eatout) continue;
+    out[meal] = { ...clone(d), ...(c.lowCarb ? { lowCarb: true } : {}) };
+  }
+  return out;
+}
+// The meal as it is now, in the shape a daily meal is kept in (null for eating out).
+function dailyFrom(meal) {
+  const m = todayPlan()[meal], c = todaysCustom()[meal] || {};
+  if (m.eatout) return null;
+  if (m.prepared) return { prepared: { ...c.prepared } };
+  const out = { items: m.portions.filter((x) => x.grams > 0).map((x) => ({ food: x.food, grams: Math.round(x.grams) })) };
+  if (c.manual && Object.values(c.manual).some((v) => v !== '' && v != null)) out.manual = { ...c.manual };
+  if (meal === 'breakfast') out.template = m.template;
+  return out;
+}
+const dailyKey = (x) => JSON.stringify({ items: (x?.items || []).map((i) => [i.food, Math.round(i.grams)]), prepared: x?.prepared || null, manual: x?.manual || null });
 // What you've logged for the day being shown (nothing for future days).
 function viewLog() {
   return viewingToday() ? todaysLog() : { meals: {}, fuel: null, extras: [] };
@@ -646,7 +670,7 @@ function mealCardsWithAdd(plan) {
   document.body.classList.toggle('meal-editing', !!(editingMeal && plan[editingMeal]));
   if (editingMeal && plan[editingMeal]) return mealEditor(editingMeal, plan[editingMeal]);
   editingMeal = null;
-  return mealOrder(plan).map((meal) => cardFor(meal, plan[meal]) + (meal === 'lunch' && !plan.snack ? addSnackCard() : '')).join('');
+  return restDayBar() + mealOrder(plan).map((meal) => cardFor(meal, plan[meal]) + (meal === 'lunch' && !plan.snack ? addSnackCard() : '')).join('');
 }
 const cardFor = (meal, m) => (meal === 'snack' || editingMeal === meal ? mealCard(meal, m) : mealSummary(meal, m));
 // "⚖️ −4 g fat, +6 g carbs" when a meal was resized to make up for another one.
@@ -662,7 +686,7 @@ function mealSummary(meal, m) {
   return `<div class="card meal meal-sum ${locked ? 'eaten' : ''}" data-meal="${meal}">
     <div class="meal-open" data-openmeal="${meal}" role="button" tabindex="0" aria-label="Customize ${MEAL_NUM[meal] || meal}">
       <div class="row between" style="margin-top:0;align-items:flex-start">
-        <div><div class="eyebrow">${MEAL_NUM[meal] || ''} · ${MEAL_NAMES[meal]}</div><h3 data-role="title">${esc(m.title)}</h3></div>
+        <div><div class="eyebrow">${MEAL_NUM[meal] || ''} · ${MEAL_NAMES[meal]}${dailyMeals()[meal] ? ' · <span class="pill-mini">🔒 daily</span>' : ''}${m.target.lowCarb ? ' · <span class="pill-mini lc">🥑 low-carb</span>' : ''}</div><h3 data-role="title">${esc(m.title)}</h3></div>
         <span class="open-go">${locked ? 'View' : 'Customize'} ›</span>
       </div>
       <div class="meal-macros" data-role="totals">${totalsLine(m)}</div>${balancedNote(m)}
@@ -678,7 +702,8 @@ function mealEditor(meal, m) {
       ${todaysCustom()[meal] && !viewLog().meals[meal] ? `<button type="button" class="linkish small" data-startover="${meal}">↺ Start over</button>` : ''}
     </div>
     <h2 class="editor-title">${MEAL_NUM[meal] || ''} · ${MEAL_NAMES[meal]}</h2>
-    <p class="small muted" style="margin:0 0 8px">Swap or add foods, pick a saved combo, or enter the macros yourself. Changes save as you go.</p>
+    <p class="small muted" style="margin:0 0 8px">Protein, carbs, veggies and fats each have their own list. Packaged meal? Tap 📦 and type the label. Changes save as you go.</p>
+    ${mealModes(meal, m)}
     ${mealCard(meal, m)}
     <button type="button" class="ghost back-bottom" data-closemeal>‹ Back to today's plan</button>
   </div>`;
@@ -745,13 +770,13 @@ function mealCard(meal, m) {
           ${meal === 'breakfast' ? `<select class="small-select" data-template aria-label="Breakfast type">
             ${Object.entries(MEAL_TEMPLATES).map(([k, v]) => `<option value="${k}" ${m.template === k ? 'selected' : ''}>${v}</option>`).join('')}
           </select>` : ''}
-          ${m.custom ? '' : '<button class="ghost small" data-prepared title="A pre-packaged or catered meal with its macros on the label">📦 Prepared</button><button class="ghost small" data-eatout title="Log a restaurant meal">🍴 Ate out</button>'}
+          ${m.custom ? '' : '<button class="ghost small" data-prepared title="A pre-packaged or catered meal (Factor, a meal-prep kitchen…): type the macros on its label">📦 Packaged meal</button><button class="ghost small" data-eatout title="Log a restaurant meal">🍴 Ate out</button>'}
         </div>
       </div>
       <div class="meal-macros" data-role="totals">${totalsLine(m)}${m.manual ? ' <small class="muted">(your numbers)</small>' : ''}</div>${balancedNote(m)}
+      ${macroPanel(m)}
       ${comboRow(meal, m)}
-      ${m.prepared ? preparedBody(meal, m) : m.eatout ? eatOutBody(meal, m) : m.custom ? customBody(meal, m) : `<ul class="portions editable">${m.portions.map((x) => itemRow(x, meal)).join('')}</ul>
-      <div class="row" style="margin-top:6px"><select data-cadd aria-label="Add a food">${foodOptions('', '+ Add a food…')}</select></div>
+      ${m.prepared ? preparedBody(meal, m) : m.eatout ? eatOutBody(meal, m) : m.custom ? customBody(meal, m) : `${sectioned(meal, m, (x) => itemRow(x, meal))}
       <p class="small muted swipe-hint">Swipe a food left (or tap ✕) to remove it.</p>`}
       </div>
       ${eatButton(meal)}
@@ -940,11 +965,94 @@ function foodOptions(selected, placeholder) {
     + NEW_FOOD_OPTION;
 }
 
-function customBody(meal, m) {
-  const man = todaysCustom()[meal]?.manual || {};
-  return `
-    <ul class="portions editable custom">
-      ${m.portions.map((x, i) => {
+// ---- a meal by macro: protein, carbs, veggies, fats (and packaged / mixed foods) ----
+const VEG = new Set(['veggies', 'broccoli', 'zucchini', 'cauliflower', 'salad']);
+const MACRO_SECTIONS = [['protein', '🍗', 'Protein', 'p'], ['carb', '🍚', 'Carbs', 'c'], ['veg', '🥦', 'Veggies', 'c'], ['fat', '🥑', 'Fats', 'f'], ['other', '📦', 'Packaged & mixed', 'kcal']];
+function macroGroup(food, slot) {
+  const bySlot = { protein: 'protein', eggs: 'protein', carb: 'carb', fruit: 'carb', veggies: 'veg', fat: 'fat' }[slot];
+  if (bySlot) return bySlot;
+  const f = FOODS[food];
+  if (!f) return 'other';
+  if (f.mine) return f.cat === 'mixed' || !f.cat ? 'other' : f.cat;
+  if (VEG.has(food)) return 'veg';
+  for (const [g, key] of [['Protein', 'protein'], ['Carbs', 'carb'], ['Fats', 'fat'], ['Fruit & veg', 'carb'], ['Milk', 'other'], ['Coffee shop', 'other'], ['Bars & shakes', 'other']]) if (FOOD_GROUPS[g]?.includes(food)) return key;
+  const cat = guessCategory(f.p, f.c, f.f);
+  return cat === 'mixed' ? 'other' : cat;
+}
+// The foods a section offers: only proteins under Protein, and so on.
+function sectionFoods(key) {
+  const seen = new Set();
+  return Object.values(FOOD_GROUPS).flat().filter((k) => FOODS[k] && !FOODS[k].hidden && !seen.has(k) && seen.add(k) && macroGroup(k) === key);
+}
+function addMenu(key, label) {
+  const cat = { protein: 'protein', carb: 'carb', veg: 'carb', fat: 'fat', other: 'mixed' }[key];
+  return `<select class="sec-add" data-cadd data-cat="${cat}" aria-label="Add ${esc(label.toLowerCase())}"><option value="">＋ Add ${esc(label.toLowerCase())}…</option>${sectionFoods(key).map((k) => `<option value="${k}">${esc(FOODS[k].name)}</option>`).join('')}<option value="__new">＋ ${key === 'other' ? 'Packaged item' : `New ${esc(label.toLowerCase().replace(/s$/, ''))}`} (enter its macros)…</option></select>`;
+}
+function sectioned(meal, m, rowFn) {
+  const rows = m.portions.map((x, i) => ({ x, i, g: macroGroup(x.food, x.slot) }));
+  const unit = { p: 'g protein', c: 'g carbs', f: 'g fat', kcal: 'kcal' };
+  return MACRO_SECTIONS.filter(([key]) => (key !== 'other' && !(key === 'veg' && meal === 'breakfast')) || rows.some((r) => r.g === key)).map(([key, ico, label, mk]) => {
+    const mine = rows.filter((r) => r.g === key);
+    const sub = mine.reduce((a, r) => a + ((FOODS[r.x.food]?.[mk] || 0) * r.x.grams) / 100, 0);
+    return `<div class="msec msec-${key}"><div class="msec-head"><span>${ico} ${label}</span><small>${mine.length ? `${Math.round(sub)} ${unit[mk]}` : 'none yet'}</small></div>
+      ${mine.length ? `<ul class="portions editable${m.custom ? ' custom' : ''}">${mine.map((r) => rowFn(r.x, r.i)).join('')}</ul>` : ''}
+      ${addMenu(key, label)}</div>`;
+  }).join('');
+}
+// Protein, carbs and fat for the meal against its target, as bars.
+function macroPanel(m) {
+  const row = (k, label) => {
+    const v = Math.round(m.totals[k]), t = Math.round(m.target[k] || 0), d = v - t;
+    return `<div class="mrow m${k}"><span class="mlabel">${label}</span><span class="mbar"><i style="width:${t ? Math.min(100, Math.round((v / t) * 100)) : 0}%"></i></span><span class="mval"><b>${v}</b>/${t} g ${Math.abs(d) > 5 ? `<small class="${d > 0 ? 'over' : 'under'}">${d > 0 ? '+' : '−'}${Math.abs(d)}</small>` : '<small class="ok">✓</small>'}</span></div>`;
+  };
+  return `<div class="mpanel" data-role="mpanel">${row('p', 'Protein')}${row('c', 'Carbs')}${row('f', 'Fat')}</div>`;
+}
+// The two switches on a meal's page: low-carb for today, and the same meal every day.
+function mealModes(meal, m) {
+  const c = todaysCustom()[meal] || {}, d = dailyMeals()[meal];
+  const differs = d && (c.items || c.prepared) && dailyKey(c) !== dailyKey(d);
+  const lighter = m.target.lowCarb ? '' : (() => { const lc = lowCarbTarget(m.target); return ` (${lc.c} g carbs, ~${Math.max(0, m.target.kcal - lc.kcal)} kcal lighter)`; })();
+  return `<div class="card meal-modes" data-modes="${meal}">
+    <label class="switch-row"><span><b>🥑 Low-carb today</b><small>Protein stays the same; carbs drop to about 10% of this meal${lighter}, and half those calories come back as healthy fats. For rest days.${meal === 'breakfast' ? ' Breakfast switches to eggs.' : ''}</small></span><input type="checkbox" data-lowcarb="${meal}" ${c.lowCarb ? 'checked' : ''}><i class="switch"></i></label>
+    <details class="small muted lc-why"><summary>Why these numbers?</summary>Low-carb means under ~26% of calories from carbs (Feinman et al., <i>Nutrition</i> 2015). Keeping protein high protects muscle while you lose fat (Morton et al., <i>Br J Sports Med</i> 2018), and matching carbs to how active you are — fewer on rest days — is the "fuel for the work required" approach (Impey et al., <i>Sports Med</i> 2018). The other meals aren't padded with the carbs you skip, so a rest day ends a little lighter.</details>
+    <label class="switch-row"><span><b>🔒 Same every day</b><small>${d ? `This is your daily ${MEAL_NAMES[meal].toLowerCase()}: it fills in each day and the other meals balance around it.` : 'Keep this exact meal every day, so there\'s nothing to tweak.'}</small></span><input type="checkbox" data-daily="${meal}" ${d ? 'checked' : ''}><i class="switch"></i></label>
+    ${c.lowCarb && (m.custom && !m.prepared) ? `<p class="small daily-diff">You've chosen this meal's foods, so they stay as they are: trim the carbs (rice, bread, fruit) to about <b>${m.target.c} g</b>, or tap ↺ Start over for a low-carb suggestion.</p>` : ''}
+    ${differs ? `<div class="row wrap small daily-diff"><span>Today's is different from your daily one.</span><button type="button" class="ghost small" data-dailysave="${meal}">Save as daily</button><button type="button" class="linkish small" data-dailyreset="${meal}">Back to daily</button></div>` : ''}
+  </div>`;
+}
+// 😴 One switch for the whole day.
+function restDayBar() {
+  const c = todaysCustom();
+  const on = ['breakfast', 'lunch', 'dinner'].every((x) => c[x]?.lowCarb);
+  return `<div class="card restday"><label class="switch-row"><span><b>😴 Rest day: low-carb meals</b><small>Fewer carbs in all three meals, protein the same. Or set it per meal.</small></span><input type="checkbox" data-restday ${on ? 'checked' : ''}><i class="switch"></i></label></div>`;
+}
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  const setLow = (meal, on) => editMeal(meal, (c) => { if (on) c.lowCarb = true; else delete c.lowCarb; });
+  const tidy = () => { const c = todaysCustom(); for (const k of ['breakfast', 'lunch', 'dinner']) if (c[k] && !Object.keys(c[k]).length) delete c[k]; saveCustom(); };
+  if (t.dataset?.lowcarb) { setLow(t.dataset.lowcarb, t.checked); tidy(); renderToday(); return; }
+  if (t.dataset?.restday != null) { for (const k of ['breakfast', 'lunch', 'dinner']) setLow(k, t.checked); tidy(); renderToday(); return; }
+  if (t.dataset?.daily) {
+    const meal = t.dataset.daily, all = dailyMeals();
+    if (t.checked) {
+      const d = dailyFrom(meal);
+      if (!d) { t.checked = false; alert("A restaurant meal can't be your daily meal — build it from foods or use 📦 Packaged meal."); return; }
+      all[meal] = d;
+    } else delete all[meal];
+    store.set('dailyMeals', all);
+    renderToday();
+  }
+});
+document.addEventListener('click', (e) => {
+  const save = e.target.closest('[data-dailysave]'), reset = e.target.closest('[data-dailyreset]');
+  if (save) { const all = dailyMeals(); all[save.dataset.dailysave] = dailyFrom(save.dataset.dailysave); store.set('dailyMeals', all); renderToday(); }
+  if (reset) {
+    const c = todaysCustom()[reset.dataset.dailyreset];
+    if (c) for (const k of ['items', 'prepared', 'manual', 'template', 'picks', 'grams', 'title']) delete c[k];
+    saveCustom(); renderToday();
+  }
+});
+function customRow(x, i, meal) {
         const a = amountLabel(x.food, x.grams, meal);
         return `<li data-ci="${i}">
           <div class="item-top">
@@ -957,14 +1065,18 @@ function customBody(meal, m) {
             ${stepButtons(x, meal)}
           </div>
         </li>`;
-      }).join('')}
-    </ul>
+}
+function customBody(meal, m) {
+  const man = todaysCustom()[meal]?.manual || {};
+  return `
+    ${meal === 'snack' ? `<ul class="portions editable custom">${m.portions.map((x, i) => customRow(x, i, meal)).join('')}</ul>
+      <div class="row" style="margin-top:6px"><select data-cadd aria-label="Add a food">${foodOptions('', '+ Add a food…')}</select></div>`
+      : sectioned(meal, m, (x, i) => customRow(x, i, meal))}
     <div class="row" style="margin-top:6px">
-      <select data-cadd aria-label="Add a food">${foodOptions('', '+ Add a food…')}</select>
       ${meal !== 'snack' && m.portions.length && !m.manual ? `<button type="button" class="ghost small" data-fit title="Scale every food so the meal hits its calorie target">⚖️ Fit to ${m.target.kcal} kcal</button>` : ''}
     </div>
     <details class="manual" ${m.manual ? 'open' : ''}>
-      <summary>Enter macros yourself</summary>
+      <summary>✍️ Enter the meal's macros yourself (a packaged meal, another app)</summary>
       <p class="small muted">Use numbers from a label or another app. Leave a box blank to use the foods above.</p>
       <div class="manual-grid">
         ${[['kcal', 'Calories'], ['p', 'Protein g'], ['f', 'Fat g'], ['c', 'Carbs g']].map(([k, label]) =>
@@ -985,6 +1097,7 @@ function refreshCustom(meal) {
   const card = document.querySelector(`.meal[data-meal="${meal}"]`);
   card.querySelector('[data-role="title"]').textContent = m.title;
   card.querySelector('[data-role="totals"]').innerHTML = meal === 'snack' ? macroLine(m.totals) : totalsLine(m) + (m.manual ? ' <small class="muted">(your numbers)</small>' : '');
+  const mp = card.querySelector('[data-role="mpanel"]'); if (mp) mp.outerHTML = macroPanel(m);
   // Lunch and dinner resize around the snack.
   if (meal === 'snack') {
     const plan = todayPlan();
@@ -1339,6 +1452,7 @@ function refreshMeal(meal, active) {
   }
   card.querySelector('[data-role="title"]').textContent = m.title;
   card.querySelector('[data-role="totals"]').innerHTML = totalsLine(m);
+  const mp = card.querySelector('[data-role="mpanel"]'); if (mp) mp.outerHTML = macroPanel(m);
   card.querySelector('[data-reset]')?.toggleAttribute('hidden', !todaysCustom()[meal]);
   for (const x of m.portions) {
     const li = card.querySelector(`li[data-slot="${x.slot}"]`);
@@ -1354,6 +1468,9 @@ function refreshMeal(meal, active) {
 
 function editMeal(meal, fn) {
   const meals = todaysCustom();
+  // Changing a daily meal for today starts from the daily version.
+  const d = dailyMeals()[meal], c0 = meals[meal] || {};
+  if (d && !c0.items && !c0.prepared && !c0.eatout) meals[meal] = { ...clone(d), ...c0 };
   meals[meal] = meals[meal] || {};
   fn(meals[meal]);
   saveCustom();
@@ -2226,7 +2343,7 @@ function mfRender() {
   $('#mfList').innerHTML = all.length ? all.map(([id, x]) => `<li><span>${esc(x.name)} <small class="muted">${MY_CATS[x.cat] ? MY_CATS[x.cat].split(' ')[0] : ''} · 1 ${esc(x.unit.label)}: ${Math.round(x.p * x.unit.grams / 100)}P ${Math.round(x.c * x.unit.grams / 100)}C ${Math.round(x.f * x.unit.grams / 100)}F</small></span>${mine[id] ? `<button type="button" class="x" data-mfdel="${id}" aria-label="Delete ${esc(x.name)}">✕</button>` : ''}</li>`).join('') : '<li class="muted">None yet.</li>';
 }
 function openNewFood(ctx) {
-  newFoodFor = ctx; mfCat = '';
+  newFoodFor = ctx; mfCat = MY_CATS[ctx?.cat] ? ctx.cat : '';
   $('#myFoodForm').reset();
   mfRender();
   $('#myFoodDialog').showModal();
@@ -2268,7 +2385,7 @@ $('#myFoodForm').addEventListener('submit', (e) => {
       if (fits) editMeal(ctx.meal, (c) => { if (ctx.meal === 'breakfast') c.template = plan.template; c.picks = { ...c.picks, [ctx.slot]: id }; if (c.grams) delete c.grams[ctx.slot]; });
       else addToMeal(ctx.meal, id, grams);
     } else if (ctx.ci != null) editCustom(ctx.meal, (c) => { c.items[ctx.ci].food = id; });
-    else editCustom(ctx.meal, (c) => c.items.push({ food: id, grams }));
+    else addToMeal(ctx.meal, id, grams); // a planned meal keeps its foods
     resnap(ctx.meal);
   }
   renderToday();
@@ -2279,14 +2396,14 @@ $('#meals').addEventListener('change', (e) => {
   e.stopPropagation();
   const meal = e.target.closest('.meal')?.dataset.meal;
   const ds = e.target.dataset;
-  const ctx = ds.pick ? { meal, slot: ds.pick } : ds.cfood != null ? { meal, ci: +ds.cfood } : { meal, add: true };
+  const ctx = ds.pick ? { meal, slot: ds.pick } : ds.cfood != null ? { meal, ci: +ds.cfood } : { meal, add: true, cat: ds.cat };
   renderToday(); // puts the menu back on what it was
   openNewFood(ctx);
 }, true);
 
 // ---------- GROCERIES ----------
 function renderGroceries() {
-  const totals = groceryList(baseTargets(), new Date(), 7, state.prefs);
+  const totals = groceryList(baseTargets(), new Date(), 7, state.prefs, withDaily({}));
   const byStore = {};
   for (const [food, grams] of Object.entries(totals)) {
     const s = STORES[food];
