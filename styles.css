@@ -1130,3 +1130,4 @@ body.meal-editing #tab-today > :not(#meals) { display: none !important; }
 .msec-protein .msec-head span { color: var(--p); } .msec-carb .msec-head span { color: var(--c); } .msec-fat .msec-head span { color: var(--f); } .msec-veg .msec-head span { color: var(--good); }
 .msec .portions { margin: 0; }
 .sec-add { width: 100%; margin: 4px 0 6px; font-size: .88rem; color: var(--muted); border-style: dashed; }
+.btn-link { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); color: inherit; text-decoration: none; font-weight: 600; }

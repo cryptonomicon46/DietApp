@@ -486,8 +486,9 @@ export async function familyApi(req, env, path) {
       // Yours, a pet's, or (bringing data over) someone who hasn't joined yet.
       if (!(self || t.kind === 'pet' || (!t.uid && t.addedBy === me.id))) return json({ error: 'not allowed' }, 403);
       if (!body || typeof body.data !== 'object') return json({ error: 'expected {data}' }, 400);
-      await db.put(`data:${fam.fid}:${t.id}`, { savedAt: Date.now(), data: body.data });
-      return json({ ok: true });
+      const savedAt = Date.now();
+      await db.put(`data:${fam.fid}:${t.id}`, { savedAt, data: body.data });
+      return json({ ok: true, savedAt });
     }
   }
 

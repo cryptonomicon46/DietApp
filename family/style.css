@@ -48,7 +48,9 @@ label { display: grid; gap: 4px; font-size: .9rem; font-weight: 600; }
 .fam-switch { background: none; color: var(--ink); font-size: 1.25rem; padding: 4px 6px; letter-spacing: -.01em; }
 .fam-switch .caret { color: var(--muted); font-size: .8rem; margin-left: 4px; }
 .nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; justify-content: space-around; align-items: center; background: var(--card); border-top: 1px solid var(--line); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
-.nav button { background: none; color: var(--muted); display: grid; gap: 0; font-size: .7rem; font-weight: 600; padding: 4px 10px; }
+.nav a.nav-link { text-decoration: none; color: var(--muted); display: grid; justify-items: center; font-size: .7rem; font-weight: 600; padding: 4px 6px; }
+.nav a.nav-link span { font-size: 1.35rem; line-height: 1.2; filter: grayscale(.6); }
+.nav button { background: none; color: var(--muted); display: grid; gap: 0; font-size: .7rem; font-weight: 600; padding: 4px 6px; }
 .nav button span { font-size: 1.35rem; line-height: 1.2; filter: grayscale(.6); }
 .nav button.on { color: var(--brand); } .nav button.on span { filter: none; }
 .nav .nav-post span { background: var(--brand); color: var(--brand-ink); width: 46px; height: 34px; border-radius: 12px; display: grid; place-items: center; filter: none; font-size: 1.4rem; }

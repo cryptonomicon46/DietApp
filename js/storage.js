@@ -85,7 +85,8 @@ export function exportProfile(id, { shared = false } = {}) {
 
 export function importProfile(id, data) {
   const prefix = `lp.p.${id}.`;
-  for (const k of raw.keys()) if (k.startsWith(prefix) && !(k.slice(prefix.length) in data)) {
+  // This device's own sign-ins (WHOOP/Strava) are never in a synced copy, so they stay.
+  for (const k of raw.keys()) if (k.startsWith(prefix) && !(k.slice(prefix.length) in data) && !PRIVATE_KEYS.has(k.slice(prefix.length))) {
     try { localStorage.removeItem(k); } catch { /* ignore */ }
   }
   for (const [k, v] of Object.entries(data)) raw.set(prefix + k, v);

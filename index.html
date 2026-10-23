@@ -11,13 +11,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawmily">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=208">
+  <link rel="stylesheet" href="styles.css?v=209">
 </head>
 <body>
   <header class="top">
     <div class="top-row">
       <h1>OurPawmily</h1>
       <div class="row" style="margin-top:0">
+        <a id="toFamily" class="btn-link small" href="family/" aria-label="OurPawmily Families" title="OurPawmily Families" hidden>👨‍👩‍👧</a>
         <button id="openScience" class="ghost small" aria-label="The science">ⓘ Science</button>
         <button id="openProfile" class="ghost small" aria-label="Edit profile">⚙︎ Profile</button>
       </div>
@@ -205,6 +206,7 @@
     <!-- PRIVACY SETTINGS: the household code and how sharing works -->
     <section id="tab-privacy" class="tab">
       <h2 class="brief-title">🔐 Privacy settings</h2>
+      <div id="accountInfo"></div>
       <div id="usHousehold"></div>
       <div id="privacyInfo"></div>
       <a class="card home-card" href="family/"><span class="home-ico">👨‍👩‍👧</span><span class="home-main"><b>OurPawmily Families · beta</b><small class="muted">Google sign-in, invites, pets and a private family feed. Try it on this phone first.</small></span><span class="home-go">›</span></a>
@@ -410,45 +412,47 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/activity.js": "./js/activity.js?v=208",
-    "./js/adopt.js": "./js/adopt.js?v=208",
-    "./js/analytics.js": "./js/analytics.js?v=208",
-    "./js/app.js": "./js/app.js?v=208",
-    "./js/bodycomp.js": "./js/bodycomp.js?v=208",
-    "./js/brief.js": "./js/brief.js?v=208",
-    "./js/briefTab.js": "./js/briefTab.js?v=208",
-    "./js/calTab.js": "./js/calTab.js?v=208",
-    "./js/calendar.js": "./js/calendar.js?v=208",
-    "./js/cheer.js": "./js/cheer.js?v=208",
-    "./js/climb.js": "./js/climb.js?v=208",
-    "./js/commands.js": "./js/commands.js?v=208",
-    "./js/devices.js": "./js/devices.js?v=208",
-    "./js/dexa.js": "./js/dexa.js?v=208",
-    "./js/dogs.js": "./js/dogs.js?v=208",
-    "./js/dress.js": "./js/dress.js?v=208",
-    "./js/dressTab.js": "./js/dressTab.js?v=208",
-    "./js/foods.js": "./js/foods.js?v=208",
-    "./js/household.js": "./js/household.js?v=208",
-    "./js/lift.js": "./js/lift.js?v=208",
-    "./js/lifting.js": "./js/lifting.js?v=208",
-    "./js/notes.js": "./js/notes.js?v=208",
-    "./js/photos.js": "./js/photos.js?v=208",
-    "./js/plan.js": "./js/plan.js?v=208",
-    "./js/plans.js": "./js/plans.js?v=208",
-    "./js/poster.js": "./js/poster.js?v=208",
-    "./js/progress.js": "./js/progress.js?v=208",
-    "./js/research.js": "./js/research.js?v=208",
-    "./js/review.js": "./js/review.js?v=208",
-    "./js/rewards.js": "./js/rewards.js?v=208",
-    "./js/rhythm.js": "./js/rhythm.js?v=208",
-    "./js/share.js": "./js/share.js?v=208",
-    "./js/shows.js": "./js/shows.js?v=208",
-    "./js/storage.js": "./js/storage.js?v=208",
-    "./js/sync.js": "./js/sync.js?v=208",
-    "./js/zip.js": "./js/zip.js?v=208"
+    "./js/account.js": "./js/account.js?v=209",
+    "./js/accountBoot.js": "./js/accountBoot.js?v=209",
+    "./js/activity.js": "./js/activity.js?v=209",
+    "./js/adopt.js": "./js/adopt.js?v=209",
+    "./js/analytics.js": "./js/analytics.js?v=209",
+    "./js/app.js": "./js/app.js?v=209",
+    "./js/bodycomp.js": "./js/bodycomp.js?v=209",
+    "./js/brief.js": "./js/brief.js?v=209",
+    "./js/briefTab.js": "./js/briefTab.js?v=209",
+    "./js/calTab.js": "./js/calTab.js?v=209",
+    "./js/calendar.js": "./js/calendar.js?v=209",
+    "./js/cheer.js": "./js/cheer.js?v=209",
+    "./js/climb.js": "./js/climb.js?v=209",
+    "./js/commands.js": "./js/commands.js?v=209",
+    "./js/devices.js": "./js/devices.js?v=209",
+    "./js/dexa.js": "./js/dexa.js?v=209",
+    "./js/dogs.js": "./js/dogs.js?v=209",
+    "./js/dress.js": "./js/dress.js?v=209",
+    "./js/dressTab.js": "./js/dressTab.js?v=209",
+    "./js/foods.js": "./js/foods.js?v=209",
+    "./js/household.js": "./js/household.js?v=209",
+    "./js/lift.js": "./js/lift.js?v=209",
+    "./js/lifting.js": "./js/lifting.js?v=209",
+    "./js/notes.js": "./js/notes.js?v=209",
+    "./js/photos.js": "./js/photos.js?v=209",
+    "./js/plan.js": "./js/plan.js?v=209",
+    "./js/plans.js": "./js/plans.js?v=209",
+    "./js/poster.js": "./js/poster.js?v=209",
+    "./js/progress.js": "./js/progress.js?v=209",
+    "./js/research.js": "./js/research.js?v=209",
+    "./js/review.js": "./js/review.js?v=209",
+    "./js/rewards.js": "./js/rewards.js?v=209",
+    "./js/rhythm.js": "./js/rhythm.js?v=209",
+    "./js/share.js": "./js/share.js?v=209",
+    "./js/shows.js": "./js/shows.js?v=209",
+    "./js/storage.js": "./js/storage.js?v=209",
+    "./js/sync.js": "./js/sync.js?v=209",
+    "./js/zip.js": "./js/zip.js?v=209"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=208"></script>
+  <script type="module" src="js/app.js?v=209"></script>
 </body>
 </html>

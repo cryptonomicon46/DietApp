@@ -90,7 +90,8 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
 - **💬 Help** (Me › Help, "Trouble signing in?" on the sign-in screen, and 🔐 Privacy in the trackers): ask how anything works, from setting up a family and inviting people to entering macros and setting up a diet plan. Quick questions are one tap. When the connector has an Anthropic API key, Claude answers and can check your account and families, resend an invite, sign out your other devices (after you confirm) and file a problem. Without the key, or offline, it answers from the built-in guide. **📮 Report a problem** sends a note to the app's maintainer.
 - **🛠 Maintainer** (Me tab, for the emails in `ADMIN_EMAILS`): problems people filed, with their help chat; app errors phones hit in the last 7 days (just the error and where, counted); and the nightly check, which repairs leftovers from half-finished changes and lists what it fixed.
 - What's in place for the App Store and Google Play, and what's left, is in [family/STORE-READINESS.md](family/STORE-READINESS.md).
-- **Still in the current app:** the food, training and calendar trackers, and editing vet records. Moving those in, a shared calendar between families, and notifications come next.
+- **🥗 Trackers** (bottom bar, when the family manages Diet & fitness): the food, macros, training, dogs and calendar screens you know, now **saved to your OurPawmily account** once you're signed in. They're the same on every phone or computer you sign in on: a new device loads them before it opens, and a change on one device shows up on the others. Your partner's day comes from their account only if they've turned sharing on for you (Me › Who can see my diet & fitness). Friends' families never see anyone's trackers, and kids' details stay inside the family. WHOOP/Strava sign-ins stay on each device. The 👨‍👩‍👧 button at the top of the trackers goes back to the family app, and 🔐 Privacy shows where your trackers are saved. The household code keeps working alongside until both of you have moved over.
+- **Coming next:** editing vet records in the family app, a shared calendar between families, and notifications.
 
 ## 🏠 Home
 
@@ -390,4 +391,5 @@ Run `node scripts/bump-version.mjs` before committing. It gives every app file a
 | `js/notes.js`, `js/plans.js`, `js/shows.js` | Us tab: notes, plans, watching |
 | `js/lifting.js`, `js/lift.js` | Lifting program and log |
 | `js/sync.js`, `js/household.js`, `js/storage.js` | Profiles, household sync, changing the household code |
+| `js/account.js`, `js/accountBoot.js` | Saves the trackers to your OurPawmily account (family sign-in) |
 | `server/worker.js` | The connector |

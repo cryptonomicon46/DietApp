@@ -36,7 +36,7 @@ function movedCard(inDialog = false) {
 
 function codeCard() {
   const s = sync.settings();
-  if (!s?.code || !sync.enabled()) {
+  if (!s?.code || !sync.household()) {
     return `<div class="card hh-card"><div class="eyebrow">🔐 Our household code</div>
       <p class="small muted">Sharing is off on this phone. Link your phones first (open ${esc(nameOf(partner()))}'s day and tap Link phones).</p></div>`;
   }

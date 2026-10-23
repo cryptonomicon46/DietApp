@@ -1,3 +1,4 @@
+import './accountBoot.js'; // first: a new device loads your trackers from your OurPawmily account
 import { FOODS, STORES, FOOD_GROUPS, addScannedFoods, addMyFoods, makeMyFood, guessCategory, MY_CATS, netCarbs } from './foods.js';
 import {
   ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList, lowCarbTarget,
@@ -20,6 +21,7 @@ import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from 
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
 import { sync, newHouseholdCode, DEFAULT_CONNECTOR } from './sync.js';
+import { account } from './account.js';
 import { renderHousehold, initHousehold } from './household.js';
 import { renderRhythm, initRhythm } from './rhythm.js';
 import { renderDexa, initDexa, allScans } from './dexa.js';
@@ -3063,9 +3065,26 @@ function renderSharing() {
   $('#shareUrl').value = s.url || devices.get().server || DEFAULT_CONNECTOR;
   $('#shareCode').value = s.code || '';
   $('#shareMe').textContent = PROFILES.find((p) => p.id === ownerId())?.name || '—';
-  $('#shareStatus').textContent = sync.enabled()
-    ? `Sharing is on. Last upload ${global.get('pushedAt', 0) ? ago(global.get('pushedAt', 0)) : 'not yet'}.`
-    : 'Off. Both profiles still work on this phone.';
+  const acct = account.get();
+  $('#shareStatus').textContent = `${acct ? `Saved to your OurPawmily account (${acct.email}). ` : ''}${sync.household()
+    ? `Household sharing is on. Last upload ${global.get('pushedAt', 0) ? ago(global.get('pushedAt', 0)) : 'not yet'}.`
+    : acct ? '' : 'Off. Both profiles still work on this phone.'}`;
+  renderAccount();
+// Your own trackers changed on another phone or computer: show the new copy.
+window.addEventListener('lp:mine', () => location.reload());
+}
+// Privacy tab: where your trackers are saved, and who can see them.
+function renderAccount() {
+  const el = $('#accountInfo');
+  if (!el) return;
+  const acct = account.get();
+  $('#toFamily').hidden = !acct;
+  el.innerHTML = acct
+    ? `<div class="card"><div class="eyebrow">☁️ Saved to your account</div>
+        <p class="small">Your meals, weigh-ins, training and notes are saved to <b>${esc(acct.email)}</b> in <b>${esc(acct.family)}</b>, so they're the same on every phone or computer you sign in on.</p>
+        <p class="small muted">Only people in ${esc(acct.family)} you've turned sharing on for can see them (Families › Me › Who can see my diet &amp; fitness). Friends' families never see your trackers or your kids' details.</p>
+        <p class="small muted">${global.get('pushError', null) ? `<span class="tone-warn">Not saved yet: ${esc(global.get('pushError', ''))}</span>` : `Saved ${global.get('pushedAt', 0) ? ago(global.get('pushedAt', 0)) : 'soon'}`} · <a href="family/">Open OurPawmily Families ›</a></p></div>`
+    : `<div class="card"><div class="eyebrow">☁️ Save to your account</div><p class="small">Sign in to <a href="family/">OurPawmily Families</a> with Google and your trackers are saved to your account, so they follow you to any phone or computer — and only the family members you choose can see them.</p></div>`;
 }
 $('#shareNewCode').onclick = () => { $('#shareCode').value = newHouseholdCode(); };
 $('#shareSave').onclick = async () => {
@@ -3137,7 +3156,7 @@ window.addEventListener('lp:weighin', (e) => {
 // Commands the phone couldn't parse go to Claude through the connector (needs household sharing).
 window.addEventListener('lp:assistant', async (e) => {
   const s = sync.settings();
-  if (!sync.enabled()) {
+  if (!sync.household()) {
     setCommandFeedback(`${e.detail.message}<br><span class="muted">Turn on household sharing in Devices to let Claude handle commands like this.</span>`);
     return;
   }
@@ -3193,11 +3212,12 @@ else if (state.profile) renderAll();
 else if (sync.readOnly()) openPartnerNotice();
 else openProfile();
 renderHousehold(); // a changed household code asks for the new one as soon as the app opens
+renderAccount();
 // Pull workouts on open (at most every 10 min) and right after connecting.
 if (!sync.readOnly() && (justConnected || Date.now() - store.get('lastSync', 0) > 10 * 60000)) syncDevices();
 // Household: upload my latest, then fetch my partner's; reload if I'm looking at fresh data.
 applyPendingLink();
-if (sync.enabled()) {
+if (sync.enabled() || account.get() || (() => { try { return localStorage.getItem('fam.token.live'); } catch { return null; } })()) {
   sync.push().catch(() => {});
   sync.pull().then((changed) => { if (changed) registerMyFoods(); updateNotesBadge(); updateCalBadge(); if (changed) renderHome(); if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
   const onNotes = () => document.querySelector('#tab-notes').classList.contains('active');

@@ -1,9 +1,13 @@
 import { PROFILES, global, onChange, exportProfile, importProfile, activeProfile, ownerId } from './storage.js';
+import { account } from './account.js';
 
 // Household sync through the connector worker (server/worker.js, KV storage).
 // Each phone uploads its owner's data and downloads everyone else's to view.
 // settings = {url, code}: connector URL and shared household code. The phone's owner
 // (storage.ownerId) is the one whose data this phone uploads.
+// Signed in to the family app (account.js)? Then your data is also saved to your OurPawmily
+// account, and your partner's comes from there when they share it with you; the household code
+// carries on alongside until both of you have moved over.
 
 // Your Cloudflare connector. Not secret: data there can only be read with the household code.
 export const DEFAULT_CONNECTOR = 'https://lean-plate-connect.sandman-amani.workers.dev';
@@ -47,7 +51,7 @@ export const sync = {
   // you send it yourselves. fileIds: dog documents and adoption photos to carry over.
   async rotate(fileIds = []) {
     const s = this.settings();
-    if (!this.enabled()) throw new Error('Turn on sharing first.');
+    if (!this.household()) throw new Error('Turn on sharing first.');
     const old = s.code;
     const code = householdCode(newHouseholdCode());
     const at = Date.now();
@@ -116,13 +120,15 @@ export const sync = {
     return moved;
   },
   save(s) { global.set('sync', s); },
-  enabled() { const s = this.settings(); return !!(s?.url && s?.code && !s.moved && ownerId()); },
+  household() { const s = this.settings(); return !!(s?.url && s?.code && !s.moved && ownerId()); },
+  enabled() { return this.household() || account.active(); },
   // Only the phone's owner can edit; anyone else's profile is view-only.
   readOnly() { return !!ownerId() && activeProfile().id !== ownerId(); },
 
   async push() {
+    if (account.active()) await account.push();
     const s = this.settings();
-    if (!this.enabled()) return;
+    if (!this.household()) return;
     const res = await fetch(`${s.url}/household/${encodeURIComponent(s.code)}/${ownerId()}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -134,13 +140,17 @@ export const sync = {
 
   // Returns true when someone else's data changed.
   async pull() {
+    // Something waiting to upload goes first, so it isn't replaced by an older copy.
+    if (timer) { clearTimeout(timer); timer = null; await this.push().catch(() => {}); }
+    let changed = false, got = [];
+    if (token() && !account.active()) await account.connect().catch(() => null);
+    if (account.active()) ({ changed, got } = await account.pull());
     const s = this.settings();
-    if (!this.enabled()) return false;
+    if (!this.household()) { global.set('pulledAt', Date.now()); return changed; }
     const followed = await this.follow();
     if (followed === 'moved') return true;
     if (followed) await this.push();
-    let changed = false;
-    for (const p of PROFILES.filter((x) => x.id !== ownerId())) {
+    for (const p of PROFILES.filter((x) => x.id !== ownerId() && !got.includes(x.id))) {
       const res = await fetch(`${s.url}/household/${encodeURIComponent(this.settings().code)}/${p.id}`);
       if (res.status === 404) continue;
       if (!res.ok) throw new Error(`download failed (${res.status})`);
@@ -157,6 +167,8 @@ export const sync = {
     return changed;
   },
 };
+
+const token = () => { try { return localStorage.getItem('fam.mode') !== 'demo' && localStorage.getItem('fam.token.live'); } catch { return null; } };
 
 // Upload a few seconds after the owner changes anything.
 let timer = null;

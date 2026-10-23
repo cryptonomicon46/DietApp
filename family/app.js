@@ -88,6 +88,7 @@ function chrome(on) {
   $('#bar').hidden = !on; $('#nav').hidden = !on;
   document.body.classList.toggle('with-nav', on);
   if (on) document.querySelector('#nav [data-view=pets]').hidden = !(fam().modules || []).some((x) => x === 'dogs' || x === 'chores');
+  if (on) $('#navTrackers').hidden = !(fam().modules || []).includes('health');
   if (on) $('#famSwitch').innerHTML = `<b>${esc(fam().name)}</b><span class="caret">▾</span>${api.mode() === 'demo' ? '<span class="pill demo">Demo</span>' : ''}`;
 }
 
@@ -510,7 +511,7 @@ function meView() {
       ${state.support ? `<a class="small" href="mailto:${esc(state.support)}?subject=OurPawmily%20support">✉️ Email support</a>` : ''}
       <p class="tiny muted"><a href="privacy.html" target="_blank">Privacy Policy</a> · <a href="terms.html" target="_blank">Terms</a> · <a href="delete-account.html" target="_blank">How deletion works</a></p>
     </section>
-    <section class="card links"><a href="../">📊 Open the trackers (food, training, dogs, calendar) ›</a></section>
+    <section class="card links"><a href="../">🥗 Open your trackers (food, macros, training, calendar) ›</a><p class="tiny muted">Saved to this account, so they're the same on every device you sign in on. Only the people you turn sharing on for above can see them — never friends' families.</p></section>
     <button type="button" class="ghost wide" data-act="signout">Sign out</button>
     <p class="tiny muted center pad">OurPawmily Families · beta</p>`;
   api.get('/account/sessions').then((r) => {
