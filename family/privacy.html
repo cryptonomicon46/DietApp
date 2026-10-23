@@ -39,6 +39,8 @@
   <li><b>Google</b> handles sign-in.</li>
   <li><b>GitHub Pages</b> serves the app's files.</li>
   <li>The trackers fetch weather from <b>Open-Meteo</b>. Those requests carry no personal data, only fixed city locations.</li>
+  <li>If you use 💬 Help, your questions (and the account details needed to answer them, like your families' member names) are sent to <b>Anthropic</b>'s API so Claude can answer. If you report a problem, the report and that help chat are kept for the app's maintainer for up to 180 days.</li>
+  <li>If the app hits an error, the error message and where it happened (no account or personal data) are counted so we can fix it.</li>
   <li>If you use "Ask Claude" in the trackers, what you type and the data needed to answer it is sent to <b>Anthropic</b>'s API. Anthropic doesn't use API data to train its models by default.</li>
 </ul>
 <p>Data is encrypted in transit (HTTPS). It is not end-to-end encrypted, so whoever runs the server could technically access it. We only do so to keep the service running or when you ask us for help.</p>
@@ -48,6 +50,7 @@
   <li><b>Your data:</b> kept until you delete it or your account.</li>
   <li><b>Sign-ins:</b> expire after 30 days.</li>
   <li><b>Invites:</b> expire after 14 days or when used.</li>
+  <li><b>Problem reports:</b> 180 days. <b>Error counts:</b> 30 days.</li>
   <li><b>When you delete your account:</b> your account, sign-ins, diet & fitness data, posts, comments and likes are deleted immediately (see <a href="delete-account.html">Deleting your account</a>). Copies may linger in our providers' systems only for as long as their own retention allows.</li>
 </ul>
 

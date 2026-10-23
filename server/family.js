@@ -20,11 +20,17 @@
 //   gold:<fid>                 [{month, winners, points}] Gold Card hall of fame
 //   report:<fid>:<postId>      [{uid, reason, at}]        posts someone reported
 //   rate:<uid>:<minute>        count of changes (limits runaway clients and abuse)
+//   ticket:<id>                a problem filed through Help (180 days)   tickets: [id] newest first
+//   glitch:<date>              {key: {message, where, n}} app errors phones reported that day (30 days)
+//   helprate:<who>:<minute|day> help-chat use per account or address
+//   admin:report / admin:history  the nightly maintenance report (runMaintenance)
 //
 // Store rules this follows (Apple App Store 5.1.1, Google Play User Data): people can delete
 // their account and everything tied to it from inside the app, download a copy of their data,
 // and accept the terms (13+) before using it; shared posts can be reported, hidden, and their
 // authors blocked (Apple 1.2).
+
+import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
 const SESSION_TTL = 30 * 86400;
 const INVITE_TTL = 14 * 86400;
@@ -35,6 +41,9 @@ export const TERMS_VERSION = '2026-10';
 export const POINTS = { breakfast: 1, dinner: 1, walk: 2, park: 2, treat: 0, meds: 1, poop: 2, trash: 1, laundry: 3, groceries: 3, cleaning: 4, dishes: 1 };
 const CARE = Object.keys(POINTS);
 const MAX_WRITES_PER_MIN = 120;
+
+const HELP_PER_MIN = 10, HELP_PER_DAY = 80;
+const TICKET_TTL = 180 * 86400;
 
 const enc = new TextEncoder();
 const b64urlBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
@@ -112,11 +121,46 @@ export async function familyApi(req, env, path) {
     return json(await startSession(db, { uid: `d${email.replace(/[^a-z0-9]/g, '')}`, email, name: clean(body.name || email.split('@')[0], 60), picture: '', device: body.device }));
   }
 
-  // ---- everything else needs a session ----
   const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   const session = /^[a-z0-9]{20,64}$/.test(token) ? await db.get(`session:${token}`) : null;
-  if (!session) return json({ error: 'sign in first' }, 401);
-  const user = await db.get(`user:${session.uid}`);
+  const user = session ? await db.get(`user:${session.uid}`) : null;
+
+  // ---- help: the assistant, problem reports and glitch reports work signed in or not ----
+  if (path.startsWith('/help/') && method === 'POST') {
+    const who = user ? user.uid : `ip:${clean(req.headers.get('cf-connecting-ip') || 'anon', 64)}`;
+    if (path === '/help/glitch') {
+      if (!(await underLimit(db, `helprate:${who}:g${Math.floor(Date.now() / 60000)}`, 5, 120))) return json({ ok: true });
+      await noteGlitch(db, body);
+      return json({ ok: true });
+    }
+    const minute = await underLimit(db, `helprate:${who}:${Math.floor(Date.now() / 60000)}`, HELP_PER_MIN, 120);
+    const day = minute && await underLimit(db, `helprate:${who}:d${new Date().toISOString().slice(0, 10)}`, HELP_PER_DAY, 86400 * 2);
+    if (!day) return json({ error: 'lots of questions — give it a minute and try again' }, 429);
+    const transcript = (Array.isArray(body.messages) ? body.messages : []).slice(-8);
+    if (path === '/help/report') {
+      if (!clean(body.summary, 120)) return json({ error: 'say what went wrong' }, 400);
+      return json(await fileTicket(db, { user, input: { category: body.category, summary: body.summary, details: body.details, contact_email: body.contact }, app: body.app, transcript }));
+    }
+    if (path === '/help/chat') {
+      const messages = toMessages(body.messages);
+      if (!messages.length) return json({ error: 'ask a question' }, 400);
+      const supportEmail = env.SUPPORT_EMAIL || '';
+      if (env.DEMO || !(env.ANTHROPIC_API_KEY || env.__anthropic)) return json(offlineAnswer(messages.at(-1).content, { supportEmail }));
+      const extra = {};
+      const run = (name, input) => helpTool(db, env, { user, token, name, input, app: body.app, transcript, extra });
+      let client = env.__anthropic;
+      if (!client) { const { default: Anthropic } = await import('@anthropic-ai/sdk'); client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }); }
+      try {
+        const r = await runHelpAgent({ client, messages, run, tools: user ? ACCOUNT_TOOLS : GUEST_TOOLS, system: helpSystem({ signedIn: !!user, name: user?.name, supportEmail }) });
+        return json({ reply: r.reply, ...extra });
+      } catch {
+        return json({ ...offlineAnswer(messages.at(-1).content, { supportEmail }), note: 'The assistant is unavailable right now, so here is the guide.' });
+      }
+    }
+    return json({ error: 'not found' }, 404);
+  }
+
+  // ---- everything else needs a session ----
   if (!user) return json({ error: 'sign in first' }, 401);
   const saveUser = () => db.put(`user:${user.uid}`, user);
   let m;
@@ -140,11 +184,8 @@ export async function familyApi(req, env, path) {
   const consented = user.consent?.version === TERMS_VERSION;
   if (!consented && !['/me', '/account/export', '/account/delete'].includes(path)) return json({ error: 'accept the terms first', consent: true }, 403);
   // A steady stream of changes from one account is a bug or abuse: slow it down.
-  if (method !== 'GET') {
-    const key = `rate:${user.uid}:${Math.floor(Date.now() / 60000)}`;
-    const n = ((await db.get(key)) || 0) + 1;
-    if (n > MAX_WRITES_PER_MIN) return json({ error: 'too many changes — try again in a minute' }, 429);
-    await db.put(key, n, 120);
+  if (method !== 'GET' && !(await underLimit(db, `rate:${user.uid}:${Math.floor(Date.now() / 60000)}`, MAX_WRITES_PER_MIN, 120))) {
+    return json({ error: 'too many changes — try again in a minute' }, 429);
   }
 
   const families = async () => (await Promise.all(user.families.map((f) => db.get(`family:${f}`)))).filter(Boolean);
@@ -156,7 +197,37 @@ export async function familyApi(req, env, path) {
 
   if (path === '/me' && method === 'GET') {
     const fams = await families();
-    return json({ user: { uid: user.uid, email: user.email, name: user.name, picture: user.picture, needsConsent: !consented, termsVersion: TERMS_VERSION, blocked: blockedOut(user) }, families: fams.map((f) => familyOut(f, user)) });
+    return json({ user: { uid: user.uid, email: user.email, name: user.name, picture: user.picture, needsConsent: !consented, termsVersion: TERMS_VERSION, blocked: blockedOut(user), isAdmin: isAdmin(env, user) }, families: fams.map((f) => familyOut(f, user)) });
+  }
+
+  // ---- the maintainer's desk: problems people filed, app glitches, the nightly check ----
+  if (path.startsWith('/admin/')) {
+    if (!isAdmin(env, user)) return json({ error: 'not found' }, 404);
+    if (path === '/admin/overview' && method === 'GET') {
+      const ids = (await db.get('tickets')) || [];
+      const tickets = (await Promise.all(ids.slice(0, 60).map((id) => db.get(`ticket:${id}`)))).filter(Boolean);
+      const glitches = {};
+      for (let i = 0; i < 7; i++) {
+        for (const [k, g] of Object.entries((await db.get(`glitch:${shiftDay(new Date().toISOString().slice(0, 10), -i)}`)) || {})) {
+          glitches[k] = { ...g, n: (glitches[k]?.n || 0) + g.n, last: Math.max(glitches[k]?.last || 0, g.last) };
+        }
+      }
+      return json({ tickets, glitches: Object.values(glitches).sort((a, b) => b.n - a.n).slice(0, 20), report: await db.get('admin:report'), history: (await db.get('admin:history')) || [] });
+    }
+    m = path.match(/^\/admin\/tickets\/([a-z0-9]+)$/);
+    if (m && method === 'PATCH') {
+      const t = await db.get(`ticket:${m[1]}`);
+      if (!t) return json({ error: 'not found' }, 404);
+      if (['open', 'done'].includes(body.status)) t.status = body.status;
+      if (body.note != null) t.note = clean(body.note, 500);
+      await db.put(`ticket:${t.id}`, t, TICKET_TTL);
+      return json({ ticket: t });
+    }
+    if (path === '/admin/maintenance' && method === 'POST') {
+      if (!env.HOUSEHOLD.list) return json({ error: 'not available in the demo' }, 400);
+      return json({ report: await runMaintenance(env) });
+    }
+    return json({ error: 'not found' }, 404);
   }
 
   // ---- your account: devices, a copy of your data, deleting it ----
@@ -747,4 +818,157 @@ export async function deleteAccount(db, user) {
   for (const x of user.sessions || []) await db.del(`session:${x.t}`);
   await db.del(`user:${user.uid}`);
   return { deleted: true, ...summary };
+}
+
+// ---------- help desk ----------
+// Counts one use against a limit; false once it's used up.
+async function underLimit(db, key, max, ttl) {
+  const n = ((await db.get(key)) || 0) + 1;
+  if (n > max) return false;
+  await db.put(key, n, ttl);
+  return true;
+}
+const isAdmin = (env, user) => !!user?.email && String(env.ADMIN_EMAILS || '').toLowerCase().split(/[\s,;]+/).filter(Boolean).includes(user.email);
+const appInfo = (app) => ({ version: clean(app?.version, 20), device: clean(app?.device, 60), page: clean(app?.page, 40) });
+const TICKET_KINDS = ['sign-in', 'invite', 'data', 'bug', 'feature', 'other'];
+
+// A problem for the maintainer, with the chat that led to it (only admins can read tickets).
+export async function fileTicket(db, { user, input, app, transcript = [] }) {
+  const ticket = {
+    id: randomId(8), at: Date.now(), status: 'open',
+    category: TICKET_KINDS.includes(input.category) ? input.category : 'other',
+    summary: clean(input.summary, 120), details: clean(input.details, 2000),
+    from: user ? { name: user.name, email: user.email, signedIn: true } : { name: '', email: emailOf(input.contact_email), signedIn: false },
+    app: appInfo(app),
+    transcript: transcript.slice(-8).map((x) => ({ role: x?.role === 'assistant' ? 'assistant' : 'user', text: clean(x?.text, 600) })),
+  };
+  await db.put(`ticket:${ticket.id}`, ticket, TICKET_TTL);
+  await db.put('tickets', [ticket.id, ...((await db.get('tickets')) || [])].slice(0, 300));
+  return { filed: true, ticket: ticket.id };
+}
+
+// Errors phones hit, counted per day by message and place — no account, no data, just the error.
+async function noteGlitch(db, body) {
+  const message = clean(body.message, 160), where = clean(body.where, 120);
+  if (!message) return;
+  const key = `glitch:${new Date().toISOString().slice(0, 10)}`;
+  const day = (await db.get(key)) || {};
+  const id = `${message}|${where}`.slice(0, 200);
+  if (!day[id] && Object.keys(day).length >= 100) return;
+  day[id] = { message, where, version: clean(body.version, 20), n: (day[id]?.n || 0) + 1, last: Date.now() };
+  await db.put(key, day, 30 * 86400);
+}
+
+// What the help assistant's tools do — always for the person asking, never anyone else.
+async function helpTool(db, env, { user, token, name, input, app, transcript, extra }) {
+  if (name === 'report_problem') {
+    const r = await fileTicket(db, { user, input, app, transcript });
+    extra.filed = r.ticket;
+    return r;
+  }
+  if (!user) return { error: 'not signed in' };
+  const fams = (await Promise.all(user.families.map((f) => db.get(`family:${f}`)))).filter(Boolean);
+  if (name === 'get_my_account') {
+    return { name: user.name, google_email: user.email, devices_signed_in: (user.sessions || []).filter((x) => Date.now() - x.at < SESSION_TTL * 1000).length,
+      terms_accepted: user.consent?.version === TERMS_VERSION, families: fams.length, blocked_people: (user.blocked || []).length };
+  }
+  if (name === 'list_my_families') {
+    return { families: fams.map((f) => ({ family_id: f.fid, name: f.name, my_role: f.members.find((x) => x.uid === user.uid)?.role, sections: f.modules || MODULES,
+      members: f.members.map((x) => { const v = memberView(x, true); return { member_id: v.id, name: v.name, kind: v.kind, relation: v.relation, status: v.status, ...(v.status === 'invited' ? { invite_email: v.email } : {}) }; }) })) };
+  }
+  if (name === 'resend_invite') {
+    const fam = fams.find((f) => f.fid === input.family_id);
+    const me = fam?.members.find((x) => x.uid === user.uid);
+    if (!me) return { error: 'not one of your families' };
+    if (me.relation === 'child') return { error: 'ask a grown-up in the family to send it' };
+    const t = fam.members.find((x) => x.id === input.member_id && x.kind === 'person');
+    if (!t) return { error: 'no such person in that family' };
+    if (t.uid) return { error: `${t.name} has already joined` };
+    const email = emailOf(input.email) || t.email;
+    if (!email) return { error: 'they need a Google email first' };
+    if (email !== t.email) { t.email = email; await db.put(`family:${fam.fid}`, fam); }
+    const invite = await makeInvite(db, { kind: 'member', fid: fam.fid, memberId: t.id, email, by: me.id, byName: me.name, familyName: fam.name });
+    const link = env.APP_ORIGIN ? `${new URL('family/', env.APP_ORIGIN)}#invite=${invite.code}` : '';
+    extra.invite = { ...invite, name: t.name };
+    return { sent_to: email, link, expires_in_days: 14, note: 'Share the link with them; it only works for that Google account.' };
+  }
+  if (name === 'sign_out_other_devices') {
+    if (input.confirmed !== true) return { needs_confirmation: true, message: 'Ask them to confirm first.' };
+    const others = (user.sessions || []).filter((x) => x.t !== token);
+    for (const x of others) await db.del(`session:${x.t}`);
+    user.sessions = (user.sessions || []).filter((x) => x.t === token);
+    await db.put(`user:${user.uid}`, user);
+    extra.signedOutOthers = true;
+    return { signed_out_devices: others.length };
+  }
+  return { error: `unknown tool ${name}` };
+}
+
+// ---------- nightly maintenance (worker.js scheduled(), or Me › Maintainer › Run the check now) ----------
+// Finds and repairs what a half-finished request can leave behind: people whose account is gone,
+// accounts that lost the link to their family, families with no creator or nobody left, links to
+// deleted families, expired sign-ins and filed problems. Writes a report for the maintainer.
+export async function runMaintenance(env) {
+  const kv = env.HOUSEHOLD, db = store(kv);
+  const report = { at: Date.now(), counts: { families: 0, accounts: 0, people: 0, pets: 0, openTickets: 0 }, fixes: [], problems: [] };
+  const fix = (s) => report.fixes.push(s);
+  const keys = async (prefix) => {
+    const out = [];
+    let cursor;
+    do {
+      const r = await kv.list({ prefix, cursor });
+      out.push(...r.keys.map((k) => k.name.slice(prefix.length)));
+      cursor = r.list_complete === false ? r.cursor : null;
+    } while (cursor);
+    return out;
+  };
+  for (const fid of await keys('v2:family:')) {
+    try {
+      const fam = await db.get(`family:${fid}`);
+      if (!fam) continue;
+      for (const x of fam.members.filter((y) => y.uid)) {
+        const u = await db.get(`user:${x.uid}`);
+        if (!u) { await removeMember(db, fam, x, { keepPosts: false }); fix(`${fam.name}: removed ${x.name}, whose account was deleted`); continue; }
+        if (!u.families.includes(fid)) { u.families.push(fid); await db.put(`user:${u.uid}`, u); fix(`${fam.name}: relinked ${x.name}'s account to the family`); }
+      }
+      const joined = fam.members.filter((y) => y.uid);
+      if (!joined.length) { await deleteFamily(db, fam); fix(`deleted ${fam.name}: nobody with an account was left in it`); continue; }
+      let changed = false;
+      if (!fam.members.some((y) => y.role === 'owner' && y.uid)) {
+        const next = joined.find((y) => y.kind === 'person' && y.relation !== 'child') || joined[0];
+        for (const y of fam.members) if (y.role === 'owner') y.role = 'member';
+        next.role = 'owner'; changed = true;
+        fix(`${fam.name}: had no creator, ${next.name} is now in charge`);
+      }
+      const links = [];
+      for (const c of fam.connections || []) if (await db.get(`family:${c}`)) links.push(c);
+      if (links.length !== (fam.connections || []).length) { fam.connections = links; changed = true; fix(`${fam.name}: dropped links to deleted families`); }
+      if (changed) await db.put(`family:${fam.fid}`, fam);
+      report.counts.families++;
+      report.counts.people += fam.members.filter((y) => y.kind === 'person').length;
+      report.counts.pets += fam.members.filter((y) => y.kind === 'pet').length;
+    } catch (err) { report.problems.push(`family ${fid}: ${err.message}`); }
+  }
+  for (const uid of await keys('v2:user:')) {
+    try {
+      const u = await db.get(`user:${uid}`);
+      if (!u) continue;
+      report.counts.accounts++;
+      const keep = [];
+      for (const f of u.families || []) if ((await db.get(`family:${f}`))?.members.some((y) => y.uid === uid)) keep.push(f);
+      const live = (u.sessions || []).filter((x) => Date.now() - x.at < SESSION_TTL * 1000);
+      if (keep.length !== (u.families || []).length || live.length !== (u.sessions || []).length) {
+        if (keep.length !== (u.families || []).length) fix(`${u.name}: removed links to families they're no longer in`);
+        u.families = keep; u.sessions = live;
+        await db.put(`user:${uid}`, u);
+      }
+    } catch (err) { report.problems.push(`account: ${err.message}`); }
+  }
+  const ids = (await db.get('tickets')) || [];
+  const tickets = (await Promise.all(ids.map((id) => db.get(`ticket:${id}`))));
+  if (tickets.some((t) => !t)) await db.put('tickets', ids.filter((_, i) => tickets[i]));
+  report.counts.openTickets = tickets.filter((t) => t?.status === 'open').length;
+  await db.put('admin:report', report);
+  await db.put('admin:history', [{ at: report.at, fixes: report.fixes.length, problems: report.problems.length, ...report.counts }, ...((await db.get('admin:history')) || [])].slice(0, 30));
+  return report;
 }

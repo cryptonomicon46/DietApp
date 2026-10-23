@@ -12,3 +12,8 @@ APP_ORIGIN = "https://cryptonomicon46.github.io/DietApp/"
 [[kv_namespaces]]
 binding = "HOUSEHOLD"
 id = "PASTE_KV_NAMESPACE_ID_HERE"
+
+# Nightly families maintenance check (3:13 am Pacific in summer): repairs half-finished changes
+# and writes a report the maintainer sees in Me › Maintainer.
+[triggers]
+crons = ["13 10 * * *"]

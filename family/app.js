@@ -22,6 +22,7 @@ const monthName = (m) => new Date(`${m}-15T12:00:00`).toLocaleDateString(undefin
 const deviceName = () => { const u = navigator.userAgent; return `${/iPhone/.test(u) ? 'iPhone' : /iPad/.test(u) ? 'iPad' : /Android/.test(u) ? 'Android' : /Mac/.test(u) ? 'Mac' : /Windows/.test(u) ? 'Windows' : 'Browser'} · ${/CriOS|Chrome/.test(u) ? 'Chrome' : /Safari/.test(u) ? 'Safari' : /Firefox/.test(u) ? 'Firefox' : 'browser'}`; };
 const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
 
+const VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
 const state = { user: null, families: [], fid: LS.get('fam.fid'), family: null, connected: [], feed: [], view: 'feed', memberId: null, invite: null, open: {} };
 const fam = () => state.family;
 // How someone shows up: relations are as the person who added them described them.
@@ -105,6 +106,7 @@ async function signIn() {
         <button type="button" class="ghost wide" data-act="demo">Try it on this phone (demo)</button>
         <p class="tiny muted">The demo keeps everything on this phone, so you can try families, invites and the feed before anything goes live.</p>
       </div>
+      <button type="button" class="linkish small" data-act="help">💬 Trouble signing in? Get help</button>
       <a class="small" href="../">‹ Back to the current app</a>
     </section>`;
   if (cfg.ready) loadGoogle(cfg.googleClientId);
@@ -494,6 +496,10 @@ function meView() {
       ${others.filter((o) => o.relation !== 'child').length ? `<button type="button" class="linkish small" data-act="handover">Hand ${esc(f.name)} over to someone else</button>` : ''}
       <button type="button" class="linkish small danger" data-act="deletefamily">Delete ${esc(f.name)}…</button></section>`
       : `<section class="card"><button type="button" class="linkish small danger" data-act="leavefamily">Leave ${esc(f.name)}</button></section>`}
+    <h3>Help</h3>
+    <section class="card stack"><button type="button" class="ghost" data-act="help">💬 Help &amp; questions</button>
+      <p class="tiny muted">How families, invites, chores and the diet app work — and it can check your account, resend an invite, or pass a problem to the app's maintainer.</p></section>
+    ${state.user.isAdmin ? '<h3>Maintainer</h3><section class="card"><button type="button" class="ghost wide" data-act="admin">🛠 Problems, glitches &amp; the nightly check</button></section>' : ''}
     <h3>Account & security</h3>
     <section class="card stack">
       <div id="sessions" class="small muted">Loading your sign-ins…</div>
@@ -511,6 +517,80 @@ function meView() {
     const el = $('#sessions');
     if (el) el.innerHTML = `<b>Signed in on</b><ul class="list">${r.sessions.slice().reverse().map((x) => `<li class="row between"><span>${esc(x.device || 'A device')}${x.current ? ' <span class="pill">This one</span>' : ''}</span><small>${ago(x.at)}</small></li>`).join('')}</ul>`;
   }).catch(() => {});
+}
+
+// ---------- help: chat with the assistant, report a problem ----------
+const chat = { messages: [], busy: false };
+const CHIPS = ['How do I set up a family?', 'How do I add people and pets?', "My invite isn't working", "I can't sign in", 'How do I enter macros for a meal?', 'Help me set up my diet plan', 'Something is broken'];
+// Assistant text → safe HTML: **bold**, links, line breaks.
+const rich = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|\s)_(.+?)_(?=\s|$)/g, '$1<i>$2</i>').replace(/https:\/\/[^\s<)]+/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`).replace(/\n/g, '<br>');
+function helpView() {
+  openSheet(`<div class="row between"><h2>💬 Help</h2><button type="button" class="linkish small" data-act="close">Done</button></div>
+    <div class="chat" id="chatLog"></div>
+    <div class="chips" id="chatChips">${CHIPS.map((c) => `<button type="button" class="chip" data-ask="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    <form id="chatForm" class="chat-form"><input name="text" placeholder="Ask anything about OurPawmily…" maxlength="1000" autocomplete="off"><button ${chat.busy ? 'disabled' : ''}>Send</button></form>
+    <div class="row between"><button type="button" class="linkish small" data-act="reportproblem">📮 Report a problem</button>${chat.messages.length ? '<button type="button" class="linkish small" data-act="chatclear">Start over</button>' : ''}</div>
+    <p class="tiny muted">Answers come from Claude (Anthropic) using the app's guide. Don't share passwords or codes. Problems you report go to the app's maintainer.</p>`);
+  renderChat();
+}
+function renderChat() {
+  const log = $('#chatLog');
+  if (!log) return;
+  const hello = `Hi${state.user ? ` ${esc(state.user.name.split(' ')[0])}` : ''}! I can explain how OurPawmily works — families, invites, chores, the feed and the diet app${state.user ? ' — check your account, resend an invite, or pass a problem to the maintainer' : ', help with signing in, or pass a problem to the maintainer'}.`;
+  log.innerHTML = `<div class="bubble bot">${hello}</div>${chat.messages.map((m) => `<div class="bubble ${m.role === 'user' ? 'me' : 'bot'}">${m.role === 'user' ? esc(m.text) : rich(m.text)}${m.invite ? `<button type="button" class="ghost small" data-chatinvite="${m.invite.code}">💌 Share ${esc(m.invite.name)}'s invite</button>` : ''}${m.filed ? `<small class="muted">📮 Sent to the maintainer · #${esc(m.filed)}</small>` : ''}</div>`).join('')}${chat.busy ? '<div class="bubble bot typing"><i></i><i></i><i></i></div>' : ''}`;
+  $('#chatChips').hidden = chat.messages.length > 0;
+  log.scrollTop = log.scrollHeight;
+}
+async function ask(text) {
+  text = text.trim();
+  if (!text || chat.busy) return;
+  chat.messages.push({ role: 'user', text }); chat.busy = true; renderChat();
+  try {
+    const r = await api.post('/help/chat', { messages: chat.messages.map(({ role, text: t }) => ({ role, text: t })), app: { version: VERSION, device: deviceName(), page: state.view } });
+    chat.messages.push({ role: 'assistant', text: r.note ? `${r.reply}\n\n_${r.note}_` : r.reply, invite: r.invite, filed: r.filed });
+    if (r.signedOutOthers) toast('Signed out on your other devices');
+  } catch (err) {
+    if (err.status === 429) chat.messages.push({ role: 'assistant', text: err.message });
+    else {
+      // The connector is out of reach (offline, or not set up yet): answer from the guide on this phone.
+      const { offlineAnswer } = await import('../server/helpAgent.js');
+      chat.messages.push({ role: 'assistant', text: `${offlineAnswer(text).reply}\n\n_(Offline answer from the guide — the help desk isn't reachable right now.)_` });
+    }
+  }
+  chat.busy = false; renderChat();
+  const b = $('#chatForm button'); if (b) b.disabled = false;
+}
+function reportSheet() {
+  openSheet(`<h2>📮 Report a problem</h2><p class="small muted">It goes to the app's maintainer${chat.messages.length ? ', with this help chat' : ''}.</p>
+    <form id="reportForm" class="stack">
+      <label>What kind<select name="category"><option value="bug">Something's broken</option><option value="sign-in">Signing in</option><option value="invite">Invites</option><option value="data">Missing or wrong data</option><option value="feature">An idea</option><option value="other">Something else</option></select></label>
+      <label>What happened<input name="summary" required maxlength="120"></label>
+      <label>Details<textarea name="details" rows="4" maxlength="2000" placeholder="What you were doing, what you expected, what you saw"></textarea></label>
+      ${state.user ? '' : '<label>Your email (so we can reply)<input name="contact" type="email" maxlength="120"></label>'}
+      <div class="row end"><button type="button" class="ghost" data-act="help">Back</button><button>Send</button></div>
+    </form>`);
+}
+
+// ---------- the maintainer's desk (ADMIN_EMAILS only) ----------
+async function adminView() {
+  openSheet('<h2>🛠 Maintainer</h2><p class="small muted">Loading…</p>');
+  const r = await act(() => api.get('/admin/overview'));
+  if (!r) return;
+  const rep = r.report;
+  const open = r.tickets.filter((t) => t.status === 'open');
+  openSheet(`<div class="row between"><h2>🛠 Maintainer</h2><button type="button" class="linkish small" data-act="close">Done</button></div>
+    <section class="card stack"><b>Nightly check</b>${rep ? `<p class="small muted">${ago(rep.at)} · ${rep.counts.families} families · ${rep.counts.accounts} accounts · ${rep.counts.people} people · ${rep.counts.pets} pets</p>
+      ${rep.fixes.length ? `<ul class="small">${rep.fixes.map((x) => `<li>🔧 ${esc(x)}</li>`).join('')}</ul>` : '<p class="small">✅ Nothing needed fixing.</p>'}
+      ${rep.problems.length ? `<ul class="small danger">${rep.problems.map((x) => `<li>⚠️ ${esc(x)}</li>`).join('')}</ul>` : ''}` : '<p class="small muted">Hasn\'t run yet — it runs every night.</p>'}
+      <button type="button" class="ghost" data-act="runcheck">Run the check now</button></section>
+    <section class="card stack"><b>Problems people filed · ${open.length} open</b>
+      ${r.tickets.length ? r.tickets.map((t) => `<details class="ticket ${t.status}"><summary><span class="pill">${esc(t.category)}</span> ${esc(t.summary)} <small class="muted">${ago(t.at)}${t.status === 'done' ? ' · done' : ''}</small></summary>
+        <p class="small">${esc(t.details) || '<i>No details</i>'}</p>
+        <p class="tiny muted">${esc(t.from.name || '')} ${t.from.email ? `<a href="mailto:${esc(t.from.email)}?subject=${encodeURIComponent(`OurPawmily: ${t.summary}`)}">${esc(t.from.email)}</a>` : '(no email)'} · ${t.from.signedIn ? 'signed in' : 'not signed in'} · v${esc(t.app.version)} · ${esc(t.app.device)}${t.app.page ? ` · on ${esc(t.app.page)}` : ''}</p>
+        ${t.transcript.length ? `<div class="chat mini">${t.transcript.map((m) => `<div class="bubble ${m.role === 'user' ? 'me' : 'bot'}">${esc(m.text)}</div>`).join('')}</div>` : ''}
+        <button type="button" class="ghost small" data-ticket="${t.id}" data-status="${t.status === 'open' ? 'done' : 'open'}">${t.status === 'open' ? '✓ Mark done' : 'Reopen'}</button></details>`).join('') : '<p class="small muted">None yet.</p>'}</section>
+    <section class="card stack"><b>App glitches · last 7 days</b>
+      ${r.glitches.length ? `<ul class="small">${r.glitches.map((g) => `<li><b>${g.n}×</b> ${esc(g.message)} <small class="muted">${esc(g.where)} · v${esc(g.version)} · ${ago(g.last)}</small></li>`).join('')}</ul>` : '<p class="small muted">✅ None reported.</p>'}</section>`);
 }
 
 // ---------- add people & pets, invites ----------
@@ -599,6 +679,9 @@ document.addEventListener('click', (e) => {
   }
   if (d.careundo) return act(async () => { await api.del(`/families/${state.fid}/care/${isoLocal()}/${d.careundo}`); renderCare(); renderRace(); });
   if (d.unblock) return act(async () => { await api.del(`/account/blocks/${d.unblock}`); state.user.blocked = state.user.blocked.filter((b) => b.id !== d.unblock); meView(); });
+  if (d.ask) return ask(d.ask);
+  if (d.chatinvite) { const m = chat.messages.find((x) => x.invite?.code === d.chatinvite); return inviteSheet(m.invite, m.invite.name); }
+  if (d.ticket) return act(async () => { await api.patch(`/admin/tickets/${d.ticket}`, { status: d.status }); adminView(); });
   if (d.view) { e.preventDefault(); return show(d.view); }
   if (d.member) { closeSheet(); return show('member', d.member); }
   if (d.fam) { state.fid = d.fam; return act(async () => { await loadFamily(); show('feed'); }); }
@@ -610,8 +693,13 @@ document.addEventListener('click', (e) => {
   switch (d.act) {
     case 'close': return closeSheet();
     case 'demo': return demoSignIn();
+    case 'help': return helpView();
+    case 'chatclear': chat.messages = []; return helpView();
+    case 'reportproblem': return reportSheet();
+    case 'admin': return adminView();
+    case 'runcheck': t.disabled = true; t.textContent = 'Checking…'; return act(async () => { await api.post('/admin/maintenance'); adminView(); });
     case 'home': return boot();
-    case 'signout': return act(async () => { await api.post('/auth/logout').catch(() => {}); api.setToken(null); state.family = null; state.view = 'feed'; boot(); });
+    case 'signout': return act(async () => { await api.post('/auth/logout').catch(() => {}); api.setToken(null); chat.messages = []; state.family = null; state.view = 'feed'; boot(); });
     case 'addperson': return addPerson();
     case 'addpet': return addPet();
     case 'editpet': return addPet(member(d.id));
@@ -724,6 +812,19 @@ document.addEventListener('change', async (e) => {
 document.addEventListener('submit', (e) => {
   const f = e.target;
   const v = Object.fromEntries(new FormData(f));
+  if (f.id === 'chatForm') {
+    e.preventDefault();
+    f.text.value = ''; f.querySelector('button').disabled = true;
+    return ask(v.text || '');
+  }
+  if (f.id === 'reportForm') {
+    e.preventDefault();
+    return act(async () => {
+      const r = await api.post('/help/report', { ...v, messages: chat.messages.map(({ role, text }) => ({ role, text })), app: { version: VERSION, device: deviceName(), page: state.view } });
+      chat.messages.push({ role: 'assistant', text: "Thanks — I've passed that to the app's maintainer.", filed: r.ticket });
+      helpView();
+    });
+  }
   if (f.id === 'demoForm') {
     e.preventDefault();
     return act(async () => { api.setMode('demo'); const s = await api.post('/auth/demo', { ...v, device: deviceName() }); api.setToken(s.token); closeSheet(); state.view = 'feed'; boot(); });
@@ -814,4 +915,13 @@ document.addEventListener('submit', (e) => {
 $('#sheet').addEventListener('close', () => { if (state.view === 'compose') { draft.text = $('#postForm textarea')?.value ?? draft.text; show('feed'); } });
 window.addEventListener('hashchange', () => { if (/invite=/.test(location.hash)) boot(); });
 
-boot().catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; });
+// Errors this phone hits are counted on the connector (message and place only) so the
+// maintainer sees glitches nobody reported.
+let glitches = 0;
+const glitch = (message, where) => { if (glitches++ < 3) api.post('/help/glitch', { message: String(message || '').slice(0, 160), where: String(where || '').replace(location.origin, '').slice(0, 120), version: VERSION }).catch(() => {}); };
+window.addEventListener('error', (e) => glitch(e.message, `${e.filename}:${e.lineno}`));
+window.addEventListener('unhandledrejection', (e) => glitch(e.reason?.message || e.reason, 'promise'));
+
+const wantHelp = new URLSearchParams(location.search).has('help');
+if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
+boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; });

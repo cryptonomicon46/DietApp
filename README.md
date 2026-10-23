@@ -87,6 +87,8 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
 - **Safety:** every post has ⋯ → Hide, Report (flagged 🚩 to the family's creator) or Block its author (unblock in Me).
 - **Your account:** see where you're signed in, sign out on all devices, download all your data, or **delete your account**. Deleting removes your data, posts, comments and likes everywhere, and families you created pass to another grown-up.
 - **First sign-in:** confirm you're 13+ and accept the [Terms](family/terms.html) and [Privacy Policy](family/privacy.html). Younger kids are profiles their parents manage. [How account deletion works](family/delete-account.html).
+- **💬 Help** (Me › Help, "Trouble signing in?" on the sign-in screen, and 🔐 Privacy in the trackers): ask how anything works, from setting up a family and inviting people to entering macros and setting up a diet plan. Quick questions are one tap. When the connector has an Anthropic API key, Claude answers and can check your account and families, resend an invite, sign out your other devices (after you confirm) and file a problem. Without the key, or offline, it answers from the built-in guide. **📮 Report a problem** sends a note to the app's maintainer.
+- **🛠 Maintainer** (Me tab, for the emails in `ADMIN_EMAILS`): problems people filed, with their help chat; app errors phones hit in the last 7 days (just the error and where, counted); and the nightly check, which repairs leftovers from half-finished changes and lists what it fixed.
 - What's in place for the App Store and Google Play, and what's left, is in [family/STORE-READINESS.md](family/STORE-READINESS.md).
 - **Still in the current app:** the food, training and calendar trackers, and editing vet records. Moving those in, a shared calendar between families, and notifications come next.
 
@@ -380,7 +382,8 @@ Run `node scripts/bump-version.mjs` before committing. It gives every app file a
 | `js/plan.js`, `js/foods.js` | Targets, meal planning, foods, check-in math |
 | `js/brief.js`, `js/briefTab.js` | Weather, walk / run / ride windows, dog buttons, golden days, scoreboard |
 | `family/` | 👨‍👩‍👧 OurPawmily Families (preview): sign-in, families, invites, feed, privacy, bringing data over |
-| `server/family.js` | The family API (`/v2/…` on the connector; also runs on the phone for the demo) |
+| `server/family.js` | The family API (`/v2/…` on the connector; also runs on the phone for the demo), help desk, nightly maintenance |
+| `server/helpAgent.js`, `server/helpGuide.js` | 💬 The help assistant (Claude with account tools) and the guide it answers from |
 | `js/dress.js`, `js/dressTab.js` | 👔 Dress for the day: places from the calendar, layering for each person's weather |
 | `js/dogs.js`, `js/adopt.js` | Dog profiles and documents; adoption board |
 | `js/calendar.js`, `js/calTab.js` | Calendar rules, .ics import / export, Calendar tab |

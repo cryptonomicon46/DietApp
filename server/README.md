@@ -127,6 +127,10 @@ The family app at `/family/` (families, invites by email, pets, a private feed, 
 
 4. **Support email (optional for the beta, needed for the stores):** `npx wrangler secret put SUPPORT_EMAIL` with the address people should write to. It shows in the app under Me › Account & security.
 
+5. **Help desk (optional):** the 💬 Help chat (Me › Help, the sign-in screen, and 🔐 Privacy in the trackers) answers from the app's guide on its own. With the `ANTHROPIC_API_KEY` secret (the same one "Ask Claude" uses) Claude answers instead and can, for the person asking only: look at their account and families, resend an invite, sign out their other devices (after they confirm), and file a problem for you.
+6. **You as maintainer:** `npx wrangler secret put ADMIN_EMAILS` with your Google email (comma-separate several). Me › Maintainer then shows the problems people filed (with their help chat), app glitches phones reported, and the nightly check. Mark problems done there, or run the check now.
+7. **Nightly check:** the `[triggers]` cron in `wrangler.toml` deploys with the connector. Every night it repairs what a half-finished change can leave behind: people whose account is gone, accounts that lost their family link, a family without a creator (the next grown-up takes over), empty families, links to deleted families, and expired sign-ins. It lists every fix in the report.
+
 Open `/family/` and **Continue with Google** appears. Accounts are protected by Google's own sign-in, including 2-Step Verification (turn it on at <https://myaccount.google.com/security> — that's the "two-factor" for the app).
 
 **How it's kept private:**

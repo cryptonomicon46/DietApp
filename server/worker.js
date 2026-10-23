@@ -10,9 +10,12 @@
 //           STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET,
 //           ANTHROPIC_API_KEY (optional: "Ask Claude" for workout commands)
 //           GOOGLE_CLIENT_ID (OurPawmily Families: Google sign-in, see family.js)
+//           ADMIN_EMAILS (Google emails that see Me › Maintainer: problems filed through Help)
+//           SUPPORT_EMAIL (shown to people who need a human)
+// The nightly cron in wrangler.toml runs the families' maintenance check (runMaintenance).
 
 import { assist } from './assistant.js';
-import { familyApi } from './family.js';
+import { familyApi, runMaintenance } from './family.js';
 import { mergeEvents, icsCalendar } from '../js/calendar.js';
 
 const WHOOP = {
@@ -29,13 +32,16 @@ const STRAVA = {
 };
 
 export default {
+  async scheduled(event, env, ctx) {
+    if (env.HOUSEHOLD) ctx.waitUntil(runMaintenance(env));
+  },
   async fetch(req, env) {
     const url = new URL(req.url);
     const origin = new URL(env.APP_ORIGIN).origin;
     const cors = {
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     };
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
     const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
