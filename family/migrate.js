@@ -77,6 +77,7 @@ export function backupBlob() {
 }
 // Runs a plan against the API; reports each step.
 export async function runImport(api, fid, ops, report = () => {}) {
+  const done = [];
   for (const o of ops) {
     if (o.op === 'tag') { await api.patch(`/families/${fid}/members/${o.memberId}`, { legacyId: o.legacyId }); continue; }
     let id = o.memberId;
@@ -87,7 +88,30 @@ export async function runImport(api, fid, ops, report = () => {}) {
     }
     await api.put(`/families/${fid}/members/${id}/data`, { data: o.data });
     report(`Brought over ${o.name}'s data`);
+    done.push({ memberId: id, name: o.name, data: o.data });
   }
+  return done;
+}
+
+// ---------- checking it all arrived ----------
+const LABELS = { weights: 'weigh-ins', mealLog: 'days of meals', workouts: 'workouts', activities: 'activities', liftSessions: 'lifting sessions',
+  checkins: 'weekly check-ins', dexa: 'DEXA scans', events: 'calendar events', notes: 'notes', plans: 'plans', combos: 'meal combos',
+  preparedMeals: 'packaged meals', myFoods: 'your foods', dailyMeals: 'daily meals', climbs: 'climbing sessions', dogFed: 'feedings',
+  dogWalked: 'days of walks', dogPark: 'days at the park', dogTreats: 'treat days', profile: 'profile', rhythm: '2-2-2-2 moments', days: 'days' };
+const count = (x) => (Array.isArray(x) ? x.length : x && typeof x === 'object' ? Object.keys(x).length : x == null || x === '' ? 0 : 1);
+// Each section of this phone's copy against what the server now holds. → [{key, label, count, ok}]
+export function compareData(local = {}, remote = {}) {
+  return Object.entries(local).map(([key, v]) => ({ key, label: LABELS[key] || key, count: count(v), ok: JSON.stringify(v) === JSON.stringify(remote?.[key]) }));
+}
+// Reads back every copy just brought over. → [{name, sections: [...], ok, missing: [...]}]
+export async function verifyImport(api, fid, done) {
+  const out = [];
+  for (const d of done) {
+    const remote = (await api.get(`/families/${fid}/members/${d.memberId}/data`)).data || {};
+    const sections = compareData(d.data, remote);
+    out.push({ name: d.name, sections, ok: sections.every((x) => x.ok), missing: sections.filter((x) => !x.ok).map((x) => x.label) });
+  }
+  return out;
 }
 // After the people are in: their dog-duty history becomes the family's care log.
 export async function importCare(api, fid, legacy, family, report = () => {}) {

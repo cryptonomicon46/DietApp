@@ -246,8 +246,65 @@ test("privacy with friends' families: kids private by default, pets shareable; h
   const r = (await api('/feed', { token: b })).posts.find((x) => x.help);
   assert.equal(r.help.type, 'petsit');
   const off = await api(`/posts/${fa.fid}/${req.post.id}/offer`, { token: b, method: 'POST', body: { msg: 'Happy to!' } });
-  assert.equal(off.help.offers[0].family, 'Fam B');
-  assert.equal((await api(`/posts/${fa.fid}/${req.post.id}/accept`, { token: b, method: 'POST', body: { uid: 'g701' } })).status, 403);
-  const acc = await api(`/posts/${fa.fid}/${req.post.id}/accept`, { token: a, method: 'POST', body: { uid: 'g701' } });
+  assert.equal(off.help.offered, true); assert.deepEqual(off.help.offers, [], "helpers don't see each other");
+  const mineView = (await api('/feed', { token: a })).posts.find((x) => x.id === req.post.id);
+  assert.equal(mineView.help.offers[0].family, 'Fam B');
+  const offerId = mineView.help.offers[0].id;
+  assert.equal((await api(`/posts/${fa.fid}/${req.post.id}/accept`, { token: b, method: 'POST', body: { offer: offerId } })).status, 403);
+  const acc = await api(`/posts/${fa.fid}/${req.post.id}/accept`, { token: a, method: 'POST', body: { offer: offerId } });
   assert.equal(acc.help.status, 'filled'); assert.equal(acc.help.helper.name, 'Parent B');
+});
+
+test('no leaks: a friend\'s family and a stranger never see emails, account ids, private kids or diet data', async () => {
+  const a = await signIn('800', 'secret-a@gmail.com', 'Ana');
+  const { family: fa } = await api('/families', { token: a, method: 'POST', body: { name: 'Leak A' } });
+  const partner = await api(`/families/${fa.fid}/members`, { token: a, method: 'POST', body: { kind: 'person', name: 'Paz', relation: 'spouse', email: 'secret-p@gmail.com' } });
+  const kid = (await api(`/families/${fa.fid}/members`, { token: a, method: 'POST', body: { kind: 'person', name: 'Kidzilla', relation: 'child' } })).member;
+  const pz = await signIn('801', 'secret-p@gmail.com', 'Paz');
+  await api(`/invites/${partner.invite.code}/accept`, { token: pz, method: 'POST' });
+  await api(`/families/${fa.fid}/members/${fa.me}/data`, { token: a, method: 'PUT', body: { data: { weights: [{ date: '2026-10-01', weight: 187.25 }] } } });
+  const inv = await api(`/families/${fa.fid}/invites`, { token: a, method: 'POST', body: { kind: 'family', email: 'friend-b@gmail.com' } });
+  const b = await signIn('802', 'friend-b@gmail.com', 'Bo');
+  const { family: fb } = await api(`/invites/${inv.invite.code}/accept`, { token: b, method: 'POST', body: { familyName: 'Leak B' } });
+  // A busy shared post: comments, likes, a tag of the kid on another, and a help request with an offer.
+  const pub = await api(`/families/${fa.fid}/posts`, { token: a, method: 'POST', body: { text: 'Shared with friends', audience: 'connections' } });
+  await api(`/posts/${fa.fid}/${pub.post.id}/comments`, { token: pz, method: 'POST', body: { text: 'cute' } });
+  await api(`/posts/${fa.fid}/${pub.post.id}/like`, { token: pz, method: 'POST' });
+  await api(`/families/${fa.fid}/posts`, { token: a, method: 'POST', body: { text: 'Family only' } });
+  await api(`/families/${fa.fid}/posts`, { token: a, method: 'POST', body: { text: 'Kid day', tags: [kid.id], audience: 'connections' } });
+  const help = await api(`/families/${fa.fid}/posts`, { token: a, method: 'POST', body: { help: { type: 'babysit', from: '2026-11-01' }, audience: 'connections' } });
+  await api(`/posts/${fa.fid}/${help.post.id}/offer`, { token: pz, method: 'POST', body: { msg: 'me!' } });
+
+  const forbidden = ['secret-a@gmail.com', 'secret-p@gmail.com', 'g800', 'g801', 'Kidzilla', '187.25', 'Family only', 'Kid day'];
+  const check = (label, obj) => { const j = JSON.stringify(obj); for (const f of forbidden) assert.ok(!j.includes(f), `${label} leaks ${f}`); };
+  // What the friend's family can reach.
+  check('feed', await api('/feed', { token: b }));
+  check('family view', await api(`/families/${fb.fid}`, { token: b }));
+  check('me', await api('/me', { token: b }));
+  check('like', await api(`/posts/${fa.fid}/${pub.post.id}/like`, { token: b, method: 'POST' }));
+  check('offer', await api(`/posts/${fa.fid}/${help.post.id}/offer`, { token: b, method: 'POST', body: { msg: 'also me' } }));
+  for (const path of [`/families/${fa.fid}`, `/families/${fa.fid}/members/${fa.me}/data`, `/families/${fa.fid}/care?to=2026-10-01`, `/families/${fa.fid}/chores?month=2026-10&today=2026-10-02`]) {
+    const r = await api(path, { token: b });
+    assert.ok(r.status === 404 || r.status === 403, `friend reaches ${path}`); check(path, r);
+  }
+  // Inside the family, account ids still stay out.
+  for (const g of ['g800', 'g801']) assert.ok(!JSON.stringify(await api(`/families/${fa.fid}`, { token: pz })).includes(g));
+  assert.ok(!JSON.stringify(await api('/feed', { token: pz })).includes('g80'), 'no account ids in the family feed either');
+  // A stranger sees nothing at all.
+  const x = await signIn('803', 'stranger@gmail.com', 'X');
+  check('stranger feed', await api('/feed', { token: x }));
+  for (const path of [`/families/${fa.fid}`, `/families/${fa.fid}/members/${fa.me}/data`, `/posts/${fa.fid}/${pub.post.id}/like`]) {
+    const r = await api(path, { token: x, method: path.endsWith('like') ? 'POST' : 'GET' });
+    assert.equal(r.status, 404, `stranger reaches ${path}`);
+  }
+  assert.equal((await api('/feed')).status, 401, 'nothing without signing in');
+});
+
+test('bringing data over is checked section by section', async () => {
+  const { compareData } = await import('../family/migrate.js');
+  const local = { weights: [{ date: '2026-10-01', weight: 187 }], mealLog: { '2026-10-01': {} }, profile: { name: 'Me' } };
+  assert.ok(compareData(local, JSON.parse(JSON.stringify(local))).every((x) => x.ok));
+  const bad = compareData(local, { ...local, weights: [] });
+  assert.deepEqual(bad.filter((x) => !x.ok).map((x) => x.label), ['weigh-ins']);
+  assert.equal(bad.find((x) => x.key === 'mealLog').count, 1);
 });

@@ -81,7 +81,7 @@ const store = (kv) => ({
 const memberView = (m, inside) => ({
   id: m.id, kind: m.kind, name: m.name, relation: m.relation, species: m.species, breed: m.breed, born: m.born,
   avatar: m.avatar, status: m.uid ? 'active' : m.email ? 'invited' : 'managed', role: m.role,
-  ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], legacyId: m.legacyId || '', uid: m.uid || '' } : {}),
+  ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], legacyId: m.legacyId || '' } : {}),
 });
 
 export async function familyApi(req, env, path) {
@@ -156,7 +156,7 @@ export async function familyApi(req, env, path) {
 
   if (path === '/me' && method === 'GET') {
     const fams = await families();
-    return json({ user: { uid: user.uid, email: user.email, name: user.name, picture: user.picture, needsConsent: !consented, termsVersion: TERMS_VERSION, blocked: user.blocked || [] }, families: fams.map((f) => familyOut(f, user)) });
+    return json({ user: { uid: user.uid, email: user.email, name: user.name, picture: user.picture, needsConsent: !consented, termsVersion: TERMS_VERSION, blocked: blockedOut(user) }, families: fams.map((f) => familyOut(f, user)) });
   }
 
   // ---- your account: devices, a copy of your data, deleting it ----
@@ -186,8 +186,8 @@ export async function familyApi(req, env, path) {
   }
   m = path.match(/^\/account\/blocks\/([a-z0-9]+)$/);
   if (m && method === 'DELETE') {
-    user.blocked = (user.blocked || []).filter((b) => b.uid !== m[1]); await saveUser();
-    return json({ blocked: user.blocked });
+    user.blocked = (user.blocked || []).filter((b) => b.id !== m[1] && b.uid !== m[1]); await saveUser();
+    return json({ blocked: blockedOut(user) });
   }
 
   // ---- families ----
@@ -497,7 +497,7 @@ export async function familyApi(req, env, path) {
         if (!s.own && (p.tags || []).some((id) => { const x = fam?.members.find((y) => y.id === id); return x && !sharedWithFriends(fam, x); })) continue;
         if (blocked.has(p.byUid) || hidden.has(p.id)) continue;
         const owner = s.own && meIn(fam)?.role === 'owner';
-        posts.push({ ...p, reports: undefined, reported: owner ? (p.reports || 0) : 0, comments: p.comments.filter((c) => !blocked.has(c.uid)), familyName: fam?.name || '', own: s.own, mine: p.byUid === user.uid, liked: p.likes.includes(user.uid), likes: p.likes.length });
+        posts.push(postOut(p, user, { own: s.own, familyName: fam?.name || '', reported: owner ? (p.reports || 0) : 0, blocked }));
       }
     }
     posts.sort((a, b) => b.at - a.at);
@@ -530,7 +530,7 @@ export async function familyApi(req, env, path) {
     }
     await db.put(`post:${fam.fid}:${post.id}`, post);
     await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
-    return json({ post: { ...post, familyName: fam.name, own: true, mine: true, liked: false, likes: 0 }, note });
+    return json({ post: postOut(post, user, { own: true, familyName: fam.name }), note });
   }
   m = path.match(/^\/posts\/([a-z0-9]+)\/([a-z0-9]+)(\/like|\/comments|\/report|\/hide|\/block|\/offer|\/accept)?$/);
   if (m) {
@@ -553,7 +553,7 @@ export async function familyApi(req, env, path) {
       const c = { id: randomId(5), uid: user.uid, name: myName, text, at: Date.now() };
       p.comments = [...p.comments, c].slice(-200);
       await db.put(`post:${fid}:${id}`, p);
-      return json({ comment: c });
+      return json({ comment: { id: c.id, name: c.name, text: c.text, at: c.at, mine: true } });
     }
     // Reporting hides it for you and flags it to the family's creator.
     if (action === '/report' && method === 'POST') {
@@ -569,16 +569,16 @@ export async function familyApi(req, env, path) {
       if (p.byUid === user.uid) return json({ error: "that's your own request" }, 400);
       const others = p.help.offers.filter((o) => o.uid !== user.uid);
       const myFam = own || fams.find((f) => (f.connections || []).includes(fid));
-      p.help.offers = body.withdraw ? others : [...others, { uid: user.uid, name: myName, family: myFam?.name || '', msg: clean(body.msg, 140), at: Date.now() }].slice(-30);
+      p.help.offers = body.withdraw ? others : [...others, { id: randomId(6), uid: user.uid, name: myName, family: myFam?.name || '', msg: clean(body.msg, 140), at: Date.now() }].slice(-30);
       await db.put(`post:${fid}:${id}`, p);
-      return json({ help: p.help });
+      return json({ help: postOut(p, user, {}).help });
     }
     if (action === '/accept' && method === 'POST' && p.help) {
       if (p.byUid !== user.uid) return json({ error: 'only who asked can choose' }, 403);
-      const o = p.help.offers.find((x) => x.uid === body.uid);
+      const o = p.help.offers.find((x) => (body.offer && x.id === body.offer) || (body.uid && x.uid === body.uid));
       p.help.status = o ? 'filled' : 'open'; p.help.helper = o ? { uid: o.uid, name: o.name, family: o.family } : null;
       await db.put(`post:${fid}:${id}`, p);
-      return json({ help: p.help });
+      return json({ help: postOut(p, user, {}).help });
     }
     if (action === '/hide' && method === 'POST') {
       user.hidden = [...new Set([id, ...(user.hidden || [])])].slice(0, 500); await saveUser();
@@ -586,8 +586,8 @@ export async function familyApi(req, env, path) {
     }
     if (action === '/block' && method === 'POST') {
       if (!p.byUid || p.byUid === user.uid) return json({ error: "can't block that" }, 400);
-      user.blocked = [...(user.blocked || []).filter((b) => b.uid !== p.byUid), { uid: p.byUid, name: p.byName }].slice(-200); await saveUser();
-      return json({ blocked: user.blocked });
+      user.blocked = [...(user.blocked || []).filter((b) => b.uid !== p.byUid), { id: randomId(8), uid: p.byUid, name: p.byName }].slice(-200); await saveUser();
+      return json({ blocked: blockedOut(user) });
     }
     if (!action && method === 'DELETE') {
       const mine = own && meIn(own).id === p.by;
@@ -621,9 +621,27 @@ async function makeInvite(db, inv) {
 }
 function familyOut(fam, user) {
   const me = fam.members.find((m) => m.uid === user.uid);
-  return { fid: fam.fid, name: fam.name, createdBy: fam.createdBy, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
+  return { fid: fam.fid, name: fam.name, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
 }
 const url = (req) => new URL(req.url);
+// A post as one viewer sees it: no account ids (theirs or anyone else's), just "is it mine".
+function postOut(p, user, { own = false, familyName = '', reported = 0, blocked = new Set() } = {}) {
+  const { byUid, likes, comments, reports, help, ...rest } = p;
+  return {
+    ...rest, own, familyName, reported, mine: byUid === user.uid,
+    liked: likes.includes(user.uid), likes: likes.length,
+    comments: comments.filter((c) => !blocked.has(c.uid)).map((c) => ({ id: c.id, name: c.name, text: c.text, at: c.at, mine: c.uid === user.uid })),
+    ...(help ? { help: {
+      type: help.type, from: help.from, to: help.to, time: help.time, status: help.status,
+      helper: help.helper ? { name: help.helper.name, family: help.helper.family, me: help.helper.uid === user.uid } : null,
+      offered: help.offers.some((o) => o.uid === user.uid),
+      // Only the one who asked sees who offered (and their notes); others just see how many.
+      offers: byUid === user.uid ? help.offers.map((o) => ({ id: o.id || o.uid, name: o.name, family: o.family, msg: o.msg, at: o.at })) : [],
+      offerCount: help.offers.length,
+    } } : {}),
+  };
+}
+const blockedOut = (user) => (user.blocked || []).map((b) => ({ id: b.id || b.uid, name: b.name }));
 export const HELP = { petsit: '🐾 Pet sitting', babysit: '🧸 Babysitting', walk: '🦮 Dog walk', ride: '🚗 A ride', meal: '🍲 A meal', other: '🙋 A hand' };
 // What a friends' family may see of someone: kids are private unless the family shares them,
 // pets are shared unless the family keeps them private.

@@ -3,7 +3,7 @@
 // The trackers (food, training, dogs, calendar) stay in the current app for now; their data
 // comes over with "Bring over the current app".
 import { api } from './api.js';
-import { planImport, legacySnapshot, backupBlob, runImport, importCare } from './migrate.js';
+import { planImport, legacySnapshot, backupBlob, runImport, importCare, verifyImport } from './migrate.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -270,12 +270,12 @@ function postCard(p) {
 // 🙋 A request for help inside a post: what, when, who offered, and who's helping.
 function helpBlock(p) {
   const h = p.help, [ico, label] = HELP[h.type] || HELP.other;
-  const mine = p.mine, offered = h.offers.some((o) => o.uid === state.user.uid);
+  const mine = p.mine, offered = h.offered;
   return `<div class="help ${h.status}">
     <div class="help-top"><span class="help-ico">${ico}</span><div><div class="help-k">${h.status === 'filled' ? 'Sorted ✓' : 'Can anyone help?'}</div><b>${esc(label)}</b><small>${esc(dayRange(h.from, h.to))}${h.time ? ` · ${esc(h.time)}` : ''}</small></div></div>
     ${h.status === 'filled' ? `<p class="small">💛 ${esc(h.helper.name)}${h.helper.family ? ` (${esc(h.helper.family)})` : ''} is helping.</p>`
-      : mine ? (h.offers.length ? `<ul class="offers">${h.offers.map((o) => `<li><span><b>${esc(o.name)}</b>${o.family ? ` <small class="muted">${esc(o.family)}</small>` : ''}${o.msg ? `<br><small>“${esc(o.msg)}”</small>` : ''}</span><button type="button" class="small" data-pick="${o.uid}">✓ Choose</button></li>`).join('')}</ul>` : '<p class="small muted">No offers yet. Your network sees this in their feed.</p>')
-      : `<div class="row">${offered ? '<span class="pill">🙋 You offered</span><button type="button" class="linkish small" data-act="withdraw">Withdraw</button>' : '<button type="button" data-act="offer">🙋 I can help</button>'}<span class="small muted">${h.offers.length ? `${h.offers.length} offer${h.offers.length > 1 ? 's' : ''}` : ''}</span></div>`}
+      : mine ? (h.offers.length ? `<ul class="offers">${h.offers.map((o) => `<li><span><b>${esc(o.name)}</b>${o.family ? ` <small class="muted">${esc(o.family)}</small>` : ''}${o.msg ? `<br><small>“${esc(o.msg)}”</small>` : ''}</span><button type="button" class="small" data-pick="${o.id}">✓ Choose</button></li>`).join('')}</ul>` : '<p class="small muted">No offers yet. Your network sees this in their feed.</p>')
+      : `<div class="row">${offered ? '<span class="pill">🙋 You offered</span><button type="button" class="linkish small" data-act="withdraw">Withdraw</button>' : '<button type="button" data-act="offer">🙋 I can help</button>'}<span class="small muted">${h.offerCount ? `${h.offerCount} offer${h.offerCount > 1 ? 's' : ''}` : ''}</span></div>`}
   </div>`;
 }
 
@@ -498,7 +498,7 @@ function meView() {
     <section class="card stack">
       <div id="sessions" class="small muted">Loading your sign-ins…</div>
       <button type="button" class="ghost" data-act="logoutall">Sign out on all devices</button>
-      ${(state.user.blocked || []).length ? `<div><b class="small">Blocked</b><ul class="list">${state.user.blocked.map((b) => `<li class="row between small"><span>${esc(b.name)}</span><button type="button" class="linkish" data-unblock="${b.uid}">Unblock</button></li>`).join('')}</ul></div>` : ''}
+      ${(state.user.blocked || []).length ? `<div><b class="small">Blocked</b><ul class="list">${state.user.blocked.map((b) => `<li class="row between small"><span>${esc(b.name)}</span><button type="button" class="linkish" data-unblock="${b.id}">Unblock</button></li>`).join('')}</ul></div>` : ''}
       <button type="button" class="ghost" data-act="export">⬇️ Download my data</button>
       <button type="button" class="ghost danger" data-act="deleteaccount">Delete my account…</button>
       ${state.support ? `<a class="small" href="mailto:${esc(state.support)}?subject=OurPawmily%20support">✉️ Email support</a>` : ''}
@@ -555,9 +555,13 @@ async function runTheImport() {
   const legacy = await legacySnapshot();
   const ops = planImport(legacy, fam());
   if (!ops.length) { log.innerHTML = '<div class="muted">Nothing to bring over.</div>'; return; }
-  await runImport(api, state.fid, ops, say);
+  const done = await runImport(api, state.fid, ops, say);
   await loadFamily();
   await importCare(api, state.fid, legacy, fam(), say);
+  // Read everything back and compare it with this phone, section by section.
+  const checks = await verifyImport(api, state.fid, done);
+  const highlight = (c) => c.sections.filter((x) => ['weigh-ins', 'days of meals', 'workouts', 'calendar events', 'meal combos', 'feedings'].includes(x.label) && x.count).map((x) => `${x.count} ${x.count === 1 ? x.label.replace(/^days of /, 'day of ').replace(/s$/, '') : x.label}`).join(', ');
+  log.innerHTML += `<div class="verify">${checks.map((c) => `<div class="${c.ok ? 'good' : 'tone-warn'}">${c.ok ? '✅' : '⚠️'} <b>${esc(c.name)}</b>: ${c.ok ? `${c.sections.length === 1 ? 'everything matches' : `all ${c.sections.length} sections match`}${highlight(c) ? ` (${esc(highlight(c))})` : ''}` : `didn't match: ${esc(c.missing.join(', '))} — tap Bring it over again`}</div>`).join('')}</div>`;
   say('Done. Your partner can claim theirs by accepting an invite — open them under Family and tap "Invite by email".');
 }
 
@@ -575,7 +579,8 @@ async function postAction(kind, { fid, pid }) {
     if (kind === 'block') {
       if (!confirm(`Block ${name}? You won't see their posts or comments. You can unblock them in Me.`)) return;
       const r = await api.post(`/posts/${fid}/${pid}/block`);
-      state.user.blocked = r.blocked; state.feed = state.feed.filter((x) => x.byUid !== state.feed.find((y) => y.id === pid)?.byUid); closeSheet(); renderPosts(); toast(`${name} is blocked`);
+      state.user.blocked = r.blocked; closeSheet(); toast(`${name} is blocked`);
+      const f = await api.get('/feed'); state.feed = f.posts; renderPosts();
     }
   });
 }
@@ -593,14 +598,14 @@ document.addEventListener('click', (e) => {
     return act(async () => { await api.post(`/families/${state.fid}/care`, { kind: d.care, date: isoLocal(), by: careBoth ? 'both' : 'me' }); renderCare(); renderRace(); });
   }
   if (d.careundo) return act(async () => { await api.del(`/families/${state.fid}/care/${isoLocal()}/${d.careundo}`); renderCare(); renderRace(); });
-  if (d.unblock) return act(async () => { await api.del(`/account/blocks/${d.unblock}`); state.user.blocked = state.user.blocked.filter((b) => b.uid !== d.unblock); meView(); });
+  if (d.unblock) return act(async () => { await api.del(`/account/blocks/${d.unblock}`); state.user.blocked = state.user.blocked.filter((b) => b.id !== d.unblock); meView(); });
   if (d.view) { e.preventDefault(); return show(d.view); }
   if (d.member) { closeSheet(); return show('member', d.member); }
   if (d.fam) { state.fid = d.fam; return act(async () => { await loadFamily(); show('feed'); }); }
   if (d.tag) { draft.tags = draft.tags.includes(d.tag) ? draft.tags.filter((x) => x !== d.tag) : [...draft.tags, d.tag]; t.classList.toggle('on'); return; }
   if (d.kind) { draft.text = $('#postForm textarea')?.value || draft.text; draft.help = d.kind === 'help' ? (draft.help || { type: 'petsit', from: '', to: '', time: '' }) : null; if (draft.help && state.connected.length) draft.audience = 'connections'; return compose(); }
   if (d.htype) { const f = $('#postForm'); Object.assign(draft.help, { type: d.htype, from: f.from.value, to: f.to.value, time: f.time.value }); draft.text = f.text.value; return compose(); }
-  if (d.pick) return act(async () => { const r = await api.post(`/posts/${post.dataset.fid}/${post.dataset.post}/accept`, { uid: d.pick }); const p = state.feed.find((x) => x.id === post.dataset.post); p.help = r.help; post.outerHTML = postCard(p); toast(`💛 ${r.help.helper.name} is helping`); });
+  if (d.pick) return act(async () => { const r = await api.post(`/posts/${post.dataset.fid}/${post.dataset.post}/accept`, { offer: d.pick }); const p = state.feed.find((x) => x.id === post.dataset.post); p.help = r.help; post.outerHTML = postCard(p); toast(`💛 ${r.help.helper.name} is helping`); });
   if (d.aud) { draft.audience = d.aud; t.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === t)); return; }
   switch (d.act) {
     case 'close': return closeSheet();
