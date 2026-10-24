@@ -24,4 +24,14 @@ test('an entry becomes "both of us" after the fact', async () => {
   assert.equal((await call(`${C}/2026-10-24/${walk.id}`, pat, 'PATCH', { both: false })).entry.byName, 'Pat', 'back to just whoever asked');
   const outsider = await signIn('out@example.com');
   assert.equal((await call(`${C}/2026-10-24/${walk.id}`, outsider, 'PATCH', { both: true })).status, 404);
+
+  // Either of you logs for the other: Pat did the dishes, Sam taps it in.
+  const dishes = (await call(C, sam, 'POST', { date: '2026-10-24', kind: 'dishes', by: add.member.id })).entry;
+  assert.deepEqual(dishes.by, [add.member.id]);
+  assert.equal(dishes.byName, 'Pat');
+  assert.equal((await call(`${C}/2026-10-24/${dishes.id}`, sam, 'PATCH', { who: 'both' })).entry.byName, 'sam & Pat');
+  assert.equal((await call(`${C}/2026-10-24/${dishes.id}`, pat, 'PATCH', { who: family.members[0].id })).entry.byName, 'sam', 'Pat moves it to Sam');
+  const trash = (await call(C, pat, 'POST', { date: '2026-10-24', kind: 'trash', by: family.members[0].id })).entry;
+  assert.equal((await call(`${C}/2026-10-24/${trash.id}`, pat, 'DELETE')).ok, true, 'who logged it can undo it');
+  assert.equal((await call(C, sam, 'POST', { date: '2026-10-24', kind: 'trash', by: 'nobody' })).entry.byName, 'sam', 'unknown → you');
 });

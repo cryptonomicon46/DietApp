@@ -438,8 +438,10 @@ export async function familyApi(req, env, path, ctx = null) {
       const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? body.date : null;
       if (!date || !CARE.includes(body.kind)) return json({ error: 'what and which day?' }, 400);
       const pets = (Array.isArray(body.pets) ? body.pets : []).filter((id) => fam.members.some((x) => x.id === id && x.kind === 'pet'));
-      const who = body.by === 'both' ? fam.members.filter((x) => x.kind === 'person' && x.uid && x.relation !== 'child').map((x) => x.id).slice(0, 2) : [me.id];
-      const entry = { id: randomId(6), kind: body.kind, pets, by: who, byName: who.map((id) => fam.members.find((x) => x.id === id)?.name).join(' & '), note: clean(body.note, 80), at: Date.now() };
+      // Who did it: you, both of you, or the other one (either of you can log for the other).
+      const adults = fam.members.filter((x) => x.kind === 'person' && x.uid && x.relation !== 'child').map((x) => x.id).slice(0, 2);
+      const who = body.by === 'both' ? adults : adults.includes(body.by) && me.relation !== 'child' ? [body.by] : [me.id];
+      const entry = { id: randomId(6), kind: body.kind, pets, by: who, byName: who.map((id) => fam.members.find((x) => x.id === id)?.name).join(' & '), loggedBy: me.id, note: clean(body.note, 80), at: Date.now() };
       const list = [...((await db.get(`care:${fam.fid}:${date}`)) || []), entry].slice(-100);
       await db.put(`care:${fam.fid}:${date}`, list);
       const idx = (await db.get(`careidx:${fam.fid}`)) || [];
@@ -469,14 +471,16 @@ export async function familyApi(req, env, path, ctx = null) {
       await db.put(`careidx:${fam.fid}`, [...idx].sort().slice(-800));
       return json({ days: Object.keys(byDay).length, entries: Object.values(byDay).flat().length });
     }
-    // 👫 After the fact: an entry becomes "both of us" (or back to just you); points follow.
+    // 👫 After the fact: who did it changes (you, both of you, or the other one); points follow.
     if (method === 'PATCH' && m[2]) {
       const list = (await db.get(`care:${fam.fid}:${m[2]}`)) || [];
       const e = list.find((x) => x.id === m[3]);
       if (!e) return json({ error: 'not found' }, 404);
-      if (!(e.by.includes(me.id) || me.role === 'owner')) return json({ error: 'only who logged it can change it' }, 403);
       const adults = fam.members.filter((x) => x.kind === 'person' && x.uid && x.relation !== 'child').map((x) => x.id).slice(0, 2);
-      e.by = body.both ? [...new Set([...e.by, ...adults])].slice(0, 2) : [e.by.includes(me.id) ? me.id : e.by[0]];
+      if (!(adults.includes(me.id) || e.by.includes(me.id) || me.role === 'owner')) return json({ error: 'ask a grown-up' }, 403);
+      if (body.who === 'both' || body.both === true) e.by = adults; // family order, so it always reads the same
+      else if (adults.includes(body.who)) e.by = [body.who];
+      else e.by = [e.by.includes(me.id) ? me.id : e.by[0]];
       e.byName = e.by.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ');
       await db.put(`care:${fam.fid}:${m[2]}`, list);
       return json({ entry: e });
@@ -485,7 +489,7 @@ export async function familyApi(req, env, path, ctx = null) {
       const list = (await db.get(`care:${fam.fid}:${m[2]}`)) || [];
       const e = list.find((x) => x.id === m[3]);
       if (!e) return json({ error: 'not found' }, 404);
-      if (!(e.by.includes(me.id) || me.role === 'owner')) return json({ error: 'only who logged it can undo it' }, 403);
+      if (!(e.by.includes(me.id) || e.loggedBy === me.id || me.role === 'owner')) return json({ error: 'only who logged it can undo it' }, 403);
       await db.put(`care:${fam.fid}:${m[2]}`, list.filter((x) => x !== e));
       return json({ ok: true });
     }
