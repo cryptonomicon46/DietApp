@@ -690,8 +690,18 @@ export async function familyApi(req, env, path) {
 
 async function startSession(db, who) {
   let user = await db.get(`user:${who.uid}`);
+  const oldPicture = user?.picture || '';
   user = { ...(user || { families: [], createdAt: Date.now() }), uid: who.uid, email: who.email, name: user?.name || who.name, picture: who.picture || user?.picture || '' };
   await db.put(`user:${user.uid}`, user);
+  // A new Google profile picture replaces the old one in your families too (unless you chose
+  // a different picture or emoji there).
+  if (user.picture && user.picture !== oldPicture) {
+    for (const fid of user.families) {
+      const fam = await db.get(`family:${fid}`);
+      const m = fam?.members.find((x) => x.uid === user.uid);
+      if (m && (!m.avatar || m.avatar === oldPicture)) { m.avatar = user.picture; await db.put(`family:${fid}`, fam); }
+    }
+  }
   const token = randomId(32);
   await db.put(`session:${token}`, { uid: user.uid, at: Date.now() }, SESSION_TTL);
   // Remember the sign-ins (newest 10), so "sign out everywhere" can end them all.

@@ -308,3 +308,13 @@ test('bringing data over is checked section by section', async () => {
   assert.deepEqual(bad.filter((x) => !x.ok).map((x) => x.label), ['weigh-ins']);
   assert.equal(bad.find((x) => x.key === 'mealLog').count, 1);
 });
+
+test('a new Google profile picture shows up in your families when you next sign in', async () => {
+  const first = await api('/auth/google', { method: 'POST', body: { credential: await idToken({ sub: '900', email: 'pic@gmail.com', name: 'Pic', picture: 'https://lh3.googleusercontent.com/old' }) } });
+  await api('/account/consent', { token: first.token, method: 'POST', body: { version: TERMS_VERSION, age13: true } });
+  const { family } = await api('/families', { token: first.token, method: 'POST', body: { name: 'Pics' } });
+  assert.equal(family.members[0].avatar, 'https://lh3.googleusercontent.com/old');
+  const again = await api('/auth/google', { method: 'POST', body: { credential: await idToken({ sub: '900', email: 'pic@gmail.com', name: 'Pic', picture: 'https://lh3.googleusercontent.com/new' }) } });
+  assert.equal((await api(`/families/${family.fid}`, { token: again.token })).family.members[0].avatar, 'https://lh3.googleusercontent.com/new');
+  assert.equal((await api('/me', { token: again.token })).user.picture, 'https://lh3.googleusercontent.com/new');
+});
