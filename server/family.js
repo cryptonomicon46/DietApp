@@ -21,6 +21,7 @@
 //   gold:<fid>                 [{month, winners, points}] Gold Card hall of fame
 //   report:<fid>:<postId>      [{uid, reason, at}]        posts someone reported
 //   rate:<uid>:<minute>        count of changes (limits runaway clients and abuse)
+//   us:<fid>                   {plans: [{id, by, to, day, body, replies, done}], notes: [{id, by, to, body, at, hearts}], noteDays}  💞
 //   appts:<fid>                [{id, type, pets, place, dropAt, dropBy, pickAt, pickBy, repeatWeeks, vaccine, status, cost…}]  dog appointments
 //   dogmonths:<fid>            {YYYY-MM: {golden, walks}}  finished months of dog stats (cache)
 //   bingopacks:<fid>           [{id, title, squares, by, byName, at}]  show bingo card sets
@@ -39,6 +40,7 @@
 // authors blocked (Apple 1.2).
 
 import { isGolden, dayHighlights, goldenMessage } from './goldenPost.js';
+import { REPLIES, NOTE_DAYS, partnerOf, visibleTo, upcoming, agreed, streak } from './us.js';
 import { APPT_TYPES, cleanAppt, nextDue, shiftWeeks, startOf, spending } from './appts.js';
 import { parseSquares, makeCard, bingoLines, bingoPrompt, NEED, FREE } from './bingo.js';
 import { EVENTS as PICK_EVENTS, OUTCOMES, locked as pickLocked, score as pickScore, parseCouples } from './picks.js';
@@ -440,6 +442,99 @@ export async function familyApi(req, env, path) {
   }
 
   // ---- 🏆 the month's chores race: points per person, and the Gold Card ----
+  // ---- 💞 just us: feeling-like plans and post-it notes ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/us(?:\/(plans|notes|import)(?:\/([a-z0-9]+)(\/reply|\/heart)?)?)?$/);
+  if (m) {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const me = meIn(fam);
+    const [, , what, id, act] = m;
+    const key = `us:${fam.fid}`;
+    const us = (await db.get(key)) || { plans: [], notes: [], noteDays: {} };
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(url(req).searchParams.get('today') || '') ? url(req).searchParams.get('today') : new Date().toISOString().slice(0, 10);
+    const save = () => { const cut = Date.now() - NOTE_DAYS * 864e5; us.notes = us.notes.filter((n) => n.at >= cut || n.hearts?.length).slice(-200); us.plans = us.plans.slice(-300); return db.put(key, us); };
+    const partner = partnerOf(fam, me);
+    const recipients = (aud) => (aud === 'family' ? fam.members.filter((x) => x.kind === 'person' && x.id !== me.id).map((x) => x.id) : partner ? [partner.id] : []);
+    const bodyOf = (v) => sealed(v, 8000) ?? (fam.e2ee ? null : (typeof v === 'object' && v ? JSON.stringify(v).slice(0, 4000) : null));
+    if (!what && method === 'GET') {
+      const mine = (x) => visibleTo(x, me.id);
+      const plans = us.plans.filter(mine).filter((p) => upcoming(p, today) || p.day >= shiftDay(today, -21)).map((p) => ({ ...p, agreed: agreed(p) }));
+      return json({ plans, notes: us.notes.filter(mine), streak: streak(us.noteDays?.[me.id] || [], today), theirStreak: partner ? streak(us.noteDays?.[partner.id] || [], today) : 0, partner: partner ? { id: partner.id, name: partner.name } : null });
+    }
+    if (what === 'plans' && !id && method === 'POST') {
+      const b = bodyOf(body.body);
+      if (!b) return json({ error: 'this family is end-to-end encrypted — update the app and try again' }, 400);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(body.day || '')) return json({ error: 'which day?' }, 400);
+      const to = recipients(body.audience);
+      if (!to.length) return json({ error: 'add your partner to the family first' }, 400);
+      const plan = { id: randomId(8), by: me.id, to, audience: body.audience === 'family' ? 'family' : 'couple', day: body.day, weekend: !!body.weekend, body: b, replies: {}, done: false, at: Date.now() };
+      us.plans.push(plan); await save();
+      return json({ plan });
+    }
+    if (what === 'notes' && !id && method === 'POST') {
+      const b = bodyOf(body.body);
+      if (!b) return json({ error: 'this family is end-to-end encrypted — update the app and try again' }, 400);
+      const to = recipients('couple');
+      const note = { id: randomId(8), by: me.id, to, body: b, at: Date.now(), hearts: [] };
+      us.notes.push(note);
+      us.noteDays = { ...(us.noteDays || {}), [me.id]: [...new Set([...(us.noteDays?.[me.id] || []), today])].slice(-400) };
+      await save();
+      return json({ note });
+    }
+    // Bringing over the trackers' "Feeling like" plans, replies and notes (each person their own).
+    if (what === 'import' && method === 'POST') {
+      const to = recipients('couple');
+      let n = 0;
+      for (const p of (Array.isArray(body.plans) ? body.plans : []).slice(0, 200)) {
+        const b = bodyOf(p.body), pid = `t${String(p.id || '').replace(/[^a-z0-9]/g, '').slice(0, 20)}`;
+        if (!b || !/^\d{4}-\d{2}-\d{2}$/.test(p.day || '') || us.plans.some((x) => x.id === pid)) continue;
+        us.plans.push({ id: pid, by: me.id, to, audience: 'couple', day: p.day, weekend: !!p.weekend, body: b, replies: us.pending?.[pid] || {}, done: !!p.done, at: +p.at || Date.now(), src: 'import' }); n++;
+      }
+      // My answers to my partner's plans: on their plan if it's here, else kept until it arrives.
+      for (const [pid0, r] of Object.entries(body.replies || {})) {
+        if (!REPLIES.includes(r?.r)) continue;
+        const pid = `t${String(pid0).replace(/[^a-z0-9]/g, '').slice(0, 20)}`;
+        const plan = us.plans.find((x) => x.id === pid);
+        if (plan) plan.replies = { ...plan.replies, [me.id]: { r: r.r, at: +r.at || Date.now() } };
+        else us.pending = { ...(us.pending || {}), [pid]: { ...(us.pending?.[pid] || {}), [me.id]: { r: r.r, at: +r.at || Date.now() } } };
+      }
+      for (const nt of (Array.isArray(body.notes) ? body.notes : []).slice(0, 100)) {
+        const b = bodyOf(nt.body), nid = `t${String(nt.id || '').replace(/[^a-z0-9]/g, '').slice(0, 20)}`;
+        if (!b || us.notes.some((x) => x.id === nid) || !(+nt.at > Date.now() - NOTE_DAYS * 864e5)) continue;
+        us.notes.push({ id: nid, by: me.id, to, body: b, at: +nt.at, hearts: [] }); n++;
+      }
+      const days = (Array.isArray(body.noteDays) ? body.noteDays : []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+      us.noteDays = { ...(us.noteDays || {}), [me.id]: [...new Set([...(us.noteDays?.[me.id] || []), ...days])].sort().slice(-400) };
+      await save();
+      return json({ imported: n });
+    }
+    const list = what === 'plans' ? us.plans : us.notes;
+    const item = list.find((x) => x.id === id);
+    if (!item || !visibleTo(item, me.id)) return json({ error: 'not found' }, 404);
+    if (what === 'plans' && act === '/reply' && method === 'POST') {
+      if (!item.to.includes(me.id)) return json({ error: "it's your own plan" }, 400);
+      if (item.replies[me.id]?.r === body.r || !REPLIES.includes(body.r)) delete item.replies[me.id];
+      else item.replies[me.id] = { r: body.r, at: Date.now() };
+      await save();
+      return json({ plan: { ...item, agreed: agreed(item) } });
+    }
+    if (what === 'notes' && act === '/heart' && method === 'POST') {
+      item.hearts = item.hearts.includes(me.id) ? item.hearts.filter((x) => x !== me.id) : [...item.hearts, me.id];
+      await save();
+      return json({ note: item });
+    }
+    if (item.by !== me.id) return json({ error: 'only who made it can change it' }, 403);
+    if (method === 'PATCH') {
+      if (body.done != null) item.done = !!body.done;
+      if (body.body) { const b = bodyOf(body.body); if (b) item.body = b; }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(body.day || '')) { item.day = body.day; item.replies = {}; }
+      await save();
+      return json({ [what === 'plans' ? 'plan' : 'note']: item });
+    }
+    if (method === 'DELETE') { const i = list.indexOf(item); list.splice(i, 1); await save(); return json({ ok: true }); }
+    return json({ error: 'not found' }, 404);
+  }
+
   // ---- 🐾 dog appointments: grooming, vet, vaccines… with drop-off and pick-up drivers ----
   m = path.match(/^\/families\/([a-z0-9]+)\/appts(?:\/([a-z0-9]+))?$/);
   if (m) {
@@ -1248,6 +1343,7 @@ async function deleteFamily(db, fam) {
   await db.del(`careidx:${fam.fid}`);
   await db.del(`goldenmsg:${fam.fid}`);
   await db.del(`appts:${fam.fid}`);
+  await db.del(`us:${fam.fid}`);
   await db.del(`dogmonths:${fam.fid}`);
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) for (const x of fam.members) await db.del(`bingocard:${fam.fid}:${g.id}:${x.id}`);
   await db.del(`bingogames:${fam.fid}`);

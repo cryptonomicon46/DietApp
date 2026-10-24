@@ -70,6 +70,13 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
   - **People:** add a partner, kids, parents and others. Grown-ups get an **invite by email**, and only that Google account can accept it (once, within 14 days). Young kids can be added without an account and managed by the grown-ups.
   - **One set of dogs:** the family app's dogs and the trackers' 🐕 Dogs tab are the same dogs. Name, breed, birthday and photo come from the family app; food, meds, vaccines and the vet are edited in the trackers and show on the pet's profile. Each side picks up the other's changes when the trackers sync with your account, the newest edit of each detail wins, and a dog in only one app is added to the other (matched by name, so no duplicates).
   - **Pets:** add each pet with a photo, its breed and birthday (✎ Edit on the pet's profile changes the photo). Photos are cropped square and shrunk on the phone before upload. Everyone in the family sees the pets.
+- **🏠 Feed, top to bottom:**
+  - **☀️ Today:** whether the dogs have been fed (tap to log), the next good walk time, tonight's plan, and your macros left (from your trackers).
+  - **✨ What are you feeling like?** One tap on 🍽️ Dinner, 🍿 Movie, 📺 Show, 🥞 Brunch, 🥗 Lunch, ☕ Coffee, 🚶 Walk, 🏋️ Work out or ✨ Other opens the form with that picked: what, where, when (tonight, today, tomorrow, this weekend, a day), a time, a note, and who (just you two, or the whole family). Your partner gets a bold **NEW** card with 🙌 I'm in · 🤔 Maybe · ⏰ Another time; when everyone's in it becomes **🎉 It's a plan!** (with Directions, and Get tickets for a movie) and shows in Today. Your own suggestions show ⏳ waiting, with Another day / Cancel; ✓ We did it moves it to the recap chips.
+  - **💞 Just us:** post-it notes only the two of you see (five colours, quick emoji), ❤️ to keep one, a note streak; they clear after a week unless hearted.
+  - **📅 Coming up:** the next agreed plan and dog appointment, flagging a ride nobody has taken.
+  - Then posts. Everything in ✨ and 💞 is end-to-end encrypted. The trackers' old "Feeling like" plans, answers and notes come over automatically the first time each of you opens the feed.
+- **＋ (center of the bottom bar, and top right):** ✨ I'm feeling like… first, then 💌 Leave a note, 📸 Post, 🐾 Dog appointment, 🙋 Ask for help.
 - **Feed:** a private, Instagram-style feed with photos, captions, tags for the people and pets in a photo, likes and comments. A family's posts are seen only by that family.
 - **Connected families:** anyone can invite a close friend, who then creates their own family (or uses one they run). The two families are then connected, and a post shared with *+ connected families* shows up for them too. Nothing else is shared with them, not even email addresses.
 - **Privacy:** your diet & fitness (weight, meals, training) is private until you turn sharing on for a specific person in **Me › Who can see my diet & fitness**.
@@ -403,6 +410,7 @@ Run `node scripts/bump-version.mjs` before committing. It gives every app file a
 | `family/crypto.js` | 🔐 End-to-end encryption: sealing, keys on the device, recovery phrase |
 | `family/` | 👨‍👩‍👧 OurPawmily Families (preview): sign-in, families, invites, feed, privacy, bringing data over |
 | `server/family.js` | The family API (`/v2/…` on the connector; also runs on the phone for the demo), help desk, nightly maintenance |
+| `server/us.js` | 💞 Feeling-like plans and notes: who they're for, days, answers, streaks |
 | `server/appts.js` | 🐾 Dog appointments: drivers, repeats, vaccine due dates, spending |
 | `server/picks.js` | 💑 Couples picks: events, endings and scoring |
 | `server/bingo.js` | 🎲 Show bingo: reading pasted squares, dealing cards, finding bingo |

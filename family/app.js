@@ -275,9 +275,10 @@ async function inviteView() {
 
 // ---------- views ----------
 function show(view, extra) {
+  if (view !== 'compose') state.prevView = view;
   state.view = view;
   if (view === 'member') state.memberId = extra;
-  if (view === 'compose') return compose();
+  if (view === 'compose') { state.view = state.prevView || 'feed'; return plusMenu(); }
   chrome(true);
   document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === (view === 'member' ? 'family' : view)));
   window.scrollTo(0, 0);
@@ -287,15 +288,17 @@ function show(view, extra) {
 const demoBanner = () => (api.mode() === 'demo' ? '<div class="banner">Demo — everything stays on this phone.</div>' : '');
 
 async function feedView() {
-  const people = fam().members;
   $('#view').innerHTML = `${demoBanner()}
-    <div class="stories">${people.map((m) => `<button type="button" class="story" data-member="${m.id}">${avatar(m, 58)}<span>${esc(m.id === fam().me ? 'You' : m.name)}</span></button>`).join('')}
-      <button type="button" class="story add" data-act="addperson"><span class="av plus" style="width:58px;height:58px">＋</span><span>Add</span></button></div>
-    <button type="button" class="card composer" data-view="compose">${avatar(me(), 36)}<span>Share something with the family…</span><span class="cam">📷</span></button>
+    <section class="card today" id="today"><div class="skeleton line"></div></section>
+    <section class="feelhero" id="feel"><div class="skeleton line"></div></section>
+    <div id="usNotes"></div>
+    <div id="comingLine"></div>
     <div id="goldNews"></div>
     <div id="posts"><div class="skeleton card"></div><div class="skeleton card"></div></div>`;
   goldNews();
-  const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts()]);
+  importUs().catch(() => {});
+  const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts(), loadUs()]);
+  renderFeel(); renderNotes(); renderToday(); renderComingLine();
   if (!r) return;
   state.feed = await Promise.all(r.posts.map(openPost));
   renderPosts();
@@ -562,25 +565,30 @@ async function renderHappy() {
     <p class="tiny muted">⭐ A golden day = two outings, or one plus a treat. The strip is the last 12 months.</p>`;
 }
 // 🦮 When to walk: the trackers' weather scoring (San Jose), and how hot the pavement gets.
+// Today's walk weather (cached 30 minutes): the best hour, the hottest pavement, the hourly strip.
+async function walkWeather() {
+  const B = await import('../js/brief.js');
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem('fam.weather') || 'null'); } catch { /* none */ }
+  if (!cached || Date.now() - cached.at > 30 * 60000) {
+    const u = B.weatherUrls(B.PLACE);
+    const [f, air] = await Promise.all([fetch(u.forecast).then((r) => r.json()), fetch(u.air).then((r) => (r.ok ? r.json() : null)).catch(() => null)]);
+    cached = { at: Date.now(), f, air };
+    try { localStorage.setItem('fam.weather', JSON.stringify(cached)); } catch { /* full */ }
+  }
+  const hourly = B.parseWeather(cached.f, cached.air);
+  const now = new Date();
+  const from = Math.max(0, hourly.findIndex((h) => h.time > now) - 1);
+  const w = B.dogWalks(hourly, from), hot = B.hottestPavement(hourly, from);
+  const pick = [w.morning, w.evening].filter(Boolean).sort((a, b) => b.score - a.score)[0];
+  const hr = (i) => hourly[i].time.toLocaleTimeString(undefined, { hour: 'numeric' }).replace(' ', '').toLowerCase();
+  return { B, hourly, now, from, w, hot, pick, hr };
+}
 async function renderWalk() {
   const el = $('#walk');
   if (!el) return;
   try {
-    const B = await import('../js/brief.js');
-    let cached = null;
-    try { cached = JSON.parse(localStorage.getItem('fam.weather') || 'null'); } catch { /* none */ }
-    if (!cached || Date.now() - cached.at > 30 * 60000) {
-      const u = B.weatherUrls(B.PLACE);
-      const [f, air] = await Promise.all([fetch(u.forecast).then((r) => r.json()), fetch(u.air).then((r) => (r.ok ? r.json() : null)).catch(() => null)]);
-      cached = { at: Date.now(), f, air };
-      try { localStorage.setItem('fam.weather', JSON.stringify(cached)); } catch { /* full */ }
-    }
-    const hourly = B.parseWeather(cached.f, cached.air);
-    const now = new Date();
-    const from = Math.max(0, hourly.findIndex((h) => h.time > now) - 1);
-    const w = B.dogWalks(hourly, from), hot = B.hottestPavement(hourly, from);
-    const pick = [w.morning, w.evening].filter(Boolean).sort((a, b) => b.score - a.score)[0];
-    const hr = (i) => hourly[i].time.toLocaleTimeString(undefined, { hour: 'numeric' }).replace(' ', '').toLowerCase();
+    const { B, hourly, now, from, w, hot, pick, hr } = await walkWeather();
     const strip = hourly.slice(from, from + 14).filter((h) => h.time.getHours() >= 6 && h.time.getHours() <= 21).slice(0, 8);
     const cls = (s) => (s >= 80 ? 'g' : s >= 60 ? 'ok2' : s >= 40 ? 'meh' : 'bad');
     const other = [w.morning, w.evening].filter((x) => x && x !== pick)[0];
@@ -817,6 +825,187 @@ function meView() {
     const el = $('#sessions');
     if (el) el.innerHTML = `<b>Signed in on</b><ul class="list">${r.sessions.slice().reverse().map((x) => `<li class="row between"><span>${esc(x.device || 'A device')}${x.current ? ' <span class="pill">This one</span>' : ''}</span><small>${ago(x.at)}</small></li>`).join('')}</ul>`;
   }).catch(() => {});
+}
+
+// ---------- 💞 just us: feeling like, notes, the Today card, the ＋ menu ----------
+const KINDS = {
+  dinner: ['🍽️', 'Dinner', 'Anything special? (optional)', 'Where?'], movie: ['🍿', 'Movie', 'Which movie?', 'Theater (optional)'],
+  show: ['📺', 'Watch a show', 'Which show?', ''], brunch: ['🥞', 'Brunch', 'Anything special? (optional)', 'Where?'],
+  lunch: ['🥗', 'Lunch', 'Anything special? (optional)', 'Where?'], coffee: ['☕', 'Coffee', '', 'Where?'],
+  walk: ['🚶', 'Walk / hike', '', 'Where?'], workout: ['🏋️', 'Work out together', 'What? e.g. a run', 'Where? (optional)'],
+  other: ['✨', 'Something else', 'What are you feeling like?', 'Where? (optional)'],
+};
+const WHENS = { tonight: 'Tonight', today: 'Today', tomorrow: 'Tomorrow', weekend: 'This weekend', date: 'Pick a day' };
+const ANSWERS = { in: "🙌 I'm in", maybe: '🤔 Maybe', later: '⏰ Another time' };
+const NOTE_COLORS = ['yellow', 'pink', 'blue', 'green', 'peach'];
+const NOTE_EMOJI = ['❤️', '😘', '🥰', '🐶', '☕', '🍕', '🌙', '✨', '🙏', '😂'];
+// The day a plan is for (as the trackers worked it out): tonight/today = that day, weekend = Saturday.
+function planDayOf(when, made, day) {
+  if (when === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(day || '')) return day;
+  const d = new Date(`${made}T12:00:00`);
+  if (when === 'tomorrow') d.setDate(d.getDate() + 1);
+  if (when === 'weekend') d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7));
+  return isoLocal(d);
+}
+const us = { plans: [], notes: [], partner: null, streak: 0, theirStreak: 0 };
+async function loadUs() {
+  const r = await api.get(`/families/${state.fid}/us?today=${isoLocal()}`).catch(() => null);
+  if (!r) return;
+  // 🔐 Unlocked here: what it is, where, when, the note.
+  us.plans = await Promise.all(r.plans.map(async (p) => ({ ...p, ...((await unlock(p.body)) || { kind: 'other', what: '🔒', locked: true }) })));
+  us.notes = await Promise.all(r.notes.map(async (n) => ({ ...n, ...((await unlock(n.body)) || { text: '🔒', color: 'yellow' }) })));
+  Object.assign(us, { partner: r.partner, streak: r.streak, theirStreak: r.theirStreak });
+}
+const partnerName = () => us.partner?.name || 'your partner';
+// Still ahead (a weekend plan through Sunday), and not done.
+const isUpcoming = (p) => !p.done && (p.weekend ? shiftLocal(p.day, 1) >= isoLocal() : p.day >= isoLocal());
+const shiftLocal = (d, n) => { const x = new Date(`${d}T12:00:00`); x.setDate(x.getDate() + n); return isoLocal(x); };
+function planWhen(p) {
+  const t = p.time ? ` · ${new Date(`2000-01-01T${p.time}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : '';
+  if (p.weekend) return `This weekend${t}`;
+  if (p.day === isoLocal()) return `${p.when === 'tonight' ? 'Tonight' : 'Today'}${t}`;
+  if (p.day === shiftLocal(isoLocal(), 1)) return `Tomorrow${t}`;
+  return `${new Date(`${p.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}${t}`;
+}
+const planTitle = (p) => `${(KINDS[p.kind] || KINDS.other)[1]}${p.what ? `: ${p.what}` : ''}`;
+// The ✨ card: one-tap kinds, what's waiting for your answer, what you sent, what's agreed, recaps.
+function renderFeel() {
+  const el = $('#feel');
+  if (!el) return;
+  if (!us.partner && !us.plans.length) { el.hidden = true; return; }
+  el.hidden = false;
+  const up = us.plans.filter(isUpcoming).sort((a, b) => a.day.localeCompare(b.day) || (a.time || '').localeCompare(b.time || ''));
+  const toMe = up.filter((p) => p.by !== fam().me && !p.replies?.[fam().me]);
+  const agreed = up.filter((p) => p.agreed);
+  const mineWaiting = up.filter((p) => p.by === fam().me && !p.agreed);
+  const past = us.plans.filter((p) => !isUpcoming(p)).sort((a, b) => b.day.localeCompare(a.day)).slice(0, 6);
+  const map = (p) => (p.where ? ` · 📍 ${esc(p.where)} · <a href="https://maps.apple.com/?q=${encodeURIComponent(p.where)}" target="_blank" rel="noopener">map</a>` : '');
+  const card = (p, cls, inner) => `<div class="fh-in ${cls}" data-plan="${p.id}">${cls === 'incoming' ? '<span class="newdot">NEW</span>' : ''}<div class="fic big">${(KINDS[p.kind] || KINDS.other)[0]}</div>
+    <div><div class="small">${p.by === fam().me ? "You're" : `${esc(member(p.by)?.name || partnerName())} is`} feeling like</div><b class="fh-what">${esc(planTitle(p))}</b>
+    <div class="small">${esc(planWhen(p))}${map(p)}</div>${p.note ? `<div class="small fnote">“${esc(p.note)}”</div>` : ''}${inner}</div></div>`;
+  const answers = (p) => `<div class="rsvp full">${Object.entries(ANSWERS).map(([k, t]) => `<button type="button" class="${p.replies?.[fam().me]?.r === k ? '' : 'ghost'}" data-answer="${p.id}:${k}">${t}</button>`).join('')}</div>`;
+  const them = (p) => p.to.map((id) => { const r = p.replies?.[id]?.r; return r ? `${esc(member(id)?.name || '')}: <b>${ANSWERS[r]}</b>` : ''; }).filter(Boolean).join(' · ');
+  el.innerHTML = `<div class="row between"><b class="fh-title">✨ What are you feeling like?</b><span class="fh-sub">${esc(us.partner ? `you & ${us.partner.name}` : 'just you two')}</span></div>
+    <div class="fh-kinds">${Object.entries(KINDS).map(([k, [ico, label]]) => `<button type="button" data-feel="${k}"><b>${ico}</b>${esc(label.split(' / ')[0].replace('Watch a show', 'Show').replace('Work out together', 'Work out').replace('Something else', 'Other'))}</button>`).join('')}</div>
+    ${toMe.map((p) => card(p, 'incoming', answers(p))).join('')}
+    ${agreed.map((p) => `<div class="itsaplan" data-plan="${p.id}"><div class="big">🎉 It's a plan!</div><div class="small">${(KINDS[p.kind] || KINDS.other)[0]} ${esc(planTitle(p))} · ${esc(planWhen(p))}${p.where ? ` · ${esc(p.where)}` : ''}</div>
+      <div class="chips center">${p.where ? `<a class="chip" href="https://maps.apple.com/?q=${encodeURIComponent(p.where)}" target="_blank" rel="noopener">🗺 Directions</a>` : ''}${p.kind === 'movie' && p.what ? `<a class="chip" href="https://www.fandango.com/search?q=${encodeURIComponent(p.what)}" target="_blank" rel="noopener">🎟 Get tickets</a>` : ''}${p.by === fam().me ? `<button type="button" class="chip" data-plandone="${p.id}">✓ We did it</button>` : ''}</div></div>`).join('')}
+    ${mineWaiting.map((p) => card(p, 'waiting', `<div class="small muted" style="margin-top:4px">${them(p) || `⏳ Waiting for ${esc(partnerName())}…`} · <button type="button" class="linkish small" data-planmove="${p.id}">Another day</button> · <button type="button" class="linkish small" data-plandel="${p.id}">Cancel</button></div>`)).join('')}
+    ${!toMe.length && !agreed.length && !mineWaiting.length ? '<p class="small fh-empty">Nothing waiting on an answer · tap above to suggest something 💡</p>' : ''}
+    ${past.length ? `<div class="fh-past">${past.map((p) => `<span>${p.done || p.agreed ? '✓' : '·'} ${esc((KINDS[p.kind] || KINDS.other)[1].split(' ')[0])} ${new Date(`${p.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' })}${p.agreed ? ' · 🙌' : ''}</span>`).join('')}</div>` : ''}`;
+}
+function feelSheet(kind = 'dinner') {
+  const k = KINDS[kind] || KINDS.other;
+  openSheet(`<h2>✨ I'm feeling like…</h2>
+    <form id="feelForm" class="stack">
+      <div class="kinds radios">${Object.entries(KINDS).map(([key, [ico, label]]) => `<label><input type="radio" name="kind" value="${key}" ${key === kind ? 'checked' : ''}><span><b>${ico}</b>${esc(label)}</span></label>`).join('')}</div>
+      <label class="kwhat" ${k[2] ? '' : 'hidden'}><span>${esc(k[2] || 'What?')}</span><input name="what" maxlength="80"></label>
+      <label class="kwhere" ${k[3] ? '' : 'hidden'}><span>${esc(k[3] || 'Where?')}</span><input name="where" maxlength="80"></label>
+      <div class="seg2 radios whens">${Object.entries(WHENS).map(([key, t]) => `<label><input type="radio" name="when" value="${key}" ${key === 'tonight' ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div>
+      <label class="kday" hidden>Day<input type="date" name="day" min="${isoLocal()}" value="${isoLocal()}"></label>
+      <div class="two"><label>Time (optional)<input type="time" name="time"></label><label>Who<select name="audience"><option value="couple">Just us two</option><option value="family">The whole family</option></select></label></div>
+      <label>Note (optional)<input name="note" maxlength="140" placeholder="😊"></label>
+      <p class="tiny muted">${esc(partnerName())} gets it on their feed with 🙌 I'm in · 🤔 Maybe · ⏰ Another time. 🔐 Only the people it's for can read it.</p>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Send to ${esc(partnerName())} 💌</button></div>
+    </form>`);
+}
+// 💞 Just us: post-its only the two of you see.
+function renderNotes() {
+  const el = $('#usNotes');
+  if (!el) return;
+  if (!us.partner && !us.notes.length) { el.innerHTML = ''; return; }
+  const mine = (n) => n.by === fam().me;
+  const fresh = us.notes.filter((n) => !mine(n) && Date.now() - n.at < 864e5).length;
+  el.innerHTML = `<h3 class="row between"><span>💞 Just us ${fresh ? `<span class="newpill">${fresh} NEW</span>` : ''}</span></h3>
+    <div class="postits">${us.notes.slice().sort((a, b) => b.at - a.at).map((n) => `<div class="postit ${esc(n.color || 'yellow')}" data-note="${n.id}">${esc(n.text)}
+      <small>${esc(mine(n) ? 'You' : member(n.by)?.name || '')} · ${ago(n.at)} <button type="button" class="heart" data-noteheart="${n.id}" aria-label="Heart">${n.hearts?.length ? '❤️'.repeat(Math.min(2, n.hearts.length)) : '🤍'}</button>${mine(n) ? ` <button type="button" class="heart" data-notedel="${n.id}" aria-label="Remove">✕</button>` : ''}</small></div>`).join('')}
+      <button type="button" class="postit add" data-act="note">＋ Note</button></div>
+    <p class="tiny muted pad">${us.streak > 1 ? `🔥 ${us.streak}-day note streak · ` : ''}only you two see these · they clear after a week unless you ❤️ them</p>`;
+}
+function noteSheet() {
+  openSheet(`<h2>💌 Leave a note</h2><p class="small muted">A post-it only you and ${esc(partnerName())} see.</p>
+    <form id="noteForm" class="stack">
+      <textarea name="text" rows="4" maxlength="280" required placeholder="Thanks for walking the girls ☔"></textarea>
+      <div class="emo">${NOTE_EMOJI.map((e) => `<button type="button" class="chip" data-emoji="${e}">${e}</button>`).join('')}</div>
+      <div class="colors">${NOTE_COLORS.map((c, i) => `<label><input type="radio" name="color" value="${c}" ${i === 0 ? 'checked' : ''}><i class="sw-${c}"></i></label>`).join('')}</div>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Stick it 📌</button></div>
+    </form>`);
+}
+// ☀️ Today: the dogs fed, the next walk, tonight's plan, your macros left.
+async function renderToday() {
+  const el = $('#today');
+  if (!el) return;
+  const today = isoLocal();
+  const tile = (ico, label, value, sub = '', attrs = '') => `<button type="button" class="tile" ${attrs}>${ico} ${label}<b>${value}</b>${sub ? `<small class="muted">${sub}</small>` : ''}</button>`;
+  const [care, mine, weather] = await Promise.all([
+    (fam().modules || []).includes('dogs') ? api.get(`/families/${state.fid}/care?to=${today}&days=1`).catch(() => null) : null,
+    api.get(`/families/${state.fid}/members/${fam().me}/data`).then(openData).catch(() => null),
+    (fam().modules || []).includes('dogs') ? walkWeather().catch(() => null) : null,
+  ]);
+  if (!$('#today')) return;
+  const tiles = [];
+  if (care) {
+    const list = care.days?.[today] || [];
+    const fed = (k) => list.find((e) => e.kind === k);
+    const meal = new Date().getHours() < 15 ? 'breakfast' : 'dinner';
+    const f = fed(meal);
+    tiles.push(tile(meal === 'breakfast' ? '🍳' : '🍲', meal === 'breakfast' ? 'Breakfast' : 'Dinner', f ? '<span class="ok">Fed ✓</span>' : 'Not yet', f ? `${esc(f.byName)} · ${new Date(f.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : 'tap to log', 'data-view="pets"'));
+  }
+  if (weather?.pick) tiles.push(tile('🦮', 'Next walk', `${weather.hr(weather.pick.index)}–${weather.hr(weather.pick.index + 1)}`, weather.hot && weather.hot.asphalt >= 125 ? `🔥 pavement hot ~${weather.hr(weather.hot.index)}` : 'pavement cool ✓', 'data-view="pets"'));
+  const tonight = us.plans.filter((p) => isUpcoming(p) && p.day === today).sort((a, b) => (b.agreed ? 1 : 0) - (a.agreed ? 1 : 0))[0];
+  tiles.push(tonight ? tile((KINDS[tonight.kind] || KINDS.other)[0], 'Tonight', esc(planTitle(tonight)), tonight.agreed ? 'it\'s a plan 🙌' : 'waiting for an answer') : tile('✨', 'Tonight', 'Nothing yet', 'suggest something', 'data-feel="dinner"'));
+  const day = mine?.days?.[today];
+  tiles.push(day?.left ? tile('🥗', 'Macros left', `${day.left.p}P · ${day.left.c}C · ${day.left.f}F`, `${Math.max(0, day.left.kcal).toLocaleString()} kcal`, 'data-trackers="1"') : tile('🥗', 'Trackers', 'Today\'s plan', 'open your trackers', 'data-trackers="1"'));
+  el.innerHTML = `<div class="row between"><b>☀️ Today · ${new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</b>${weather ? `<span class="small muted">${Math.round(weather.hourly[weather.from].temp)}°</span>` : ''}</div>
+    <div class="grid4">${tiles.join('')}</div>`;
+}
+// 📅 Coming up (one line): the next dog appointment (and an open leg), and the next agreed plan.
+function renderComingLine() {
+  const el = $('#comingLine');
+  if (!el) return;
+  const a = dogsHub.appts.find((x) => x.status !== 'done');
+  const p = us.plans.filter((x) => x.agreed && isUpcoming(x) && x.day !== isoLocal()).sort((x, y) => x.day.localeCompare(y.day))[0];
+  const bits = [];
+  if (p) bits.push(`${(KINDS[p.kind] || KINDS.other)[0]} ${esc(planTitle(p))} · ${esc(planWhen(p))}`);
+  if (a) {
+    const pets = a.pets.map((id) => member(id)?.name).filter(Boolean).join(' & ');
+    const open = (a.dropAt && !a.dropBy) || (a.pickAt && !a.pickBy);
+    bits.push(`${(APPT[a.type] || APPT.other)[0]} ${esc(whenText(a.dropAt || a.pickAt))} ${esc(pets)}${open ? ' · <span class="tone-warn">a ride needs a driver</span>' : ''}`);
+  }
+  el.innerHTML = bits.length ? `<button type="button" class="card coming-line" data-view="pets"><span class="small">📅 <b>Coming up:</b> ${bits.join(' · ')}</span></button>` : '';
+}
+// The center ＋: everything you can add, feeling-like first.
+function plusMenu() {
+  const items = [
+    ['feel', '✨', "I'm feeling like…", `dinner, a movie, a walk — send it to ${partnerName()}`, 'hot'],
+    ['note', '💌', 'Leave a note', 'a post-it just for you two'],
+    ['post', '📸', 'Post', 'a photo or update for the family'],
+    ...((fam().modules || []).includes('dogs') ? [['apptnew', '🐾', 'Dog appointment', 'grooming, vet, vaccine']] : []),
+    ['askhelp', '🙋', 'Ask for help', 'pet sitting, babysitting, a ride'],
+  ];
+  openSheet(`<h2>What would you like to do?</h2><div class="pluslist">${items.map(([act, ico, title, sub, hot]) => `<button type="button" class="pl ${hot || ''}" data-act="${act}"><b>${ico}</b><span><strong>${esc(title)}</strong><small>${esc(sub)}</small></span></button>`).join('')}</div>`);
+}
+// Bringing over the trackers' "Feeling like" plans, answers and notes (once per family, each
+// person their own, locked before they're sent).
+async function importUs() {
+  const flag = `fam.usImported.${state.fid}`;
+  if (LS.get(flag) || lockedHere()) return;
+  const data = await openData(await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null));
+  if (!data || data.locked) return;
+  const plans = await Promise.all((data.plans || []).filter((p) => p?.id && p.date).map(async (p) => ({
+    id: p.id, at: p.at, done: !!p.done, weekend: p.when === 'weekend', day: planDayOf(p.when, p.date, p.day),
+    body: await lock({ kind: KINDS[p.kind] ? p.kind : 'other', what: p.what || '', where: p.where || '', when: p.when, time: p.time || '', note: p.note || '' }),
+  })));
+  const notes = await Promise.all((data.notes || []).filter((n) => n?.id && n.at > Date.now() - 7 * 864e5).map(async (n) => ({ id: n.id, at: n.at, body: await lock({ text: `${n.text || ''}${n.emoji ? ` ${n.emoji}` : ''}`.trim(), color: NOTE_COLORS.includes(n.color) ? n.color : 'yellow' }) })));
+  if (plans.length || notes.length || Object.keys(data.planReplies || {}).length) {
+    await api.post(`/families/${state.fid}/us/import`, { plans, notes, replies: data.planReplies || {}, noteDays: data.noteDays || [] });
+    await loadUs(); renderFeel(); renderNotes(); renderToday();
+  }
+  LS.set(flag, '1');
+}
+async function usChanged(r) {
+  await loadUs(); renderFeel(); renderNotes(); renderToday(); renderComingLine();
+  return r;
 }
 
 // ---------- 🎲 show bingo ----------
@@ -1201,6 +1390,15 @@ document.addEventListener('click', (e) => {
   if (d.book) return apptSheet(null, { type: 'vaccine', pets: [d.book], vaccine: d.vaccine });
   if (d.apptdel) { if (!confirm('Remove this appointment?')) return; return act(async () => { await api.del(`/families/${state.fid}/appts/${d.apptdel}`); closeSheet(); await apptChanged(); }); }
   if (d.apptundone) return act(async () => { await api.patch(`/families/${state.fid}/appts/${d.apptundone}`, { undone: true }); closeSheet(); await apptChanged(); });
+  if (d.feel) return feelSheet(d.feel);
+  if (d.trackers) { location.href = '../'; return; }
+  if (d.answer) { const [id, r] = d.answer.split(':'); return act(async () => { await api.post(`/families/${state.fid}/us/plans/${id}/reply`, { r }); await usChanged(); if (r === 'in') toast("🎉 It's a plan!"); }); }
+  if (d.plandone) return act(async () => { await api.patch(`/families/${state.fid}/us/plans/${d.plandone}`, { done: true }); await usChanged(); toast('✓ Nice — added to your recap'); });
+  if (d.plandel) { if (!confirm('Cancel this plan?')) return; return act(async () => { await api.del(`/families/${state.fid}/us/plans/${d.plandel}`); await usChanged(); }); }
+  if (d.planmove) { const day = prompt('Which day instead? (YYYY-MM-DD)', shiftLocal(isoLocal(), 1)); if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '')) return; return act(async () => { await api.patch(`/families/${state.fid}/us/plans/${d.planmove}`, { day }); await usChanged(); }); }
+  if (d.noteheart) return act(async () => { await api.post(`/families/${state.fid}/us/notes/${d.noteheart}/heart`); await usChanged(); });
+  if (d.notedel) return act(async () => { await api.del(`/families/${state.fid}/us/notes/${d.notedel}`); await usChanged(); });
+  if (d.emoji) { const ta = $('#noteForm textarea'); if (ta) { ta.value = `${ta.value}${d.emoji}`.slice(0, 280); ta.focus(); } return; }
   if (d.season) { bingo.season = d.season; return seasonView(); }
   if (d.pick || d.pickend) {
     const cid = t.closest('[data-couple]').dataset.couple, cur = bingo.view.mine?.[cid] || { events: [], outcome: null };
@@ -1248,6 +1446,10 @@ document.addEventListener('click', (e) => {
     case 'close': return closeSheet();
     case 'demo': return demoSignIn();
     case 'help': return helpView();
+    case 'feel': return feelSheet();
+    case 'note': return noteSheet();
+    case 'post': state.view = 'compose'; draft.help = null; return compose();
+    case 'askhelp': state.view = 'compose'; draft.help = draft.help || { type: 'petsit', from: '', to: '', time: '' }; return compose();
     case 'e2eeon': return openSheet(`<h2>🔐 Turn on encryption</h2>
       <p class="small">This phone makes a secret family key and locks everything private that's already stored: posts, photos, comments, diet &amp; fitness, the dogs' details and appointment notes. From then on the server only keeps text it can't read.</p>
       <p class="small">Afterwards: send your partner <b>📲 Add a device</b> (once), and write down your <b>🔑 recovery phrase</b>.</p>
@@ -1388,7 +1590,7 @@ document.addEventListener('click', (e) => {
     default:
   }
   if (t.id === 'famSwitch') return show('me');
-  if (t.id === 'newPostTop') return show('compose');
+  if (t.id === 'newPostTop') return plusMenu();
   if (t.id === 'bingoTop') { bingo.game = null; return show('bingo'); }
 });
 
@@ -1399,6 +1601,14 @@ document.addEventListener('change', async (e) => {
     draft.photo = await shrinkPhoto(t.files[0]).catch(() => '');
     return compose();
   }
+  if (t.form?.id === 'feelForm' && t.name === 'kind') {
+    const k = KINDS[t.value] || KINDS.other;
+    const w = t.form.querySelector('.kwhat'), h = t.form.querySelector('.kwhere');
+    w.hidden = !k[2]; w.querySelector('span').textContent = k[2] || 'What?';
+    h.hidden = !k[3]; h.querySelector('span').textContent = k[3] || 'Where?';
+    return;
+  }
+  if (t.form?.id === 'feelForm' && t.name === 'when') { t.form.querySelector('.kday').hidden = t.value !== 'date'; return; }
   if (t.name === 'type' && t.form?.id === 'apptForm') { t.form.querySelector('.vaxonly').hidden = t.value !== 'vaccine'; return; }
   if (t.name === 'bingofile' && t.files?.[0]) {
     const text = await t.files[0].text();
@@ -1473,6 +1683,24 @@ document.addEventListener('submit', (e) => {
   if (f.id === 'famSettings') {
     e.preventDefault();
     return act(async () => { await api.patch(`/families/${state.fid}`, { name: v.name, modules: new FormData(f).getAll('mod'), goldenPosts: !!v.goldenPosts }); await loadFamily(); chrome(true); toast('Saved'); });
+  }
+  if (f.id === 'feelForm') {
+    e.preventDefault();
+    if (lockedHere()) return toast('🔒 This device needs the family key first — Me › 🔐 Encryption');
+    const k = KINDS[v.kind] || KINDS.other;
+    if (k[2] && !k[2].includes('optional') && !v.what.trim()) return toast(k[2]);
+    if (k[3] && !k[3].includes('optional') && !v.where.trim()) return toast(k[3]);
+    return act(async () => {
+      const day = planDayOf(v.when, isoLocal(), v.day);
+      const body = await lock({ kind: v.kind, what: v.what.trim(), where: v.where.trim(), when: v.when, time: v.time, note: v.note.trim() });
+      await api.post(`/families/${state.fid}/us/plans`, { day, weekend: v.when === 'weekend', audience: v.audience, body });
+      closeSheet(); await usChanged(); toast(`💌 Sent to ${v.audience === 'family' ? 'the family' : partnerName()}`);
+    });
+  }
+  if (f.id === 'noteForm') {
+    e.preventDefault();
+    if (lockedHere()) return toast('🔒 This device needs the family key first — Me › 🔐 Encryption');
+    return act(async () => { await api.post(`/families/${state.fid}/us/notes`, { body: await lock({ text: v.text.trim(), color: v.color }) }); closeSheet(); await usChanged(); toast('📌 Stuck'); });
   }
   if (f.id === 'phraseForm') {
     e.preventDefault();
