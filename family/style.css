@@ -284,3 +284,6 @@ fieldset.chips.plain { border: 0; padding: 0; margin: 0; } fieldset.chips legend
 .chipcheck { display: inline-block; } .chipcheck span { display: inline-block; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); font-size: .85rem; font-weight: 600; cursor: pointer; }
 .chipcheck input:checked + span { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
 .appt-post header { display: flex; justify-content: space-between; align-items: center; } .appt-post .who { display: flex; gap: 10px; align-items: center; }
+details.house > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+details.house > summary::-webkit-details-marker { display: none; }
+details.house .fold { margin-left: auto; color: var(--brand); font-weight: 700; font-size: .8rem; text-transform: none; letter-spacing: 0; }

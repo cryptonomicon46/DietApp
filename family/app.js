@@ -539,7 +539,7 @@ function apptDetail(a) {
     <button type="button" class="linkish small danger" data-apptdel="${a.id}">Remove this appointment</button>`);
 }
 // 🐾 Today's dog care, shared by the whole family: tap what you did; 👫 logs it for both of you.
-let careBoth = false;
+let careBoth = false, careToday = [];
 async function renderCare() {
   const el = $('#care');
   if (!el) return;
@@ -547,6 +547,7 @@ async function renderCare() {
   const r = await act(() => api.get(`/families/${state.fid}/care?to=${today}&days=7`));
   if (!r) return;
   const list = r.days[today] || [];
+  careToday = list;
   const count = (k) => list.filter((e) => e.kind === k).length;
   const fedBoth = count('breakfast') && count('dinner');
   const outings = count('walk') + count('park');
@@ -560,9 +561,14 @@ async function renderCare() {
   const grid = (kinds) => `<div class="care-grid">${kinds.map((k) => { const [ico, label] = CARE[k]; return `<button type="button" class="care-btn ${count(k) ? 'done' : ''}" data-care="${k}"><span>${ico}</span>${label}<em class="pts">${PTS[k] ? `+${PTS[k]}` : '♡'}</em>${count(k) ? `<small>${count(k) > 1 ? `×${count(k)}` : '✓'}</small>` : ''}</button>`; }).join('')}</div>`;
   el.innerHTML = `<div class="row between"><b>Today</b><span class="small ${golden ? 'good' : 'muted'}">${mods.includes('dogs') ? (golden ? '⭐ Golden day' : `${outings} outing${outings === 1 ? '' : 's'}`) : ''}</span></div>
     ${mods.includes('dogs') ? `<div class="care-sec">🐾 The dogs</div>${grid(DOG_KINDS)}` : ''}
-    ${mods.includes('chores') ? `<div class="care-sec">🏠 The house</div>${grid(HOUSE_KINDS)}` : ''}
+    ${mods.includes('chores') ? (() => {
+      // The house folds away (remembered on this phone); its taps still count for the Gold Card.
+      const done = HOUSE_KINDS.reduce((n, k) => n + count(k), 0);
+      const open = LS.get('fam.houseOpen') !== '0';
+      return `<details class="house" data-house ${open ? 'open' : ''}><summary class="care-sec">🏠 The house <span class="muted">${done ? `· ${done} done today` : ''}</span><span class="fold">${open ? 'Hide' : 'Show'}</span></summary>${grid(HOUSE_KINDS)}</details>`;
+    })() : ''}
     ${adults.length > 1 ? `<label class="switch-row small both"><span>👫 Log for both of us</span><input type="checkbox" data-careboth ${careBoth ? 'checked' : ''}><i class="switch"></i></label>` : ''}
-    ${list.length ? `<ul class="care-log">${list.slice().reverse().map((e) => `<li><span>${CARE[e.kind]?.[0] || ''} ${esc(CARE[e.kind]?.[1] || e.kind)} · <b>${esc(e.byName)}</b> <small class="muted">${new Date(e.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</small></span>${e.by.includes(fam().me) || me().role === 'owner' ? `<button type="button" class="linkish small" data-careundo="${e.id}">Undo</button>` : ''}</li>`).join('')}</ul>`
+    ${list.length ? `<ul class="care-log">${list.slice().reverse().map((e) => `<li><span>${CARE[e.kind]?.[0] || ''} ${esc(CARE[e.kind]?.[1] || e.kind)} · <b>${esc(e.byName)}</b> <small class="muted">${new Date(e.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</small></span>${e.by.includes(fam().me) || me().role === 'owner' ? `<span class="care-acts">${adults.length > 1 ? (e.by.length > 1 ? `<button type="button" class="linkish small" data-careboth-entry="${e.id}" data-solo="1">Just me</button>` : `<button type="button" class="linkish small" data-careboth-entry="${e.id}">👫 Both</button>`) : ''}<button type="button" class="linkish small" data-careundo="${e.id}">Undo</button></span>` : ''}</li>`).join('')}</ul>`
       : '<p class="small muted">Nothing logged yet today.</p>'}
     ${mods.includes('dogs') ? `<div class="week" aria-label="This week">${week}</div>
     <p class="tiny muted">${fedBoth ? '✓ Fed twice today. ' : ''}⭐ = two outings, or one plus a treat.</p>` : ''}`;
@@ -1001,6 +1007,7 @@ document.addEventListener('click', (e) => {
       if (r.golden) { state.feed = [r.golden, ...state.feed]; setTimeout(() => toast(`⭐ Golden day! ${r.golden.byName} left you a note on the feed`), 1600); }
     });
   }
+  if (d.carebothEntry) return act(async () => { await api.patch(`/families/${state.fid}/care/${isoLocal()}/${d.carebothEntry}`, { both: !d.solo }); renderCare(); renderRace(); toast(d.solo ? 'Logged as just you' : '👫 Logged for both of you'); });
   if (d.careundo) return act(async () => { await api.del(`/families/${state.fid}/care/${isoLocal()}/${d.careundo}`); renderCare(); renderRace(); });
   if (d.unblock) return act(async () => { await api.del(`/account/blocks/${d.unblock}`); state.user.blocked = state.user.blocked.filter((b) => b.id !== d.unblock); meView(); });
   if (d.claim && d.appt) return act(async () => { await api.patch(`/families/${state.fid}/appts/${d.appt}`, { claim: d.claim, release: !!d.release }); await apptChanged(); toast(d.release ? 'Given up — it\'s open again' : `You've got the ${d.claim === 'drop' ? 'drop-off' : 'pick-up'} 🚗`); });
@@ -1191,7 +1198,15 @@ document.addEventListener('change', async (e) => {
     $('#petPhotoBox').innerHTML = petPhotoBox(member($('#petForm').dataset.id));
     return;
   }
-  if (t.dataset.careboth != null) { careBoth = t.checked; return; }
+  if (t.dataset.careboth != null) {
+    careBoth = t.checked;
+    // Turned on after logging some things yourself? Offer to count those for both too.
+    const solo = careToday.filter((x) => x.by.length === 1 && x.by[0] === fam().me);
+    if (careBoth && solo.length && confirm(`Also log your ${solo.length} earlier ${solo.length === 1 ? 'entry' : 'entries'} today for both of you?`)) {
+      return act(async () => { for (const x of solo) await api.patch(`/families/${state.fid}/care/${isoLocal()}/${x.id}`, { both: true }); renderCare(); renderRace(); toast(`👫 ${solo.length} logged for both of you`); });
+    }
+    return;
+  }
   if (t.dataset.sharewhat) {
     const share = { kids: !!document.querySelector('[data-sharewhat=kids]')?.checked, pets: !!document.querySelector('[data-sharewhat=pets]')?.checked };
     return act(async () => { await api.patch(`/families/${state.fid}`, { share }); await loadFamily(); toast(`Friends' families ${share.kids ? 'can' : "can't"} see the kids, ${share.pets ? 'can' : "can't"} see the pets`); });
@@ -1361,5 +1376,6 @@ window.addEventListener('unhandledrejection', (e) => glitch(e.reason?.message ||
 const wantHelp = new URLSearchParams(location.search).has('help');
 if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
 boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; });
-document.addEventListener('toggle', (e) => { const c = e.target.closest?.('[data-couple]'); if (c && e.target === c) bingo.open[c.dataset.couple] = c.open; }, true);
+document.addEventListener('toggle', (e) => {
+  if (e.target.matches?.('details[data-house]')) { LS.set('fam.houseOpen', e.target.open ? '1' : '0'); const f = e.target.querySelector('.fold'); if (f) f.textContent = e.target.open ? 'Hide' : 'Show'; return; } const c = e.target.closest?.('[data-couple]'); if (c && e.target === c) bingo.open[c.dataset.couple] = c.open; }, true);
 document.addEventListener('input', (e) => { if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); });

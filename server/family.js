@@ -392,6 +392,18 @@ export async function familyApi(req, env, path) {
       await db.put(`careidx:${fam.fid}`, [...idx].sort().slice(-800));
       return json({ days: Object.keys(byDay).length, entries: Object.values(byDay).flat().length });
     }
+    // 👫 After the fact: an entry becomes "both of us" (or back to just you); points follow.
+    if (method === 'PATCH' && m[2]) {
+      const list = (await db.get(`care:${fam.fid}:${m[2]}`)) || [];
+      const e = list.find((x) => x.id === m[3]);
+      if (!e) return json({ error: 'not found' }, 404);
+      if (!(e.by.includes(me.id) || me.role === 'owner')) return json({ error: 'only who logged it can change it' }, 403);
+      const adults = fam.members.filter((x) => x.kind === 'person' && x.uid && x.relation !== 'child').map((x) => x.id).slice(0, 2);
+      e.by = body.both ? [...new Set([...e.by, ...adults])].slice(0, 2) : [e.by.includes(me.id) ? me.id : e.by[0]];
+      e.byName = e.by.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ');
+      await db.put(`care:${fam.fid}:${m[2]}`, list);
+      return json({ entry: e });
+    }
     if (method === 'DELETE' && m[2]) {
       const list = (await db.get(`care:${fam.fid}:${m[2]}`)) || [];
       const e = list.find((x) => x.id === m[3]);
