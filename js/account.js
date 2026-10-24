@@ -67,6 +67,70 @@ export const account = {
     if (r.status !== 200) throw new Error(r.data.error || `account upload failed (${r.status})`);
     global.set('account.mineAt', r.data.savedAt || Date.now());
     global.set('pushedAt', Date.now());
+    await this.pushDogs(a).catch(() => {});
+  },
+
+  // ---------- the dogs: one set for the family app and the trackers ----------
+  // The family's dog pets become a third copy of each dog in the trackers (dogs.js merges it
+  // with yours and your partner's, newest edit of each field winning). Their name, breed,
+  // birthday and photo come from the pet; everything else (food, meds, vaccines, vet) from the
+  // pet's data, which is where the trackers send their copy back.
+  async pullDogs(a) {
+    const r = await call('GET', `/families/${a.fid}`);
+    if (r.status !== 200) return false;
+    const { allDogs, DOG_FIELDS } = await import('./dogs.js');
+    const local = allDogs().filter((d) => d.person !== 'family');
+    const links = {}, out = {};
+    for (const p of r.data.family.members.filter((m) => m.kind === 'pet' && m.species === 'dog')) {
+      let id = p.legacyId?.startsWith('dog-') ? p.legacyId.slice(4) : null;
+      if (!id) {
+        // A dog added in the family app that the trackers already know by name: link the two.
+        const same = local.find((d) => d.name?.trim().toLowerCase() === p.name.trim().toLowerCase() && !Object.keys(links).includes(d.id));
+        id = same?.id || `fam${p.id}`;
+        await call('PATCH', `/families/${a.fid}/members/${p.id}`, { legacyId: `dog-${id}` });
+      }
+      links[id] = p.id;
+      const d = await call('GET', `/families/${a.fid}/members/${p.id}/data`);
+      const prof = (d.status === 200 && d.data.data?.profile) || {};
+      const photo = /^data:image\//.test(p.avatar || '') ? p.avatar : '';
+      const ident = { name: p.name, breed: p.breed || prof.breed || '', birthday: p.born || prof.birthday || '', photo, emoji: photo ? prof.emoji || '🐕' : p.avatar || prof.emoji || '🐕' };
+      const times = { ...(prof.times || {}) };
+      for (const f of Object.keys(ident)) times[f] = Math.max(times[f] || 0, p.editedAt || 0);
+      // Fields this copy doesn't hold count as old, so they never wipe the trackers' details.
+      for (const f of DOG_FIELDS) times[f] ??= 0;
+      const { person, editedBy, ...rest } = prof;
+      out[id] = { ...rest, ...ident, id, times, updatedAt: Math.max(prof.updatedAt || 0, p.editedAt || 0), createdAt: prof.createdAt || p.editedAt || 0 };
+    }
+    const changed = JSON.stringify(out) !== JSON.stringify(global.get('famDogs', {}));
+    global.set('famDogs', out);
+    global.set('famDogLinks', links);
+    global.set('famDogsPulled', true);
+    return changed;
+  },
+  // Your trackers' dogs → the family app: new dogs become pets, changes update the pet and its data.
+  async pushDogs(a) {
+    if (!global.get('famDogsPulled', false)) return; // only once the family's dogs are known: no duplicates
+    const links = global.get('famDogLinks', {}), sent = global.get('famDogSent', {}), fam = global.get('famDogs', {});
+    for (const d of (await import('./dogs.js')).allDogs()) {
+      const { person, editedBy, docs, removedDocs, ...profile } = d;
+      const sig = JSON.stringify(profile);
+      if (sent[d.id] === sig) continue;
+      const avatar = d.photo || d.emoji || '';
+      let pid = links[d.id];
+      if (!pid) {
+        const r = await call('POST', `/families/${a.fid}/members`, { kind: 'pet', species: 'dog', name: d.name || 'Dog', breed: d.breed || '', born: d.birthday || '', avatar, legacyId: `dog-${d.id}` });
+        if (r.status !== 200) continue;
+        pid = links[d.id] = r.data.member.id;
+      } else {
+        const f = fam[d.id] || {};
+        if (f.name !== d.name || (f.breed || '') !== (d.breed || '') || (f.birthday || '') !== (d.birthday || '') || (f.photo || f.emoji || '') !== avatar) {
+          await call('PATCH', `/families/${a.fid}/members/${pid}`, { name: d.name, breed: d.breed || '', born: d.birthday || '', avatar });
+        }
+      }
+      if ((await call('PUT', `/families/${a.fid}/members/${pid}/data`, { data: { profile } })).status === 200) sent[d.id] = sig;
+    }
+    global.set('famDogLinks', links);
+    global.set('famDogSent', sent);
   },
 
   // Your own data saved from another device, and your partner's if they share it with you.
@@ -96,6 +160,8 @@ export const account = {
         if (!same(merged, theirs)) await this.push();
       }
     }
+    if (await this.pullDogs(a).catch(() => false)) out.changed = true;
+    await this.pushDogs(a).catch(() => {});
     for (const p of PROFILES.filter((x) => x.id !== a.profile)) {
       const id = a.members[p.id];
       if (!id) continue;

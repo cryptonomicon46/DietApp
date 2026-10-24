@@ -1132,3 +1132,4 @@ body.meal-editing #tab-today > :not(#meals) { display: none !important; }
 .sec-add { width: 100%; margin: 4px 0 6px; font-size: .88rem; color: var(--muted); border-style: dashed; }
 .btn-link { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); color: inherit; text-decoration: none; font-weight: 600; }
 .recover-list { padding-left: 18px; display: grid; gap: 6px; }
+.dog-photo { width: 1.6em; height: 1.6em; border-radius: 50%; object-fit: cover; vertical-align: middle; }

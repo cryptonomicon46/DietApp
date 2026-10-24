@@ -3,7 +3,7 @@
 // profile; household sync carries them over and the newest edit of each dog wins.
 // Documents are files, too big for sync: they live in this phone's IndexedDB and go to the
 // household connector's file store (when it has one), so the other phone can open them too.
-import { PROFILES, ownerId, profileStore } from './storage.js';
+import { PROFILES, ownerId, profileStore, global } from './storage.js';
 import { sync, pushNow } from './sync.js';
 
 export const VACCINES = ['Rabies', 'DHPP', 'Bordetella', 'Leptospirosis', 'Canine influenza', 'Lyme'];
@@ -15,7 +15,7 @@ const MAX_FILE = 10 * 1024 * 1024;
 // Shared by both partners: each field keeps the time it was last changed, so if one of you
 // updates the vaccines while the other updates the food, both changes survive. Documents
 // from either phone are combined; a removed document stays removed.
-export const DOG_FIELDS = ['name', 'emoji', 'breed', 'sex', 'birthday', 'weightLb', 'food', 'supplements', 'meds', 'vaccines', 'vet', 'microchip', 'notes', 'deleted'];
+export const DOG_FIELDS = ['name', 'emoji', 'photo', 'breed', 'sex', 'birthday', 'weightLb', 'food', 'supplements', 'meds', 'vaccines', 'vet', 'microchip', 'notes', 'deleted'];
 export function mergeDogs(records) {
   const versions = {};
   for (const r of records) for (const [id, d] of Object.entries(r.dogs || {})) (versions[id] ||= []).push({ ...d, person: r.person });
@@ -76,11 +76,15 @@ const shortDate = (d) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString(undef
 const nameOf = (id) => profileStore(id).get('profile', null)?.name?.split(/\s+/)[0] || PROFILES.find((p) => p.id === id)?.name || id;
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-export const allDogs = () => mergeDogs(PROFILES.map((p) => ({ person: p.id, dogs: profileStore(p.id).get('dogProfiles', {}) })));
+// Both of you, plus the family app's copy of each dog (account.js), newest edit of each field wins.
+const records = () => [...PROFILES.map((p) => ({ person: p.id, dogs: profileStore(p.id).get('dogProfiles', {}) })), { person: 'family', dogs: global.get('famDogs', {}) }];
+export const allDogs = () => mergeDogs(records());
+// The dog's picture: the photo from the family app, else its emoji.
+const face = (d, cls = '') => (d.photo ? `<img class="dog-photo ${cls}" src="${esc(d.photo)}" alt="">` : esc(d.emoji || '🐕'));
 // Saves what changed, stamping each changed field so the partner's edits to other fields survive.
 function saveDog(dog) {
   const now = Date.now();
-  const prev = mergeDogs(PROFILES.map((p) => ({ person: p.id, dogs: profileStore(p.id).get('dogProfiles', {}) }))).find((d) => d.id === dog.id);
+  const prev = mergeDogs(records()).find((d) => d.id === dog.id);
   const times = { ...(prev?.times || {}) };
   for (const f of DOG_FIELDS) if (JSON.stringify(dog[f] ?? null) !== JSON.stringify(prev?.[f] ?? null)) times[f] = now;
   const { person, editedBy, ...clean } = dog;
@@ -146,7 +150,7 @@ function dogView(d, today) {
   const age = ageText(d.birthday, today);
   const meds = (d.meds || []).filter((m) => m.active !== false);
   return `<div class="dog-full">
-    <div class="row between" style="margin-top:0"><div><div class="dog-name">${esc(d.emoji || '🐕')} ${esc(d.name)}</div>
+    <div class="row between" style="margin-top:0"><div><div class="dog-name">${face(d)} ${esc(d.name)}</div>
       <div class="small muted">${[d.breed, age, d.weightLb ? `${d.weightLb} lb` : '', d.sex].filter(Boolean).map(esc).join(' · ')}</div></div>
       <div class="row" style="margin-top:0"><button type="button" class="ghost small" data-dogedit="${d.id}">Edit</button><button type="button" class="ghost small" data-dogclose>Done</button></div></div>
     ${badge(d, today)}
@@ -217,7 +221,7 @@ export function renderDogs(force = false) {
     <div class="row between" style="margin-top:0"><div class="eyebrow">🐶 Our dogs</div><button type="button" class="ghost small" data-dogadd>＋ Add a dog</button></div>
     ${alerts.length ? `<ul class="dog-alerts">${alerts.slice(0, 4).map((a) => `<li class="${a.days < 0 ? 'overdue' : 'soon'}">⚠ <b>${esc(a.dog)}</b>: ${esc(a.text)}</li>`).join('')}</ul>` : ''}
     ${dogs.length ? `<div class="dog-grid">${dogs.map((d) => `<button type="button" class="dog-tile" data-dogopen="${d.id}">
-        <span class="dog-emoji">${esc(d.emoji || '🐕')}</span><b>${esc(d.name)}</b>
+        <span class="dog-emoji">${face(d)}</span><b>${esc(d.name)}</b>
         <small class="muted">${[d.breed, ageText(d.birthday, today)].filter(Boolean).map(esc).join(' · ') || 'Tap to fill in'}</small>
         ${badge(d, today)}
         <small class="muted">${(d.meds || []).filter((m) => m.active !== false).length} meds · ${(d.supplements || []).length} supplements · ${(d.docs || []).length} docs</small>

@@ -141,3 +141,40 @@ test('two copies are combined, so a nearly empty device never wipes a full one',
   assert.equal(J('lp.p.sandman.weights').length, 2);
   assert.deepEqual(J('lp.p.sandman.profile'), { name: 'Sam' });
 });
+
+test('one set of dogs: family pets show in the trackers, tracker details go back, no duplicates', async () => {
+  const sam = await signIn('dogs@example.com');
+  const { family } = await api('/families', sam, 'POST', { name: 'Dogs' });
+  const photo = `data:image/jpeg;base64,${'B'.repeat(200)}`;
+  // Added in the family app: one the trackers know by name, and one they don't.
+  const pip = (await api(`/families/${family.fid}/members`, sam, 'POST', { kind: 'pet', name: 'Pip', species: 'dog', breed: 'Mix', avatar: photo })).member;
+  await api(`/families/${family.fid}/members`, sam, 'POST', { kind: 'pet', name: 'Bo', species: 'dog' });
+  const t0 = Date.now() - 60000;
+  device({ 'lp.g.sync': { url: 'https://c.test' }, 'fam.token.live': sam, 'fam.fid': family.fid, 'lp.g.owner': 'sandman',
+    'lp.p.sandman.dogProfiles': {
+      d1: { id: 'd1', name: 'Pip', emoji: '🐕', vaccines: [{ name: 'Rabies', due: '2027-01-01' }], times: { name: t0, vaccines: t0 }, updatedAt: t0, createdAt: t0 },
+      d2: { id: 'd2', name: 'Zed', emoji: '🐩', breed: 'Poodle', times: { name: t0 }, updatedAt: t0, createdAt: t0 },
+    } });
+  await account.connect();
+  await sync.pull();
+  const { allDogs } = await import('../js/dogs.js');
+  const dogs = Object.fromEntries(allDogs().map((d) => [d.name, d]));
+  assert.deepEqual(Object.keys(dogs).sort(), ['Bo', 'Pip', 'Zed'], 'the trackers now show the family\'s dogs, once each');
+  assert.equal(dogs.Pip.photo, photo);
+  assert.equal(dogs.Pip.breed, 'Mix');
+  assert.equal(dogs.Pip.vaccines[0].name, 'Rabies');
+
+  // Back in the family app: Zed became a pet, Pip carries the trackers' vaccines.
+  const fam = (await api(`/families/${family.fid}`, sam)).family;
+  const pets = fam.members.filter((m) => m.kind === 'pet');
+  assert.deepEqual(pets.map((m) => m.name).sort(), ['Bo', 'Pip', 'Zed']);
+  assert.equal(pets.find((m) => m.name === 'Zed').breed, 'Poodle');
+  assert.equal((await api(`/families/${family.fid}/members/${pip.id}/data`, sam)).data.profile.vaccines[0].name, 'Rabies');
+
+  // Renamed in the family app: the trackers follow, and nothing is duplicated on the way back.
+  await api(`/families/${family.fid}/members/${pip.id}`, sam, 'PATCH', { name: 'Pippa' });
+  await sync.pull();
+  const names = allDogs().map((d) => d.name).sort();
+  assert.deepEqual(names, ['Bo', 'Pippa', 'Zed']);
+  assert.equal((await api(`/families/${family.fid}`, sam)).family.members.filter((m) => m.kind === 'pet').length, 3);
+});

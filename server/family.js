@@ -102,7 +102,7 @@ const store = (kv) => ({
 const memberView = (m, inside) => ({
   id: m.id, kind: m.kind, name: m.name, relation: m.relation, species: m.species, breed: m.breed, born: m.born,
   avatar: m.avatar, status: m.uid ? 'active' : m.email ? 'invited' : 'managed', role: m.role,
-  ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], legacyId: m.legacyId || '', petCalls: m.petCalls || '' } : {}),
+  ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], legacyId: m.legacyId || '', petCalls: m.petCalls || '', ...(m.kind === 'pet' ? { editedAt: m.editedAt || m.addedAt || 0 } : {}) } : {}),
 });
 
 export async function familyApi(req, env, path) {
@@ -654,6 +654,7 @@ export async function familyApi(req, env, path) {
     }
     if (body.name != null) t.name = clean(body.name, 40) || t.name;
     if (body.avatar != null) t.avatar = avatarOf(body.avatar);
+    if (t.kind === 'pet') t.editedAt = Date.now(); // the trackers use it to tell whose edit is newer
     if (body.petCalls != null && t.kind === 'person') t.petCalls = clean(body.petCalls, 20); // what the pets call them, e.g. Dad
     if (body.legacyId != null) t.legacyId = clean(body.legacyId, 40); // who they were in the current app
     if (t.kind === 'pet') {
