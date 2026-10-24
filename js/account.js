@@ -63,7 +63,11 @@ export const account = {
     const members = {};
     for (const m of fam.members) if (m.kind === 'person' && ids.includes(m.legacyId)) members[m.legacyId] = m.id;
     members[profile] = me.id;
-    const acct = { fid: fam.fid, family: fam.name, email: r.data.user.email, me: me.id, profile, members, e2ee: !!fam.e2ee, keyCheck: fam.keyCheck || '' };
+    // Both of you on accounts, each sharing with the other: the household code has nothing left
+    // to carry, so it stops (its last copies stay on the server for 🛟 Recover).
+    const others = PROFILES.filter((p) => p.id !== profile).map((p) => fam.members.find((m) => m.id === members[p.id]));
+    const householdOff = others.length > 0 && others.every((m) => m && m.status === 'active' && (m.shareWith || []).includes(me.id) && (me.shareWith || []).includes(m.id));
+    const acct = { fid: fam.fid, family: fam.name, email: r.data.user.email, me: me.id, profile, members, e2ee: !!fam.e2ee, keyCheck: fam.keyCheck || '', householdOff };
     global.set('account', acct);
     return acct;
   },
@@ -79,6 +83,12 @@ export const account = {
     global.set('account.mineAt', r.data.savedAt || Date.now());
     global.set('pushedAt', Date.now());
     await this.pushDogs(a).catch(() => {});
+  },
+
+  // 🤖 Ask Claude for a tracker command, through your account (no household code needed).
+  async assist(text, context) {
+    const r = await call('POST', '/assistant', { text, context }, 30000);
+    return { ok: r.status === 200, status: r.status, ...r.data };
   },
 
   // ---------- the dogs: one set for the family app and the trackers ----------

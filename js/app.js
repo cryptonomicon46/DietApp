@@ -2807,7 +2807,12 @@ form.addEventListener('submit', () => {
 // Scan) switched from the bar at its top; the Food tab stays lit on all four.
 const FOOD_PAGES = [['today', '🍽 Meals'], ['weight', '⚖︎ Weight'], ['groceries', '🛒 Groceries'], ['scan', '▦ Scan']];
 let currentTab = 'home';
+// Signed in to OurPawmily: the dogs, notes and plans live there, so the trackers drop those tabs
+// (a link from a pet's page still opens 🐕 Dogs for food, meds, vaccines and the vet).
+const famLinked = () => !!account.get();
+document.body.classList.toggle('famlinked', famLinked());
 function showTab(name) {
+  if (famLinked() && name === 'notes') name = 'home';
   currentTab = name;
   document.body.dataset.tab = name; // Dogs hides the calorie bar
   const lit = FOOD_PAGES.some(([k]) => k === name) ? 'today' : name;
@@ -2890,6 +2895,7 @@ function homeWeight() {
         <small class="muted">7-day average${trend ? ` · ${trend.lbPerWeek <= 0 ? '−' : '+'}${Math.abs(trend.lbPerWeek).toFixed(1)} lb/wk` : ''}${goal ? ` · ${Math.max(last.v - goal, 0).toFixed(1)} lb to goal` : ''}</small></span>
       <span class="home-go">›</span></button>`;
 }
+const famHome = () => `<a class="card home-card" href="family/"><span class="home-ico">🐾</span><span class="home-main"><b>OurPawmily</b><small class="muted">The dogs, plans &amp; notes, the calendar and 🍿 what you watch</small></span><span class="home-go">›</span></a>`;
 function renderHome() {
   if (!$('#homeHello')) return;
   const name = firstName();
@@ -2897,10 +2903,11 @@ function renderHome() {
     <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
     ${(() => { const data = personData(ownerId() || activeProfile().id); const d = healthDay(data, isoDate()); const n = strongStreak(data, isoDate()); return d.strong || n ? `<div class="small cheer-home">💪 ${d.strong ? 'Checked in today' : 'Weigh in and log your meals to keep it going'}${n > 1 ? ` · ${n}-day streak` : ''}</div>` : ''; })()}`;
   // Dogs, calendar and notes don't need a diet profile.
-  $('#homeDogs').innerHTML = homeDogs();
+  document.body.classList.toggle('famlinked', famLinked());
+  $('#homeDogs').innerHTML = famLinked() ? '' : homeDogs();
   $('#homeCal').innerHTML = homeCal();
   updateFoodBadge();
-  $('#homeUs').innerHTML = homeUs();
+  $('#homeUs').innerHTML = famLinked() ? famHome() : homeUs();
   $('#homeGym').innerHTML = homeGym();
   renderRhythm();
   renderHousehold();
@@ -2918,7 +2925,7 @@ function renderHome() {
         <small class="muted">${next ? `${esc(plan[next].title)} · ${plan[next].totals.kcal} kcal` : 'Nice work today.'}</small>
         <small class="muted">${done} of ${order.length} meals logged</small></span>
       <span class="home-go">›</span></button>` + homeWeight();
-  $('#homeUs').innerHTML = homeUs();
+  $('#homeUs').innerHTML = famLinked() ? famHome() : homeUs();
   $('#homeCal').innerHTML = homeCal();
   const day = todaysTraining();
   $('#homeTrain').innerHTML = `<button type="button" class="card home-card" data-goto="lift">
@@ -3209,6 +3216,19 @@ window.addEventListener('lp:weighin', (e) => {
 // Commands the phone couldn't parse go to Claude through the connector (needs household sharing).
 window.addEventListener('lp:assistant', async (e) => {
   const s = sync.settings();
+  if (account.active()) {
+    setCommandFeedback('<span class="muted">Asking Claude…</span>');
+    try {
+      const out = await account.assist(e.detail.text, e.detail.context);
+      if (out.status === 404 || out.status === 501) { setCommandFeedback(e.detail.message); return; }
+      if (!out.ok) throw new Error(out.error || `Claude request failed (${out.status})`);
+      if (out.actions?.length) applyAssistantActions(out.actions, out.note ? `Claude: ${out.note}` : 'via Claude');
+      else setCommandFeedback(`<span class="tone-warn">${esc(out.note || 'Claude didn\'t find anything to log.')}</span>`);
+    } catch (err) {
+      setCommandFeedback(`<span class="tone-warn">${esc(err.message)}</span> Try “bench 3 sets of 8 at 135”.`);
+    }
+    return;
+  }
   if (!sync.household()) {
     setCommandFeedback(`${e.detail.message}<br><span class="muted">Turn on household sharing in Devices to let Claude handle commands like this.</span>`);
     return;
@@ -3236,6 +3256,7 @@ const justConnected = devices.takeRedirect();
 // One-tap linking: opening the app at …#link=<code or phrase> joins that household.
 // The part after # never leaves the phone, so the phrase isn't in any server log or the code.
 function takeLinkFromUrl() {
+  if (location.hash === '#dogs') { history.replaceState(null, '', location.pathname + location.search); setTimeout(() => showTab('brief')); }
   const m = location.hash.match(/^#link=(.+)$/);
   if (!m) return false;
   history.replaceState(null, '', location.pathname + location.search);

@@ -82,6 +82,21 @@ test('trackers follow your account to a new device, and partners see them only w
   await sync.pull();
   assert.deepEqual(J('lp.p.amani.weights'), [{ date: '2026-10-01', weight: 130 }]);
 
+  // The household code retires once you're both on accounts and share with each other.
+  cur.set('lp.g.sync', JSON.stringify({ url: 'https://c.test', code: 'household-test-code' }));
+  assert.equal((await account.connect()).householdOff, false, "Sam doesn't share with Pat yet");
+  assert.equal(sync.household(), true);
+  await api(`/families/${family.fid}/members/${family.members[0].id}`, sam, 'PATCH', { shareWith: [add.member.id] });
+  assert.equal((await account.connect()).householdOff, true);
+  assert.equal(sync.household(), false, 'no more household uploads');
+  // Ask Claude goes through the account, not the household code.
+  env.__assist = async (_, { text }) => ({ actions: [{ type: 'note', text }], note: 'ok' });
+  const out = await account.assist('bench 3x8 at 135', { today: '2026-10-24' });
+  assert.equal(out.ok, true);
+  assert.equal(out.actions[0].text, 'bench 3x8 at 135');
+  delete env.__assist;
+  assert.equal((await account.assist('bench', {})).status, 501, 'demo connector: no Claude');
+
   // A friend's family (connected) and a kid's profile: no tracker data, ever.
   const friend = await signIn('friend@example.com');
   const finv = await api(`/families/${family.fid}/invites`, sam, 'POST', { kind: 'family', email: 'friend@example.com' });

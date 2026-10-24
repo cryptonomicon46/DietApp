@@ -263,6 +263,16 @@ export async function familyApi(req, env, path, ctx = null) {
     return json({ sent });
   }
 
+  // ---- 🤖 Ask Claude for a tracker command ("bench 3 sets of 8 at 135"), signed in ----
+  if (path === '/assistant' && method === 'POST') {
+    if ((env.DEMO && !env.__assist) || !(env.ANTHROPIC_API_KEY || env.__assist)) return json({ error: 'Claude is not set up on your connector — see server/README.md' }, 501);
+    const text = String(body.text || '').trim();
+    if (!text || text.length > 500) return json({ error: 'say a short command' }, 400);
+    if (!(await underLimit(db, `rate:${user.uid}:assist:${new Date().toISOString().slice(0, 10)}`, 150, 86400 * 2))) return json({ error: "that's a lot of commands today — try again tomorrow" }, 429);
+    const assist = env.__assist || (await import('./assistant.js')).assist;
+    return json(await assist(env, { text, context: body.context && typeof body.context === 'object' ? body.context : {} }));
+  }
+
   // ---- the maintainer's desk: problems people filed, app glitches, the nightly check ----
   if (path.startsWith('/admin/')) {
     if (!isAdmin(env, user)) return json({ error: 'not found' }, 404);

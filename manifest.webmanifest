@@ -1,8 +1,8 @@
 {
   "name": "OurPawmily",
   "short_name": "OurPawmily",
-  "description": "A couples app for two people and their dogs: dog care, notes and plans, meals and lifting.",
-  "start_url": "./",
+  "description": "One app for a family and its dogs: the feed, dog care, plans and notes, the calendar, what you watch, and each person's meals and training.",
+  "start_url": "family/",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f5f4ef",

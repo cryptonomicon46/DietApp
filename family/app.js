@@ -183,7 +183,7 @@ async function signIn() {
         <p class="tiny muted">The demo keeps everything on this phone, so you can try families, invites and the feed before anything goes live.</p>
       </div>
       <button type="button" class="linkish small" data-act="help">💬 Trouble signing in? Get help</button>
-      <a class="small" href="../">‹ Back to the current app</a>
+      <a class="small" href="../">🥗 Just the trackers? Open them without signing in ›</a>
     </section>`;
   if (cfg.ready) loadGoogle(cfg.googleClientId);
 }
@@ -773,7 +773,7 @@ function petDetails(m, data) {
   const vax = (d.vaccines || []).map((v) => `${esc(v.name)}${v.due ? ` · due ${esc(v.due)}` : ''}`).join('<br>');
   const food = d.food ? esc([d.food.brand, d.food.amount, d.food.times ? `${d.food.times}× a day` : ''].filter(Boolean).join(' · ') || '') : '';
   const body = [row('Breed', esc(m.breed || d.breed)), row('Born', esc(m.born || d.birthday)), row('Weight', d.weightLb ? `${esc(d.weightLb)} lb` : ''), row('Food', food), row('Vaccines', vax), row('Vet', esc(d.vet?.name || d.vet || '')), row('Microchip', esc(d.microchip))].join('');
-  return `<b>About ${esc(m.name)}</b>${body ? `<ul class="kv">${body}</ul>` : '<p class="small muted">Add food, meds, vaccines and the vet in 🥗 Trackers › Dogs — they show up here.</p>'}
+  return `<b>About ${esc(m.name)}</b>${body ? `<ul class="kv">${body}</ul><a class="small" href="../#dogs">✎ Edit in 🥗 Trackers › Dogs</a>` : '<p class="small muted">Add food, meds, vaccines and the vet in <a href="../#dogs">🥗 Trackers › Dogs</a> — they show up here.</p>'}
     <button type="button" class="linkish small" data-act="editpet" data-id="${m.id}">✎ Edit photo, name, breed, birthday</button>`;
 }
 

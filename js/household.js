@@ -3,6 +3,7 @@
 // anyone who had the old code (an old screenshot, a shared calendar link) is locked out.
 import { PROFILES, ownerId, profileStore } from './storage.js';
 import { sync } from './sync.js';
+import { account } from './account.js';
 import { syncLine } from './plans.js';
 import { allDogs } from './dogs.js';
 import { allAdopt } from './adopt.js';
@@ -36,6 +37,10 @@ function movedCard(inDialog = false) {
 
 function codeCard() {
   const s = sync.settings();
+  if (account.get()?.householdOff) {
+    return `<div class="card hh-card"><div class="eyebrow">✅ Moved to your accounts</div>
+      <p class="small">You're both on OurPawmily accounts and share with each other, so the household code isn't used any more: your trackers sync through your accounts, end-to-end encrypted. Its last copies stay on the server, and 🛟 Recover my data can still read them.</p></div>`;
+  }
   if (!s?.code || !sync.household()) {
     return `<div class="card hh-card"><div class="eyebrow">🔐 Our household code</div>
       <p class="small muted">Sharing is off on this phone. Link your phones first (open ${esc(nameOf(partner()))}'s day and tap Link phones).</p></div>`;
@@ -62,6 +67,20 @@ function codeCard() {
 // The rest of the Privacy tab: sharing status and how your data is kept.
 function privacyInfo() {
   const s = sync.settings();
+  const acct = account.get();
+  if (acct) {
+    return `<div class="card">
+      <div class="eyebrow">🛡 How your data is kept</div>
+      <ul class="small privacy-list">
+        <li><b>Saved to your OurPawmily account</b> (${esc(acct.email)}), so it's the same on every device you sign in on.</li>
+        ${acct.e2ee ? `<li><b>End-to-end encrypted.</b> Your trackers are locked on your devices with ${esc(acct.family)}'s family key before they're sent; the server only keeps text it can't read.</li>` : `<li><b>Not end-to-end encrypted yet.</b> ${esc(acct.family)}'s creator can turn it on in OurPawmily › Me › 🔐 Encryption.</li>`}
+        <li><b>Who can see it:</b> only the people in ${esc(acct.family)} you turned sharing on for (OurPawmily › Me › Who can see my diet &amp; fitness).</li>
+        <li><b>${acct.householdOff ? 'The household code is retired' : 'The household code still runs alongside'}</b>${acct.householdOff ? ' — you both share through your accounts now.' : ` until ${esc(nameOf(partner()))} is on an account too and you share with each other.`}</li>
+        <li><b>Keys stay secret.</b> WHOOP, Strava and Claude keys live in Cloudflare's secret store; WHOOP and Strava sign-ins never leave the device that made them.</li>
+        <li><b>🐾 Dogs, 💞 notes and plans, and 🍿 what you watch</b> live in OurPawmily now.</li>
+      </ul>
+    </div>`;
+  }
   return `<div class="card">
       <div class="eyebrow">📡 Sharing between your phones</div>
       ${syncLine()}
@@ -82,7 +101,7 @@ function privacyInfo() {
 
 export function renderHousehold() {
   if (!ownerId()) return;
-  const moved = !!sync.settings()?.moved;
+  const moved = !!sync.settings()?.moved && !account.get()?.householdOff;
   // A pop-up rather than a Home card: Home can't be typed in while you view your partner's day.
   const dlg = $('#hhDialog');
   if (dlg) {

@@ -7,7 +7,7 @@ import { account } from './account.js';
 // (storage.ownerId) is the one whose data this phone uploads.
 // Signed in to the family app (account.js)? Then your data is also saved to your OurPawmily
 // account, and your partner's comes from there when they share it with you; the household code
-// carries on alongside until both of you have moved over.
+// carries on alongside until both of you have moved over (and share with each other), then stops.
 
 // Your Cloudflare connector. Not secret: data there can only be read with the household code.
 export const DEFAULT_CONNECTOR = 'https://lean-plate-connect.sandman-amani.workers.dev';
@@ -120,7 +120,7 @@ export const sync = {
     return moved;
   },
   save(s) { global.set('sync', s); },
-  household() { const s = this.settings(); return !!(s?.url && s?.code && !s.moved && ownerId()); },
+  household() { const s = this.settings(); return !!(s?.url && s?.code && !s.moved && ownerId() && !account.get()?.householdOff); },
   enabled() { return this.household() || account.active(); },
   // Only the phone's owner can edit; anyone else's profile is view-only.
   readOnly() { return !!ownerId() && activeProfile().id !== ownerId(); },
