@@ -1230,15 +1230,30 @@ async function renderCalDress(date) {
   const temps = (t) => `<div class="dress-temps"><span>🌅 ${D.hourLabel(t.leave.hour)} <b>${t.leave.f}°</b></span><i>→</i><span>☀️ ${D.hourLabel(t.peak.hour)} <b>${t.peak.f}°</b></span><i>→</i><span>🌆 ${D.hourLabel(t.back.hour)} <b>${t.back.f}°</b></span></div>`;
   let body;
   try {
-    const parts = await Promise.all(people.map(async (m) => {
+    // Where each of you will be; the same place for both of you is one box for both, dressed
+    // for the longer day (the earlier start to the later finish).
+    const wheres = people.map((m) => {
       const evs = entries.map((e) => ({ title: e.title, place: e.place, start: e.time, end: e.end, allDay: e.allDay || !e.time, who: e.who === 'both' || e.who === m.id ? m.id : '-' }));
-      const where = D.whereOn(evs, m.id, D.PLACES, picks[`${m.id}|${date}`] || null);
-      const plan = D.dressFor(await dressHours(where.place, date), where.leave, where.back);
-      const why = where.picked ? 'picked by hand' : where.fromCalendar ? `📅 from “${esc(where.event.title)}”` : 'nothing on the calendar — home';
-      return `<div class="dress-person">
-        <div class="row between dress-who"><b><i class="who-dot ${whoCls(m.id)}"></i> ${esc(m.name)}</b>
-          <select data-dresspick="${m.id}" data-dressdate="${date}" aria-label="Where ${esc(m.name)} will be">${D.PLACES.map((p) => `<option value="${p.id}" ${p.id === where.place.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}${where.picked ? '<option value="">↺ Use the calendar</option>' : ''}</select></div>
-        <small class="muted">${why} · out ${D.hourLabel(where.leave)}–${D.hourLabel(where.back)}</small>
+      return { m, where: D.whereOn(evs, m.id, D.PLACES, picks[`${m.id}|${date}`] || null) };
+    });
+    const groups = [];
+    for (const w of wheres) {
+      const g = groups.find((x) => x.place.id === w.where.place.id);
+      if (g) g.list.push(w); else groups.push({ place: w.where.place, list: [w] });
+    }
+    const why = (where) => (where.picked ? 'picked by hand' : where.fromCalendar ? `📅 from “${esc(where.event.title)}”` : 'nothing on the calendar — home');
+    const parts = await Promise.all(groups.map(async (g) => {
+      const leave = Math.min(...g.list.map((w) => w.where.leave)), back = Math.max(...g.list.map((w) => w.where.back));
+      const plan = D.dressFor(await dressHours(g.place, date), leave, back);
+      const ids = g.list.map((w) => w.m.id);
+      const names = g.list.map((w) => `<i class="who-dot ${whoCls(w.m.id)}"></i> ${esc(w.m.name)}`).join(' &amp; ');
+      const whys = [...new Set(g.list.map((w) => why(w.where)))];
+      const reason = whys.length === 1 ? whys[0] : g.list.map((w) => `${esc(w.m.name)}: ${why(w.where)}`).join(' · ');
+      const picked = g.list.some((w) => w.where.picked);
+      return `<div class="dress-person${g.list.length > 1 ? ' together' : ''}">
+        <div class="row between dress-who"><b>${names}${g.list.length > 1 ? ' <span class="pill">together</span>' : ''}</b>
+          <select data-dresspick="${ids.join(',')}" data-dressdate="${date}" aria-label="Where ${g.list.map((w) => esc(w.m.name)).join(' and ')} will be">${D.PLACES.map((p) => `<option value="${p.id}" ${p.id === g.place.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}${picked ? '<option value="">↺ Use the calendar</option>' : ''}</select></div>
+        <small class="muted">${reason} · out ${D.hourLabel(leave)}–${D.hourLabel(back)}</small>
         ${plan ? `${temps(plan.temps)}<div class="dress-shape">${esc(plan.label)}</div>
           <ul class="dress-layers">${plan.layers.map((l) => `<li><span>${l.icon}</span><span>${esc(l.text)}${l.carry ? ' <em class="dress-carry">take off later</em>' : ''}</span></li>`).join('')}</ul>
           ${plan.when ? `<p class="small dress-when">⏱ ${esc(plan.when)}</p>` : ''}${plan.extras.length ? `<p class="small muted">${plan.extras.map(esc).join(' · ')}</p>` : ''}`
@@ -2125,8 +2140,9 @@ document.addEventListener('change', async (e) => {
     return compose();
   }
   if (t.dataset.dresspick) {
-    const picks = dressPicks(), k = `${t.dataset.dresspick}|${t.dataset.dressdate}`;
-    if (t.value) picks[k] = t.value; else delete picks[k];
+    // A shared box changes it for both of you.
+    const picks = dressPicks();
+    for (const id of t.dataset.dresspick.split(',')) { const k = `${id}|${t.dataset.dressdate}`; if (t.value) picks[k] = t.value; else delete picks[k]; }
     LS.set('fam.dressPicks', JSON.stringify(picks));
     return renderCalDress(t.dataset.dressdate);
   }
