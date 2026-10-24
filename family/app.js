@@ -1067,6 +1067,7 @@ function plusMenu() {
     ['post', '📸', 'Post', 'a photo or update for the family'],
     ...((fam().modules || []).includes('dogs') ? [['apptnew', '🐾', 'Dog appointment', 'grooming, vet, vaccine']] : []),
     ['eventnew', '📅', 'Calendar event', 'family only'],
+    ['lognew', '❤️', 'Log a date', 'date night, us time, a trip — for your 2-2-2-2'],
     ['watchadd', '🍿', 'Add to Watch', 'a show or movie you two are watching'],
     ['askhelp', '🙋', 'Ask for help', 'pet sitting, babysitting, a ride'],
   ];
@@ -1228,12 +1229,13 @@ async function renderCal() {
   // The chosen day.
   const sel = await dayEntries(calm.day);
   const dayMarks = [
-    ...(hearts[calm.day] || []).map((r) => `<li class="mark-row">❤️ <span>${esc(r.kind === 'date' ? `Date${r.place ? ` · ${r.place}` : ''}` : r.kind === 'overnight' ? 'Overnight trip' : r.kind === 'getaway' ? 'Getaway' : 'Us time')}</span></li>`),
+    ...(hearts[calm.day] || []).map((r) => `<li class="mark-row">${calm.R ? calm.R.momentIcon(r) : '❤️'} <span>${esc(calm.R ? calm.R.momentText(r) : 'Us time')}${r.by && r.by !== fam().me ? ` <small class="muted">· ${esc(member(r.by)?.name || '')}</small>` : ''}</span><button type="button" class="linkish small" data-momentedit="${esc(r.id)}">✎ Edit</button></li>`),
     ...(calm.golden.includes(calm.day) ? ['<li class="mark-row">⭐ <span>Golden day for the dogs</span></li>'] : []),
   ];
   $('#calDay').innerHTML = `<section class="card"><div class="row between" style="margin-top:0"><div class="eyebrow">${esc(calDayLabel(calm.day))}${calm.day !== today ? ` · ${new Date(`${calm.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })}` : ''}</div><button type="button" class="linkish small" data-act="eventnew">＋ Event</button></div>
     ${dayMarks.length ? `<ul class="mark-list">${dayMarks.join('')}</ul>` : ''}
-    ${sel.length ? `<ul class="ev-list">${sel.map((e) => calRow(e)).join('')}</ul>` : dayMarks.length ? '' : '<p class="small muted">Nothing planned. Tap ＋ to add something.</p>'}</section>
+    ${sel.length ? `<ul class="ev-list">${sel.map((e) => calRow(e)).join('')}</ul>` : dayMarks.length ? '' : '<p class="small muted">Nothing planned. Tap ＋ to add something.</p>'}
+    ${calm.day <= today ? `<button type="button" class="ghost small logdate" data-act="lognew">❤️ Log a date on this day</button>` : ''}</section>
     <div id="calDress"></div>`;
   renderCalDress(calm.day).catch(() => {});
   // Coming up: the next two weeks after the chosen day.
@@ -1314,20 +1316,61 @@ async function renderCalDress(date) {
   } catch (err) { body = `<p class="small tone-warn">Couldn't get the weather (${esc(err.message)}).</p>`; }
   if ($('#calDress') && calm.day === date) $('#calDress').innerHTML = `<section class="card dress-card"><div class="eyebrow">👔 Dress for ${esc(label)}</div>${body}<p class="tiny muted">Feels-like temperatures from when you leave to when you're home (from the calendar, else 8 AM–6 PM). An event whose title or place names San Francisco or Oakland puts that person there. Weather: Open-Meteo.</p></section>`;
 }
+// 💞 2-2-2-2 moments: kept in each person's own trackers ({entries, removed}, end-to-end
+// encrypted), combined with your partner's when they share their trackers with you.
+async function loadRhythm() {
+  const R = await import('../js/rhythm.js');
+  const partner = us.partner;
+  const [mine, theirs] = await Promise.all([myTrackers(), partner ? api.get(`/families/${state.fid}/members/${partner.id}/data`).then(openData).catch(() => null) : null]);
+  calm.R = R;
+  return R.mergeRhythm([{ person: fam().me, rhythm: mine?.rhythm || {} }, ...(partner && theirs && !theirs.locked ? [{ person: partner.id, rhythm: theirs.rhythm || {} }] : [])]);
+}
 async function rhythmLine() {
   const el = $('#calRhythm');
   if (!el) return;
-  const mine = await openData(await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null));
-  const entries = Array.isArray(mine?.rhythm) ? mine.rhythm : [];
+  const entries = await loadRhythm().catch(() => []);
+  const R = calm.R;
   const had = JSON.stringify(calm.rhythm || []);
-  calm.rhythm = entries.filter((r) => r?.date && !r.deleted);
+  calm.rhythm = entries;
   // New ❤️ moments: draw the month again (this runs again from there, finds nothing new, and stops).
   if (had !== JSON.stringify(calm.rhythm) && state.view === 'calendar') setTimeout(() => renderCal());
-  if (!entries.length) { el.innerHTML = ''; return; }
-  const R = await import('../js/rhythm.js');
+  if (!$('#calRhythm') || !R) return;
   const st = R.rhythmStatus(entries, isoLocal());
   const n = R.nextNudge(st);
-  el.innerHTML = `<section class="card small rhythm-line">💞 <b>2-2-2-2</b> · ${['date', 'overnight', 'getaway'].map((k) => `${R.RHYTHMS[k].icon} ${st[k].level === 'due' ? '<b class="tone-warn">due</b>' : st[k].level === 'soon' ? `in ${Math.max(0, st[k].daysLeft)}d` : '✓'}`).join(' · ')}${n ? ` — ${esc(R.RHYTHMS[n.kind].label)} ${n.level === 'due' ? 'is due' : 'is coming up'}` : ''}</section>`;
+  $('#calRhythm').innerHTML = `<section class="card small rhythm-line"><div class="row between"><span>💞 <b>2-2-2-2</b> · ${['date', 'overnight', 'getaway'].map((k) => `${R.RHYTHMS[k].icon} ${!st[k].last ? '–' : st[k].level === 'due' ? '<b class="tone-warn">due</b>' : st[k].level === 'soon' ? `in ${Math.max(0, st[k].daysLeft)}d` : '✓'}`).join(' · ')}</span><button type="button" class="linkish small" data-act="lognew">❤️ Log</button></div>${n ? `<div class="muted">${esc(R.loveLine(n.kind, isoLocal()))}</div>` : ''}</section>`;
+}
+// Log or edit a moment. A date gets what and where; the others are just the day.
+async function momentSheet({ id = null, date = calm.day && calm.day <= isoLocal() ? calm.day : isoLocal() } = {}) {
+  if (lockedHere()) return toast('🔒 This device needs the family key first — Me › 🔐 Encryption');
+  const R = calm.R || (calm.R = await import('../js/rhythm.js'));
+  const e = id ? (calm.rhythm || []).find((x) => x.id === id) : null;
+  const v = e ? { kind: e.kind, date: e.date, what: e.what || R.DATE_TYPES[e.type]?.label || '', place: e.place || '' } : { kind: 'date', date, what: '', place: '' };
+  const past = (k) => [...new Set((calm.rhythm || []).filter((x) => x.kind === 'date' && x[k]).reverse().map((x) => x[k]))].slice(0, 15);
+  openSheet(`<h2>${e ? '✎ Edit' : '❤️ Log'} ${v.kind === 'date' ? 'a date' : 'a moment'}</h2>
+    <form id="momentForm" class="stack" data-id="${e?.id || ''}">
+      <div class="seg kinds4">${Object.entries(R.RHYTHMS).map(([k, r]) => `<label class="segopt"><input type="radio" name="kind" value="${k}" ${v.kind === k ? 'checked' : ''}><span>${r.icon} ${({ date: 'Date', close: 'Us time', overnight: 'Overnight trip', getaway: 'Getaway' })[k] || esc(r.label)}</span></label>`).join('')}</div>
+      <div class="datebits" ${v.kind === 'date' ? '' : 'hidden'}>
+        <label>What did you do?<input name="what" list="mWhats" maxlength="60" placeholder="e.g. Movie, drinks & dinner" value="${esc(v.what)}"></label>
+        <label>Where?<input name="place" list="mPlaces" maxlength="60" placeholder="e.g. Santana Row" value="${esc(v.place)}"></label>
+        <datalist id="mWhats">${past('what').map((x) => `<option value="${esc(x)}"></option>`).join('')}</datalist><datalist id="mPlaces">${past('place').map((x) => `<option value="${esc(x)}"></option>`).join('')}</datalist>
+      </div>
+      <label>When<input type="date" name="date" value="${v.date}" max="${isoLocal()}" required></label>
+      <p class="tiny muted">Just for the two of you — it shows as a ❤️ on the calendar and counts toward your 2-2-2-2. End-to-end encrypted.</p>
+      <div class="row end">${e ? '<button type="button" class="ghost danger" data-act="momentdel">Delete</button>' : ''}<button type="button" class="ghost" data-act="close">Cancel</button><button>Save ❤️</button></div>
+    </form>`);
+}
+// Your own trackers' rhythm, changed and saved back (sealed). An edit or delete of your
+// partner's moment is recorded as "removed" in yours — the two copies combine that way.
+async function saveRhythm(change) {
+  mineCache = null;
+  const mine = await myTrackers();
+  if (mine?.locked) throw new Error('This device needs the family key first');
+  const data = { ...(mine || {}) };
+  const r = { entries: [...(data.rhythm?.entries || [])], removed: [...(data.rhythm?.removed || [])] };
+  change(r);
+  data.rhythm = { entries: r.entries.slice(-400), removed: [...new Set(r.removed)].slice(-400) };
+  await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData(data) });
+  mineCache = null;
 }
 function eventSheet(ev = null, day = calm.day || isoLocal()) {
   const v = ev || { date: day, allDay: false, start: '', end: '', who: [fam().me], remind: 60, repeat: null };
@@ -1987,6 +2030,7 @@ document.addEventListener('click', (e) => {
     });
   }
   if (d.bingogame) { bingo.game = d.bingogame; return bingoGame(); }
+  if (d.momentedit) return momentSheet({ id: d.momentedit });
   if (d.watchtab) { watch.tab = d.watchtab; return renderWatch(); }
   if (d.watchnight) return act(async () => { await api.post(`/families/${state.fid}/watch/shows/${d.watchnight}/night`, { date: isoLocal() }); await watchSaved(); });
   if (d.watchrate) { const [id, n] = d.watchrate.split(':'); const cur = watch.shows.find((x) => x.id === id)?.ratings[fam().me]; return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { rating: cur === +n ? null : +n }); await watchSaved(); }); }
@@ -2056,6 +2100,12 @@ document.addEventListener('click', (e) => {
     case 'bingonew': return bingoNew();
     case 'games': bingo.game = null; bingo.season = null; return show('bingo');
     case 'watchadd': return watchAddSheet();
+    case 'lognew': return momentSheet(state.view === 'calendar' ? {} : { date: isoLocal() });
+    case 'momentdel': {
+      const id = $('#momentForm')?.dataset.id;
+      if (!id || !confirm('Delete this moment?')) return;
+      return act(async () => { await saveRhythm((r) => { r.entries = r.entries.filter((x) => x.id !== id); r.removed.push(id); }); closeSheet(); toast('Deleted'); if (state.view === 'calendar') rhythmLine(); });
+    }
     case 'seasonnew': return seasonNew();
     case 'seasonstatus': return act(async () => seasonView(await api.patch(`/families/${state.fid}/picks/${bingo.season}`, { status: bingo.view.season.status === 'live' ? 'done' : 'live' })));
     case 'bingoback': bingo.game = null; bingo.season = null; clearInterval(bingo.timer); return bingoView();
@@ -2201,6 +2251,7 @@ document.addEventListener('change', async (e) => {
     const prefs = Object.fromEntries([...document.querySelectorAll('[data-notifypref]')].map((x) => [x.dataset.notifypref, x.checked]));
     return act(() => api.put('/push/prefs', prefs));
   }
+  if (t.form?.id === 'momentForm' && t.name === 'kind') { t.form.querySelector('.datebits').hidden = t.value !== 'date'; return; }
   if (t.form?.id === 'eventForm' && t.name === 'allDay') { t.form.querySelectorAll('.timeonly').forEach((x) => { x.hidden = t.checked; }); return; }
   if (t.form?.id === 'feelForm' && t.name === 'kind') {
     const k = KINDS[t.value] || KINDS.other;
@@ -2285,6 +2336,21 @@ document.addEventListener('submit', (e) => {
       closeSheet(); watch.tab = 'now';
       if (state.view === 'watch') await watchSaved(); else show('watch');
       toast(`🍿 ${v.title.trim()} added`);
+    });
+  }
+  if (f.id === 'momentForm') {
+    e.preventDefault();
+    const id = f.dataset.id, date = v.date && v.date <= isoLocal() ? v.date : isoLocal();
+    const what = (v.what || '').trim().slice(0, 60), place = (v.place || '').trim().slice(0, 60);
+    return act(async () => {
+      await saveRhythm((r) => {
+        // An edit replaces the old moment (whoever logged it) with the corrected one.
+        if (id) { r.entries = r.entries.filter((x) => x.id !== id); r.removed.push(id); }
+        const at = Date.now();
+        r.entries.push({ id: at.toString(36) + Math.random().toString(36).slice(2, 5), kind: v.kind, date, at, ...(v.kind === 'date' ? { ...(what ? { what } : {}), ...(place ? { place } : {}) } : {}) });
+      });
+      closeSheet(); toast(id ? 'Saved ❤️' : '❤️ Logged');
+      if (state.view === 'calendar') { calm.day = date; calm.month = date.slice(0, 7); rhythmLine(); renderCal(); }
     });
   }
   if (f.id === 'watchPgForm') {
