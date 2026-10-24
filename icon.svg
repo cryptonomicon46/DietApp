@@ -1,6 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#2f7d5b"/>
-  <circle cx="256" cy="256" r="150" fill="#f5f4ef"/>
-  <circle cx="256" cy="256" r="104" fill="none" stroke="#2f7d5b" stroke-width="14"/>
-  <path d="M256 152 v104 l70 48" fill="none" stroke="#2f7d5b" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#43a97a"/><stop offset="1" stop-color="#1d5a41"/></linearGradient>
+    <radialGradient id="glow" cx=".28" cy=".18" r=".85"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="pad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdf7"/><stop offset="1" stop-color="#f3e9d6"/></linearGradient>
+    <linearGradient id="heart" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f27c72"/><stop offset="1" stop-color="#d9475a"/></linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="10" stdDeviation="11" flood-color="#0a2a1d" flood-opacity=".38"/></filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
+  <g fill="url(#pad)" filter="url(#sh)">
+    <ellipse cx="142" cy="236" rx="40" ry="51" transform="rotate(-28 142 236)"/>
+    <ellipse cx="209" cy="160" rx="43" ry="56" transform="rotate(-9 209 160)"/>
+    <ellipse cx="303" cy="160" rx="43" ry="56" transform="rotate(9 303 160)"/>
+    <ellipse cx="370" cy="236" rx="40" ry="51" transform="rotate(28 370 236)"/>
+    <path d="M256 262 C 205 262 158 316 147 356 C 134 404 168 430 208 424 C 232 420 242 410 256 410 C 270 410 280 420 304 424 C 344 430 378 404 365 356 C 354 316 307 262 256 262 Z"/>
+  </g>
+  <path d="M256 392 C 226 370 208 354 208 332 C 208 316 220 304 236 304 C 246 304 252 309 256 316 C 260 309 266 304 276 304 C 292 304 304 316 304 332 C 304 354 286 370 256 392 Z" fill="url(#heart)"/>
 </svg>

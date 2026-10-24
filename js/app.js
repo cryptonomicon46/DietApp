@@ -3130,7 +3130,6 @@ function renderAccount() {
   const el = $('#accountInfo');
   if (!el) return;
   const acct = account.get();
-  $('#toFamily').hidden = !acct;
   el.innerHTML = acct
     ? `<div class="card"><div class="eyebrow">☁️ Saved to your account</div>
         <p class="small">Your meals, weigh-ins, training and notes are saved to <b>${esc(acct.email)}</b> in <b>${esc(acct.family)}</b>, so they're the same on every phone or computer you sign in on.</p>

@@ -172,7 +172,7 @@ async function signIn() {
   chrome(false);
   const cfg = await api.liveConfig();
   $('#view').innerHTML = `<section class="hero">
-      <div class="logo">🐾</div>
+      <img class="logo-img" src="../icon.svg?v=2" alt="" width="88" height="88">
       <h1>OurPawmily</h1>
       <p class="lede">A private home for your family — the people, the pets, and the little moments. Only the people you invite can see it.</p>
       ${state.invite ? '<div class="note">💌 You have an invite. Sign in with the Google account it was sent to.</div>' : ''}

@@ -1136,3 +1136,13 @@ body.meal-editing #tab-today > :not(#meals) { display: none !important; }
 
 /* Signed in to OurPawmily: the dogs, notes and plans live in the family app */
 body.famlinked .tabs button[data-tab=brief], body.famlinked .tabs button[data-tab=notes] { display: none; }
+
+/* The way back to OurPawmily from the trackers: the app's icon and name, like a back button */
+.fam-pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 6px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--ink); text-decoration: none; box-shadow: 0 1px 2px rgba(0,0,0,.06); min-width: 0; }
+.fam-pill:active { transform: scale(.97); }
+.fam-pill .chev { color: var(--brand); font-size: 1.4rem; line-height: 1; font-weight: 700; margin: 0 -2px 2px 4px; }
+.fam-pill img { border-radius: 7px; flex: none; }
+.fam-pill span:last-child { display: flex; flex-direction: column; line-height: 1.1; }
+.fam-pill b { font-size: 1rem; letter-spacing: -.01em; }
+.fam-pill small { font-size: .68rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
