@@ -318,3 +318,24 @@ test('a new Google profile picture shows up in your families when you next sign 
   assert.equal((await api(`/families/${family.fid}`, { token: again.token })).family.members[0].avatar, 'https://lh3.googleusercontent.com/new');
   assert.equal((await api('/me', { token: again.token })).user.picture, 'https://lh3.googleusercontent.com/new');
 });
+
+test('pet photos: small photos or emoji only, never outside links', async () => {
+  const me = await signIn('950', 'petpics@gmail.com', 'Pets');
+  const { family } = await api('/families', { token: me, method: 'POST', body: { name: 'Pet pics' } });
+  const photo = `data:image/jpeg;base64,${'A'.repeat(4000)}`;
+  const dog = await api(`/families/${family.fid}/members`, { token: me, method: 'POST', body: { kind: 'pet', name: 'Rex', species: 'dog', avatar: photo } });
+  assert.equal(dog.member.avatar, photo);
+  const patch = (avatar) => api(`/families/${family.fid}/members/${dog.member.id}`, { token: me, method: 'PATCH', body: { avatar } });
+  await patch('https://tracker.example/pixel.gif');
+  let rex = (await api(`/families/${family.fid}`, { token: me })).family.members.find((m) => m.id === dog.member.id);
+  assert.equal(rex.avatar, '', 'outside links are dropped');
+  await patch(`data:image/svg+xml;base64,${'A'.repeat(100)}`);
+  rex = (await api(`/families/${family.fid}`, { token: me })).family.members.find((m) => m.id === dog.member.id);
+  assert.equal(rex.avatar, '', 'no SVG (can carry script)');
+  await patch('🐕');
+  rex = (await api(`/families/${family.fid}`, { token: me })).family.members.find((m) => m.id === dog.member.id);
+  assert.equal(rex.avatar, '🐕');
+  await patch('');
+  rex = (await api(`/families/${family.fid}`, { token: me })).family.members.find((m) => m.id === dog.member.id);
+  assert.equal(rex.avatar, '');
+});

@@ -68,7 +68,7 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
 - **Sign in with Google.** Your account is protected by Google's sign-in, including its 2-Step Verification. No shared phrase is needed.
 - **Families:** one person creates the family and becomes its creator.
   - **People:** add a partner, kids, parents and others. Grown-ups get an **invite by email**, and only that Google account can accept it (once, within 14 days). Young kids can be added without an account and managed by the grown-ups.
-  - **Pets:** add each pet with its breed and birthday. Everyone in the family sees the pets.
+  - **Pets:** add each pet with a photo, its breed and birthday (✎ Edit on the pet's profile changes the photo). Photos are cropped square and shrunk on the phone before upload. Everyone in the family sees the pets.
 - **Feed:** a private, Instagram-style feed with photos, captions, tags for the people and pets in a photo, likes and comments. A family's posts are seen only by that family.
 - **Connected families:** anyone can invite a close friend, who then creates their own family (or uses one they run). The two families are then connected, and a post shared with *+ connected families* shows up for them too. Nothing else is shared with them, not even email addresses.
 - **Privacy:** your diet & fitness (weight, meals, training) is private until you turn sharing on for a specific person in **Me › Who can see my diet & fitness**.

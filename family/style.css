@@ -224,3 +224,4 @@ button.ghost.danger, .danger { color: #c0392b; }
 .ticket { border-top: 1px solid var(--line); padding: 8px 0; }
 .ticket summary { cursor: pointer; font-size: .9rem; }
 .ticket.done summary { opacity: .6; }
+.pet-photo { align-items: center; gap: 14px; }

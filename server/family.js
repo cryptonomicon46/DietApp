@@ -51,6 +51,9 @@ const b64urlBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/
 const b64urlJson = (s) => JSON.parse(new TextDecoder().decode(b64urlBytes(s)));
 export const randomId = (bytes = 9) => [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('');
 const clean = (s, max = 80) => String(s ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, max);
+// A member's picture: an emoji, or a small photo (data URL, resized on the phone). No outside
+// links, so a picture can't be used to track who's looking.
+const avatarOf = (v) => (typeof v === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(v) && v.length <= 120_000 ? v : /[:/]/.test(String(v ?? '')) ? '' : clean(v, 8));
 const emailOf = (s) => { const e = clean(s, 120).toLowerCase(); return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) ? e : ''; };
 
 // ---------- Google ID token ----------
@@ -427,7 +430,7 @@ export async function familyApi(req, env, path) {
       id: randomId(6), kind, name, role: kind === 'pet' ? 'pet' : 'member',
       relation: kind === 'pet' ? 'pet' : RELATIONS.includes(body.relation) ? body.relation : 'other',
       ...(kind === 'pet' ? { species: SPECIES.includes(body.species) ? body.species : 'dog', breed: clean(body.breed, 40), born: /^\d{4}-\d{2}-\d{2}$/.test(body.born || '') ? body.born : '' } : {}),
-      ...(email ? { email } : {}), legacyId: clean(body.legacyId, 40), avatar: clean(body.avatar, 8), shareWith: [], addedBy: me.id, addedAt: Date.now(),
+      ...(email ? { email } : {}), legacyId: clean(body.legacyId, 40), avatar: avatarOf(body.avatar), shareWith: [], addedBy: me.id, addedAt: Date.now(),
     };
     fam.members.push(member);
     await db.put(`family:${fam.fid}`, fam);
@@ -457,7 +460,7 @@ export async function familyApi(req, env, path) {
       return json({ ok: true });
     }
     if (body.name != null) t.name = clean(body.name, 40) || t.name;
-    if (body.avatar != null) t.avatar = clean(body.avatar, 8);
+    if (body.avatar != null) t.avatar = avatarOf(body.avatar);
     if (body.legacyId != null) t.legacyId = clean(body.legacyId, 40); // who they were in the current app
     if (t.kind === 'pet') {
       if (body.breed != null) t.breed = clean(body.breed, 40);

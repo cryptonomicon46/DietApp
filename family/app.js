@@ -39,7 +39,7 @@ function toast(text) {
 const hue = (id = '') => HUES[[...id].reduce((a, c) => a + c.charCodeAt(0), 0) % HUES.length];
 function avatar(m, size = 40) {
   const s = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.42)}px`;
-  if (m?.avatar?.startsWith?.('http')) return `<img class="av" style="${s}" src="${esc(m.avatar)}" alt="" referrerpolicy="no-referrer">`;
+  if (/^(https:|data:image\/)/.test(m?.avatar || '')) return `<img class="av" style="${s}" src="${esc(m.avatar)}" alt="" referrerpolicy="no-referrer">`;
   const face = m?.avatar || (m?.kind === 'pet' ? '🐶' : esc((m?.name || '?').trim()[0]?.toUpperCase() || '?'));
   return `<span class="av" style="${s};--h:${hue(m?.id || m?.name)}">${face}</span>`;
 }
@@ -471,7 +471,7 @@ function petDetails(m, data) {
   const food = d.food ? esc([d.food.brand, d.food.amount, d.food.times ? `${d.food.times}× a day` : ''].filter(Boolean).join(' · ') || '') : '';
   const body = [row('Breed', esc(m.breed || d.breed)), row('Born', esc(m.born || d.birthday)), row('Weight', d.weightLb ? `${esc(d.weightLb)} lb` : ''), row('Food', food), row('Vaccines', vax), row('Vet', esc(d.vet?.name || d.vet || '')), row('Microchip', esc(d.microchip))].join('');
   return `<b>About ${esc(m.name)}</b>${body ? `<ul class="kv">${body}</ul>` : '<p class="small muted">Bring over the current app (Me tab) to fill this in, or edit it in the Dogs tab there.</p>'}
-    <button type="button" class="linkish small" data-act="editpet" data-id="${m.id}">✎ Edit name, breed, birthday</button>`;
+    <button type="button" class="linkish small" data-act="editpet" data-id="${m.id}">✎ Edit photo, name, breed, birthday</button>`;
 }
 
 function meView() {
@@ -604,9 +604,29 @@ function addPerson() {
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Add</button></div>
     </form>`);
 }
+// The pet photo being chosen in the form: undefined = unchanged, '' = removed, or a data URL.
+let petPhoto;
+const petPhotoBox = (p) => {
+  const shown = petPhoto === undefined ? p?.avatar || '' : petPhoto;
+  const has = /^data:image\//.test(shown) || /^https:/.test(shown);
+  return `${avatar({ ...(p || { kind: 'pet', name: '?' }), kind: 'pet', avatar: shown }, 72)}
+    <div class="stack"><label class="filebtn ghost small">📷 ${has ? 'Change photo' : 'Add a photo'}<input type="file" name="petphoto" accept="image/*" hidden></label>
+    ${has ? '<button type="button" class="linkish small" data-act="petnophoto">Remove photo</button>' : ''}</div>`;
+};
+// A square, small copy of a photo for a profile picture (center crop, 320 px).
+async function squarePhoto(file) {
+  const bmp = await createImageBitmap(file);
+  const side = Math.min(bmp.width, bmp.height), out = Math.min(320, side);
+  const c = document.createElement('canvas');
+  c.width = c.height = out;
+  c.getContext('2d').drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, out, out);
+  return c.toDataURL('image/jpeg', 0.82);
+}
 function addPet(p = null) {
+  petPhoto = undefined;
   openSheet(`<h2>${p ? `Edit ${esc(p.name)}` : 'Add a pet'}</h2>
     <form id="petForm" class="stack" data-id="${p?.id || ''}">
+      <div class="row pet-photo" id="petPhotoBox">${petPhotoBox(p)}</div>
       <label>Name<input name="name" required maxlength="40" value="${esc(p?.name || '')}"></label>
       ${p ? '' : `<label>Kind<select name="species">${Object.entries(SPECIES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>`}
       <label>Breed<input name="breed" maxlength="40" value="${esc(p?.breed || '')}"></label>
@@ -704,6 +724,7 @@ document.addEventListener('click', (e) => {
     case 'addperson': return addPerson();
     case 'addpet': return addPet();
     case 'editpet': return addPet(member(d.id));
+    case 'petnophoto': petPhoto = ''; $('#petPhotoBox').innerHTML = petPhotoBox(member($('#petForm').dataset.id)); return;
     case 'nophoto': draft.photo = ''; return compose();
     case 'accept': return act(async () => {
       const r = await api.post(`/invites/${state.invite}/accept`);
@@ -795,6 +816,11 @@ document.addEventListener('change', async (e) => {
     draft.photo = await shrinkPhoto(t.files[0]).catch(() => '');
     return compose();
   }
+  if (t.name === 'petphoto' && t.files?.[0]) {
+    petPhoto = await squarePhoto(t.files[0]).catch(() => { toast("Couldn't read that photo"); return petPhoto; });
+    $('#petPhotoBox').innerHTML = petPhotoBox(member($('#petForm').dataset.id));
+    return;
+  }
   if (t.dataset.careboth != null) { careBoth = t.checked; return; }
   if (t.dataset.sharewhat) {
     const share = { kids: !!document.querySelector('[data-sharewhat=kids]')?.checked, pets: !!document.querySelector('[data-sharewhat=pets]')?.checked };
@@ -881,6 +907,8 @@ document.addEventListener('submit', (e) => {
   }
   if (f.id === 'petForm') {
     e.preventDefault();
+    delete v.petphoto;
+    if (petPhoto !== undefined) v.avatar = petPhoto;
     return act(async () => {
       if (f.dataset.id) await api.patch(`/families/${state.fid}/members/${f.dataset.id}`, v);
       else await api.post(`/families/${state.fid}/members`, { kind: 'pet', ...v });
