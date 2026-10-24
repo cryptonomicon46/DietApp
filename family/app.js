@@ -997,7 +997,8 @@ function plusMenu() {
     ['watchadd', '🍿', 'Add to Watch', 'a show or movie you two are watching'],
     ['askhelp', '🙋', 'Ask for help', 'pet sitting, babysitting, a ride'],
   ];
-  openSheet(`<h2>What would you like to do?</h2><div class="pluslist">${items.map(([act, ico, title, sub, hot]) => `<button type="button" class="pl ${hot || ''}" data-act="${act}"><b>${ico}</b><span><strong>${esc(title)}</strong><small>${esc(sub)}</small></span></button>`).join('')}</div>`);
+  openSheet(`<div class="row between"><h2>What would you like to do?</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div><div class="pluslist">${items.map(([act, ico, title, sub, hot]) => `<button type="button" class="pl ${hot || ''}" data-act="${act}"><b>${ico}</b><span><strong>${esc(title)}</strong><small>${esc(sub)}</small></span></button>`).join('')}</div>
+    <button type="button" class="ghost wide" data-act="close">Cancel</button>`);
 }
 // Bringing over the trackers' "Feeling like" plans, answers and notes (once per family, each
 // person their own, locked before they're sent).
@@ -2278,6 +2279,12 @@ document.addEventListener('submit', (e) => {
       p.comments.push(r.comment); post.outerHTML = postCard(p);
     });
   }
+});
+// Tapping outside a sheet (on the dimmed backdrop) closes it.
+$('#sheet').addEventListener('click', (e) => {
+  if (e.target !== $('#sheet')) return;
+  const r = $('#sheet').getBoundingClientRect();
+  if (e.clientY < r.top || e.clientY > r.bottom || e.clientX < r.left || e.clientX > r.right) closeSheet();
 });
 $('#sheet').addEventListener('close', () => { if (state.view === 'compose') { draft.text = $('#postForm textarea')?.value ?? draft.text; show('feed'); } });
 window.addEventListener('hashchange', () => { if (/invite=/.test(location.hash)) boot(); });
