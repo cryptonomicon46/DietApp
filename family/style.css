@@ -459,3 +459,12 @@ details.house .fold { margin-left: auto; color: var(--brand); font-weight: 700; 
 .call-line { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); }
 .call-line .ok { color: var(--brand); font-weight: 700; }
 .logo-img { display: block; margin: 0 auto 8px; border-radius: 22px; box-shadow: 0 10px 24px rgba(20,60,40,.22); }
+
+/* 🏃 Your day: run / ride windows, dog walks and your classes, in time order */
+.yourday .dayplan { list-style: none; padding: 0; margin: 8px 0 0; }
+.yourday .dayplan li { display: grid; grid-template-columns: 62px 1fr auto; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line); font-size: .92rem; }
+.yourday .dayplan li:first-child { border-top: 0; }
+.yourday .dayplan li > b { font-size: .8rem; color: var(--muted); }
+.yourday .plan-temp { font-size: .78rem; color: var(--muted); background: var(--bg); border-radius: 999px; padding: 1px 7px; margin-left: 4px; white-space: nowrap; }
+.yourday .gymlinks { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.yourday .gymlinks a { font-weight: 600; text-decoration: none; }

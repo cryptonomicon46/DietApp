@@ -1135,7 +1135,10 @@ body.meal-editing #tab-today > :not(#meals) { display: none !important; }
 .dog-photo { width: 1.6em; height: 1.6em; border-radius: 50%; object-fit: cover; vertical-align: middle; }
 
 /* Signed in to OurPawmily: the dogs, notes and plans live in the family app */
-body.famlinked .tabs button[data-tab=brief], body.famlinked .tabs button[data-tab=notes] { display: none; }
+body.famlinked .tabs button:not([data-tab=today]):not([data-tab=lift]) { display: none; }
+#openPrivacy { display: none; }
+body.famlinked #openPrivacy { display: inline-flex; }
+.icon-only { padding-left: 10px; padding-right: 10px; }
 
 /* The way back to OurPawmily from the trackers: the app's icon and name, like a back button */
 .fam-pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 6px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--ink); text-decoration: none; box-shadow: 0 1px 2px rgba(0,0,0,.06); min-width: 0; }
@@ -1146,3 +1149,6 @@ body.famlinked .tabs button[data-tab=brief], body.famlinked .tabs button[data-ta
 .fam-pill b { font-size: 1rem; letter-spacing: -.01em; }
 .fam-pill small { font-size: .68rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+body.famlinked .top-row .lbl { display: none; }
+body.famlinked .top-row .ghost.small { padding-left: 11px; padding-right: 11px; }
+body.famlinked .tabs { grid-template-columns: repeat(2, minmax(0, 160px)); justify-content: center; gap: 24px; }

@@ -2807,12 +2807,13 @@ form.addEventListener('submit', () => {
 // Scan) switched from the bar at its top; the Food tab stays lit on all four.
 const FOOD_PAGES = [['today', '🍽 Meals'], ['weight', '⚖︎ Weight'], ['groceries', '🛒 Groceries'], ['scan', '▦ Scan']];
 let currentTab = 'home';
-// Signed in to OurPawmily: the dogs, notes and plans live there, so the trackers drop those tabs
-// (a link from a pet's page still opens 🐕 Dogs for food, meds, vaccines and the vet).
+// Signed in to OurPawmily: the trackers are just 🍽 Food and 🏋︎ Train. Your day, the calendar,
+// the dogs, notes and plans live in OurPawmily; 🔐 Privacy (and Recover) is the header button,
+// and a link from a pet's page still opens 🐕 Dogs for food, meds, vaccines and the vet.
 const famLinked = () => !!account.get();
 document.body.classList.toggle('famlinked', famLinked());
 function showTab(name) {
-  if (famLinked() && name === 'notes') name = 'home';
+  if (famLinked() && ['home', 'calendar', 'notes'].includes(name)) name = 'today';
   currentTab = name;
   document.body.dataset.tab = name; // Dogs hides the calorie bar
   const lit = FOOD_PAGES.some(([k]) => k === name) ? 'today' : name;
@@ -2838,6 +2839,8 @@ function showTab(name) {
   window.scrollTo(0, 0);
 }
 document.querySelectorAll('.tabs button').forEach((btn) => { btn.onclick = () => showTab(btn.dataset.tab); });
+$('#openPrivacy').onclick = () => showTab('privacy');
+if (famLinked() && location.hash !== '#dogs') setTimeout(() => { if (currentTab === 'home') showTab('today'); });
 document.querySelector('main').addEventListener('click', (e) => {
   if (e.target.closest('[data-opencheckin]')) { openCheckin(); return; }
   if (e.target.closest('[data-ckremind]')) { checkinReminder(); return; }

@@ -292,6 +292,7 @@ const demoBanner = () => (api.mode() === 'demo' ? '<div class="banner">Demo — 
 
 async function feedView() {
   $('#view').innerHTML = `${demoBanner()}
+    <section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>
     <section class="card today" id="today"><div class="skeleton line"></div></section>
     <section class="feelhero" id="feel"><div class="skeleton line"></div></section>
     <div id="usNotes"></div>
@@ -299,6 +300,7 @@ async function feedView() {
     <div id="goldNews"></div>
     <div id="posts"><div class="skeleton card"></div><div class="skeleton card"></div></div>`;
   goldNews();
+  renderYourDay();
   importUs().catch(() => {});
   const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts(), loadUs()]);
   renderFeel(); renderNotes(); renderToday(); renderComingLine();
@@ -572,6 +574,55 @@ async function renderHappy() {
 }
 // 🦮 When to walk: the trackers' weather scoring (San Jose), and how hot the pavement gets.
 // Today's walk weather (cached 30 minutes): the best hour, the hottest pavement, the hourly strip.
+// Your own trackers (unlocked), read once a minute at most: Today and Your day both use them.
+let mineCache = null;
+function myTrackers() {
+  if (!mineCache || Date.now() - mineCache.at > 60000 || mineCache.fid !== state.fid) {
+    mineCache = { at: Date.now(), fid: state.fid, p: api.get(`/families/${state.fid}/members/${fam().me}/data`).then(openData).catch(() => null) };
+  }
+  return mineCache.p;
+}
+// 🏃 Your day (top of the feed): the best run and ride windows, dog walks, and your Movement
+// classes, in time order — what the trackers' Home used to show. After 9 PM it plans tomorrow.
+async function renderYourDay() {
+  const el = $('#yourDay');
+  if (!el) return;
+  try {
+    const [{ B, hourly }, mine] = await Promise.all([walkWeather(), myTrackers()]);
+    if (!$('#yourDay')) return;
+    const clock = (d) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(':00', '');
+    const temps = (start, n) => { const ts = hourly.slice(start, start + n + 1).map((h) => Math.round(h.temp)); const lo = Math.min(...ts), hi = Math.max(...ts); return hi - lo < 2 ? `${lo}°` : `${lo}–${hi}°`; };
+    const { from, end, late } = B.planRange(hourly, new Date());
+    const day = hourly[from].time;
+    const items = [], acts = [];
+    const run = B.bestWindow(hourly, 'run', 1, from, end), bike = B.bestWindow(hourly, 'bike', 3, from, end);
+    if (run?.score > 0) acts.push({ w: run, item: { t: hourly[run.start].time, label: '🏃 Run', temp: temps(run.start, 1) } });
+    if (bike?.score > 0) acts.push({ w: bike, item: { t: hourly[bike.start].time, label: '🚴 Ride', temp: temps(bike.start, 3), note: `until ${clock(new Date(hourly[bike.start + 2].time.getTime() + 36e5))}` } });
+    if ((fam().modules || []).includes('dogs') && dogsOf().length) {
+      const walks = B.dogWalks(hourly, from);
+      // A dog walk inside a run or ride window rides along (🐾 on that line).
+      for (const wk of [walks.morning, walks.evening]) {
+        if (!wk || wk.index >= end) continue;
+        const with_ = acts.filter((a) => wk.index >= a.w.start && wk.index < a.w.start + a.w.hours);
+        if (with_.length) for (const a of with_) a.paw = true;
+        else items.push({ t: hourly[wk.index].time, label: '🐕 Walk the dogs', temp: temps(wk.index, 1) });
+      }
+    }
+    for (const a of acts) items.push(a.paw ? { ...a.item, label: `${a.item.label} 🐾` } : a.item);
+    for (const c of B.classesOn(Array.isArray(mine?.gymClasses) ? mine.gymClasses : [], day)) {
+      const [hh, mm] = String(c.time).split(':').map(Number);
+      const t = new Date(day); t.setHours(hh, mm || 0, 0, 0);
+      items.push({ t, label: `${B.CLASS_TYPES[c.type]?.split(' ')[0] || '🧗'} ${c.name}`, note: B.GYMS[c.gym]?.short || '' });
+    }
+    const now = Date.now();
+    const list = items.filter((i) => late || i.t.getTime() + 36e5 > now).sort((a, b) => a.t - b.t);
+    const gyms = Object.keys(B.GYMS).map((k) => `<span><b>${esc(B.GYMS[k].short)}</b> <a href="${B.gymSchedule(k, 'yoga')}" target="_blank" rel="noopener">🧘 Yoga</a> · <a href="${B.gymSchedule(k, 'fitness')}" target="_blank" rel="noopener">🏋️ Fitness</a></span>`).join('');
+    el.innerHTML = `<div class="row between"><b>🏃 ${late ? `Tomorrow · ${day.toLocaleDateString(undefined, { weekday: 'long' })}` : 'Your day'}</b><span class="small muted">best times outside</span></div>
+      ${list.length ? `<ul class="dayplan">${list.map((i) => `<li><b>${clock(i.t)}</b><span>${esc(i.label)}${i.temp ? ` <span class="plan-temp">${i.temp}</span>` : ''}</span>${i.note ? `<small class="muted">${esc(i.note)}</small>` : ''}</li>`).join('')}</ul>` : '<p class="small muted">No good run, ride or walk windows left today.</p>'}
+      <div class="gymlinks small">🧗 Movement classes: ${gyms}</div>
+      ${acts.length > 1 ? '<p class="tiny muted">Run and ride are alternatives — pick whichever fits.' + (list.some((i) => i.label.endsWith('🐾')) ? ' 🐾 = a good time to walk the dogs too.' : '') + '</p>' : ''}`;
+  } catch { if ($('#yourDay')) $('#yourDay').remove(); }
+}
 async function walkWeather() {
   const B = await import('../js/brief.js');
   let cached = null;
@@ -959,7 +1010,7 @@ async function renderToday() {
   const tile = (ico, label, value, sub = '', attrs = '') => `<button type="button" class="tile" ${attrs}>${ico} ${label}<b>${value}</b>${sub ? `<small class="muted">${sub}</small>` : ''}</button>`;
   const [care, mine, weather] = await Promise.all([
     (fam().modules || []).includes('dogs') ? api.get(`/families/${state.fid}/care?to=${today}&days=1`).catch(() => null) : null,
-    api.get(`/families/${state.fid}/members/${fam().me}/data`).then(openData).catch(() => null),
+    myTrackers(),
     (fam().modules || []).includes('dogs') ? walkWeather().catch(() => null) : null,
   ]);
   if (!$('#today')) return;
