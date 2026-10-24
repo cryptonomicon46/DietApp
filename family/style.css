@@ -287,3 +287,5 @@ fieldset.chips.plain { border: 0; padding: 0; margin: 0; } fieldset.chips legend
 details.house > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 details.house > summary::-webkit-details-marker { display: none; }
 details.house .fold { margin-left: auto; color: var(--brand); font-weight: 700; font-size: .8rem; text-transform: none; letter-spacing: 0; }
+.care-acts { display: inline-flex; align-items: center; gap: 14px; flex: none; }
+.care-acts button + button::before { content: '·'; color: var(--muted); margin-right: 14px; font-weight: 400; }
