@@ -252,10 +252,12 @@ function renderPosts() {
 }
 function postCard(p) {
   const author = p.own && p.fid === state.fid ? member(p.by) : null;
-  const who = author || { id: p.by, name: p.byName, avatar: p.byAvatar };
+  // A golden-day post from the dogs shows all of them as the author.
+  const who = p.fromPets ? { id: p.by, kind: 'pet', name: p.byName, avatar: author?.avatar || p.byAvatar } : author || { id: p.by, name: p.byName, avatar: p.byAvatar };
   const open = state.open[p.id];
   const comments = open ? p.comments : p.comments.slice(-2);
-  return `<article class="post card" data-post="${p.id}" data-fid="${p.fid}">
+  return `<article class="post card${p.golden ? ' golden-post' : ''}" data-post="${p.id}" data-fid="${p.fid}">
+    ${p.golden ? '<div class="golden-tag">⭐ Golden day</div>' : ''}
     <header><button type="button" class="who" ${author ? `data-member="${author.id}"` : ''}>${avatar(who, 38)}<span><b>${esc(who.name)}</b><small class="muted">${p.fid !== state.fid ? `${esc(p.familyName)} · ` : ''}${ago(p.at)} · ${p.audience === 'connections' ? '👥 Family & friends' : '🏠 Family'}</small></span></button>
       ${p.reported ? `<span class="pill warn" title="Reported by someone in the family">🚩 ${p.reported}</span>` : ''}<button type="button" class="icon-btn" data-act="postmenu" aria-label="Post options">⋯</button></header>
     ${p.help ? helpBlock(p) : ''}
@@ -480,6 +482,8 @@ function meView() {
   const hasLegacy = Object.keys(localStorage).some((k) => k.startsWith('lp.p.'));
   $('#view').innerHTML = `${demoBanner()}
     <section class="card profile">${avatar({ ...my, avatar: my.avatar || state.user.picture }, 72)}<h2>${esc(my.name)}</h2><div class="muted small">${esc(state.user.email)} · ${api.mode() === 'demo' ? 'Demo account' : 'Google account'}</div></section>
+    ${(f.modules || []).includes('dogs') && f.members.some((m) => m.kind === 'pet') ? `<section class="card"><form id="petCallsForm" class="row"><label class="grow">What the pets call you<input name="petCalls" maxlength="20" placeholder="e.g. Dad, Mom, Auntie" value="${esc(my.petCalls || '')}"></label><button class="ghost">Save</button></form>
+      <p class="tiny muted">Used when the dogs thank you for a ⭐ golden day.</p></section>` : ''}
     <h3>Privacy</h3>
     <section class="card"><b>Who can see my diet & fitness</b><p class="small muted">Weight, meals and training. Off for everyone until you turn it on.</p>
       ${others.length ? `<ul class="list toggles">${others.map((o) => `<li><label class="switch-row">${avatar(o, 32)}<span>${esc(o.name)} <small class="muted">${esc(relLabel(o))}</small></span><input type="checkbox" data-share="${o.id}" ${(my.shareWith || []).includes(o.id) ? 'checked' : ''}><i class="switch"></i></label></li>`).join('')}</ul>`
@@ -493,6 +497,7 @@ function meView() {
     ${my.role === 'owner' ? `<h3>Family settings</h3><section class="card stack">
       <form id="famSettings" class="stack"><label>Family name<input name="name" maxlength="40" value="${esc(f.name)}"></label>
         <fieldset class="modules"><legend>What ${esc(f.name)} manages</legend>${Object.entries(MODULES).map(([k, v]) => `<label class="check"><input type="checkbox" name="mod" value="${k}" ${(f.modules || []).includes(k) ? 'checked' : ''}><span>${v}</span></label>`).join('')}</fieldset>
+        <label class="check"><input type="checkbox" name="goldenPosts" ${f.goldenPosts !== false ? 'checked' : ''}><span>🐾 On a ⭐ golden day, the dogs post a thank-you on the feed</span></label>
         <button class="ghost">Save</button></form>
       ${others.filter((o) => o.relation !== 'child').length ? `<button type="button" class="linkish small" data-act="handover">Hand ${esc(f.name)} over to someone else</button>` : ''}
       <button type="button" class="linkish small danger" data-act="deletefamily">Delete ${esc(f.name)}…</button></section>`
@@ -696,7 +701,11 @@ document.addEventListener('click', (e) => {
   if (d.care) {
     const box = t.getBoundingClientRect();
     celebrate(d.care, box.left + box.width / 2, box.top + box.height / 2);
-    return act(async () => { await api.post(`/families/${state.fid}/care`, { kind: d.care, date: isoLocal(), by: careBoth ? 'both' : 'me' }); renderCare(); renderRace(); });
+    return act(async () => {
+      const r = await api.post(`/families/${state.fid}/care`, { kind: d.care, date: isoLocal(), by: careBoth ? 'both' : 'me' });
+      renderCare(); renderRace();
+      if (r.golden) { state.feed = [r.golden, ...state.feed]; setTimeout(() => toast(`⭐ Golden day! ${r.golden.byName} left you a note on the feed`), 1600); }
+    });
   }
   if (d.careundo) return act(async () => { await api.del(`/families/${state.fid}/care/${isoLocal()}/${d.careundo}`); renderCare(); renderRace(); });
   if (d.unblock) return act(async () => { await api.del(`/account/blocks/${d.unblock}`); state.user.blocked = state.user.blocked.filter((b) => b.id !== d.unblock); meView(); });
@@ -871,7 +880,11 @@ document.addEventListener('submit', (e) => {
   }
   if (f.id === 'famSettings') {
     e.preventDefault();
-    return act(async () => { await api.patch(`/families/${state.fid}`, { name: v.name, modules: new FormData(f).getAll('mod') }); await loadFamily(); chrome(true); toast('Saved'); });
+    return act(async () => { await api.patch(`/families/${state.fid}`, { name: v.name, modules: new FormData(f).getAll('mod'), goldenPosts: !!v.goldenPosts }); await loadFamily(); chrome(true); toast('Saved'); });
+  }
+  if (f.id === 'petCallsForm') {
+    e.preventDefault();
+    return act(async () => { await api.patch(`/families/${state.fid}/members/${fam().me}`, { petCalls: v.petCalls.trim() }); await loadFamily(); toast(v.petCalls.trim() ? `The pets will call you ${v.petCalls.trim()} 🐾` : 'Saved'); });
   }
   if (f.id === 'deleteForm') {
     e.preventDefault();

@@ -31,6 +31,7 @@
 // and accept the terms (13+) before using it; shared posts can be reported, hidden, and their
 // authors blocked (Apple 1.2).
 
+import { isGolden, dayHighlights, goldenMessage } from './goldenPost.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
 const SESSION_TTL = 30 * 86400;
@@ -94,7 +95,7 @@ const store = (kv) => ({
 const memberView = (m, inside) => ({
   id: m.id, kind: m.kind, name: m.name, relation: m.relation, species: m.species, breed: m.breed, born: m.born,
   avatar: m.avatar, status: m.uid ? 'active' : m.email ? 'invited' : 'managed', role: m.role,
-  ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], legacyId: m.legacyId || '' } : {}),
+  ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], legacyId: m.legacyId || '', petCalls: m.petCalls || '' } : {}),
 });
 
 export async function familyApi(req, env, path) {
@@ -297,6 +298,7 @@ export async function familyApi(req, env, path) {
       if (body.name != null) fam.name = clean(body.name, 40) || fam.name;
       if (Array.isArray(body.modules)) fam.modules = body.modules.filter((x) => MODULES.includes(x));
       if (body.goldPrize != null) fam.goldPrize = clean(body.goldPrize, 80);
+      if (typeof body.goldenPosts === 'boolean') fam.goldenPosts = body.goldenPosts;
       if (body.share && typeof body.share === 'object') fam.share = { kids: !!body.share.kids, pets: body.share.pets !== false };
       await db.put(`family:${fam.fid}`, fam);
       return json({ family: familyOut(fam, user) });
@@ -356,7 +358,9 @@ export async function familyApi(req, env, path) {
       await db.put(`care:${fam.fid}:${date}`, list);
       const idx = (await db.get(`careidx:${fam.fid}`)) || [];
       if (!idx.includes(date)) await db.put(`careidx:${fam.fid}`, [...idx, date].slice(-800));
-      return json({ entry });
+      // ⭐ The day just turned golden: the dogs say thank you on the feed.
+      const golden = ['walk', 'park', 'treat'].includes(entry.kind) && !isGolden(list.slice(0, -1)) && isGolden(list) ? await goldenDayPost(db, fam, date, list) : null;
+      return json({ entry, ...(golden ? { golden: postOut(golden, user, { own: true, familyName: fam.name }) } : {}) });
     }
     // Bringing over the current app's history: replaces what an earlier import added, day by day.
     if (method === 'PUT' && !m[2]) {
@@ -461,6 +465,7 @@ export async function familyApi(req, env, path) {
     }
     if (body.name != null) t.name = clean(body.name, 40) || t.name;
     if (body.avatar != null) t.avatar = avatarOf(body.avatar);
+    if (body.petCalls != null && t.kind === 'person') t.petCalls = clean(body.petCalls, 20); // what the pets call them, e.g. Dad
     if (body.legacyId != null) t.legacyId = clean(body.legacyId, 40); // who they were in the current app
     if (t.kind === 'pet') {
       if (body.breed != null) t.breed = clean(body.breed, 40);
@@ -721,7 +726,7 @@ async function makeInvite(db, inv) {
 }
 function familyOut(fam, user) {
   const me = fam.members.find((m) => m.uid === user.uid);
-  return { fid: fam.fid, name: fam.name, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
+  return { fid: fam.fid, name: fam.name, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', goldenPosts: fam.goldenPosts !== false, share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
 }
 const url = (req) => new URL(req.url);
 // A post as one viewer sees it: no account ids (theirs or anyone else's), just "is it mine".
@@ -773,6 +778,27 @@ export function choresRace(logs, people) {
   const top = board[0]?.points || 0;
   return { board, top, leaders: top > 0 ? board.filter((r) => r.points === top).map((r) => r.id) : [] };
 }
+// The dogs' thank-you post for a golden day (once per day; the family can turn it off).
+async function goldenDayPost(db, fam, date, list) {
+  if (fam.goldenPosts === false || !(fam.modules || MODULES).includes('dogs')) return null;
+  const dogs = fam.members.filter((x) => x.kind === 'pet' && x.species === 'dog');
+  if (!dogs.length || (await db.get(`goldenpost:${fam.fid}:${date}`))) return null;
+  await db.put(`goldenpost:${fam.fid}:${date}`, 1, 40 * 86400);
+  // Thank whoever took them out or gave the treat, by what the dogs call them.
+  const ids = [...new Set(list.filter((e) => ['walk', 'park', 'treat'].includes(e.kind)).flatMap((e) => e.by))];
+  const people = ids.map((id) => fam.members.find((x) => x.id === id && x.kind === 'person')).filter(Boolean).map((x) => x.petCalls || x.name.split(/\s+/)[0]);
+  const recent = (await db.get(`goldenmsg:${fam.fid}`)) || [];
+  const { text, used } = goldenMessage({ pets: dogs.map((d) => d.name), people: people.length ? people : ['family'], day: dayHighlights(list), recent });
+  await db.put(`goldenmsg:${fam.fid}`, [used, ...recent].slice(0, 4));
+  const names = dogs.map((d) => d.name);
+  const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: dogs[0].id, byUid: null, fromPets: dogs.map((d) => d.id), golden: date,
+    byName: names.length > 1 ? `${names.slice(0, -1).join(', ')} & ${names.at(-1)}` : names[0], byAvatar: dogs[0].avatar || '', text, photo: '',
+    tags: dogs.map((d) => d.id), tagNames: Object.fromEntries(dogs.map((d) => [d.id, d.name])), tagKinds: Object.fromEntries(dogs.map((d) => [d.id, 'pet'])),
+    audience: 'family', likes: [], comments: [], at: Date.now() };
+  await db.put(`post:${fam.fid}:${post.id}`, post);
+  await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
+  return post;
+}
 const shiftDay = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 export const MODULES = ['dogs', 'chores', 'feed', 'health', 'calendar'];
 
@@ -819,6 +845,7 @@ async function deleteFamily(db, fam) {
   for (const x of fam.members) { await db.del(`data:${fam.fid}:${x.id}`); await db.del(`dataprev:${fam.fid}:${x.id}`); }
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) await db.del(`care:${fam.fid}:${d}`);
   await db.del(`careidx:${fam.fid}`);
+  await db.del(`goldenmsg:${fam.fid}`);
   for (const c of fam.connections || []) {
     const o = await db.get(`family:${c}`);
     if (o) { o.connections = (o.connections || []).filter((f) => f !== fam.fid); await db.put(`family:${o.fid}`, o); }

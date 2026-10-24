@@ -225,3 +225,7 @@ button.ghost.danger, .danger { color: #c0392b; }
 .ticket summary { cursor: pointer; font-size: .9rem; }
 .ticket.done summary { opacity: .6; }
 .pet-photo { align-items: center; gap: 14px; }
+.caption { white-space: pre-line; }
+.golden-post { border: 1.5px solid #e8c25a; background: linear-gradient(180deg, #fff8e1, var(--card) 120px); }
+.golden-tag { font-size: .75rem; font-weight: 700; color: #a87a00; margin-bottom: 6px; letter-spacing: .02em; }
+.grow { flex: 1; }

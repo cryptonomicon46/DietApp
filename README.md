@@ -78,6 +78,7 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
 - **Choose what to manage:** when creating a family, pick from 🐶 Dogs, 🧺 Chores, 📸 Feed, 🥗 Diet & fitness and 📅 Calendar. Change it later in Me › Family settings, where the creator can also rename the family, hand it over or delete it.
 - **🏆 Chores** (tab): one shared log for the family. Tap what you did, and 👫 logs it for both of you; you can undo your own entries.
   - **The dogs:** 🍳 Breakfast, 🍲 Dinner, 🦮 Walk, 🌳 Dog park, 🦴 Treat, 💊 Meds, with ⭐ Golden day and a week strip.
+  - **The dogs say thank you:** when a day turns ⭐ golden, the dogs post a note on the feed thanking whoever took them out ("Dear Dad, thank you for a walk and the dog park… P.S. Please disregard any sock incidents. Forever yours, …"). Each note is put together from a greeting, a line about the day, a quirky P.S. and a sign-off, and recent lines aren't reused, so they read differently every time. One post a day, family only. Set what the pets call you in **Me › What the pets call you** (Dad, Mom…), and the family's creator can turn the notes off in Family settings.
   - **The house:** 💩 Poop patrol, 🗑️ Garbage, 🧺 Laundry, 🛒 Groceries, 🧽 Cleaning, 🍽️ Dishes.
   - **Points by effort** (cleaning 4; laundry and groceries 3; walks, park and poop patrol 2; feeding, meds, garbage and dishes 1; treats are for love). Every tap gets a little burst of ✨ and says where you stand.
   - **The Gold Card:** the month's top scorer wins a gold card, with a prize the family's creator sets (e.g. "picks date night"). A tie shares it. The race shows points, chores and 🔥 streaks, the winner tops the feed in the first week of the next month, and past winners go in the **Hall of fame**.
@@ -385,6 +386,7 @@ Run `node scripts/bump-version.mjs` before committing. It gives every app file a
 | `js/brief.js`, `js/briefTab.js` | Weather, walk / run / ride windows, dog buttons, golden days, scoreboard |
 | `family/` | 👨‍👩‍👧 OurPawmily Families (preview): sign-in, families, invites, feed, privacy, bringing data over |
 | `server/family.js` | The family API (`/v2/…` on the connector; also runs on the phone for the demo), help desk, nightly maintenance |
+| `server/goldenPost.js` | ⭐ The dogs' golden-day thank-you notes |
 | `server/helpAgent.js`, `server/helpGuide.js` | 💬 The help assistant (Claude with account tools) and the guide it answers from |
 | `js/dress.js`, `js/dressTab.js` | 👔 Dress for the day: places from the calendar, layering for each person's weather |
 | `js/dogs.js`, `js/adopt.js` | Dog profiles and documents; adoption board |
