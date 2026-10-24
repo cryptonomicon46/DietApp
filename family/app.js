@@ -280,10 +280,10 @@ function show(view, extra) {
   if (view === 'member') state.memberId = extra;
   if (view === 'compose') { state.view = state.prevView || 'feed'; return plusMenu(); }
   chrome(true);
-  document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === (view === 'member' ? 'family' : view)));
+  document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === (view === 'member' || view === 'family' ? 'me' : view)));
   window.scrollTo(0, 0);
   if (view !== 'bingo') clearInterval(bingo.timer);
-  ({ feed: feedView, family: familyView, pets: petsView, me: meView, member: memberView, bingo: bingoView })[view]?.();
+  ({ feed: feedView, family: familyView, pets: petsView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView })[view]?.();
 }
 const demoBanner = () => (api.mode() === 'demo' ? '<div class="banner">Demo — everything stays on this phone.</div>' : '');
 
@@ -777,6 +777,9 @@ function meView() {
   const hasLegacy = Object.keys(localStorage).some((k) => k.startsWith('lp.p.'));
   $('#view').innerHTML = `${demoBanner()}
     <section class="card profile">${avatar({ ...my, avatar: my.avatar || state.user.picture }, 72)}<h2>${esc(my.name)}</h2><div class="muted small">${esc(state.user.email)} · ${api.mode() === 'demo' ? 'Demo account' : 'Google account'}</div></section>
+    <h3 class="row between"><span>👨‍👩‍👧 ${esc(f.name)}</span><button type="button" class="linkish small" data-view="family">Manage ›</button></h3>
+    <section class="card"><ul class="list">${f.members.map((x) => `<li><button type="button" class="member-row" data-member="${x.id}">${avatar(x, 34)}<span><b>${esc(x.id === my.id ? 'You' : x.name)}</b><small class="muted">${esc(relLabel(x))}${x.status === 'invited' ? ' · invited' : ''}</small></span><span class="go">›</span></button></li>`).join('')}</ul>
+      <div class="row wrap"><button type="button" class="ghost small" data-act="addperson">＋ Person</button><button type="button" class="ghost small" data-act="addpet">＋ Pet</button><button type="button" class="ghost small" data-view="family">💌 Invite a friend's family</button></div></section>
     ${(f.modules || []).includes('dogs') && f.members.some((m) => m.kind === 'pet') ? `<section class="card"><form id="petCallsForm" class="row"><label class="grow">What the pets call you<input name="petCalls" maxlength="20" placeholder="e.g. Dad, Mom, Auntie" value="${esc(my.petCalls || '')}"></label><button class="ghost">Save</button></form>
       <div class="chips">${['Dad', 'Mom'].map((x) => `<button type="button" class="chip" data-petcalls="${x}">${x}</button>`).join('')}</div>
       <p class="tiny muted">Used when the dogs thank you for a ⭐ golden day. Until you choose, they write to "Mom &amp; Dad".</p></section>` : ''}
@@ -981,6 +984,7 @@ function plusMenu() {
     ['note', '💌', 'Leave a note', 'a post-it just for you two'],
     ['post', '📸', 'Post', 'a photo or update for the family'],
     ...((fam().modules || []).includes('dogs') ? [['apptnew', '🐾', 'Dog appointment', 'grooming, vet, vaccine']] : []),
+    ['eventnew', '📅', 'Calendar event', 'family only'],
     ['askhelp', '🙋', 'Ask for help', 'pet sitting, babysitting, a ride'],
   ];
   openSheet(`<h2>What would you like to do?</h2><div class="pluslist">${items.map(([act, ico, title, sub, hot]) => `<button type="button" class="pl ${hot || ''}" data-act="${act}"><b>${ico}</b><span><strong>${esc(title)}</strong><small>${esc(sub)}</small></span></button>`).join('')}</div>`);
@@ -1006,6 +1010,172 @@ async function importUs() {
 async function usChanged(r) {
   await loadUs(); renderFeel(); renderNotes(); renderToday(); renderComingLine();
   return r;
+}
+
+// ---------- 📅 the family calendar (family only; titles, places and notes end-to-end encrypted) ----------
+const calm = { month: null, day: null, events: [], feeds: [], golden: [], rhythm: null, C: null };
+const calModule = () => import('../js/calendar.js');
+async function loadCal() {
+  calm.C ||= await calModule();
+  const [r, stats] = await Promise.all([
+    api.get(`/families/${state.fid}/events`).catch(() => ({ events: [], feeds: [] })),
+    (fam().modules || []).includes('dogs') ? api.get(`/families/${state.fid}/dogstats?today=${isoLocal()}`).catch(() => null) : null,
+    loadAppts(), loadUs(),
+  ]);
+  calm.events = await Promise.all(r.events.map(async (e) => ({ ...e, ...((await unlock(e.body)) || { title: '🔒 Locked', locked: true }) })));
+  calm.feeds = (await Promise.all(r.feeds.map(async (f) => ({ ...f, ...((await unlock(f.body)) || {}) })))).filter((f) => f.url);
+  calm.golden = stats?.goldenDays || [];
+  refreshFeeds().catch(() => {});
+}
+// Linked calendars (iCloud, Google): fetched through the connector, kept on this device for 30 minutes.
+const feedCache = () => { try { return JSON.parse(localStorage.getItem('fam.calFeeds') || '{}'); } catch { return {}; } };
+async function refreshFeeds(force = false) {
+  const cache = feedCache();
+  const due = calm.feeds.filter((f) => force || Date.now() - (cache[f.id]?.at || 0) > 30 * 60000);
+  if (!due.length) return;
+  const from = shiftLocal(isoLocal(), -30);
+  for (const f of due) {
+    try {
+      const { ics } = await api.get(`/ics?url=${encodeURIComponent(f.url)}`);
+      cache[f.id] = { at: Date.now(), events: calm.C.parseIcs(ics, { localTz: Intl.DateTimeFormat().resolvedOptions().timeZone, from, source: f.name }).slice(0, 1500) };
+    } catch (err) { cache[f.id] = { ...(cache[f.id] || {}), at: Date.now(), error: err.message }; }
+  }
+  try { localStorage.setItem('fam.calFeeds', JSON.stringify(cache)); } catch { /* full */ }
+  if (state.view === 'calendar') renderCal();
+}
+// Everything on one day, in time order: events, linked calendars, dog drop-offs and pick-ups,
+// plans, Call Mom windows. {time, icon, title, sub, cls, open}
+async function dayEntries(day) {
+  const out = [];
+  const C = calm.C;
+  for (const e of C.eventsOn(calm.events, day)) out.push({ time: e.allDay ? '' : e.start, icon: '📅', title: e.title, sub: [e.place, (e.who || []).map((id) => (id === fam().me ? 'You' : member(id)?.name)).filter(Boolean).join(', ')].filter(Boolean).join(' · '), cls: 'fam', open: `data-event="${e.id}"` });
+  const cache = feedCache();
+  for (const f of calm.feeds) for (const e of C.eventsOn(cache[f.id]?.events || [], day)) out.push({ time: e.allDay ? '' : e.start, icon: '📲', title: e.title, sub: `${f.name}${f.by !== fam().me ? ` · ${member(f.by)?.name || ''}` : ''}`, cls: 'fam' });
+  for (const a of dogsHub.appts.filter((x) => x.status !== 'done')) {
+    const pets = a.pets.map((id) => member(id)?.name).filter(Boolean).join(' & ');
+    const [ico, label] = APPT[a.type] || APPT.other;
+    for (const [k, verb] of [['drop', 'Drop off'], ['pick', 'Pick up']]) {
+      const at = a[`${k}At`];
+      if (!at || at.slice(0, 10) !== day) continue;
+      const by = a[`${k}By`];
+      out.push({ time: at.slice(11, 16), icon: k === 'drop' ? ico : '🏁', title: `${verb} ${pets} · ${label.toLowerCase()}`, sub: by ? who(by) : '<span class="tone-warn">nobody yet — tap to take it</span>', cls: 'dog', open: `data-apptopen="${a.id}"` });
+    }
+  }
+  for (const p of us.plans.filter((x) => !x.done && x.day === day)) out.push({ time: p.time || '', icon: (KINDS[p.kind] || KINDS.other)[0], title: planTitle(p), sub: p.agreed ? "it's a plan 🙌" : 'waiting for an answer', cls: 'plan' });
+  // 📞 Call Mom windows, for whoever the trackers set them up for.
+  if (me()?.legacyId) {
+    const B = await import('../js/brief.js');
+    if (B.CALL.who === me().legacyId) for (const w of B.callWindows(day)) out.push({ time: `${String(w.start.getHours()).padStart(2, '0')}:${String(w.start.getMinutes()).padStart(2, '0')}`, icon: '📞', title: 'Call Mom window', sub: `until ${w.end.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`, cls: 'fam' });
+  }
+  return out.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+}
+const timeLabel = (t) => (t ? new Date(`2000-01-01T${t}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(':00', '').replace(' ', '').toLowerCase() : 'all day');
+async function calendarView() {
+  calm.month ||= isoLocal().slice(0, 7); calm.day ||= isoLocal();
+  $('#view').innerHTML = `${demoBanner()}<section class="card" id="calMonth"><div class="skeleton line"></div></section><div id="calRhythm"></div><div id="calDay"></div><div id="calNext"></div><div id="calFeeds"></div>
+    <p class="tiny muted center pad">🔒 Only your family sees this calendar — friends' families see nothing. Titles, places and notes are end-to-end encrypted.</p>`;
+  await loadCal();
+  importCal().catch(() => {});
+  renderCal();
+}
+async function renderCal() {
+  if (!$('#calMonth')) return;
+  const [y, mo] = calm.month.split('-').map(Number);
+  const first = new Date(y, mo - 1, 1), start = new Date(first); start.setDate(1 - first.getDay());
+  const days = Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return isoLocal(d); });
+  const weeks = days.slice(35).every((d) => !d.startsWith(calm.month)) ? days.slice(0, 35) : days;
+  const cache = feedCache();
+  const dots = (d) => {
+    const out = [];
+    if (dogsHub.appts.some((a) => a.status !== 'done' && [a.dropAt, a.pickAt].some((x) => x?.startsWith(d)))) out.push('dv');
+    if (calm.C.eventsOn(calm.events, d).length || calm.feeds.some((f) => calm.C.eventsOn(cache[f.id]?.events || [], d).length)) out.push('df');
+    if (us.plans.some((p) => !p.done && p.day === d)) out.push('dp');
+    if (calm.golden.includes(d)) out.push('dg');
+    return out.map((c) => `<i class="${c}"></i>`).join('');
+  };
+  $('#calMonth').innerHTML = `<div class="row between"><button type="button" class="linkish" data-calmove="-1" aria-label="Previous month">‹</button><b>${first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</b><button type="button" class="linkish" data-calmove="1" aria-label="Next month">›</button></div>
+    <div class="cal7">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((x) => `<div class="dh">${x}</div>`).join('')}${weeks.map((d) => `<button type="button" class="d ${d.startsWith(calm.month) ? '' : 'o'} ${d === isoLocal() ? 't' : ''} ${d === calm.day ? 'sel' : ''}" data-calday="${d}">${+d.slice(8)}<span class="dots">${dots(d)}</span></button>`).join('')}</div>
+    <div class="legend"><span><i class="dv"></i>Dogs</span><span><i class="df"></i>Family</span><span><i class="dp"></i>Plans</span><span><i class="dg"></i>⭐ Golden</span></div>`;
+  const list = (entries) => entries.map((e) => `<button type="button" class="ev ${e.cls}" ${e.open || ''}><span class="tm">${timeLabel(e.time)}</span><span><b>${e.icon} ${esc(e.title)}</b>${e.sub ? `<small class="muted"> · ${e.sub}</small>` : ''}</span></button>`).join('');
+  const sel = await dayEntries(calm.day);
+  const label = calm.day === isoLocal() ? 'Today' : new Date(`${calm.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  $('#calDay').innerHTML = `<h3 class="row between"><span>${esc(label)}</span><button type="button" class="linkish small" data-act="eventnew">＋ Event</button></h3>
+    <section class="card agenda">${sel.length ? list(sel) : '<p class="small muted">Nothing on this day.</p>'}</section>`;
+  // Coming up: the next two weeks after the chosen day.
+  const next = [];
+  for (let i = 1, d = shiftLocal(calm.day, 1); i <= 14 && next.length < 10; i++, d = shiftLocal(d, 1)) for (const e of await dayEntries(d)) next.push({ ...e, time: e.time, day: d });
+  $('#calNext').innerHTML = next.length ? `<h3>Coming up</h3><section class="card agenda">${next.slice(0, 10).map((e) => `<button type="button" class="ev ${e.cls}" ${e.open || ''}><span class="tm">${new Date(`${e.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' })} ${timeLabel(e.time)}</span><span><b>${e.icon} ${esc(e.title)}</b>${e.sub ? `<small class="muted"> · ${e.sub}</small>` : ''}</span></button>`).join('')}</section>` : '';
+  const fc = feedCache();
+  $('#calFeeds').innerHTML = `<details class="card"><summary><b>📲 Linked calendars</b> <span class="small muted">${calm.feeds.length ? `${calm.feeds.length} linked` : 'bring in your iPhone or Google calendar'}</span></summary>
+    ${calm.feeds.length ? `<ul class="list">${calm.feeds.map((f) => `<li class="row between small"><span><b>${esc(f.name)}</b> <small class="${fc[f.id]?.error ? 'tone-warn' : 'muted'}">${fc[f.id]?.error ? esc(fc[f.id].error) : fc[f.id]?.events ? `${fc[f.id].events.length} events` : 'loading…'}</small></span>${f.by === fam().me ? `<button type="button" class="linkish small danger" data-feeddel="${f.id}">Unlink</button>` : ''}</li>`).join('')}</ul><button type="button" class="linkish small" data-act="feedsrefresh">↻ Refresh</button>` : ''}
+    <form id="feedForm" class="stack"><p class="small">iPhone: Calendar app › Calendars › ⓘ next to yours › turn on <b>Public Calendar</b> › Share Link › Copy. Google: Settings › your calendar › <b>Secret address in iCal format</b>.</p>
+      <label>Name<input name="name" maxlength="40" required placeholder="My iPhone calendar"></label><label>Link<input name="url" required placeholder="webcal://p…icloud.com/…"></label>
+      <label class="check"><input type="checkbox" name="both"><span>It's for both of us</span></label><button>Link it</button></form></details>`;
+  // 💞 2-2-2-2: what's due, from the trackers' log.
+  rhythmLine().catch(() => {});
+}
+async function rhythmLine() {
+  const el = $('#calRhythm');
+  if (!el) return;
+  const mine = await openData(await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null));
+  const entries = Array.isArray(mine?.rhythm) ? mine.rhythm : [];
+  if (!entries.length) { el.innerHTML = ''; return; }
+  const R = await import('../js/rhythm.js');
+  const st = R.rhythmStatus(entries, isoLocal());
+  const n = R.nextNudge(st);
+  el.innerHTML = `<section class="card small rhythm-line">💞 <b>2-2-2-2</b> · ${['date', 'overnight', 'getaway'].map((k) => `${R.RHYTHMS[k].icon} ${st[k].level === 'due' ? '<b class="tone-warn">due</b>' : st[k].level === 'soon' ? `in ${Math.max(0, st[k].daysLeft)}d` : '✓'}`).join(' · ')}${n ? ` — ${esc(R.RHYTHMS[n.kind].label)} ${n.level === 'due' ? 'is due' : 'is coming up'}` : ''}</section>`;
+}
+function eventSheet(ev = null, day = calm.day || isoLocal()) {
+  const v = ev || { date: day, allDay: false, start: '', end: '', who: [fam().me], remind: 60, repeat: null };
+  const C = calm.C;
+  const people = fam().members.filter((m) => m.kind === 'person' || m.kind === 'pet');
+  openSheet(`<h2>${ev ? 'Edit event' : '📅 New event'}</h2>
+    <form id="eventForm" class="stack" data-id="${ev?.id || ''}">
+      <label>What<input name="title" required maxlength="100" value="${esc(v.title || '')}" placeholder="Diwali dinner at Mom's 🪔"></label>
+      <label class="check"><input type="checkbox" name="allDay" ${v.allDay ? 'checked' : ''}><span>All day</span></label>
+      <div class="two"><label>Day<input type="date" name="date" required value="${esc(v.date)}"></label><label class="timeonly" ${v.allDay ? 'hidden' : ''}>Starts<input type="time" name="start" value="${esc(v.start || '')}"></label></div>
+      <label class="timeonly" ${v.allDay ? 'hidden' : ''}>Ends (optional)<input type="time" name="end" value="${esc(v.end || '')}"></label>
+      <label>Where<input name="place" maxlength="100" value="${esc(v.place || '')}"></label>
+      <fieldset class="chips plain"><legend>Who's going</legend>${people.map((p) => `<label class="chipcheck"><input type="checkbox" name="who" value="${p.id}" ${(v.who || []).includes(p.id) ? 'checked' : ''}><span>${p.kind === 'pet' ? '🐾' : '👤'} ${esc(p.id === fam().me ? 'You' : p.name)}</span></label>`).join('')}</fieldset>
+      <div class="two"><label>Repeat<select name="repeat">${Object.entries(C?.REPEATS || { '': 'Does not repeat' }).filter(([k]) => k !== 'twiceMonthly').map(([k, t]) => `<option value="${k}" ${(v.repeat?.kind || '') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label>Remind<select name="remind">${Object.entries(C?.REMINDERS || { '': 'No reminder' }).map(([k, t]) => `<option value="${k}" ${String(v.remind ?? '') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>
+      <label>Notes<textarea name="notes" rows="2" maxlength="500">${esc(v.notes || '')}</textarea></label>
+      <p class="tiny muted">🔒 Family only, end-to-end encrypted.</p>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>${ev ? 'Save' : 'Add'}</button></div>
+    </form>`);
+}
+function eventDetail(e) {
+  const C = calm.C;
+  const ics = { ...e, who: 'both' };
+  openSheet(`<div class="row between"><h2>📅 ${esc(e.title)}</h2><button type="button" class="linkish small" data-act="close">Done</button></div>
+    <p class="small">${new Date(`${e.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${e.allDay ? ' · all day' : e.start ? ` · ${timeLabel(e.start)}${e.end ? `–${timeLabel(e.end)}` : ''}` : ''}${e.repeat ? ` · ${esc(C.repeatText(e))}` : ''}</p>
+    ${e.place ? `<p class="small">📍 ${esc(e.place)} · <a href="https://maps.apple.com/?q=${encodeURIComponent(e.place)}" target="_blank" rel="noopener">map</a></p>` : ''}
+    ${(e.who || []).length ? `<p class="small">👥 ${(e.who || []).map((id) => esc(id === fam().me ? 'You' : member(id)?.name || '')).join(', ')}</p>` : ''}
+    ${e.notes ? `<p class="small">“${esc(e.notes)}”</p>` : ''}
+    <div class="row wrap"><button type="button" class="ghost small" data-eventics="${e.id}">📲 Add to my phone's calendar</button><a class="btn ghost small" href="${esc(C.googleUrl(ics))}" target="_blank" rel="noopener">Google Calendar</a>
+      <button type="button" class="ghost small" data-eventedit="${e.id}">✎ Edit</button><button type="button" class="linkish small danger" data-eventdel="${e.id}">Delete</button></div>`);
+}
+// The trackers' calendar events and linked calendars, brought over once per person (locked).
+async function importCal() {
+  const flag = `fam.calImported.${state.fid}`;
+  if (LS.get(flag) || lockedHere()) return;
+  const data = await openData(await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null));
+  if (!data || data.locked) return;
+  const adults = fam().members.filter((m) => m.kind === 'person' && m.relation !== 'child').map((m) => m.id);
+  const whoOf = (w) => (w === 'both' || !w ? adults : [fam().members.find((m) => m.legacyId === w)?.id || fam().me]);
+  const events = await Promise.all((data.events || []).filter((e) => e?.id && e.date && e.title && !e.deleted).map(async (e) => ({
+    id: e.id, date: e.date, start: e.start || '', end: e.end || '', allDay: !!e.allDay, repeat: e.repeat || null, skip: e.skip || [], who: whoOf(e.who), remind: e.remind ?? null, at: e.at, updatedAt: e.updatedAt,
+    body: await lock({ title: e.title, place: e.place || '', notes: e.notes || '' }),
+  })));
+  if (events.length) await api.post(`/families/${state.fid}/events/import`, { events });
+  const feeds = await Promise.all((data.calFeeds || []).filter((f) => f?.url).map(async (f) => ({ id: f.id, who: f.who === 'both' ? 'both' : fam().me, body: await lock({ name: f.name || 'Calendar', url: f.url }) })));
+  if (feeds.length) await saveFeeds([...calm.feeds.filter((f) => f.by === fam().me).map((f) => ({ id: f.id, name: f.name, url: f.url, who: f.who })), ...feeds.map((f) => ({ ...f, raw: true }))]);
+  LS.set(flag, '1');
+  if (events.length || feeds.length) { await loadCal(); renderCal(); }
+}
+async function saveFeeds(list) {
+  const feeds = await Promise.all(list.map(async (f) => (f.raw ? { id: f.id, who: f.who, body: f.body } : { id: f.id, who: f.who, body: await lock({ name: f.name, url: f.url }) })));
+  await api.put(`/families/${state.fid}/calfeeds`, { feeds });
 }
 
 // ---------- 🎲 show bingo ----------
@@ -1390,6 +1560,13 @@ document.addEventListener('click', (e) => {
   if (d.book) return apptSheet(null, { type: 'vaccine', pets: [d.book], vaccine: d.vaccine });
   if (d.apptdel) { if (!confirm('Remove this appointment?')) return; return act(async () => { await api.del(`/families/${state.fid}/appts/${d.apptdel}`); closeSheet(); await apptChanged(); }); }
   if (d.apptundone) return act(async () => { await api.patch(`/families/${state.fid}/appts/${d.apptundone}`, { undone: true }); closeSheet(); await apptChanged(); });
+  if (d.calmove) { const [y, m] = calm.month.split('-').map(Number); const x = new Date(y, m - 1 + +d.calmove, 1); calm.month = isoLocal(x).slice(0, 7); return renderCal(); }
+  if (d.calday) { calm.day = d.calday; if (!d.calday.startsWith(calm.month)) calm.month = d.calday.slice(0, 7); return renderCal(); }
+  if (d.event) { const e = calm.events.find((x) => x.id === d.event); return e ? eventDetail(e) : null; }
+  if (d.eventedit) return eventSheet(calm.events.find((x) => x.id === d.eventedit));
+  if (d.eventdel) { if (!confirm('Delete this event?')) return; return act(async () => { await api.del(`/families/${state.fid}/events/${d.eventdel}`); closeSheet(); await loadCal(); renderCal(); }); }
+  if (d.eventics) { const e = calm.events.find((x) => x.id === d.eventics); download(new Blob([calm.C.icsCalendar([{ ...e, who: 'both' }], { name: fam().name })], { type: 'text/calendar' }), `${(e.title || 'event').replace(/[^a-z0-9]+/gi, '-').slice(0, 40)}.ics`); return; }
+  if (d.feeddel) return act(async () => { await saveFeeds(calm.feeds.filter((f) => f.by === fam().me && f.id !== d.feeddel)); await loadCal(); renderCal(); });
   if (d.feel) return feelSheet(d.feel);
   if (d.trackers) { location.href = '../'; return; }
   if (d.answer) { const [id, r] = d.answer.split(':'); return act(async () => { await api.post(`/families/${state.fid}/us/plans/${id}/reply`, { r }); await usChanged(); if (r === 'in') toast("🎉 It's a plan!"); }); }
@@ -1447,6 +1624,8 @@ document.addEventListener('click', (e) => {
     case 'demo': return demoSignIn();
     case 'help': return helpView();
     case 'feel': return feelSheet();
+    case 'eventnew': return calModule().then((C) => { calm.C = C; eventSheet(); });
+    case 'feedsrefresh': return act(async () => { await refreshFeeds(true); renderCal(); });
     case 'note': return noteSheet();
     case 'post': state.view = 'compose'; draft.help = null; return compose();
     case 'askhelp': state.view = 'compose'; draft.help = draft.help || { type: 'petsit', from: '', to: '', time: '' }; return compose();
@@ -1601,6 +1780,7 @@ document.addEventListener('change', async (e) => {
     draft.photo = await shrinkPhoto(t.files[0]).catch(() => '');
     return compose();
   }
+  if (t.form?.id === 'eventForm' && t.name === 'allDay') { t.form.querySelectorAll('.timeonly').forEach((x) => { x.hidden = t.checked; }); return; }
   if (t.form?.id === 'feelForm' && t.name === 'kind') {
     const k = KINDS[t.value] || KINDS.other;
     const w = t.form.querySelector('.kwhat'), h = t.form.querySelector('.kwhere');
@@ -1683,6 +1863,26 @@ document.addEventListener('submit', (e) => {
   if (f.id === 'famSettings') {
     e.preventDefault();
     return act(async () => { await api.patch(`/families/${state.fid}`, { name: v.name, modules: new FormData(f).getAll('mod'), goldenPosts: !!v.goldenPosts }); await loadFamily(); chrome(true); toast('Saved'); });
+  }
+  if (f.id === 'eventForm') {
+    e.preventDefault();
+    if (lockedHere()) return toast('🔒 This device needs the family key first — Me › 🔐 Encryption');
+    const fd = new FormData(f);
+    return act(async () => {
+      const b = { date: v.date, allDay: !!v.allDay, start: v.start, end: v.end, who: fd.getAll('who'), remind: v.remind === '' ? null : +v.remind, repeat: v.repeat ? { kind: v.repeat } : null, body: await lock({ title: v.title.trim(), place: v.place.trim(), notes: v.notes.trim() }) };
+      if (f.dataset.id) await api.patch(`/families/${state.fid}/events/${f.dataset.id}`, b);
+      else await api.post(`/families/${state.fid}/events`, b);
+      closeSheet(); calm.day = v.date; calm.month = v.date.slice(0, 7);
+      if (state.view === 'calendar') { await loadCal(); renderCal(); } else toast('📅 On the calendar');
+    });
+  }
+  if (f.id === 'feedForm') {
+    e.preventDefault();
+    if (!/^(webcals?|https):\/\//i.test(v.url.trim())) return toast('Paste the calendar link (webcal:// or https://)');
+    return act(async () => {
+      await saveFeeds([...calm.feeds.filter((x) => x.by === fam().me).map((x) => ({ id: x.id, name: x.name, url: x.url, who: x.who })), { id: Math.random().toString(36).slice(2, 10), name: v.name.trim(), url: v.url.trim(), who: v.both ? 'both' : fam().me }]);
+      await loadCal(); await refreshFeeds(true); renderCal(); toast('📲 Linked');
+    });
   }
   if (f.id === 'feelForm') {
     e.preventDefault();

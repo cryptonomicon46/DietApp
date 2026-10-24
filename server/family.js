@@ -22,6 +22,7 @@
 //   report:<fid>:<postId>      [{uid, reason, at}]        posts someone reported
 //   rate:<uid>:<minute>        count of changes (limits runaway clients and abuse)
 //   us:<fid>                   {plans: [{id, by, to, day, body, replies, done}], notes: [{id, by, to, body, at, hearts}], noteDays}  💞
+//   events:<fid>               {events: [{id, by, date, start, end, allDay, repeat, skip, who, remind, body}], feeds: [{id, by, who, body}]}  📅
 //   appts:<fid>                [{id, type, pets, place, dropAt, dropBy, pickAt, pickBy, repeatWeeks, vaccine, status, cost…}]  dog appointments
 //   dogmonths:<fid>            {YYYY-MM: {golden, walks}}  finished months of dog stats (cache)
 //   bingopacks:<fid>           [{id, title, squares, by, byName, at}]  show bingo card sets
@@ -442,6 +443,86 @@ export async function familyApi(req, env, path) {
   }
 
   // ---- 🏆 the month's chores race: points per person, and the Gold Card ----
+  // ---- 📅 the family calendar: events (title, place and notes sealed in body) and linked calendars ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/(events|calfeeds)(?:\/(import|[a-z0-9]+))?$/);
+  if (m) {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const me = meIn(fam);
+    const key = `events:${fam.fid}`;
+    const cal = (await db.get(key)) || { events: [], feeds: [] };
+    const save = () => db.put(key, { events: cal.events.slice(-1000), feeds: cal.feeds.slice(-40) });
+    const bodyOf = (v) => sealed(v, 6000) ?? (fam.e2ee ? null : (typeof v === 'object' && v ? JSON.stringify(v).slice(0, 3000) : null));
+    const day = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '');
+    const hhmm = (t) => (/^\d{2}:\d{2}$/.test(t || '') ? t : '');
+    const who = (list) => (Array.isArray(list) ? list : []).filter((id) => fam.members.some((x) => x.id === id)).slice(0, 20);
+    const REPEAT = ['', 'daily', 'weekly', 'biweekly', 'monthly', 'monthlyNth', 'monthlyLast', 'twiceMonthly', 'quarterly', 'yearly'];
+    const fields = (b) => ({
+      date: day(b.date), start: b.allDay ? '' : hhmm(b.start), end: b.allDay ? '' : hhmm(b.end), allDay: !!b.allDay,
+      repeat: b.repeat && REPEAT.includes(b.repeat.kind) && b.repeat.kind ? { kind: b.repeat.kind, ...(day(b.repeat.until) ? { until: b.repeat.until } : {}), ...(Number.isInteger(+b.repeat.day2) && b.repeat.day2 ? { day2: +b.repeat.day2 } : {}) } : null,
+      skip: (Array.isArray(b.skip) ? b.skip : []).filter(day).slice(-100), who: who(b.who), remind: [0, 10, 30, 60, 120, 1440].includes(+b.remind) && b.remind !== '' && b.remind != null ? +b.remind : null,
+    });
+    if (m[2] === 'events' && !m[3] && method === 'GET') return json(cal);
+    if (me.relation === 'child' && method !== 'GET') return json({ error: 'ask a grown-up' }, 403);
+    if (m[2] === 'events' && !m[3] && method === 'POST') {
+      const b = bodyOf(body.body);
+      const f = fields(body);
+      if (!b) return json({ error: 'this family is end-to-end encrypted — update the app and try again' }, 400);
+      if (!f.date) return json({ error: 'which day?' }, 400);
+      const ev = { id: randomId(8), by: me.id, ...f, body: b, at: Date.now(), updatedAt: Date.now() };
+      cal.events.push(ev); await save();
+      return json({ event: ev });
+    }
+    // The trackers' calendar events (each person brings theirs; a newer copy of the same event wins).
+    if (m[2] === 'events' && m[3] === 'import' && method === 'POST') {
+      let n = 0;
+      for (const e of (Array.isArray(body.events) ? body.events : []).slice(0, 500)) {
+        const b = bodyOf(e.body), f = fields(e), id = `t${String(e.id || '').replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 24)}`;
+        if (!b || !f.date || id === 't') continue;
+        const cur = cal.events.find((x) => x.id === id);
+        if (cur && (cur.updatedAt || 0) >= (+e.updatedAt || 0)) continue;
+        const ev = { id, by: me.id, ...f, body: b, at: +e.at || Date.now(), updatedAt: +e.updatedAt || Date.now(), src: 'import' };
+        if (cur) Object.assign(cur, ev); else cal.events.push(ev);
+        n++;
+      }
+      await save();
+      return json({ imported: n });
+    }
+    if (m[2] === 'events' && m[3]) {
+      const ev = cal.events.find((x) => x.id === m[3]);
+      if (!ev) return json({ error: 'that event is gone' }, 404);
+      if (method === 'PATCH') {
+        Object.assign(ev, fields({ ...ev, ...body }), body.body ? { body: bodyOf(body.body) || ev.body } : {}, { updatedAt: Date.now() });
+        await save();
+        return json({ event: ev });
+      }
+      if (method === 'DELETE') { cal.events = cal.events.filter((x) => x !== ev); await save(); return json({ ok: true }); }
+    }
+    // Linked calendars (iCloud / Google links, sealed): your list replaces your old one.
+    if (m[2] === 'calfeeds' && !m[3] && method === 'PUT') {
+      const mine = (Array.isArray(body.feeds) ? body.feeds : []).slice(0, 10).map((f) => ({ id: String(f.id || randomId(6)).replace(/[^a-z0-9]/gi, '').slice(0, 24) || randomId(6), by: me.id, who: f.who === 'both' ? 'both' : me.id, body: bodyOf(f.body) })).filter((f) => f.body);
+      cal.feeds = [...cal.feeds.filter((f) => f.by !== me.id), ...mine];
+      await save();
+      return json({ feeds: cal.feeds });
+    }
+    return json({ error: 'not found' }, 404);
+  }
+  // A linked calendar's events: fetched here (phones can't read other sites), from calendar hosts only.
+  if (path === '/ics' && method === 'GET') {
+    if (!(await underLimit(db, `rate:${user.uid}:ics:${Math.floor(Date.now() / 60000)}`, 30, 120))) return json({ error: 'too many — try again in a minute' }, 429);
+    let target;
+    try { target = new URL((url(req).searchParams.get('url') || '').trim().replace(/^webcals?:/i, 'https:')); } catch { return json({ error: 'not a link' }, 400); }
+    const host = target.hostname.toLowerCase();
+    if (!(target.protocol === 'https:' && (host.endsWith('.icloud.com') || host === 'calendar.google.com' || host === 'outlook.live.com' || host === 'outlook.office365.com'))) return json({ error: 'only iCloud, Google or Outlook calendar links' }, 400);
+    if (env.DEMO) return json({ error: 'linked calendars need the live connector' }, 400);
+    const res = await fetch(target.toString(), { headers: { Accept: 'text/calendar' }, redirect: 'follow' });
+    if (!res.ok) return json({ error: `calendar link answered ${res.status}` }, 502);
+    const text = await res.text();
+    if (text.length > 5_000_000) return json({ error: 'calendar too large' }, 413);
+    if (!text.includes('BEGIN:VCALENDAR')) return json({ error: 'that link is not a calendar' }, 422);
+    return json({ ics: text });
+  }
+
   // ---- 💞 just us: feeling-like plans and post-it notes ----
   m = path.match(/^\/families\/([a-z0-9]+)\/us(?:\/(plans|notes|import)(?:\/([a-z0-9]+)(\/reply|\/heart)?)?)?$/);
   if (m) {
@@ -635,7 +716,7 @@ export async function familyApi(req, env, path) {
       months.push({ ym: mo, ...cache[mo] });
     }
     if (changed) await db.put(`dogmonths:${fam.fid}`, cache);
-    return json({ month: months.at(-1), streak, months });
+    return json({ month: months.at(-1), streak, months, goldenDays: Object.entries(recent).filter(([, s]) => s.golden).map(([d]) => d) });
   }
 
   // ---- 🎲 show bingo ----
@@ -1344,6 +1425,7 @@ async function deleteFamily(db, fam) {
   await db.del(`goldenmsg:${fam.fid}`);
   await db.del(`appts:${fam.fid}`);
   await db.del(`us:${fam.fid}`);
+  await db.del(`events:${fam.fid}`);
   await db.del(`dogmonths:${fam.fid}`);
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) for (const x of fam.members) await db.del(`bingocard:${fam.fid}:${g.id}:${x.id}`);
   await db.del(`bingogames:${fam.fid}`);
