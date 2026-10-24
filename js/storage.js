@@ -85,6 +85,10 @@ export function exportProfile(id, { shared = false } = {}) {
 
 export function importProfile(id, data) {
   const prefix = `lp.p.${id}.`;
+  // About to replace a profile with a much smaller copy: keep the old one on this device first
+  // (🔐 Privacy › Recover finds it).
+  const before = JSON.stringify(exportProfile(id, { shared: true }));
+  if (before.length > 200 && JSON.stringify(data).length < before.length * 0.7) raw.set(`lp.s.${id}`, { at: Date.now(), data: JSON.parse(before) });
   // This device's own sign-ins (WHOOP/Strava) are never in a synced copy, so they stay.
   for (const k of raw.keys()) if (k.startsWith(prefix) && !(k.slice(prefix.length) in data) && !PRIVATE_KEYS.has(k.slice(prefix.length))) {
     try { localStorage.removeItem(k); } catch { /* ignore */ }

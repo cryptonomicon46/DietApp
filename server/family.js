@@ -15,6 +15,7 @@
 //   feed:<fid>                 [postId] newest first (last 300)
 //   post:<fid>:<postId>        {id, fid, by, byName, text, photo, tags, audience, likes, comments, at}
 //   data:<fid>:<memberId>      {savedAt, data}            a member's tracker data (diet, dogs…)
+//   dataprev:<fid>:<memberId>  the bigger copy, kept 90 days when a much smaller one replaced it (Recover)
 //   care:<fid>:<date>          [{id, kind, pets, by, byName, at}]   the family's dog-care log
 //   careidx:<fid>              [date]                     days that have a care log
 //   gold:<fid>                 [{month, winners, points}] Gold Card hall of fame
@@ -451,6 +452,7 @@ export async function familyApi(req, env, path) {
       for (const x of fam.members) x.shareWith = (x.shareWith || []).filter((id) => id !== t.id);
       await db.put(`family:${fam.fid}`, fam);
       await db.del(`data:${fam.fid}:${t.id}`);
+      await db.del(`dataprev:${fam.fid}:${t.id}`);
       if (t.uid) { const u = await db.get(`user:${t.uid}`); if (u) { u.families = u.families.filter((f) => f !== fam.fid); await db.put(`user:${u.uid}`, u); } }
       return json({ ok: true });
     }
@@ -468,6 +470,16 @@ export async function familyApi(req, env, path) {
   }
 
   // ---- a member's tracker data (diet, training, dogs) ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/members\/([a-z0-9]+)\/data\/prev$/);
+  if (m && method === 'GET') {
+    // The bigger copy kept when a much smaller one replaced it (see the PUT below): yours, or one
+    // you're holding for someone who hasn't joined.
+    const fam = await loadFamily(m[1]);
+    const t = fam?.members.find((x) => x.id === m[2]);
+    if (!t) return json({ error: 'not found' }, 404);
+    if (!(t.id === meIn(fam).id || (!t.uid && t.addedBy === meIn(fam).id))) return json({ error: 'not allowed' }, 403);
+    return json((await db.get(`dataprev:${fam.fid}:${t.id}`)) || { savedAt: 0, data: {} });
+  }
   m = path.match(/^\/families\/([a-z0-9]+)\/members\/([a-z0-9]+)\/data$/);
   if (m) {
     const fam = await loadFamily(m[1]);
@@ -487,6 +499,9 @@ export async function familyApi(req, env, path) {
       if (!(self || t.kind === 'pet' || (!t.uid && t.addedBy === me.id))) return json({ error: 'not allowed' }, 403);
       if (!body || typeof body.data !== 'object') return json({ error: 'expected {data}' }, 400);
       const savedAt = Date.now();
+      const old = await db.get(`data:${fam.fid}:${t.id}`);
+      const size = (x) => JSON.stringify(x || {}).length;
+      if (old && size(old.data) > 500 && size(body.data) < size(old.data) * 0.7) await db.put(`dataprev:${fam.fid}:${t.id}`, old, 90 * 86400);
       await db.put(`data:${fam.fid}:${t.id}`, { savedAt, data: body.data });
       return json({ ok: true, savedAt });
     }
@@ -755,6 +770,7 @@ async function removeMember(db, fam, t, { keepPosts = true } = {}) {
   for (const x of fam.members) x.shareWith = (x.shareWith || []).filter((id) => id !== t.id);
   await db.put(`family:${fam.fid}`, fam);
   await db.del(`data:${fam.fid}:${t.id}`);
+  await db.del(`dataprev:${fam.fid}:${t.id}`);
   if (keepPosts || !t.uid) return;
   // The family keeps its dog-care log, without their name on it.
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) {
@@ -787,7 +803,7 @@ async function scrubPosts(db, fid, uid, memberId) {
 async function deleteFamily(db, fam) {
   for (const id of (await db.get(`feed:${fam.fid}`)) || []) { await db.del(`post:${fam.fid}:${id}`); await db.del(`report:${fam.fid}:${id}`); }
   await db.del(`feed:${fam.fid}`);
-  for (const x of fam.members) await db.del(`data:${fam.fid}:${x.id}`);
+  for (const x of fam.members) { await db.del(`data:${fam.fid}:${x.id}`); await db.del(`dataprev:${fam.fid}:${x.id}`); }
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) await db.del(`care:${fam.fid}:${d}`);
   await db.del(`careidx:${fam.fid}`);
   for (const c of fam.connections || []) {

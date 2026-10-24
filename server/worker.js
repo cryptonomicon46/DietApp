@@ -129,10 +129,11 @@ export default {
       }
 
       // ---- Household sharing: /household/<code>/<person> ----
-      const hh = url.pathname.match(/^\/household\/([a-z0-9-]{12,64})\/([a-z]{2,20})$/);
+      const hh = url.pathname.match(/^\/household\/([a-z0-9-]{12,64})\/([a-z]{2,20})(\/prev)?$/);
       if (hh) {
         if (!env.HOUSEHOLD) return json({ error: 'HOUSEHOLD storage not set up — see server/README.md' }, 501);
-        const key = `${hh[1]}:${hh[2]}`;
+        const key = `${hh[1]}:${hh[2]}${hh[3] ? ':prev' : ''}`;
+        if (hh[3] && req.method !== 'GET') return json({ error: 'method not allowed' }, 405);
         if (req.method === 'GET') {
           const v = await env.HOUSEHOLD.get(key);
           return v ? new Response(v, { headers: { ...cors, 'Content-Type': 'application/json' } }) : json({ error: 'not found' }, 404);
@@ -141,6 +142,10 @@ export default {
           const body = await req.text();
           if (body.length > 2_000_000) return json({ error: 'too large' }, 413);
           try { JSON.parse(body); } catch { return json({ error: 'expected JSON' }, 400); }
+          // A much smaller copy replacing a big one is usually a phone that lost its data: keep the
+          // big one at …/prev so Recover can bring it back.
+          const old = await env.HOUSEHOLD.get(key);
+          if (old && old.length > 500 && body.length < old.length * 0.7) await env.HOUSEHOLD.put(`${key}:prev`, old);
           await env.HOUSEHOLD.put(key, body);
           return json({ ok: true });
         }

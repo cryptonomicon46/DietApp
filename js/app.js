@@ -20,8 +20,9 @@ import { initDress } from './dressTab.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
-import { sync, newHouseholdCode, DEFAULT_CONNECTOR } from './sync.js';
+import { sync, newHouseholdCode, DEFAULT_CONNECTOR, pushNow } from './sync.js';
 import { account } from './account.js';
+import { findCopies, combine, applyRecovery, counts, describe, readBackup, partnerFile } from './recover.js';
 import { renderHousehold, initHousehold } from './household.js';
 import { renderRhythm, initRhythm } from './rhythm.js';
 import { renderDexa, initDexa, allScans } from './dexa.js';
@@ -3070,9 +3071,51 @@ function renderSharing() {
     ? `Household sharing is on. Last upload ${global.get('pushedAt', 0) ? ago(global.get('pushedAt', 0)) : 'not yet'}.`
     : acct ? '' : 'Off. Both profiles still work on this phone.'}`;
   renderAccount();
-// Your own trackers changed on another phone or computer: show the new copy.
-window.addEventListener('lp:mine', () => location.reload());
 }
+// ---------- 🛟 Recover: add back anything this device is missing (never removes) ----------
+let recoverCopies = null;
+function renderRecover(msg = '') {
+  const el = $('#recoverInfo');
+  if (!el || !ownerId()) return;
+  const me = ownerId(), partner = PROFILES.find((p) => p.id !== me);
+  const pf = partner && partnerFile(partner.id);
+  const date = (t) => (t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
+  el.innerHTML = `<div class="card"><div class="eyebrow">🛟 Recover my data</div>
+    <p class="small">Missing meals, weigh-ins or dogs? This looks for every copy of your trackers — your account, the household code, earlier copies the server kept, a backup file — and adds back whatever this device is missing. It never removes or replaces anything here.</p>
+    ${recoverCopies ? `<ul class="small recover-list">${recoverCopies.map((c) => `<li><b>${esc(c.label)}</b>${c.id === 'device' ? '' : ` <span class="muted">${date(c.at)}</span>`}<br><span class="muted">${describe(counts(c.data))}</span></li>`).join('')}</ul>
+      <p class="small">Combined: <b>${describe(counts(combine(recoverCopies)))}</b></p>
+      <button type="button" id="recoverApply">Add what's missing to this device</button>`
+      : '<button type="button" class="ghost" id="recoverFind">Look for copies</button>'}
+    <label class="filebtn ghost small">Add from a backup file<input id="recoverFile" type="file" accept=".json,application/json" hidden></label>
+    ${pf ? `<p class="small muted">This device also keeps a copy of ${esc(pf.name)}'s trackers (${describe(counts(pf.data))}). If ${esc(pf.name)} is missing data, send them this file and they add it with "Add from a backup file".</p><button type="button" class="ghost small" id="recoverPartner">Save ${esc(pf.name)}'s copy as a file</button>` : ''}
+    ${msg ? `<p class="small">${msg}</p>` : ''}</div>`;
+  el.querySelectorAll('[data-reload]').forEach((b) => { b.onclick = () => location.reload(); });
+  if ($('#recoverFind')) $('#recoverFind').onclick = async () => {
+    $('#recoverFind').textContent = 'Looking…'; $('#recoverFind').disabled = true;
+    recoverCopies = await findCopies(me).catch(() => null);
+    renderRecover(recoverCopies ? '' : "Couldn't look right now — check you're online.");
+  };
+  if ($('#recoverApply')) $('#recoverApply').onclick = async () => {
+    const r = applyRecovery(me, combine(recoverCopies));
+    recoverCopies = null;
+    await pushNow();
+    renderRecover(`✅ Done. Before: ${describe(r.before)}.<br>Now: <b>${describe(r.after)}</b>. <button type="button" class="linkish" data-reload>Reload to see it</button>`);
+  };
+  $('#recoverFile').onchange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const data = readBackup(await file.text(), me);
+    if (!data) return renderRecover(`That file doesn't have ${esc(PROFILES.find((p) => p.id === me)?.name || 'your')}'s trackers in it.`);
+    const r = applyRecovery(me, data);
+    await pushNow();
+    renderRecover(`✅ Added from ${esc(file.name)}. Before: ${describe(r.before)}.<br>Now: <b>${describe(r.after)}</b>. <button type="button" class="linkish" data-reload>Reload to see it</button>`);
+  };
+  if ($('#recoverPartner')) $('#recoverPartner').onclick = async () => {
+    const f = partnerFile(partner.id);
+    renderRecover(esc(await deliver(f.blob, `${partner.id}-trackers-copy.json`)));
+  };
+}
+
 // Privacy tab: where your trackers are saved, and who can see them.
 function renderAccount() {
   const el = $('#accountInfo');
@@ -3221,6 +3264,9 @@ else if (sync.readOnly()) openPartnerNotice();
 else openProfile();
 renderHousehold(); // a changed household code asks for the new one as soon as the app opens
 renderAccount();
+renderRecover();
+// Your own trackers changed on another phone or computer: show the new copy.
+window.addEventListener('lp:mine', () => location.reload());
 // Pull workouts on open (at most every 10 min) and right after connecting.
 if (!sync.readOnly() && (justConnected || Date.now() - store.get('lastSync', 0) > 10 * 60000)) syncDevices();
 // Household: upload my latest, then fetch my partner's; reload if I'm looking at fresh data.

@@ -91,6 +91,7 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
 - **🛠 Maintainer** (Me tab, for the emails in `ADMIN_EMAILS`): problems people filed, with their help chat; app errors phones hit in the last 7 days (just the error and where, counted); and the nightly check, which repairs leftovers from half-finished changes and lists what it fixed.
 - What's in place for the App Store and Google Play, and what's left, is in [family/STORE-READINESS.md](family/STORE-READINESS.md).
 - **🥗 Trackers** (bottom bar, when the family manages Diet & fitness): the food, macros, training, dogs and calendar screens you know, now **saved to your OurPawmily account** once you're signed in. They're the same on every phone or computer you sign in on: a new device loads them before it opens, and a change on one device shows up on the others. Your partner's day comes from their account only if they've turned sharing on for you (Me › Who can see my diet & fitness). Friends' families never see anyone's trackers, and kids' details stay inside the family. WHOOP/Strava sign-ins stay on each device. The 👨‍👩‍👧 button at the top of the trackers goes back to the family app, and 🔐 Privacy shows where your trackers are saved. The household code keeps working alongside until both of you have moved over.
+- **🛟 Recover my data** (🔐 Privacy in the trackers): finds every copy of your trackers — this device, your account, the household code, the bigger copy the server keeps whenever a much smaller one replaces it, and backup files — shows what each holds, and adds back whatever this device is missing. It never removes or replaces anything. Your partner's phone keeps a copy of your data from household sharing: they tap **Save <your name>'s copy as a file** and you load it with **Add from a backup file**. Each phone also keeps the old copy before a much smaller one replaces it.
 - **Coming next:** editing vet records in the family app, a shared calendar between families, and notifications.
 
 ## 🏠 Home
@@ -392,4 +393,5 @@ Run `node scripts/bump-version.mjs` before committing. It gives every app file a
 | `js/lifting.js`, `js/lift.js` | Lifting program and log |
 | `js/sync.js`, `js/household.js`, `js/storage.js` | Profiles, household sync, changing the household code |
 | `js/account.js`, `js/accountBoot.js` | Saves the trackers to your OurPawmily account (family sign-in) |
+| `js/recover.js` | 🛟 Recover: finds every copy of your trackers and adds back what's missing |
 | `server/worker.js` | The connector |
