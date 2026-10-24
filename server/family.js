@@ -45,6 +45,7 @@ import { REPLIES, NOTE_DAYS, partnerOf, visibleTo, upcoming, agreed, streak } fr
 import { APPT_TYPES, cleanAppt, nextDue, shiftWeeks, startOf, spending } from './appts.js';
 import { parseSquares, makeCard, bingoLines, bingoPrompt, NEED, FREE } from './bingo.js';
 import { EVENTS as PICK_EVENTS, OUTCOMES, locked as pickLocked, score as pickScore, parseCouples } from './picks.js';
+import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
 const SESSION_TTL = 30 * 86400;
@@ -118,7 +119,7 @@ const memberView = (m, inside) => ({
   ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], legacyId: m.legacyId || '', petCalls: m.petCalls || '', ...(m.kind === 'pet' ? { editedAt: m.editedAt || m.addedAt || 0 } : {}) } : {}),
 });
 
-export async function familyApi(req, env, path) {
+export async function familyApi(req, env, path, ctx = null) {
   const db = store(env.HOUSEHOLD);
   const json = (data, status = 200) => ({ status, data });
   const method = req.method;
@@ -189,6 +190,13 @@ export async function familyApi(req, env, path) {
   if (!user) return json({ error: 'sign in first' }, 401);
   const saveUser = () => db.put(`user:${user.uid}`, user);
   let m;
+  // 🔔 A notification to other people's phones: sent after the answer when the connector can.
+  const tell = (uids, kind, msg) => {
+    const p = sendTo(db, env, uids, kind, msg).catch(() => 0);
+    if (ctx?.waitUntil) { ctx.waitUntil(p); return null; }
+    return p;
+  };
+  const dayWords = (d, today) => (d === today ? 'today' : d === shiftDay(today, 1) ? 'tomorrow' : `on ${new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })}`);
 
   if (path === '/auth/logout' && method === 'POST') {
     await db.del(`session:${token}`);
@@ -223,6 +231,36 @@ export async function familyApi(req, env, path) {
   if (path === '/me' && method === 'GET') {
     const fams = await families();
     return json({ user: { uid: user.uid, email: user.email, name: user.name, picture: user.picture, needsConsent: !consented, termsVersion: TERMS_VERSION, blocked: blockedOut(user), isAdmin: isAdmin(env, user) }, families: fams.map((f) => familyOut(f, user)) });
+  }
+
+  // ---- 🔔 notifications: this account's phones, and what to send them ----
+  if (path === '/push' && method === 'GET') {
+    return json({ live: !env.DEMO, publicKey: env.DEMO ? '' : (await vapidKeys(db)).publicKey, devices: ((await db.get(`pushsub:${user.uid}`)) || []).map((x) => ({ device: x.device, at: x.at, endpoint: x.endpoint })),
+      kinds: NOTIFY_KINDS, prefs: Object.fromEntries(Object.keys(NOTIFY_KINDS).map((k) => [k, wants(user, k)])) });
+  }
+  if (path === '/push/subscribe' && method === 'POST') {
+    if (env.DEMO && !env.__push) return json({ error: 'notifications need the live connector' }, 400);
+    if (!okEndpoint(body.endpoint) || !okSubKeys(body.keys)) return json({ error: "this phone's notification address doesn't look right" }, 400);
+    const subs = ((await db.get(`pushsub:${user.uid}`)) || []).filter((x) => x.endpoint !== body.endpoint);
+    subs.push({ endpoint: body.endpoint, p256dh: body.keys.p256dh, auth: body.keys.auth, device: clean(body.device, 60), at: Date.now() });
+    await db.put(`pushsub:${user.uid}`, subs.slice(-10));
+    if (validTz(body.tz) && user.tz !== body.tz) { user.tz = body.tz; await saveUser(); }
+    return json({ ok: true });
+  }
+  if (path === '/push/unsubscribe' && method === 'POST') {
+    const subs = ((await db.get(`pushsub:${user.uid}`)) || []).filter((x) => x.endpoint !== body.endpoint);
+    if (subs.length) await db.put(`pushsub:${user.uid}`, subs); else await db.del(`pushsub:${user.uid}`);
+    return json({ ok: true });
+  }
+  if (path === '/push/prefs' && method === 'PUT') {
+    user.notify = Object.fromEntries(Object.keys(NOTIFY_KINDS).map((k) => [k, body[k] !== false]));
+    await saveUser();
+    return json({ prefs: user.notify });
+  }
+  if (path === '/push/test' && method === 'POST') {
+    if (!(await underLimit(db, `rate:${user.uid}:pushtest:${Math.floor(Date.now() / 60000)}`, 3, 120))) return json({ error: 'give it a minute' }, 429);
+    const sent = await sendTo(db, env, [user.uid], null, { title: '🔔 OurPawmily', body: 'Notifications are working on this phone.', url: 'family/#me', tag: 'test' });
+    return json({ sent });
   }
 
   // ---- the maintainer's desk: problems people filed, app glitches, the nightly check ----
@@ -398,6 +436,7 @@ export async function familyApi(req, env, path) {
       if (!idx.includes(date)) await db.put(`careidx:${fam.fid}`, [...idx, date].slice(-800));
       // ⭐ The day just turned golden: the dogs say thank you on the feed.
       const golden = ['walk', 'park', 'treat'].includes(entry.kind) && !isGolden(list.slice(0, -1)) && isGolden(list) ? await goldenDayPost(db, fam, date, list) : null;
+      if (golden) await tell(adultsOf(fam, user.uid), 'fun', { title: '⭐ A golden day!', body: `${golden.byName} wrote you a thank-you`, url: 'family/#feed', tag: `golden-${date}` });
       return json({ entry, ...(golden ? { golden: postOut(golden, user, { own: true, familyName: fam.name }) } : {}) });
     }
     // Bringing over the current app's history: replaces what an earlier import added, day by day.
@@ -550,6 +589,7 @@ export async function familyApi(req, env, path) {
       if (!to.length) return json({ error: 'add your partner to the family first' }, 400);
       const plan = { id: randomId(8), by: me.id, to, audience: body.audience === 'family' ? 'family' : 'couple', day: body.day, weekend: !!body.weekend, body: b, replies: {}, done: false, at: Date.now() };
       us.plans.push(plan); await save();
+      await tell(uidsOf(fam, to, user.uid), 'us', { title: `💞 ${me.name} is feeling like something`, body: `For ${plan.weekend ? 'this weekend' : dayWords(plan.day, today)} — tap to answer`, url: 'family/#feed', tag: `plan-${plan.id}` });
       return json({ plan });
     }
     if (what === 'notes' && !id && method === 'POST') {
@@ -560,6 +600,7 @@ export async function familyApi(req, env, path) {
       us.notes.push(note);
       us.noteDays = { ...(us.noteDays || {}), [me.id]: [...new Set([...(us.noteDays?.[me.id] || []), today])].slice(-400) };
       await save();
+      await tell(uidsOf(fam, to, user.uid), 'us', { title: `💌 ${me.name} left you a note`, body: 'Tap to read it', url: 'family/#feed', tag: `note-${note.id}` });
       return json({ note });
     }
     // Bringing over the trackers' "Feeling like" plans, replies and notes (each person their own).
@@ -597,6 +638,10 @@ export async function familyApi(req, env, path) {
       if (item.replies[me.id]?.r === body.r || !REPLIES.includes(body.r)) delete item.replies[me.id];
       else item.replies[me.id] = { r: body.r, at: Date.now() };
       await save();
+      if (item.replies[me.id]) {
+        const said = { in: "🙌 is in", maybe: '🤔 says maybe', later: '⏰ says another time' }[body.r];
+        await tell(uidsOf(fam, [item.by], user.uid), 'us', agreed(item) ? { title: "🎉 It's a plan!", body: `${me.name} is in`, url: 'family/#feed', tag: `plan-${item.id}` } : { title: `${me.name} ${said}`, body: 'About your plan', url: 'family/#feed', tag: `plan-${item.id}` });
+      }
       return json({ plan: { ...item, agreed: agreed(item) } });
     }
     if (what === 'notes' && act === '/heart' && method === 'POST') {
@@ -646,6 +691,10 @@ export async function familyApi(req, env, path) {
         audience: 'family', likes: [], comments: [], at: Date.now() };
       await db.put(`post:${fam.fid}:${post.id}`, post);
       await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
+      const open = (a.dropAt && !a.dropBy) || (a.pickAt && !a.pickBy);
+      const start = startOf(a);
+      await tell(adultsOf(fam, user.uid), 'appts', { title: `${APPT_TYPES[a.type].icon} ${me.name} booked ${APPT_TYPES[a.type].label.toLowerCase()} for ${a.pets.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ')}`,
+        body: `${new Date(`${start.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}${open ? ' — can you drive?' : ''}`, url: 'family/#dogs', tag: `appt-${a.id}` });
       return json({ appt: a });
     }
     const a = list.find((x) => x.id === m[2]);
@@ -653,7 +702,11 @@ export async function familyApi(req, env, path) {
     if (method === 'DELETE') { await save(list.filter((x) => x.id !== a.id)); return json({ ok: true }); }
     if (method === 'PATCH') {
       // I'll take it: the drop-off or the pick-up (or let it go again).
-      if (body.claim === 'drop' || body.claim === 'pick') a[`${body.claim}By`] = body.release ? '' : me.id;
+      if (body.claim === 'drop' || body.claim === 'pick') {
+        a[`${body.claim}By`] = body.release ? '' : me.id;
+        await tell(adultsOf(fam, user.uid), 'appts', { title: body.release ? `🚗 ${me.name} can't do the ${body.claim === 'drop' ? 'drop-off' : 'pick-up'} after all` : `🚗 ${me.name} will do the ${body.claim === 'drop' ? 'drop-off' : 'pick-up'}`,
+          body: `${APPT_TYPES[a.type].label} for ${a.pets.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ')}`, url: 'family/#dogs', tag: `appt-${a.id}` });
+      }
       if (body.edit) Object.assign(a, cleanAppt({ ...a, ...body.edit }, ctx));
       let next = null;
       if (body.done) {
@@ -686,6 +739,17 @@ export async function familyApi(req, env, path) {
       await save(list);
       return json({ appt: a, next });
     }
+  }
+  // 💉 Vaccines coming due, for the 9 AM reminders: the phone works these out (the records can be
+  // locked) and sends just which pet and the date.
+  m = path.match(/^\/families\/([a-z0-9]+)\/vaxdue$/);
+  if (m && method === 'PUT') {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const pets = new Set(fam.members.filter((x) => x.kind === 'pet').map((x) => x.id));
+    const due = (Array.isArray(body.due) ? body.due : []).filter((v) => pets.has(v?.pet) && /^\d{4}-\d{2}-\d{2}$/.test(v.due || '')).slice(0, 100).map((v) => ({ pet: v.pet, due: v.due }));
+    await db.put(`vaxdue:${fam.fid}`, due);
+    return json({ ok: true });
   }
   // 🐾 How happy are the dogs: golden days, walks, the streak, and the last 12 months.
   m = path.match(/^\/families\/([a-z0-9]+)\/dogstats$/);
@@ -770,6 +834,7 @@ export async function familyApi(req, env, path) {
       // One live game at a time per set: starting again ends the old one.
       const rest = games.map((x) => (x.packId === p.id && x.status === 'live' ? { ...x, status: 'done' } : x));
       await db.put(`bingogames:${fam.fid}`, [g, ...rest].slice(0, 20));
+      await tell(adultsOf(fam, user.uid), 'fun', { title: `🎲 ${me.name} started ${g.title} bingo`, body: 'Grab your card', url: 'family/#feed', tag: `bingo-${g.id}` });
       return json({ game: gameOut(g) });
     }
     const g = what === 'games' && id ? games.find((x) => x.id === id) : null;
@@ -809,6 +874,7 @@ export async function familyApi(req, env, path) {
           await db.put(`post:${fam.fid}:${post.id}`, post);
           await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
           bingo = { first };
+          await tell(adultsOf(fam, user.uid), 'fun', { title: `🎉 BINGO! ${me.name} ${first ? 'won' : 'got one too'}`, body: `${g.title} bingo`, url: 'family/#feed', tag: `bingo-${g.id}` });
         }
       }
       return json({ ...(await view(c)), bingo });
@@ -1212,6 +1278,7 @@ export async function familyApi(req, env, path) {
       const c = { id: randomId(5), uid: user.uid, name: myName, text, at: Date.now() };
       p.comments = [...p.comments, c].slice(-200);
       await db.put(`post:${fid}:${id}`, p);
+      if (p.byUid && p.byUid !== user.uid) await tell([p.byUid], 'feed', { title: `💬 ${myName} commented on your post`, body: 'Tap to see it', url: 'family/#feed', tag: `post-${id}` });
       return json({ comment: { id: c.id, name: c.name, text: c.text, at: c.at, mine: true } });
     }
     // Reporting hides it for you and flags it to the family's creator.
@@ -1228,6 +1295,7 @@ export async function familyApi(req, env, path) {
       if (p.byUid === user.uid) return json({ error: "that's your own request" }, 400);
       const others = p.help.offers.filter((o) => o.uid !== user.uid);
       const myFam = own || fams.find((f) => (f.connections || []).includes(fid));
+      if (!body.withdraw) await tell([p.byUid], 'feed', { title: `🙋 ${myName} can help`, body: 'Pick who helps from the feed', url: 'family/#feed', tag: `help-${id}` });
       p.help.offers = body.withdraw ? others : [...others, { id: randomId(6), uid: user.uid, name: myName, family: myFam?.name || '', msg: sealed(body.msg, 600) ?? clean(body.msg, 140), at: Date.now() }].slice(-30);
       await db.put(`post:${fid}:${id}`, p);
       return json({ help: postOut(p, user, {}).help });
@@ -1237,6 +1305,7 @@ export async function familyApi(req, env, path) {
       const o = p.help.offers.find((x) => (body.offer && x.id === body.offer) || (body.uid && x.uid === body.uid));
       p.help.status = o ? 'filled' : 'open'; p.help.helper = o ? { uid: o.uid, name: o.name, family: o.family } : null;
       await db.put(`post:${fid}:${id}`, p);
+      if (o && o.uid !== user.uid) await tell([o.uid], 'feed', { title: `✅ ${myName} picked you to help`, body: 'Thank you!', url: 'family/#feed', tag: `help-${id}` });
       return json({ help: postOut(p, user, {}).help });
     }
     if (action === '/hide' && method === 'POST') {
@@ -1375,6 +1444,9 @@ async function goldenDayPost(db, fam, date, list) {
   return post;
 }
 const shiftDay = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const validTz = (tz) => { if (typeof tz !== 'string' || tz.length > 64) return false; try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; } };
+// The 15-minute reminders (appointments, calendar events, vaccines due) — see push.js.
+export const runFamilyReminders = (env, at) => runReminders(env, at, { db: store(env.HOUSEHOLD) });
 export const MODULES = ['dogs', 'chores', 'feed', 'health', 'calendar'];
 
 // Takes someone out of a family: their spot, their data, and (unless kept) their posts,
@@ -1460,6 +1532,7 @@ export async function deleteAccount(db, user) {
   }
   for (const x of user.sessions || []) await db.del(`session:${x.t}`);
   await db.del(`keybackup:${user.uid}`);
+  await db.del(`pushsub:${user.uid}`);
   await db.del(`user:${user.uid}`);
   return { deleted: true, ...summary };
 }

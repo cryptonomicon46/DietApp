@@ -14,6 +14,7 @@ binding = "HOUSEHOLD"
 id = "PASTE_KV_NAMESPACE_ID_HERE"
 
 # Nightly families maintenance check (3:13 am Pacific in summer): repairs half-finished changes
-# and writes a report the maintainer sees in Me › Maintainer.
+# and writes a report the maintainer sees in Me › Maintainer. Every 15 minutes: notification
+# reminders (appointments, calendar events, vaccines due).
 [triggers]
-crons = ["13 10 * * *"]
+crons = ["13 10 * * *", "*/15 * * * *"]

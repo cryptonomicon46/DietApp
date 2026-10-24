@@ -12,10 +12,11 @@
 //           GOOGLE_CLIENT_ID (OurPawmily Families: Google sign-in, see family.js)
 //           ADMIN_EMAILS (Google emails that see Me › Maintainer: problems filed through Help)
 //           SUPPORT_EMAIL (shown to people who need a human)
-// The nightly cron in wrangler.toml runs the families' maintenance check (runMaintenance).
+// The nightly cron in wrangler.toml runs the families' maintenance check (runMaintenance); the
+// 15-minute one sends notification reminders (push.js).
 
 import { assist } from './assistant.js';
-import { familyApi, runMaintenance } from './family.js';
+import { familyApi, runMaintenance, runFamilyReminders } from './family.js';
 import { mergeEvents, icsCalendar } from '../js/calendar.js';
 
 const WHOOP = {
@@ -33,9 +34,11 @@ const STRAVA = {
 
 export default {
   async scheduled(event, env, ctx) {
-    if (env.HOUSEHOLD) ctx.waitUntil(runMaintenance(env));
+    if (!env.HOUSEHOLD) return;
+    if (event.cron === '13 10 * * *') ctx.waitUntil(runMaintenance(env));
+    else ctx.waitUntil(runFamilyReminders(env, event.scheduledTime));
   },
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
     const origin = new URL(env.APP_ORIGIN).origin;
     const cors = {
@@ -51,7 +54,7 @@ export default {
       // ---- OurPawmily Families (v2): Google sign-in, families, invites, feed — see family.js ----
       if (url.pathname.startsWith('/v2/')) {
         if (!env.HOUSEHOLD) return json({ error: 'HOUSEHOLD storage not set up — see server/README.md' }, 501);
-        const r = await familyApi(req, env, url.pathname.slice(3));
+        const r = await familyApi(req, env, url.pathname.slice(3), ctx);
         return json(r.data, r.status);
       }
 

@@ -132,7 +132,10 @@ async function boot() {
   if (!state.families.length) return onboard();
   if (!state.families.some((f) => f.fid === state.fid)) state.fid = state.families[0].fid;
   await loadFamily();
+  const hv = location.hash.match(/^#(feed|dogs|calendar|me)$/)?.[1];
+  if (hv) { state.view = hv === 'dogs' ? 'pets' : hv; history.replaceState(null, '', location.pathname + location.search); }
   show(state.view === 'member' && !member(state.memberId) ? 'feed' : state.view);
+  refreshPush();
 }
 async function loadFamily() {
   const r = await api.get(`/families/${state.fid}`);
@@ -544,6 +547,9 @@ function renderVax() {
       rows.push([n, `<li>${avatar(p, 24)} <b>${esc(p.name)}</b> · <span class="tone-warn">${esc(v.name)} ${n < 0 ? 'overdue' : `due in ${n} day${n === 1 ? '' : 's'}`}</span> ${booked ? '<span class="muted">· booked ✓</span>' : `<button type="button" class="ghost small" data-book="${p.id}" data-vaccine="${esc(v.name)}">📅 Book it</button>`}</li>`]);
     }
   }
+  // The dates (just pet and day) go to the connector for the 9 AM "due next week" reminders.
+  const due = dogsOf().flatMap((p) => (dogsHub.profiles[p.id]?.vaccines || []).filter((v) => /^\d{4}-\d{2}-\d{2}$/.test(v.due || '')).map((v) => ({ pet: p.id, due: v.due }))).sort((a, b) => (a.pet + a.due).localeCompare(b.pet + b.due));
+  if (JSON.stringify(due) !== LS.get(`fam.vaxdue.${state.fid}`)) api.put(`/families/${state.fid}/vaxdue`, { due }).then(() => LS.set(`fam.vaxdue.${state.fid}`, JSON.stringify(due))).catch(() => {});
   el.hidden = !rows.length;
   el.innerHTML = `<b>💉 Vaccines</b><ul class="list vaxlist">${rows.sort((a, b) => a[0] - b[0]).map((r) => r[1]).join('')}</ul>`;
 }
@@ -805,6 +811,8 @@ function meView() {
     <section class="card stack"><button type="button" class="ghost" data-act="help">💬 Help &amp; questions</button>
       <p class="tiny muted">How families, invites, chores and the diet app work — and it can check your account, resend an invite, or pass a problem to the app's maintainer.</p></section>
     ${state.user.isAdmin ? '<h3>Maintainer</h3><section class="card"><button type="button" class="ghost wide" data-act="admin">🛠 Problems, glitches &amp; the nightly check</button></section>' : ''}
+    <h3>🔔 Notifications</h3>
+    <section class="card stack" id="notifyCard"><div class="skeleton line"></div></section>
     <h3>🔐 Encryption</h3>
     <section class="card stack" id="e2eeCard">${e2eeCard()}</section>
     <h3>Account & security</h3>
@@ -824,6 +832,7 @@ function meView() {
     const el = $('#backupState');
     if (el) el.innerHTML = r.backup ? `🔑 Recovery backup saved ${new Date(r.backup.at).toLocaleDateString()}. Made a new family or joined one since? Make a new phrase so it's included.` : '<span class="tone-warn">⚠️ No recovery phrase yet — if you lose all your devices, nobody can unlock your family. Tap 🔑 Recovery phrase.</span>';
   }).catch(() => {});
+  renderNotify();
   api.get('/account/sessions').then((r) => {
     const el = $('#sessions');
     if (el) el.innerHTML = `<b>Signed in on</b><ul class="list">${r.sessions.slice().reverse().map((x) => `<li class="row between"><span>${esc(x.device || 'A device')}${x.current ? ' <span class="pill">This one</span>' : ''}</span><small>${ago(x.at)}</small></li>`).join('')}</ul>`;
@@ -1356,6 +1365,54 @@ async function adminView() {
 }
 
 // ---------- 🔐 encryption: turning it on, adding a device, the recovery phrase ----------
+// ---------- 🔔 notifications (Web Push, through the trackers' service worker) ----------
+const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const iosBrowser = () => (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) && !(navigator.standalone || matchMedia('(display-mode: standalone)').matches);
+const swReady = () => { navigator.serviceWorker.register('../sw.js').catch(() => {}); return navigator.serviceWorker.ready; };
+const keyBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+const myTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
+const sendSub = (sub) => { const j = sub.toJSON(); return api.post('/push/subscribe', { endpoint: j.endpoint, keys: j.keys, device: deviceName(), tz: myTz() }); };
+async function renderNotify() {
+  const el = $('#notifyCard');
+  if (!el) return;
+  if (api.mode() === 'demo') { el.innerHTML = '<p class="small muted">Notifications work with your Google account on the live app.</p>'; return; }
+  if (!pushOk()) {
+    el.innerHTML = iosBrowser() ? '<p class="small">On iPhone, notifications need the app on your Home Screen: tap <b>Share › Add to Home Screen</b>, open OurPawmily from there, and turn them on here.</p>'
+      : '<p class="small muted">This browser can\'t show notifications.</p>';
+    return;
+  }
+  const [r, sub] = await Promise.all([api.get('/push').catch(() => null), swReady().then((reg) => reg.pushManager.getSubscription()).catch(() => null)]);
+  if (!r || !$('#notifyCard')) return;
+  const on = !!sub && r.devices.some((x) => x.endpoint === sub.endpoint);
+  const others = r.devices.filter((x) => x.endpoint !== sub?.endpoint).length;
+  el.innerHTML = `${Notification.permission === 'denied' ? '<p class="small tone-warn">Notifications are blocked for this app. Allow them in your phone\'s Settings (or the browser\'s site settings), then come back.</p>'
+      : on ? '<p class="small">✅ <b>On for this device.</b></p><div class="row wrap"><button type="button" class="ghost small" data-act="pushtest">Send a test</button><button type="button" class="ghost small" data-act="pushoff">Turn off here</button></div>'
+        : '<p class="small">Get a nudge when your partner sends a plan or a note, when someone books the dogs in or takes a drive, and reminders before appointments and events.</p><button type="button" data-act="pushon">🔔 Turn on for this device</button>'}
+    ${others ? `<p class="tiny muted">Also on for ${others} other device${others === 1 ? '' : 's'}.</p>` : ''}
+    <ul class="list toggles">${Object.entries(r.kinds).map(([k, v]) => `<li><label class="switch-row"><span>${esc(v)}</span><input type="checkbox" data-notifypref="${k}" ${r.prefs[k] ? 'checked' : ''}><i class="switch"></i></label></li>`).join('')}</ul>
+    <p class="tiny muted">Notifications say who did what ("Pat left you a note"), never what an encrypted note, plan or event says — open the app to read it.</p>`;
+}
+async function pushOn() {
+  const perm = await Notification.requestPermission(); // first, while it's still the tap
+  if (perm !== 'granted') { toast('Notifications weren\'t allowed'); return renderNotify(); }
+  const reg = await swReady();
+  const { publicKey } = await api.get('/push');
+  let sub = await reg.pushManager.getSubscription();
+  const same = sub?.options?.applicationServerKey && btoa(String.fromCharCode(...new Uint8Array(sub.options.applicationServerKey))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') === publicKey;
+  if (sub && !same) { await sub.unsubscribe().catch(() => {}); sub = null; }
+  sub ||= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
+  await sendSub(sub);
+  LS.set('fam.pushSync', isoLocal());
+  toast('🔔 Notifications are on');
+  renderNotify();
+}
+// Once a day: tell the connector this phone is still here (and its time zone, for reminders).
+function refreshPush() {
+  if (api.mode() === 'demo' || !pushOk() || Notification.permission !== 'granted' || LS.get('fam.pushSync') === isoLocal()) return;
+  swReady().then((reg) => reg.pushManager.getSubscription()).then((sub) => sub && sendSub(sub)).then(() => LS.set('fam.pushSync', isoLocal())).catch(() => {});
+}
+if (pushOk()) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data?.open && state.family) show(e.data.open === 'dogs' ? 'pets' : e.data.open); });
+
 function e2eeCard() {
   const f = fam(), owner = me().role === 'owner';
   if (!f.e2ee) return `<p class="small">Posts, photos, notes, plans, diet &amp; fitness and the dogs' details are stored readable on your server today.</p>
@@ -1629,6 +1686,13 @@ document.addEventListener('click', (e) => {
     case 'note': return noteSheet();
     case 'post': state.view = 'compose'; draft.help = null; return compose();
     case 'askhelp': state.view = 'compose'; draft.help = draft.help || { type: 'petsit', from: '', to: '', time: '' }; return compose();
+    case 'pushon': return act(pushOn);
+    case 'pushoff': return act(async () => {
+      const sub = await (await swReady()).pushManager.getSubscription();
+      if (sub) { await api.post('/push/unsubscribe', { endpoint: sub.endpoint }); await sub.unsubscribe().catch(() => {}); }
+      toast('Notifications are off on this device'); renderNotify();
+    });
+    case 'pushtest': return act(async () => { const r = await api.post('/push/test'); toast(r.sent ? 'Sent — it should show in a moment' : 'Nothing was sent — try turning it off and on again'); });
     case 'e2eeon': return openSheet(`<h2>🔐 Turn on encryption</h2>
       <p class="small">This phone makes a secret family key and locks everything private that's already stored: posts, photos, comments, diet &amp; fitness, the dogs' details and appointment notes. From then on the server only keeps text it can't read.</p>
       <p class="small">Afterwards: send your partner <b>📲 Add a device</b> (once), and write down your <b>🔑 recovery phrase</b>.</p>
@@ -1779,6 +1843,10 @@ document.addEventListener('change', async (e) => {
     draft.text = $('#postForm textarea')?.value || draft.text;
     draft.photo = await shrinkPhoto(t.files[0]).catch(() => '');
     return compose();
+  }
+  if (t.dataset.notifypref) {
+    const prefs = Object.fromEntries([...document.querySelectorAll('[data-notifypref]')].map((x) => [x.dataset.notifypref, x.checked]));
+    return act(() => api.put('/push/prefs', prefs));
   }
   if (t.form?.id === 'eventForm' && t.name === 'allDay') { t.form.querySelectorAll('.timeonly').forEach((x) => { x.hidden = t.checked; }); return; }
   if (t.form?.id === 'feelForm' && t.name === 'kind') {
