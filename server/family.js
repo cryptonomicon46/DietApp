@@ -661,6 +661,86 @@ export async function familyApi(req, env, path, ctx = null) {
     return json({ error: 'not found' }, 404);
   }
 
+  // ---- 🍿 what we watch: shows and movies (title and service sealed), nights, progress, ratings ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/watch(?:\/(shows|import)(?:\/([a-z0-9]+)(\/night)?)?)?$/);
+  if (m) {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const me = meIn(fam);
+    const [, , what, id, act] = m;
+    const key = `watch:${fam.fid}`;
+    const w = (await db.get(key)) || { shows: [], nights: [], status: {}, ratings: {}, progress: {} };
+    const save = () => db.put(key, { ...w, shows: w.shows.slice(-500), nights: w.nights.slice(-3000) });
+    const bodyOf = (v) => sealed(v, 4000) ?? (fam.e2ee ? null : (typeof v === 'object' && v ? JSON.stringify(v).slice(0, 2000) : null));
+    const day = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '');
+    const STATUSES = ['watching', 'finished', 'dropped'];
+    if (!what && method === 'GET') return json(w);
+    if (what === 'shows' && !id && method === 'POST') {
+      const b = bodyOf(body.body);
+      if (!b) return json({ error: 'this family is end-to-end encrypted — update the app and try again' }, 400);
+      const show = { id: randomId(8), by: me.id, body: b, at: Date.now() };
+      w.shows.push(show); await save();
+      return json({ show });
+    }
+    // Bringing over the trackers' 📺 Watching: your shows, your nights, your ratings and status changes.
+    if (what === 'import' && method === 'POST') {
+      const tid = (x) => `t${String(x || '').replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 20)}`;
+      let n = 0;
+      for (const sh of (Array.isArray(body.shows) ? body.shows : []).slice(0, 500)) {
+        const b = bodyOf(sh.body), sid = tid(sh.id);
+        if (!b || sid === 't' || w.shows.some((x) => x.id === sid)) continue;
+        w.shows.push({ id: sid, by: me.id, body: b, at: +sh.at || Date.now(), src: 'import' }); n++;
+      }
+      for (const nt of (Array.isArray(body.nights) ? body.nights : []).slice(0, 3000)) {
+        const sid = tid(nt.show), d = day(nt.date);
+        if (!d || w.nights.some((x) => x.show === sid && x.date === d)) continue;
+        w.nights.push({ show: sid, date: d, by: me.id, at: +nt.at || Date.now() });
+      }
+      for (const [k, st] of Object.entries(body.status || {})) {
+        const sid = tid(k);
+        if (![...STATUSES, 'deleted'].includes(st?.s) || (w.status[sid]?.at || 0) >= (+st.at || 0)) continue;
+        w.status[sid] = { s: st.s, at: +st.at || Date.now(), date: day(st.date), by: me.id };
+      }
+      for (const [k, r] of Object.entries(body.ratings || {})) if (Number.isInteger(+r) && +r >= 1 && +r <= 5) w.ratings[tid(k)] = { ...(w.ratings[tid(k)] || {}), [me.id]: +r };
+      await save();
+      return json({ imported: n });
+    }
+    const show = w.shows.find((x) => x.id === id);
+    if (!show) return json({ error: 'that show is gone' }, 404);
+    if (act === '/night' && method === 'POST') {
+      const d = day(body.date);
+      if (!d) return json({ error: 'which night?' }, 400);
+      const had = w.nights.find((x) => x.show === id && x.date === d);
+      if (had && had.by !== me.id) return json({ error: `${fam.members.find((x) => x.id === had.by)?.name || 'Someone'} already logged that night` }, 400);
+      w.nights = had ? w.nights.filter((x) => x !== had) : [...w.nights, { show: id, date: d, by: me.id, at: Date.now() }];
+      await save();
+      return json({ nights: w.nights.filter((x) => x.show === id) });
+    }
+    if (!act && method === 'PATCH') {
+      if (body.body) { const b = bodyOf(body.body); if (b) show.body = b; }
+      if (STATUSES.includes(body.status)) w.status[id] = { s: body.status, at: Date.now(), date: day(body.date) || new Date().toISOString().slice(0, 10), by: me.id };
+      if (body.rating !== undefined) {
+        const r = { ...(w.ratings[id] || {}) };
+        if (Number.isInteger(body.rating) && body.rating >= 1 && body.rating <= 5) r[me.id] = body.rating; else delete r[me.id];
+        w.ratings[id] = r;
+      }
+      if (body.progress) {
+        const se = Math.max(0, Math.min(99, Math.round(+body.progress.s || 0))), ep = Math.max(0, Math.min(999, Math.round(+body.progress.e || 0)));
+        w.progress[id] = { s: se, e: ep, at: Date.now(), by: me.id };
+      }
+      await save();
+      return json({ show, status: w.status[id] || null, ratings: w.ratings[id] || {}, progress: w.progress[id] || null });
+    }
+    if (!act && method === 'DELETE') {
+      if (show.by !== me.id && me.role !== 'owner') return json({ error: 'only who added it can delete it' }, 403);
+      w.shows = w.shows.filter((x) => x !== show); w.nights = w.nights.filter((x) => x.show !== id);
+      delete w.status[id]; delete w.ratings[id]; delete w.progress[id];
+      await save();
+      return json({ ok: true });
+    }
+    return json({ error: 'not found' }, 404);
+  }
+
   // ---- 🐾 dog appointments: grooming, vet, vaccines… with drop-off and pick-up drivers ----
   m = path.match(/^\/families\/([a-z0-9]+)\/appts(?:\/([a-z0-9]+))?$/);
   if (m) {
@@ -1498,6 +1578,8 @@ async function deleteFamily(db, fam) {
   await db.del(`appts:${fam.fid}`);
   await db.del(`us:${fam.fid}`);
   await db.del(`events:${fam.fid}`);
+  await db.del(`watch:${fam.fid}`);
+  await db.del(`vaxdue:${fam.fid}`);
   await db.del(`dogmonths:${fam.fid}`);
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) for (const x of fam.members) await db.del(`bingocard:${fam.fid}:${g.id}:${x.id}`);
   await db.del(`bingogames:${fam.fid}`);

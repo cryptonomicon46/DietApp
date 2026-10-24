@@ -363,3 +363,50 @@ details.house .fold { margin-left: auto; color: var(--brand); font-weight: 700; 
 .agenda .ev > span:last-child { border-left: 4px solid var(--line); padding-left: 8px; }
 .agenda .ev.dog > span:last-child { border-color: #e07a5f; } .agenda .ev.fam > span:last-child { border-color: #5b8def; } .agenda .ev.plan > span:last-child { border-color: #b06fd8; }
 .rhythm-line { padding: 10px 14px; }
+
+/* 🍿 Watch: shows and movies (same look as the trackers' 📺 Watching) */
+.svc-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.svc-opt { background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; font-size: .8rem; font-weight: 600; }
+.svc { display: inline-block; border-radius: 6px; padding: 2px 7px; font-size: .72rem; font-weight: 800; letter-spacing: .02em; white-space: nowrap; }
+.show-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; display: grid; gap: 6px; }
+.show-card.finished { border-color: color-mix(in srgb, var(--brand) 50%, var(--line)); }
+.show-card.dropped { opacity: .7; }
+.show-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.show-status { font-size: .78rem; color: var(--muted); font-weight: 600; }
+.show-title { font-size: 1.1rem; font-weight: 800; overflow-wrap: anywhere; }
+.tonight { justify-self: start; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; font-weight: 700; }
+.tonight.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+.show-rate { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.show-rate .small:first-child { margin-right: 4px; }
+.star { background: none; border: 0; padding: 2px 3px; font-size: 1.25rem; line-height: 1; color: var(--line); min-width: 0; }
+.star.on { color: #e6b422; }
+.stars { color: #e6b422; letter-spacing: -1px; }
+.show-actions { display: flex; gap: 14px; flex-wrap: wrap; }
+.month-shows { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 8px; }
+.month-shows summary { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; cursor: pointer; }
+.month-list { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+.month-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
+.month-list .t { font-weight: 600; overflow-wrap: anywhere; }
+.recap .recap-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 10px 0; text-align: center; }
+.recap .recap-stats b { display: block; font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.recap .recap-stats small { color: var(--muted); }
+.recap p { margin: 6px 0; }
+.svc-bars { display: grid; gap: 6px; margin-top: 8px; }
+.svc-bar { display: grid; grid-template-columns: 6.5em 1fr 2em; gap: 8px; align-items: center; }
+.svc-bar .track { display: block; height: 10px; background: var(--bg); border-radius: 999px; overflow: hidden; }
+.svc-bar .track span { display: block; height: 100%; border-radius: 999px; }
+.year-months { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.year-months li { display: grid; grid-template-columns: 3em 1fr; gap: 8px; }
+.watch-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 6px 4px 4px; }
+.watch-head h2 { margin: 0; }
+.progress-row { align-items: center; gap: 8px; }
+.segopt { flex: 1; position: relative; }
+.segopt input, .svc-opt-l input { position: absolute; opacity: 0; pointer-events: none; }
+.segopt span { display: block; text-align: center; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 8px; font-weight: 600; font-size: .9rem; }
+.segopt input:checked + span { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+.svc-pick { border: 0; padding: 0; margin: 0; }
+.svc-pick legend { margin-bottom: 6px; }
+.svc-opt-l { display: inline-block; margin: 0 4px 6px 0; }
+.svc-opt-l input:checked + .svc-opt { background: var(--svc); color: #fff; border-color: var(--svc); }
+.svc-opt-l input:focus-visible + .svc-opt, .segopt input:focus-visible + span { outline: 2px solid var(--brand); outline-offset: 2px; }
+.progress-row button.ghost { padding: 6px 12px; }

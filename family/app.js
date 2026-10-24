@@ -286,7 +286,7 @@ function show(view, extra) {
   document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === (view === 'member' || view === 'family' ? 'me' : view)));
   window.scrollTo(0, 0);
   if (view !== 'bingo') clearInterval(bingo.timer);
-  ({ feed: feedView, family: familyView, pets: petsView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView })[view]?.();
+  ({ feed: feedView, family: familyView, pets: petsView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView })[view]?.();
 }
 const demoBanner = () => (api.mode() === 'demo' ? '<div class="banner">Demo — everything stays on this phone.</div>' : '');
 
@@ -994,6 +994,7 @@ function plusMenu() {
     ['post', '📸', 'Post', 'a photo or update for the family'],
     ...((fam().modules || []).includes('dogs') ? [['apptnew', '🐾', 'Dog appointment', 'grooming, vet, vaccine']] : []),
     ['eventnew', '📅', 'Calendar event', 'family only'],
+    ['watchadd', '🍿', 'Add to Watch', 'a show or movie you two are watching'],
     ['askhelp', '🙋', 'Ask for help', 'pet sitting, babysitting, a ride'],
   ];
   openSheet(`<h2>What would you like to do?</h2><div class="pluslist">${items.map(([act, ico, title, sub, hot]) => `<button type="button" class="pl ${hot || ''}" data-act="${act}"><b>${ico}</b><span><strong>${esc(title)}</strong><small>${esc(sub)}</small></span></button>`).join('')}</div>`);
@@ -1185,6 +1186,132 @@ async function importCal() {
 async function saveFeeds(list) {
   const feeds = await Promise.all(list.map(async (f) => (f.raw ? { id: f.id, who: f.who, body: f.body } : { id: f.id, who: f.who, body: await lock({ name: f.name, url: f.url }) })));
   await api.put(`/families/${state.fid}/calfeeds`, { feeds });
+}
+
+// ---------- 🍿 what we watch: shows and movies, nights together, progress, the year ----------
+// Titles and services are end-to-end encrypted; the merging and the recap are the trackers' own
+// (js/showsCore.js), run over everyone in the family.
+const watch = { data: null, shows: [], tab: 'now', S: null, adding: { kind: 'show', service: 'netflix' } };
+async function loadWatch() {
+  watch.S ||= await import('../js/showsCore.js');
+  const w = await api.get(`/families/${state.fid}/watch`);
+  const bodies = await Promise.all(w.shows.map(async (x) => ({ ...x, ...((await unlock(x.body)) || {}) })));
+  const people = fam().members.filter((m) => m.kind === 'person');
+  const records = people.map((m) => ({
+    person: m.id,
+    shows: bodies.filter((x) => x.by === m.id).map((x) => ({ id: x.id, title: x.title || '🔒 Locked', service: x.service || 'other', kind: x.kind || 'show', date: x.date || isoLocal(new Date(x.at)), at: x.at, locked: !x.title })),
+    nights: w.nights.filter((n) => n.by === m.id),
+    status: Object.fromEntries(Object.entries(w.status).filter(([, v]) => v.by === m.id)),
+    ratings: Object.fromEntries(Object.entries(w.ratings).filter(([, r]) => r[m.id]).map(([k, r]) => [k, r[m.id]])),
+  }));
+  // Shows added by someone who's since left: still on the list.
+  const orphans = bodies.filter((x) => !people.some((m) => m.id === x.by));
+  if (orphans.length) records.push({ person: 'gone', shows: orphans.map((x) => ({ id: x.id, title: x.title || '🔒 Locked', service: x.service || 'other', kind: x.kind || 'show', date: x.date || isoLocal(new Date(x.at)), at: x.at })), nights: [], status: {}, ratings: {} });
+  watch.data = w;
+  watch.shows = watch.S.mergeShows(records).map((x) => ({ ...x, progress: w.progress[x.id] || null }));
+}
+async function watchView() {
+  $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div>`;
+  importWatch().catch(() => {});
+  await act(loadWatch);
+  if (state.view !== 'watch') return;
+  renderWatch();
+}
+const svcBadge = (k) => { const v = watch.S.SERVICES[k] || watch.S.SERVICES.other; return `<span class="svc" style="background:${v.bg};color:${v.fg}">${esc(v.name)}</span>`; };
+const monthLabel = (ym, month = 'long') => new Date(`${ym}-15T12:00:00`).toLocaleDateString(undefined, { month, year: 'numeric' });
+function watchCard(x, opts = {}) {
+  const S = watch.S, my = fam().me, today = isoLocal();
+  const tonight = x.nights.find((n) => n.date === today);
+  const mine = x.ratings[my] || 0;
+  const theirs = Object.entries(x.ratings).filter(([p]) => p !== my);
+  const pg = x.progress;
+  const nights = x.kind === 'movie' ? `🍿 Movie${x.statusDate ? ` · ${new Date(`${x.statusDate}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}`
+    : `${x.nights.length} night${x.nights.length === 1 ? '' : 's'} together${opts.monthNights != null ? ` · ${opts.monthNights} this month` : ''}`;
+  return `<div class="show-card ${x.status}" data-watchshow="${x.id}">
+    <div class="show-top">${svcBadge(x.service)}<span class="show-status">${S.STATUS[x.status] || ''}</span></div>
+    <div class="show-title">${esc(x.title)}</div>
+    <div class="small muted">${nights}${x.rating ? ` · ${x.rating}★ avg` : ''}</div>
+    ${x.kind !== 'movie' && x.status === 'watching' ? `<div class="row wrap progress-row"><span class="pill">${pg ? `S${pg.s || 1} · E${pg.e}` : 'Not started'}</span><button type="button" class="ghost small" data-watchep="${x.id}">＋ Episode</button><button type="button" class="linkish small" data-watchpg="${x.id}">Set…</button></div>
+      <button type="button" class="${tonight ? 'tonight on' : 'tonight'}" data-watchnight="${x.id}">${tonight ? `✓ Watched tonight${tonight.by === my ? '' : ` (${esc(member(tonight.by)?.name || '')})`}` : '📺 We watched tonight'}</button>` : ''}
+    <div class="show-rate"><span class="small muted">You</span>${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="star ${n <= mine ? 'on' : ''}" data-watchrate="${x.id}:${n}" aria-label="Rate ${n} of 5">★</button>`).join('')}
+      ${theirs.map(([p, r]) => `<span class="small muted">· ${esc(member(p)?.name || '')} <span class="stars">${'★'.repeat(r)}${'☆'.repeat(5 - r)}</span></span>`).join('')}</div>
+    <div class="show-actions">
+      ${x.kind !== 'movie' ? Object.entries(S.STATUS).filter(([k]) => k !== x.status).map(([k, label]) => `<button type="button" class="linkish small" data-watchstatus="${x.id}:${k}">${label}</button>`).join('') : ''}
+      ${x.locked ? '' : `<button type="button" class="linkish small" data-watchbingo="${x.id}">🎲 Bingo</button>`}
+      ${x.by === fam().me || me().role === 'owner' ? `<button type="button" class="linkish small muted" data-watchdel="${x.id}">Delete</button>` : ''}
+    </div>
+  </div>`;
+}
+function renderWatch() {
+  const S = watch.S, shows = watch.shows, ym = isoLocal().slice(0, 7), year = ym.slice(0, 4);
+  const tabs = [['now', 'Now'], ['month', 'By month'], ['year', `${year} recap`]];
+  let body = '';
+  if (watch.tab === 'now') {
+    const on = shows.filter((x) => x.status === 'watching');
+    const also = S.monthShows(shows, ym).filter((x) => x.status !== 'watching');
+    body = `${on.length ? on.map((x) => watchCard(x)).join('') : '<p class="small muted">Nothing on the go. Add what you\'re watching together.</p>'}
+      ${also.length ? `<details class="us-more"><summary>Also in ${monthLabel(ym).split(' ')[0]} · ${also.length}</summary>${also.map((x) => watchCard(x, { monthNights: x.monthNights })).join('')}</details>` : ''}
+      <button type="button" class="ghost wide" data-act="watchadd">＋ Add a show or movie</button>`;
+  } else if (watch.tab === 'month') {
+    const months = [...new Set(shows.flatMap(S.showMonths))].sort().reverse();
+    body = months.length ? months.map((mo) => {
+      const list = S.monthShows(shows, mo), n = list.reduce((a, x) => a + x.monthNights, 0);
+      return `<details class="card month-shows" ${mo === ym ? 'open' : ''}><summary><b>${monthLabel(mo)}</b> <span class="small muted">${list.length} title${list.length === 1 ? '' : 's'} · ${n} night${n === 1 ? '' : 's'}</span></summary>
+        <ul class="list month-list">${list.map((x) => `<li class="row between">${svcBadge(x.service)}<span class="grow">${esc(x.title)}${x.status === 'finished' && (x.statusDate || '').startsWith(mo) ? ' 🎉' : ''}</span><span class="small muted">${x.kind === 'movie' ? '🍿' : `${x.monthNights}×`}${x.rating ? ` · ${x.rating}★` : ''}</span></li>`).join('')}</ul></details>`;
+    }).join('') : '<p class="small muted">Nothing logged yet.</p>';
+  } else {
+    const r = S.yearRecap(shows, year);
+    const rows = Object.entries(r.perService).sort((a, b) => b[1] - a[1]), max = rows[0]?.[1] || 1;
+    body = r.titles ? `<section class="card recap">
+        <div class="eyebrow">🍿 ${year} together</div>
+        <div class="recap-stats"><div><b>${r.nights}</b><small>nights</small></div><div><b>${r.shows}</b><small>shows</small></div><div><b>${r.movies}</b><small>movies</small></div><div><b>${r.finished}</b><small>finished</small></div></div>
+        ${r.mostWatched ? `<p>🏆 Most watched: <b>${esc(r.mostWatched.title)}</b> (${r.mostWatched.nights.filter((n) => n.date.startsWith(year)).length} nights)</p>` : ''}
+        ${r.topRated ? `<p>⭐ Our favourite: <b>${esc(r.topRated.title)}</b> (${r.topRated.rating}★)</p>` : ''}
+        ${r.topService ? `<p>Most of it on ${svcBadge(r.topService)}</p>` : ''}
+        <div class="svc-bars">${rows.map(([k, n]) => { const v = S.SERVICES[k] || S.SERVICES.other; return `<div class="svc-bar"><span class="small">${esc(v.name)}</span><span class="track"><span style="width:${Math.round((n / max) * 100)}%;background:${v.bg}"></span></span><span class="small muted">${n}</span></div>`; }).join('')}</div></section>
+      <h3>Month by month</h3>
+      <ul class="card list year-months">${r.months.map((mo) => `<li><b>${monthLabel(mo.month, 'short').split(' ')[0]}</b> <span>${mo.shows.map((x) => esc(x.title)).join(', ')}</span></li>`).join('')}</ul>`
+      : '<p class="small muted">Nothing logged this year yet.</p>';
+  }
+  $('#view').innerHTML = `${demoBanner()}
+    <section class="watch-head"><h2>🍿 Watch</h2><button type="button" class="ghost small" data-act="games">🎲 Bingo &amp; 💑 picks ›</button></section>
+    <div class="seg">${tabs.map(([k, l]) => `<button type="button" class="${watch.tab === k ? 'on' : ''}" data-watchtab="${k}">${l}</button>`).join('')}</div>
+    ${body}`;
+}
+function watchAddSheet() {
+  const S = watch.S, a = watch.adding;
+  openSheet(`<h2>Add to Watch</h2>
+    <form id="watchForm" class="stack">
+      <div class="seg">${[['show', '📺 Show'], ['movie', '🍿 Movie']].map(([k, l]) => `<label class="segopt"><input type="radio" name="kind" value="${k}" ${a.kind === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+      <label>Title<input name="title" maxlength="80" required placeholder="e.g. The Bear" autocomplete="off"></label>
+      <fieldset class="svc-pick"><legend class="small">Where</legend>${Object.entries(S.SERVICES).map(([k, v]) => `<label class="svc-opt-l"><input type="radio" name="service" value="${k}" ${a.service === k ? 'checked' : ''}><span class="svc-opt" style="--svc:${v.bg}">${esc(v.name)}</span></label>`).join('')}</fieldset>
+      <label class="small">Started / watched on<input type="date" name="date" value="${isoLocal()}"></label>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Add</button></div>
+    </form>`);
+}
+const watchSaved = async () => { await loadWatch(); if (state.view === 'watch') renderWatch(); };
+// Bingo for this show: its live game, or a new game from its card set, or a new card set.
+async function watchBingo(title) {
+  const r = await api.get(`/families/${state.fid}/bingo`);
+  const same = (t) => t.trim().toLowerCase() === title.trim().toLowerCase();
+  const live = r.games.find((g) => g.status === 'live' && same(g.title));
+  if (live) { bingo.game = live.id; state.view = 'bingo'; return show('bingo'); }
+  const pack = r.packs.find((p) => same(p.title));
+  if (pack) { const g = await api.post(`/families/${state.fid}/bingo/games`, { packId: pack.id }); bingo.game = g.game.id; return show('bingo'); }
+  return bingoNew({ title });
+}
+// Bringing over the trackers' 📺 Watching (once per family; each person their own).
+async function importWatch() {
+  const flag = `fam.watchImported.${state.fid}`;
+  if (LS.get(flag) || lockedHere()) return;
+  const data = await openData(await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null));
+  if (!data || data.locked) return;
+  const shows = await Promise.all((data.shows || []).filter((x) => x?.id && x.title).map(async (x) => ({ id: x.id, at: x.at, body: await lock({ title: x.title, service: x.service || 'other', kind: x.kind === 'movie' ? 'movie' : 'show', date: x.date || '' }) })));
+  if (shows.length || (data.showNights || []).length || Object.keys(data.showStatus || {}).length || Object.keys(data.showRatings || {}).length) {
+    const r = await api.post(`/families/${state.fid}/watch/import`, { shows, nights: data.showNights || [], status: data.showStatus || {}, ratings: data.showRatings || {} });
+    if (r.imported) await watchSaved();
+  }
+  LS.set(flag, '1');
 }
 
 // ---------- 🎲 show bingo ----------
@@ -1654,6 +1781,17 @@ document.addEventListener('click', (e) => {
     });
   }
   if (d.bingogame) { bingo.game = d.bingogame; return bingoGame(); }
+  if (d.watchtab) { watch.tab = d.watchtab; return renderWatch(); }
+  if (d.watchnight) return act(async () => { await api.post(`/families/${state.fid}/watch/shows/${d.watchnight}/night`, { date: isoLocal() }); await watchSaved(); });
+  if (d.watchrate) { const [id, n] = d.watchrate.split(':'); const cur = watch.shows.find((x) => x.id === id)?.ratings[fam().me]; return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { rating: cur === +n ? null : +n }); await watchSaved(); }); }
+  if (d.watchstatus) { const [id, st] = d.watchstatus.split(':'); return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { status: st, date: isoLocal() }); await watchSaved(); if (st === 'finished') toast('🎉 Finished — it goes in the recap'); }); }
+  if (d.watchep) { const pg = watch.shows.find((x) => x.id === d.watchep)?.progress; return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${d.watchep}`, { progress: { s: pg?.s || 1, e: (pg?.e || 0) + 1 } }); await watchSaved(); }); }
+  if (d.watchpg) {
+    const pg = watch.shows.find((x) => x.id === d.watchpg)?.progress;
+    return openSheet(`<h2>Where are you up to?</h2><form id="watchPgForm" class="stack" data-id="${d.watchpg}"><div class="row"><label>Season<input name="s" type="number" min="1" max="99" value="${pg?.s || 1}"></label><label>Episode<input name="e" type="number" min="0" max="999" value="${pg?.e || 0}"></label></div><div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save</button></div></form>`);
+  }
+  if (d.watchbingo) { const x = watch.shows.find((y) => y.id === d.watchbingo); return x ? act(() => watchBingo(x.title)) : null; }
+  if (d.watchdel) { if (!confirm('Delete this from Watch? Its nights and ratings go too.')) return; return act(async () => { await api.del(`/families/${state.fid}/watch/shows/${d.watchdel}`); await watchSaved(); }); }
   if (d.bingostart) return act(async () => { const r = await api.post(`/families/${state.fid}/bingo/games`, { packId: d.bingostart }); bingo.game = r.game.id; bingoGame(); });
   if (d.bingodel) { if (!confirm('Remove this card set?')) return; return act(async () => { await api.del(`/families/${state.fid}/bingo/packs/${d.bingodel}`); bingoView(); }); }
   if (d.bsq != null) {
@@ -1710,6 +1848,8 @@ document.addEventListener('click', (e) => {
     case 'keyrestore': return keyRestoreSheet();
     case 'apptnew': return apptSheet();
     case 'bingonew': return bingoNew();
+    case 'games': bingo.game = null; bingo.season = null; return show('bingo');
+    case 'watchadd': return watchAddSheet();
     case 'seasonnew': return seasonNew();
     case 'seasonstatus': return act(async () => seasonView(await api.patch(`/families/${state.fid}/picks/${bingo.season}`, { status: bingo.view.season.status === 'live' ? 'done' : 'live' })));
     case 'bingoback': bingo.game = null; bingo.season = null; clearInterval(bingo.timer); return bingoView();
@@ -1834,7 +1974,7 @@ document.addEventListener('click', (e) => {
   }
   if (t.id === 'famSwitch') return show('me');
   if (t.id === 'newPostTop') return plusMenu();
-  if (t.id === 'bingoTop') { bingo.game = null; return show('bingo'); }
+  if (t.id === 'bingoTop') { bingo.game = null; return show('watch'); }
 });
 
 document.addEventListener('change', async (e) => {
@@ -1931,6 +2071,21 @@ document.addEventListener('submit', (e) => {
   if (f.id === 'famSettings') {
     e.preventDefault();
     return act(async () => { await api.patch(`/families/${state.fid}`, { name: v.name, modules: new FormData(f).getAll('mod'), goldenPosts: !!v.goldenPosts }); await loadFamily(); chrome(true); toast('Saved'); });
+  }
+  if (f.id === 'watchForm') {
+    e.preventDefault();
+    if (lockedHere()) return toast('🔒 This device needs the family key first — Me › 🔐 Encryption');
+    watch.adding = { kind: v.kind, service: v.service };
+    return act(async () => {
+      await api.post(`/families/${state.fid}/watch/shows`, { body: await lock({ title: v.title.trim(), service: v.service || 'other', kind: v.kind === 'movie' ? 'movie' : 'show', date: v.date || isoLocal() }) });
+      closeSheet(); watch.tab = 'now';
+      if (state.view === 'watch') await watchSaved(); else show('watch');
+      toast(`🍿 ${v.title.trim()} added`);
+    });
+  }
+  if (f.id === 'watchPgForm') {
+    e.preventDefault();
+    return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${f.dataset.id}`, { progress: { s: +v.s, e: +v.e } }); closeSheet(); await watchSaved(); });
   }
   if (f.id === 'eventForm') {
     e.preventDefault();
