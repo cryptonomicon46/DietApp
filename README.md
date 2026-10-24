@@ -77,7 +77,15 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
 - **Bring over the current app** (Me tab): copies everything the current app keeps on that phone into the family. Your own data goes to you, your partner's shared copy is held for them until they accept their invite, and each dog becomes a pet. **Download a backup** first saves the whole current app as a file. Nothing is deleted, and running it again refreshes the copies. Afterwards it reads every copy back from the server and compares it with the phone, section by section (✅ Sam: all 27 sections match: 412 weigh-ins, 210 days of meals…), and flags anything that didn't arrive.
 - **Demo:** until the connector is updated and given a Google client ID (see server/README.md), **Try it on this phone** runs the whole thing on the phone itself. You can sign in as different people to try invites.
 - **Choose what to manage:** when creating a family, pick from 🐶 Dogs, 🧺 Chores, 📸 Feed, 🥗 Diet & fitness and 📅 Calendar. Change it later in Me › Family settings, where the creator can also rename the family, hand it over or delete it.
-- **🏆 Chores** (tab): one shared log for the family. Tap what you did, and 👫 logs it for both of you; you can undo your own entries.
+- **🐾 Dogs & chores** (tab): everything about the dogs on one screen.
+  - **📅 Coming up:** dog appointments (✂️ grooming, 🩺 vet, 💉 vaccination, 🦷 dental, 🏨 boarding). Each has the dogs going, the place, a 🚗 drop-off and a 🏁 pick-up with a driver, a repeat (e.g. grooming every 6 weeks) and notes. A leg nobody has taken shows "who? Tap to take it", on this screen and on the feed card the appointment posts. Mark it ✓ done with the cost; a vaccination sets the dog's next due date (rabies and DHPP every 3 years, the rest yearly), which the trackers pick up, and a repeating one books the next.
+  - **💉 Vaccines:** anything due within 60 days, with 📅 Book it (or "booked ✓").
+  - **🦮 Best time to walk:** today's best hour from the San Jose forecast, an hour-by-hour strip, and a pavement-heat warning for paws.
+  - **The dogs:** a card each with photo, breed, age, weight, food and the most urgent vaccine or meds refill.
+  - **How happy are the dogs:** golden days and outings this month, the golden-day streak, and the last 12 months.
+  - **💰 Dog spending** this year, from the costs added to finished appointments.
+  - Then the shared log, house chores and the Gold Card (below).
+- **🏆 Chores** (same tab): one shared log for the family. Tap what you did, and 👫 logs it for both of you; you can undo your own entries.
   - **The dogs:** 🍳 Breakfast, 🍲 Dinner, 🦮 Walk, 🌳 Dog park, 🦴 Treat, 💊 Meds, with ⭐ Golden day and a week strip.
   - **The dogs say thank you:** when a day turns ⭐ golden, the dogs post a note on the feed thanking whoever took them out ("Dear Dad, thank you for a walk and the dog park… P.S. Please disregard any sock incidents. Forever yours, …"). Each note is put together from a greeting, a line about the day, a quirky P.S. and a sign-off, and recent lines aren't reused, so they read differently every time. One post a day, family only. Set what the pets call you in **Me › What the pets call you** (Dad, Mom…), and the family's creator can turn the notes off in Family settings.
   - **The house:** 💩 Poop patrol, 🗑️ Garbage, 🧺 Laundry, 🛒 Groceries, 🧽 Cleaning, 🍽️ Dishes.
@@ -389,6 +397,7 @@ Run `node scripts/bump-version.mjs` before committing. It gives every app file a
 | `js/brief.js`, `js/briefTab.js` | Weather, walk / run / ride windows, dog buttons, golden days, scoreboard |
 | `family/` | 👨‍👩‍👧 OurPawmily Families (preview): sign-in, families, invites, feed, privacy, bringing data over |
 | `server/family.js` | The family API (`/v2/…` on the connector; also runs on the phone for the demo), help desk, nightly maintenance |
+| `server/appts.js` | 🐾 Dog appointments: drivers, repeats, vaccine due dates, spending |
 | `server/picks.js` | 💑 Couples picks: events, endings and scoring |
 | `server/bingo.js` | 🎲 Show bingo: reading pasted squares, dealing cards, finding bingo |
 | `server/goldenPost.js` | ⭐ The dogs' golden-day thank-you notes |

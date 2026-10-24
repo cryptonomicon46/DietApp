@@ -223,7 +223,7 @@ async function feedView() {
     <div id="goldNews"></div>
     <div id="posts"><div class="skeleton card"></div><div class="skeleton card"></div></div>`;
   goldNews();
-  const r = await act(() => api.get('/feed'));
+  const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts()]);
   if (!r) return;
   state.feed = r.posts;
   renderPosts();
@@ -251,7 +251,30 @@ function renderPosts() {
   el.innerHTML = state.feed.length ? (asks.length ? `<h3>🙋 Can you help?</h3>${asks.map(postCard).join('')}${rest.length ? '<h3>Latest</h3>' : ''}` : '') + rest.map(postCard).join('')
     : `<div class="empty card"><div class="big">📸</div><b>No posts yet</b><p class="small muted">Share a photo of the dogs, a win at the gym, or what's for dinner. Only your family${state.connected.length ? ' (and the families you connect with, if you choose)' : ''} can see it.</p><button type="button" data-view="compose">Make the first post</button></div>`;
 }
+// After any change to an appointment: refresh whichever screen shows them.
+async function apptChanged() {
+  await loadAppts();
+  if (state.view === 'pets') {
+    renderComing(); renderVax(); renderSpend();
+    // A finished vaccination changes the dog's record: show the new due date.
+    for (const p of dogsOf()) dogsHub.profiles[p.id] = (await api.get(`/families/${state.fid}/members/${p.id}/data`).catch(() => null))?.data?.profile || dogsHub.profiles[p.id];
+    renderVax();
+    const cards = $('#dogcards');
+    if (cards) cards.innerHTML = dogsOf().map((p) => dogCard(p)).join('');
+  }
+  if (state.view === 'feed') renderPosts();
+}
+// A dog appointment someone added: live, so whoever's free can take the open leg from here.
+function apptPost(p) {
+  const a = dogsHub.appts.find((x) => x.id === p.appt);
+  return `<article class="post card appt-post" data-post="${p.id}" data-fid="${p.fid}">
+    <header><span class="who">${avatar(member(p.by) || { name: p.byName }, 38)}<span><b>${esc(p.by === fam().me ? 'You' : p.byName)}</b><small class="muted">added a dog appointment · ${ago(p.at)}</small></span></span><button type="button" class="icon-btn" data-act="postmenu" aria-label="Post options">⋯</button></header>
+    ${a ? apptRow(a, { feed: true }) : '<p class="small muted">This appointment was removed.</p>'}
+    ${a ? `<button type="button" class="linkish small" data-apptopen="${a.id}">Open in Dogs &amp; chores ›</button>` : ''}
+  </article>`;
+}
 function postCard(p) {
+  if (p.appt) return apptPost(p);
   const author = p.own && p.fid === state.fid ? member(p.by) : null;
   // A golden-day post from the dogs shows all of them as the author.
   const who = p.fromPets ? { id: p.by, kind: 'pet', name: p.byName, avatar: author?.avatar || p.byAvatar } : author || { id: p.by, name: p.byName, avatar: p.byAvatar };
@@ -336,21 +359,184 @@ function familyView() {
     <button type="button" class="ghost wide" data-act="invitefamily">💌 Invite a friend's family</button>`;
 }
 
+// 🐾 Dogs & chores: appointments, vaccines, the best time to walk, today's log, each dog, how
+// happy they are, spending, the house and the Gold Card — everything about the dogs in one place.
+const APPT = { groom: ['✂️', 'Grooming'], vet: ['🩺', 'Vet visit'], vaccine: ['💉', 'Vaccination'], dental: ['🦷', 'Dental'], boarding: ['🏨', 'Boarding / daycare'], other: ['📌', 'Other'] };
+const VACCINES = ['Rabies', 'DHPP', 'Bordetella', 'Leptospirosis', 'Canine influenza', 'Lyme'];
+const dogsHub = { appts: [], spending: null, profiles: {} };
+const dogsOf = () => fam().members.filter((m) => m.kind === 'pet');
+const whenText = (at) => { if (!at) return ''; const d = new Date(at.length === 10 ? `${at}T12:00` : at); return d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', ...(at.length > 10 ? { hour: 'numeric', minute: '2-digit' } : {}) }); };
+const timeText = (at) => (at && at.length > 10 ? new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '');
+const who = (id) => (id === fam().me ? 'You' : member(id)?.name || '');
+const daysTo = (d) => Math.round((Date.parse(`${d}T12:00:00`) - Date.parse(`${isoLocal()}T12:00:00`)) / 864e5);
+async function loadAppts() {
+  const r = await api.get(`/families/${state.fid}/appts?today=${isoLocal()}`).catch(() => null);
+  if (r) { dogsHub.appts = r.appts; dogsHub.spending = r.spending; }
+  return dogsHub.appts;
+}
 async function petsView() {
-  const pets = fam().members.filter((m) => m.kind === 'pet');
   const mods = fam().modules || [];
-  $('#view').innerHTML = `${demoBanner()}<section class="card gold" id="race"><div class="skeleton line"></div></section>
+  const dogs = mods.includes('dogs');
+  $('#view').innerHTML = `${demoBanner()}
+    ${dogs ? `<section class="card" id="coming"><div class="skeleton line"></div></section>
+    <section class="card" id="vax" hidden></section>
+    <section class="card walkcard" id="walk"><div class="skeleton line"></div></section>` : ''}
     <section class="card care" id="care"><div class="skeleton line"></div></section>
-    ${mods.includes('dogs') ? `<h3>Pets</h3>${pets.length ? pets.map((p) => `<button type="button" class="card pet-card" data-member="${p.id}">${avatar(p, 64)}<span><b>${esc(p.name)}</b><small class="muted">${esc([p.breed, ageOf(p.born)].filter(Boolean).join(' · ') || SPECIES[p.species] || '')}</small><small class="pet-alerts" data-alerts="${p.id}"></small></span><span class="go">›</span></button>`).join('')
-    : '<div class="empty card"><div class="big">🐾</div><b>No pets yet</b><p class="small muted">Add your dogs (or cats) — everyone in the family sees them.</p></div>'}
-    <button type="button" class="ghost wide" data-act="addpet">＋ Add a pet</button>` : ''}
-    <section id="fame"></section>`;
+    ${dogs ? `<h3>The dogs</h3><div class="dogcards" id="dogcards">${dogsOf().map((p) => dogCard(p)).join('')}</div>
+    <button type="button" class="ghost wide" data-act="addpet">＋ Add a pet</button>
+    <h3>How happy are the dogs</h3><section class="card" id="happy"><div class="skeleton line"></div></section>
+    <section class="card" id="spend" hidden></section>` : ''}
+    <section class="card gold" id="race"><div class="skeleton line"></div></section>
+    <section id="fame"></section>
+    ${dogs ? '<section class="card small"><a href="../#adopt">🐾 Adoption board ›</a></section>' : ''}`;
   renderCare(); renderRace();
-  for (const p of pets) {
-    const d = await api.get(`/families/${state.fid}/members/${p.id}/data`).catch(() => null);
-    const el = document.querySelector(`[data-alerts="${p.id}"]`);
-    if (el && d?.data?.profile) el.innerHTML = vaccineLine(d.data.profile);
+  if (!dogs) return;
+  renderWalk();
+  await loadAppts();
+  renderComing();
+  await Promise.all(dogsOf().map(async (p) => { dogsHub.profiles[p.id] = (await api.get(`/families/${state.fid}/members/${p.id}/data`).catch(() => null))?.data?.profile || {}; }));
+  const cards = $('#dogcards');
+  if (cards) cards.innerHTML = dogsOf().map((p) => dogCard(p)).join('');
+  renderVax(); renderSpend(); renderHappy();
+}
+function dogCard(p) {
+  const d = dogsHub.profiles[p.id] || {};
+  const alert = dogAlert(p, d);
+  return `<button type="button" class="dogcard" data-member="${p.id}">${avatar(p, 54)}<b>${esc(p.name)}</b>
+    <small class="muted">${esc([p.breed, ageOf(p.born), d.weightLb ? `${d.weightLb} lb` : ''].filter(Boolean).join(' · '))}</small>
+    ${d.food?.brand || d.food?.amount ? `<small>🍖 ${esc([d.food.brand, d.food.amount].filter(Boolean).join(' · '))}</small>` : ''}
+    ${alert ? `<small class="tone-warn">${alert}</small>` : ''}</button>`;
+}
+// The most urgent thing about a dog: a vaccine due within 45 days, or a meds refill within a week.
+function dogAlert(p, d) {
+  const out = [];
+  for (const v of d.vaccines || []) if (v.due) { const n = daysTo(v.due); if (n <= 45) out.push([n, n < 0 ? `💉 ${esc(v.name)} overdue` : `💉 ${esc(v.name)} due in ${n} day${n === 1 ? '' : 's'}`]); }
+  for (const m of d.meds || []) if (m.refill && m.active !== false) { const n = daysTo(m.refill); if (n <= 7) out.push([n, n < 0 ? `💊 ${esc(m.name)} refill late` : `💊 ${esc(m.name)} refill in ${n} day${n === 1 ? '' : 's'}`]); }
+  return out.sort((a, b) => a[0] - b[0])[0]?.[1] || '';
+}
+function apptRow(a, { feed = false } = {}) {
+  const [ico, label] = APPT[a.type] || APPT.other;
+  const pets = a.pets.map((id) => member(id)?.name).filter(Boolean).join(' & ');
+  const leg = (k, icon, name) => {
+    const at = a[`${k}At`], by = a[`${k}By`];
+    if (!at) return '';
+    return by ? `<span class="leg">${icon} ${name} ${timeText(at) || whenText(at)} · ${esc(who(by))}</span>`
+      : `<button type="button" class="leg open" data-claim="${k}" data-appt="${a.id}">${icon} ${name} ${timeText(at) || whenText(at)} · who? Tap to take it</button>`;
+  };
+  const d = new Date((a.dropAt || a.pickAt).slice(0, 10) + 'T12:00');
+  return `<div class="appt ${a.status === 'done' ? 'done' : ''}" ${feed ? '' : `data-apptopen="${a.id}"`}>
+    <div class="date">${d.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}<b>${d.getDate()}</b>${d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}</div>
+    <div><b>${ico} ${esc(label)}${a.vaccine ? ` (${esc(a.vaccine)})` : ''} · ${esc(pets)}</b>
+      <div class="small muted">${esc([a.place, a.repeatWeeks ? `every ${a.repeatWeeks} weeks` : '', a.status === 'done' ? `done ✓${a.cost ? ` · $${a.cost}` : ''}` : ''].filter(Boolean).join(' · '))}</div>
+      ${a.notes ? `<div class="small">“${esc(a.notes)}”</div>` : ''}
+      ${a.status === 'done' ? '' : `<div class="legs">${a.dropAt && a.pickAt && a.dropBy && a.dropBy === a.pickBy ? `<span class="leg">🚗 Drop-off &amp; pick-up · ${esc(who(a.dropBy))}</span>` : `${leg('drop', '🚗', 'Drop-off')}${leg('pick', '🏁', 'Pick-up')}`}</div>`}</div></div>`;
+}
+function renderComing() {
+  const el = $('#coming');
+  if (!el) return;
+  const up = dogsHub.appts.filter((a) => a.status !== 'done');
+  el.innerHTML = `<div class="row between"><b>📅 Coming up</b><button type="button" class="linkish small" data-act="apptnew">＋ Appointment</button></div>
+    ${up.length ? up.slice(0, 6).map((a) => apptRow(a)).join('') : '<p class="small muted">No appointments. Add grooming, the vet or a vaccination — with who drops off and who picks up.</p>'}`;
+}
+function renderVax() {
+  const el = $('#vax');
+  if (!el) return;
+  const rows = [];
+  for (const p of dogsOf()) {
+    const d = dogsHub.profiles[p.id] || {};
+    for (const v of d.vaccines || []) {
+      if (!v.due) continue;
+      const n = daysTo(v.due);
+      if (n > 60) continue;
+      const booked = dogsHub.appts.some((a) => a.status !== 'done' && a.type === 'vaccine' && a.pets.includes(p.id) && a.vaccine?.toLowerCase() === v.name.toLowerCase());
+      rows.push([n, `<li>${avatar(p, 24)} <b>${esc(p.name)}</b> · <span class="tone-warn">${esc(v.name)} ${n < 0 ? 'overdue' : `due in ${n} day${n === 1 ? '' : 's'}`}</span> ${booked ? '<span class="muted">· booked ✓</span>' : `<button type="button" class="ghost small" data-book="${p.id}" data-vaccine="${esc(v.name)}">📅 Book it</button>`}</li>`]);
+    }
   }
+  el.hidden = !rows.length;
+  el.innerHTML = `<b>💉 Vaccines</b><ul class="list vaxlist">${rows.sort((a, b) => a[0] - b[0]).map((r) => r[1]).join('')}</ul>`;
+}
+function renderSpend() {
+  const el = $('#spend'), s = dogsHub.spending;
+  if (!el || !s) return;
+  el.hidden = !s.total;
+  el.innerHTML = `<div class="row between"><b>💰 Dog spending ${isoLocal().slice(0, 4)}</b><b class="pts-big">$${Math.round(s.total).toLocaleString()}</b></div>
+    <p class="tiny muted">${Object.entries(s.byType).map(([k, v]) => `${APPT[k]?.[1] || k} $${Math.round(v).toLocaleString()}`).join(' · ')} · from costs you add when an appointment is done</p>`;
+}
+async function renderHappy() {
+  const el = $('#happy');
+  if (!el) return;
+  const s = await api.get(`/families/${state.fid}/dogstats?today=${isoLocal()}`).catch(() => null);
+  if (!s || !$('#happy')) return;
+  const max = Math.max(1, ...s.months.map((m) => m.golden));
+  el.innerHTML = `<div class="stats3"><div><b>${s.month.golden}</b>golden days<br>this month</div><div><b>${s.streak}${s.streak > 1 ? '🔥' : ''}</b>day streak</div><div><b>${s.month.walks}</b>outings<br>this month</div></div>
+    <div class="months" aria-label="Golden days by month">${s.months.map((m) => `<i title="${monthName(m.ym)}: ${m.golden} golden days" style="opacity:${m.golden ? 0.3 + 0.7 * (m.golden / max) : 1}" class="${m.golden ? '' : 'e'}"></i>`).join('')}</div>
+    <p class="tiny muted">⭐ A golden day = two outings, or one plus a treat. The strip is the last 12 months.</p>`;
+}
+// 🦮 When to walk: the trackers' weather scoring (San Jose), and how hot the pavement gets.
+async function renderWalk() {
+  const el = $('#walk');
+  if (!el) return;
+  try {
+    const B = await import('../js/brief.js');
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem('fam.weather') || 'null'); } catch { /* none */ }
+    if (!cached || Date.now() - cached.at > 30 * 60000) {
+      const u = B.weatherUrls(B.PLACE);
+      const [f, air] = await Promise.all([fetch(u.forecast).then((r) => r.json()), fetch(u.air).then((r) => (r.ok ? r.json() : null)).catch(() => null)]);
+      cached = { at: Date.now(), f, air };
+      try { localStorage.setItem('fam.weather', JSON.stringify(cached)); } catch { /* full */ }
+    }
+    const hourly = B.parseWeather(cached.f, cached.air);
+    const now = new Date();
+    const from = Math.max(0, hourly.findIndex((h) => h.time > now) - 1);
+    const w = B.dogWalks(hourly, from), hot = B.hottestPavement(hourly, from);
+    const pick = [w.morning, w.evening].filter(Boolean).sort((a, b) => b.score - a.score)[0];
+    const hr = (i) => hourly[i].time.toLocaleTimeString(undefined, { hour: 'numeric' }).replace(' ', '').toLowerCase();
+    const strip = hourly.slice(from, from + 14).filter((h) => h.time.getHours() >= 6 && h.time.getHours() <= 21).slice(0, 8);
+    const cls = (s) => (s >= 80 ? 'g' : s >= 60 ? 'ok2' : s >= 40 ? 'meh' : 'bad');
+    const other = [w.morning, w.evening].filter((x) => x && x !== pick)[0];
+    el.innerHTML = `<div class="row between"><b>🦮 Best time to walk ${now.getHours() >= 21 ? 'tomorrow' : 'today'}</b><span class="small muted">${esc(B.PLACE.name)}</span></div>
+      ${pick ? `<div class="best">${hr(pick.index)}–${hr(pick.index + 1)} <span class="small muted">· ${Math.round(hourly[pick.index].temp)}°</span></div>` : ''}
+      <div class="hours">${strip.map((h) => `<div class="hr ${cls(B.scoreHour(h, 'dog').score)}">${h.time.toLocaleTimeString(undefined, { hour: 'numeric' }).replace(' ', '').toLowerCase()}</div>`).join('')}</div>
+      ${hot && hot.asphalt >= 125 ? `<div class="tone-warn small">🔥 Pavement ~${Math.round(hot.asphalt)}°F around ${hr(hot.index)} — too hot for paws. Grass or shade then.</div>` : ''}
+      ${other ? `<p class="tiny muted">Also good: ${hr(other.index)}</p>` : ''}`;
+  } catch { el.innerHTML = '<b>🦮 Best time to walk</b><p class="small muted">Weather is unavailable right now.</p>'; }
+}
+// ＋ Dog appointment (new, or editing one).
+function apptSheet(a = null, pre = {}) {
+  const v = a || { type: pre.type || 'groom', pets: pre.pets || dogsOf().filter((p) => p.species === 'dog').map((p) => p.id), vaccine: pre.vaccine || '', dropBy: fam().me, pickBy: '', repeatWeeks: 0, remind: ['day'] };
+  const people = fam().members.filter((m) => m.kind === 'person' && m.status !== 'managed');
+  const drivers = (sel) => `<option value="">Anyone</option>${people.map((p) => `<option value="${p.id}" ${sel === p.id ? 'selected' : ''}>${esc(p.id === fam().me ? 'You' : p.name)}</option>`).join('')}`;
+  openSheet(`<h2>${a ? 'Edit appointment' : '＋ Dog appointment'}</h2>
+    <form id="apptForm" class="stack" data-id="${a?.id || ''}">
+      <div class="seg2 radios">${Object.entries(APPT).map(([k, [ico, label]]) => `<label><input type="radio" name="type" value="${k}" ${v.type === k ? 'checked' : ''}><span>${ico} ${label}</span></label>`).join('')}</div>
+      <fieldset class="chips plain"><legend>Who's going</legend>${dogsOf().map((p) => `<label class="chipcheck"><input type="checkbox" name="pets" value="${p.id}" ${v.pets.includes(p.id) ? 'checked' : ''}><span>🐾 ${esc(p.name)}</span></label>`).join('')}</fieldset>
+      <label class="vaxonly" ${v.type === 'vaccine' ? '' : 'hidden'}>Which vaccine<input name="vaccine" list="vaxlist" value="${esc(v.vaccine)}"><datalist id="vaxlist">${VACCINES.map((x) => `<option value="${x}">`).join('')}</datalist></label>
+      <label>Where<input name="place" maxlength="80" value="${esc(v.place || '')}" placeholder="e.g. Wag N' Wash, Willow Glen"></label>
+      <div class="two"><label>🚗 Drop-off<input type="datetime-local" name="dropAt" value="${esc(v.dropAt || '')}"></label><label>Driver<select name="dropBy">${drivers(v.dropBy)}</select></label></div>
+      <div class="two"><label>🏁 Pick-up<input type="datetime-local" name="pickAt" value="${esc(v.pickAt || '')}"></label><label>Driver<select name="pickBy">${drivers(v.pickBy)}</select></label></div>
+      <label>Repeat<select name="repeatWeeks">${[[0, 'Never'], [4, 'Every 4 weeks'], [6, 'Every 6 weeks'], [8, 'Every 8 weeks'], [12, 'Every 3 months']].map(([n, t]) => `<option value="${n}" ${+v.repeatWeeks === n ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <label>Notes<textarea name="notes" rows="2" maxlength="300">${esc(v.notes || '')}</textarea></label>
+      <p class="tiny muted">On the family 📅 calendar (drop-off and pick-up) and the feed. Only your family sees it. Leave a driver as "Anyone" and whoever's free taps to take it.</p>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>${a ? 'Save' : 'Add'}</button></div>
+    </form>`);
+}
+// An appointment: take or give up a leg, edit, mark done (cost; a vaccine's next due date), remove.
+function apptDetail(a) {
+  const mine = (k) => a[`${k}By`] === fam().me;
+  // The next shot, counted from the appointment (rabies and DHPP every 3 years, the rest yearly).
+  const vaxDue = a.type === 'vaccine' && a.vaccine ? (() => { const y = { rabies: 3, dhpp: 3 }[a.vaccine.toLowerCase()] || 1; const d = new Date(`${(a.dropAt || a.pickAt).slice(0, 10)}T12:00`); d.setFullYear(d.getFullYear() + y); return isoLocal(d); })() : '';
+  openSheet(`<div class="row between"><h2>${(APPT[a.type] || APPT.other)[0]} ${esc((APPT[a.type] || APPT.other)[1])}</h2><button type="button" class="linkish small" data-act="close">Done</button></div>
+    ${apptRow(a, { feed: true })}
+    ${a.status === 'done' ? `<p class="small">✓ Done ${esc(a.doneAt || '')}${a.cost ? ` · $${a.cost}` : ''}${a.outcome ? ` · “${esc(a.outcome)}”` : ''}</p><button type="button" class="ghost small" data-apptundone="${a.id}">Not done after all</button>`
+      : `<div class="row wrap">${['drop', 'pick'].filter((k) => a[`${k}At`]).map((k) => `<button type="button" class="ghost small" data-claim="${k}" data-appt="${a.id}" ${mine(k) ? 'data-release="1"' : ''}>${mine(k) ? `Give up the ${k === 'drop' ? 'drop-off' : 'pick-up'}` : `🙋 I'll do the ${k === 'drop' ? 'drop-off' : 'pick-up'}`}</button>`).join('')}
+        <button type="button" class="ghost small" data-apptedit="${a.id}">✎ Edit</button></div>
+      <form id="apptDoneForm" class="stack card" data-id="${a.id}"><b>✓ Mark it done</b>
+        <div class="two"><label>Cost ($)<input name="cost" type="number" min="0" step="0.01" inputmode="decimal" placeholder="optional"></label><label>Date<input name="date" type="date" value="${esc((a.dropAt || a.pickAt).slice(0, 10))}"></label></div>
+        ${a.type === 'vaccine' ? `<label>${esc(a.vaccine || 'Vaccine')} next due<input name="nextDue" type="date" value="${vaxDue}"></label>` : ''}
+        <label>How did it go? (optional)<input name="outcome" maxlength="300"></label>
+        <button>✓ Done${a.repeatWeeks ? ` · next one in ${a.repeatWeeks} weeks` : ''}</button></form>`}
+    <button type="button" class="linkish small danger" data-apptdel="${a.id}">Remove this appointment</button>`);
 }
 // 🐾 Today's dog care, shared by the whole family: tap what you did; 👫 logs it for both of you.
 let careBoth = false;
@@ -801,7 +987,7 @@ async function postAction(kind, { fid, pid }) {
 
 // ---------- events ----------
 document.addEventListener('click', (e) => {
-  const t = e.target.closest('button, [data-view], [data-member], [data-fam]');
+  const t = e.target.closest('button, [data-view], [data-member], [data-fam], [data-apptopen]');
   if (!t) return;
   const d = t.dataset;
   const post = t.closest('[data-post]');
@@ -817,6 +1003,12 @@ document.addEventListener('click', (e) => {
   }
   if (d.careundo) return act(async () => { await api.del(`/families/${state.fid}/care/${isoLocal()}/${d.careundo}`); renderCare(); renderRace(); });
   if (d.unblock) return act(async () => { await api.del(`/account/blocks/${d.unblock}`); state.user.blocked = state.user.blocked.filter((b) => b.id !== d.unblock); meView(); });
+  if (d.claim && d.appt) return act(async () => { await api.patch(`/families/${state.fid}/appts/${d.appt}`, { claim: d.claim, release: !!d.release }); await apptChanged(); toast(d.release ? 'Given up — it\'s open again' : `You've got the ${d.claim === 'drop' ? 'drop-off' : 'pick-up'} 🚗`); });
+  if (d.apptopen) { const a = dogsHub.appts.find((x) => x.id === d.apptopen); return a ? apptDetail(a) : null; }
+  if (d.apptedit) return apptSheet(dogsHub.appts.find((x) => x.id === d.apptedit));
+  if (d.book) return apptSheet(null, { type: 'vaccine', pets: [d.book], vaccine: d.vaccine });
+  if (d.apptdel) { if (!confirm('Remove this appointment?')) return; return act(async () => { await api.del(`/families/${state.fid}/appts/${d.apptdel}`); closeSheet(); await apptChanged(); }); }
+  if (d.apptundone) return act(async () => { await api.patch(`/families/${state.fid}/appts/${d.apptundone}`, { undone: true }); closeSheet(); await apptChanged(); });
   if (d.season) { bingo.season = d.season; return seasonView(); }
   if (d.pick || d.pickend) {
     const cid = t.closest('[data-couple]').dataset.couple, cur = bingo.view.mine?.[cid] || { events: [], outcome: null };
@@ -864,6 +1056,7 @@ document.addEventListener('click', (e) => {
     case 'close': return closeSheet();
     case 'demo': return demoSignIn();
     case 'help': return helpView();
+    case 'apptnew': return apptSheet();
     case 'bingonew': return bingoNew();
     case 'seasonnew': return seasonNew();
     case 'seasonstatus': return act(async () => seasonView(await api.patch(`/families/${state.fid}/picks/${bingo.season}`, { status: bingo.view.season.status === 'live' ? 'done' : 'live' })));
@@ -984,6 +1177,7 @@ document.addEventListener('change', async (e) => {
     draft.photo = await shrinkPhoto(t.files[0]).catch(() => '');
     return compose();
   }
+  if (t.name === 'type' && t.form?.id === 'apptForm') { t.form.querySelector('.vaxonly').hidden = t.value !== 'vaccine'; return; }
   if (t.name === 'bingofile' && t.files?.[0]) {
     const text = await t.files[0].text();
     let lines;
@@ -1048,6 +1242,24 @@ document.addEventListener('submit', (e) => {
   if (f.id === 'famSettings') {
     e.preventDefault();
     return act(async () => { await api.patch(`/families/${state.fid}`, { name: v.name, modules: new FormData(f).getAll('mod'), goldenPosts: !!v.goldenPosts }); await loadFamily(); chrome(true); toast('Saved'); });
+  }
+  if (f.id === 'apptForm') {
+    e.preventDefault();
+    const fd = new FormData(f);
+    const body = { ...v, pets: fd.getAll('pets'), repeatWeeks: +v.repeatWeeks };
+    return act(async () => {
+      if (f.dataset.id) await api.patch(`/families/${state.fid}/appts/${f.dataset.id}`, { edit: body });
+      else await api.post(`/families/${state.fid}/appts`, body);
+      closeSheet(); await apptChanged(); toast(f.dataset.id ? 'Saved' : '🐾 Added — it\'s on the feed and the calendar');
+    });
+  }
+  if (f.id === 'apptDoneForm') {
+    e.preventDefault();
+    return act(async () => {
+      const r = await api.patch(`/families/${state.fid}/appts/${f.dataset.id}`, { done: true, ...v });
+      closeSheet(); await apptChanged();
+      toast(r.next ? `✓ Done · next one ${whenText(r.next.dropAt || r.next.pickAt)}` : '✓ Done');
+    });
   }
   if (f.id === 'seasonForm') {
     e.preventDefault();

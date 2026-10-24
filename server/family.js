@@ -21,6 +21,8 @@
 //   gold:<fid>                 [{month, winners, points}] Gold Card hall of fame
 //   report:<fid>:<postId>      [{uid, reason, at}]        posts someone reported
 //   rate:<uid>:<minute>        count of changes (limits runaway clients and abuse)
+//   appts:<fid>                [{id, type, pets, place, dropAt, dropBy, pickAt, pickBy, repeatWeeks, vaccine, status, cost…}]  dog appointments
+//   dogmonths:<fid>            {YYYY-MM: {golden, walks}}  finished months of dog stats (cache)
 //   bingopacks:<fid>           [{id, title, squares, by, byName, at}]  show bingo card sets
 //   bingogames:<fid>           [{id, packId, title, squares, status, winners, by, at}]
 //   bingocard:<fid>:<gid>:<memberId>  {card: [25 square indexes, -1 free], marks: [25]}  one player's card
@@ -37,6 +39,7 @@
 // authors blocked (Apple 1.2).
 
 import { isGolden, dayHighlights, goldenMessage } from './goldenPost.js';
+import { APPT_TYPES, cleanAppt, nextDue, shiftWeeks, startOf, spending } from './appts.js';
 import { parseSquares, makeCard, bingoLines, bingoPrompt, NEED, FREE } from './bingo.js';
 import { EVENTS as PICK_EVENTS, OUTCOMES, locked as pickLocked, score as pickScore, parseCouples } from './picks.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
@@ -380,6 +383,7 @@ export async function familyApi(req, env, path) {
         (byDay[e.date] ||= []).push({ id: randomId(6), kind: e.kind, pets: [], by, byName: by.map((id) => fam.members.find((x) => x.id === id).name).join(' & '), note: '', at: +e.at || Date.parse(`${e.date}T12:00:00Z`), src: 'import' });
       }
       const idx = new Set((await db.get(`careidx:${fam.fid}`)) || []);
+      await db.del(`dogmonths:${fam.fid}`); // history changed: recount the months
       for (const [d, list] of Object.entries(byDay)) {
         const kept = ((await db.get(`care:${fam.fid}:${d}`)) || []).filter((x) => x.src !== 'import');
         await db.put(`care:${fam.fid}:${d}`, [...kept, ...list].sort((a, b) => a.at - b.at).slice(-100));
@@ -399,6 +403,108 @@ export async function familyApi(req, env, path) {
   }
 
   // ---- 🏆 the month's chores race: points per person, and the Gold Card ----
+  // ---- 🐾 dog appointments: grooming, vet, vaccines… with drop-off and pick-up drivers ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/appts(?:\/([a-z0-9]+))?$/);
+  if (m) {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const me = meIn(fam);
+    const key = `appts:${fam.fid}`;
+    const list = (await db.get(key)) || [];
+    const save = (l) => db.put(key, l.sort((a, b) => startOf(a).localeCompare(startOf(b))).slice(-300));
+    const ctx = { petIds: fam.members.filter((x) => x.kind === 'pet').map((x) => x.id), memberIds: fam.members.filter((x) => x.kind === 'person').map((x) => x.id), clean };
+    if (!m[2] && method === 'GET') {
+      const today = /^\d{4}-\d{2}-\d{2}$/.test(url(req).searchParams.get('today') || '') ? url(req).searchParams.get('today') : new Date().toISOString().slice(0, 10);
+      const recent = shiftDay(today, -60);
+      return json({
+        appts: list.filter((a) => a.status !== 'done' || startOf(a).slice(0, 10) >= recent),
+        spending: spending(list, today.slice(0, 4)), types: APPT_TYPES,
+      });
+    }
+    if (me.relation === 'child') return json({ error: 'ask a grown-up' }, 403);
+    if (!m[2] && method === 'POST') {
+      const a = { id: randomId(8), ...cleanAppt(body, ctx), status: 'upcoming', by: me.id, at: Date.now() };
+      if (!a.pets.length) return json({ error: 'which dog is going?' }, 400);
+      if (!a.dropAt && !a.pickAt) return json({ error: 'when is it?' }, 400);
+      await save([...list, a]);
+      // It goes on the feed, so the other driver can take the open leg from there.
+      const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '',
+        text: '', photo: '', appt: a.id, tags: a.pets, tagNames: Object.fromEntries(a.pets.map((id) => [id, fam.members.find((x) => x.id === id)?.name || ''])), tagKinds: Object.fromEntries(a.pets.map((id) => [id, 'pet'])),
+        audience: 'family', likes: [], comments: [], at: Date.now() };
+      await db.put(`post:${fam.fid}:${post.id}`, post);
+      await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
+      return json({ appt: a });
+    }
+    const a = list.find((x) => x.id === m[2]);
+    if (!a) return json({ error: 'that appointment is gone' }, 404);
+    if (method === 'DELETE') { await save(list.filter((x) => x.id !== a.id)); return json({ ok: true }); }
+    if (method === 'PATCH') {
+      // I'll take it: the drop-off or the pick-up (or let it go again).
+      if (body.claim === 'drop' || body.claim === 'pick') a[`${body.claim}By`] = body.release ? '' : me.id;
+      if (body.edit) Object.assign(a, cleanAppt({ ...a, ...body.edit }, ctx));
+      let next = null;
+      if (body.done) {
+        a.status = 'done';
+        a.doneAt = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? body.date : startOf(a).slice(0, 10);
+        a.cost = Math.max(0, Math.min(100000, Math.round((+body.cost || 0) * 100) / 100));
+        a.outcome = clean(body.outcome, 300);
+        // A vaccination updates each dog's record: given today, next due in a year or three.
+        if (a.type === 'vaccine' && a.vaccine) {
+          const due = /^\d{4}-\d{2}-\d{2}$/.test(body.nextDue || '') ? body.nextDue : nextDue(a.vaccine, a.doneAt);
+          for (const pid of a.pets) {
+            const rec = (await db.get(`data:${fam.fid}:${pid}`)) || { data: {} };
+            const prof = { ...(rec.data?.profile || {}) };
+            const vax = [...(prof.vaccines || [])];
+            const i = vax.findIndex((v) => v.name?.trim().toLowerCase() === a.vaccine.toLowerCase());
+            const v = { ...(i >= 0 ? vax[i] : { name: a.vaccine }), given: a.doneAt, due };
+            if (i >= 0) vax[i] = v; else vax.push(v);
+            const now = Date.now();
+            prof.vaccines = vax; prof.times = { ...(prof.times || {}), vaccines: now }; prof.updatedAt = now;
+            await db.put(`data:${fam.fid}:${pid}`, { savedAt: now, data: { ...(rec.data || {}), profile: prof } });
+          }
+        }
+        if (a.repeatWeeks && !list.some((x) => x.from === a.id)) {
+          next = { ...a, id: randomId(8), from: a.id, status: 'upcoming', dropAt: shiftWeeks(a.dropAt, a.repeatWeeks), pickAt: shiftWeeks(a.pickAt, a.repeatWeeks), dropBy: '', pickBy: '', cost: 0, outcome: '', doneAt: '', at: Date.now() };
+          delete next.doneAt; list.push(next);
+        }
+      }
+      if (body.undone) { a.status = 'upcoming'; delete a.doneAt; }
+      await save(list);
+      return json({ appt: a, next });
+    }
+  }
+  // 🐾 How happy are the dogs: golden days, walks, the streak, and the last 12 months.
+  m = path.match(/^\/families\/([a-z0-9]+)\/dogstats$/);
+  if (m && method === 'GET') {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(url(req).searchParams.get('today') || '') ? url(req).searchParams.get('today') : new Date().toISOString().slice(0, 10);
+    const days = new Set((await db.get(`careidx:${fam.fid}`)) || []);
+    const dayStat = async (d) => { const l = days.has(d) ? (await db.get(`care:${fam.fid}:${d}`)) || [] : []; return { golden: isGolden(l), walks: l.filter((e) => e.kind === 'walk' || e.kind === 'park').length }; };
+    const ym = today.slice(0, 7);
+    // This month and last, day by day (for the streak); earlier months from the cache.
+    const recent = {};
+    for (let d = shiftDay(`${ym}-01`, -31); d <= today; d = shiftDay(d, 1)) recent[d] = await dayStat(d);
+    let streak = 0;
+    for (let d = recent[today]?.golden ? today : shiftDay(today, -1); recent[d]?.golden; d = shiftDay(d, -1)) streak++;
+    const cache = (await db.get(`dogmonths:${fam.fid}`)) || {};
+    const months = [];
+    let changed = false;
+    for (let i = 11; i >= 0; i--) {
+      const first = new Date(`${ym}-15T12:00:00Z`); first.setUTCMonth(first.getUTCMonth() - i);
+      const mo = first.toISOString().slice(0, 7);
+      if (mo === ym) { const v = Object.entries(recent).filter(([d]) => d.startsWith(mo)).map(([, s]) => s); months.push({ ym: mo, golden: v.filter((s) => s.golden).length, walks: v.reduce((n, s) => n + s.walks, 0) }); continue; }
+      if (!cache[mo]) {
+        let golden = 0, walks = 0;
+        for (const d of [...days].filter((x) => x.startsWith(mo))) { const s = await dayStat(d); golden += s.golden ? 1 : 0; walks += s.walks; }
+        cache[mo] = { golden, walks }; changed = true;
+      }
+      months.push({ ym: mo, ...cache[mo] });
+    }
+    if (changed) await db.put(`dogmonths:${fam.fid}`, cache);
+    return json({ month: months.at(-1), streak, months });
+  }
+
   // ---- 🎲 show bingo ----
   m = path.match(/^\/families\/([a-z0-9]+)\/bingo(?:\/(packs|games|generate)(?:\/([a-z0-9]+)(\/mark|\/end)?)?)?$/);
   if (m) {
@@ -1049,6 +1155,8 @@ async function deleteFamily(db, fam) {
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) await db.del(`care:${fam.fid}:${d}`);
   await db.del(`careidx:${fam.fid}`);
   await db.del(`goldenmsg:${fam.fid}`);
+  await db.del(`appts:${fam.fid}`);
+  await db.del(`dogmonths:${fam.fid}`);
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) for (const x of fam.members) await db.del(`bingocard:${fam.fid}:${g.id}:${x.id}`);
   await db.del(`bingogames:${fam.fid}`);
   await db.del(`bingopacks:${fam.fid}`);
