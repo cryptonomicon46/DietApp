@@ -154,6 +154,8 @@ function recordDay() {
     // The plan's deficit for today includes the share of training calories it doesn't
     // add back to food, so eating to target on a big training day isn't "too big".
     plannedDeficit: plannedDeficitFor(base, burned, t), protein: Math.round(ate.p), proteinTarget: t.p,
+    // For the family app's Today card.
+    left: { kcal: Math.round(t.kcal - ate.kcal), p: Math.round(t.p - ate.p), c: Math.round(t.c - ate.c), f: Math.round(t.f - ate.f) },
     floor: state.profile.sex === 'male' ? 1500 : 1200,
     meals: Object.keys(todaysLog().meals).length,
   };
