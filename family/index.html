@@ -12,12 +12,13 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="../icon-180.png">
   <link rel="icon" href="../icon.svg">
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
   <header class="bar" id="bar" hidden>
     <button type="button" class="fam-switch" id="famSwitch"></button>
-    <button type="button" class="icon-btn" id="newPostTop" aria-label="New post">＋</button>
+    <span class="row"><button type="button" class="icon-btn" id="bingoTop" aria-label="Show bingo" title="Show bingo">🎲</button>
+    <button type="button" class="icon-btn" id="newPostTop" aria-label="New post">＋</button></span>
   </header>
   <main id="view" aria-live="polite"></main>
   <nav class="nav" id="nav" hidden>
@@ -30,6 +31,6 @@
   </nav>
   <dialog id="sheet" class="sheet"><div id="sheetBody"></div></dialog>
   <div class="toast" id="toast" hidden></div>
-  <script type="module" src="app.js?v=11"></script>
+  <script type="module" src="app.js?v=12"></script>
 </body>
 </html>

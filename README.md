@@ -83,6 +83,7 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
   - **Points by effort** (cleaning 4; laundry and groceries 3; walks, park and poop patrol 2; feeding, meds, garbage and dishes 1; treats are for love). Every tap gets a little burst of ✨ and says where you stand.
   - **The Gold Card:** the month's top scorer wins a gold card, with a prize the family's creator sets (e.g. "picks date night"). A tie shares it. The race shows points, chores and 🔥 streaks, the winner tops the feed in the first week of the next month, and past winners go in the **Hall of fame**.
   - Bringing over the current app also brings its feeding, walk, park and treat history into this log.
+- **🎲 Show bingo** (🎲 at the top): before an episode, start a game from a card set and everyone in the family gets their own shuffled 5×5 card with a free middle. Tap squares as they happen; the first full row, column or diagonal is BINGO 🎉, the win goes on the feed, and everyone's progress shows under the card. **New show, no app update:** ＋ New card set → ✨ *Write them with Claude* (when the connector has an Anthropic key), 📋 *Copy a prompt* for Claude/ChatGPT and paste the squares back, 📄 *Load a file* (.txt one per line, or a JSON list), or type your own. Card sets stay in the family.
 - **🙋 Ask for help:** a post can be a request (🐾 pet sitting, 🧸 babysitting, 🦮 a dog walk, 🚗 a ride, 🍲 a meal, or a hand) with dates and a time. Open requests from others sit at the top of the feed under **Can you help?** People tap **🙋 I can help** with a note, and whoever asked picks someone, which marks the request **Sorted ✓**. Share it with *+ connected families* to ask friends' families too.
 - **What friends' families can see** (Family tab, set by the creator): 🧸 kids are private by default, and 🐾 pets are shared unless you turn them off. Friends' families don't see private members, and a post that tags someone private is kept in the family (and hidden from friends if it was shared before).
 - **Safety:** every post has ⋯ → Hide, Report (flagged 🚩 to the family's creator) or Block its author (unblock in Me).
@@ -386,6 +387,7 @@ Run `node scripts/bump-version.mjs` before committing. It gives every app file a
 | `js/brief.js`, `js/briefTab.js` | Weather, walk / run / ride windows, dog buttons, golden days, scoreboard |
 | `family/` | 👨‍👩‍👧 OurPawmily Families (preview): sign-in, families, invites, feed, privacy, bringing data over |
 | `server/family.js` | The family API (`/v2/…` on the connector; also runs on the phone for the demo), help desk, nightly maintenance |
+| `server/bingo.js` | 🎲 Show bingo: reading pasted squares, dealing cards, finding bingo |
 | `server/goldenPost.js` | ⭐ The dogs' golden-day thank-you notes |
 | `server/helpAgent.js`, `server/helpGuide.js` | 💬 The help assistant (Claude with account tools) and the guide it answers from |
 | `js/dress.js`, `js/dressTab.js` | 👔 Dress for the day: places from the calendar, layering for each person's weather |

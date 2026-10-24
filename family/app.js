@@ -209,7 +209,8 @@ function show(view, extra) {
   chrome(true);
   document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === (view === 'member' ? 'family' : view)));
   window.scrollTo(0, 0);
-  ({ feed: feedView, family: familyView, pets: petsView, me: meView, member: memberView })[view]?.();
+  if (view !== 'bingo') clearInterval(bingo.timer);
+  ({ feed: feedView, family: familyView, pets: petsView, me: meView, member: memberView, bingo: bingoView })[view]?.();
 }
 const demoBanner = () => (api.mode() === 'demo' ? '<div class="banner">Demo — everything stays on this phone.</div>' : '');
 
@@ -405,6 +406,9 @@ function celebrate(kind, x, y) {
   const after = (mine?.points || 0) + pts;
   const lead = other ? (after > other.points ? ` · ${after - other.points} ahead of ${other.name}` : after === other.points ? ` · tied with ${other.name}` : ` · ${other.points - after} behind ${other.name}`) : '';
   toast(`${CARE[kind][0]} ${pts ? `+${pts} ✨` : '♡'} ${CARE[kind][1]}${lead}`);
+  celebrateBurst(x, y);
+}
+function celebrateBurst(x, y) {
   for (let i = 0; i < 14; i++) {
     const c = document.createElement('i');
     c.className = 'burst';
@@ -483,7 +487,8 @@ function meView() {
   $('#view').innerHTML = `${demoBanner()}
     <section class="card profile">${avatar({ ...my, avatar: my.avatar || state.user.picture }, 72)}<h2>${esc(my.name)}</h2><div class="muted small">${esc(state.user.email)} · ${api.mode() === 'demo' ? 'Demo account' : 'Google account'}</div></section>
     ${(f.modules || []).includes('dogs') && f.members.some((m) => m.kind === 'pet') ? `<section class="card"><form id="petCallsForm" class="row"><label class="grow">What the pets call you<input name="petCalls" maxlength="20" placeholder="e.g. Dad, Mom, Auntie" value="${esc(my.petCalls || '')}"></label><button class="ghost">Save</button></form>
-      <p class="tiny muted">Used when the dogs thank you for a ⭐ golden day.</p></section>` : ''}
+      <div class="chips">${['Dad', 'Mom'].map((x) => `<button type="button" class="chip" data-petcalls="${x}">${x}</button>`).join('')}</div>
+      <p class="tiny muted">Used when the dogs thank you for a ⭐ golden day. Until you choose, they write to "Mom &amp; Dad".</p></section>` : ''}
     <h3>Privacy</h3>
     <section class="card"><b>Who can see my diet & fitness</b><p class="small muted">Weight, meals and training. Off for everyone until you turn it on.</p>
       ${others.length ? `<ul class="list toggles">${others.map((o) => `<li><label class="switch-row">${avatar(o, 32)}<span>${esc(o.name)} <small class="muted">${esc(relLabel(o))}</small></span><input type="checkbox" data-share="${o.id}" ${(my.shareWith || []).includes(o.id) ? 'checked' : ''}><i class="switch"></i></label></li>`).join('')}</ul>`
@@ -523,6 +528,63 @@ function meView() {
     const el = $('#sessions');
     if (el) el.innerHTML = `<b>Signed in on</b><ul class="list">${r.sessions.slice().reverse().map((x) => `<li class="row between"><span>${esc(x.device || 'A device')}${x.current ? ' <span class="pill">This one</span>' : ''}</span><small>${ago(x.at)}</small></li>`).join('')}</ul>`;
   }).catch(() => {});
+}
+
+// ---------- 🎲 show bingo ----------
+// Card sets are lists of squares anyone can add (pasted from a chatbot, a file, or written by
+// Claude), so a new show never needs an app update. Each player gets their own shuffled card.
+const bingo = { list: null, game: null, view: null, timer: null };
+const BINGO_PROMPT = (show) => `Make a bingo card set for watching "${show || 'our show'}" together.
+Give me 30 short squares (under 8 words each) — funny, specific moments and clichés that are likely to happen in an episode, a mix of easy and rare.
+Reply with just the squares, one per line, no numbers or bullets.`;
+async function bingoView() {
+  if (bingo.game) return bingoGame();
+  const r = await act(() => api.get(`/families/${state.fid}/bingo`));
+  if (!r || state.view !== 'bingo') return;
+  bingo.list = r;
+  const live = r.games.filter((g) => g.status === 'live'), past = r.games.filter((g) => g.status !== 'live').slice(0, 5);
+  $('#view').innerHTML = `${demoBanner()}
+    <section class="card bingo-hero"><div class="big">🎲</div><h2>Show bingo</h2><p class="small muted">Pick a card set before an episode, everyone gets their own card, and the first line wins. New show? Add a card set — no app update needed.</p></section>
+    ${live.length ? `<h3>Playing now</h3>${live.map((g) => `<button type="button" class="card bingo-row" data-bingogame="${g.id}"><b>${esc(g.title)}</b><small class="muted">started by ${esc(g.byName)} · ${ago(g.at)}${g.winners.length ? ` · 🏆 ${g.winners.map((w) => esc(w.name)).join(', ')}` : ''}</small><span class="go">Play ›</span></button>`).join('')}` : ''}
+    <h3>Card sets</h3>
+    ${r.packs.length ? r.packs.map((p) => `<div class="card bingo-row"><b>${esc(p.title)}</b><small class="muted">${p.count} squares · added by ${esc(p.byName)}</small>
+      <div class="row"><button type="button" data-bingostart="${p.id}">▶ Start a game</button>${p.mine || me().role === 'owner' ? `<button type="button" class="linkish small danger" data-bingodel="${p.id}">Remove</button>` : ''}</div></div>`).join('')
+      : '<p class="small muted">No card sets yet — add one for the next show you watch.</p>'}
+    <button type="button" class="ghost wide" data-act="bingonew">＋ New card set</button>
+    ${past.length ? `<h3>Earlier games</h3><ul class="list small">${past.map((g) => `<li class="row between"><span>${esc(g.title)} <small class="muted">${ago(g.at)}</small></span><span>${g.winners.length ? `🏆 ${g.winners.map((w) => esc(w.name)).join(', ')}` : 'no bingo'}</span></li>`).join('')}</ul>` : ''}`;
+}
+function bingoNew(prefill = {}) {
+  openSheet(`<h2>New card set</h2>
+    <form id="bingoForm" class="stack">
+      <label>Show<input name="title" required maxlength="60" placeholder="e.g. Love Is Blind" value="${esc(prefill.title || '')}"></label>
+      <div class="row wrap"><button type="button" class="ghost small" data-act="bingoclaude">✨ Write them with Claude</button><button type="button" class="ghost small" data-act="bingoprompt">📋 Copy a prompt for any chatbot</button>
+        <label class="filebtn ghost small">📄 Load a file<input type="file" name="bingofile" accept=".txt,.json,.csv,text/plain,application/json" hidden></label></div>
+      <label>Squares — one per line (at least 24, 30+ is best)<textarea name="text" rows="10" placeholder="Someone cries in the pods&#10;“I've never felt this way before”&#10;Dramatic slow-motion walk…">${esc(prefill.text || '')}</textarea></label>
+      <p class="tiny muted" id="bingoCount"></p>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save card set</button></div>
+    </form>`);
+  bingoCountLine();
+}
+const bingoCountLine = () => {
+  const el = $('#bingoCount'), ta = $('#bingoForm [name=text]');
+  if (!el || !ta) return;
+  const n = ta.value.split(/\n/).map((x) => x.trim()).filter(Boolean).length;
+  el.textContent = n ? `${n} square${n === 1 ? '' : 's'}${n < 24 ? ` — ${24 - n} more needed` : ' ✓'}` : '';
+};
+async function bingoGame(r) {
+  r ||= await act(() => api.get(`/families/${state.fid}/bingo/games/${bingo.game}`));
+  if (!r || state.view !== 'bingo') return;
+  bingo.view = r;
+  const c = r.card, done = r.game.status !== 'live';
+  $('#view').innerHTML = `<div class="row between bingo-top"><button type="button" class="linkish" data-act="bingoback">‹ Show bingo</button>${!done && (r.game.byName === me().name || me().role === 'owner') ? '<button type="button" class="linkish small" data-act="bingoend">End game</button>' : ''}</div>
+    <h2 class="bingo-title">${esc(r.game.title)} <small>bingo</small></h2>
+    ${r.game.winners.length ? `<p class="bingo-win">🏆 ${r.game.winners.map((w, i) => `${i === 0 ? '<b>' : ''}${esc(w.name)}${i === 0 ? '</b>' : ''}`).join(' · ')}</p>` : ''}
+    <div class="bingo-grid ${done ? 'done' : ''}">${c.squares.map((s, i) => (i === 12 ? '<div class="bsq free">⭐<small>FREE</small></div>'
+      : `<button type="button" class="bsq ${c.marks[i] ? 'on' : ''}" data-bsq="${i}" ${done ? 'disabled' : ''}>${esc(s)}</button>`)).join('')}</div>
+    <ul class="bingo-players">${r.players.map((p) => `<li>${avatar(member(p.id), 26)}<span>${esc(p.id === fam().me ? 'You' : p.name)}</span><small class="muted">${p.playing ? `${p.marked} marked${p.lines ? ` · ${p.lines} line${p.lines > 1 ? 's' : ''} 🎉` : ''}` : 'not playing yet'}</small></li>`).join('')}</ul>
+    ${done ? '<p class="small muted center">This game has ended.</p>' : '<p class="tiny muted center">Tap a square when it happens. A full row, column or diagonal is BINGO.</p>'}`;
+  clearInterval(bingo.timer);
+  if (!done) bingo.timer = setInterval(() => { if (state.view === 'bingo' && bingo.game && document.visibilityState === 'visible') api.get(`/families/${state.fid}/bingo/games/${bingo.game}`).then((x) => { if (state.view === 'bingo' && bingo.game) bingoGame(x); }).catch(() => {}); }, 8000);
 }
 
 // ---------- help: chat with the assistant, report a problem ----------
@@ -709,6 +771,18 @@ document.addEventListener('click', (e) => {
   }
   if (d.careundo) return act(async () => { await api.del(`/families/${state.fid}/care/${isoLocal()}/${d.careundo}`); renderCare(); renderRace(); });
   if (d.unblock) return act(async () => { await api.del(`/account/blocks/${d.unblock}`); state.user.blocked = state.user.blocked.filter((b) => b.id !== d.unblock); meView(); });
+  if (d.bingogame) { bingo.game = d.bingogame; return bingoGame(); }
+  if (d.bingostart) return act(async () => { const r = await api.post(`/families/${state.fid}/bingo/games`, { packId: d.bingostart }); bingo.game = r.game.id; bingoGame(); });
+  if (d.bingodel) { if (!confirm('Remove this card set?')) return; return act(async () => { await api.del(`/families/${state.fid}/bingo/packs/${d.bingodel}`); bingoView(); }); }
+  if (d.bsq != null) {
+    t.classList.toggle('on');
+    return act(async () => {
+      const r = await api.post(`/families/${state.fid}/bingo/games/${bingo.game}/mark`, { i: +d.bsq });
+      bingoGame(r);
+      if (r.bingo) { const b = t.getBoundingClientRect(); for (let k = 0; k < 3; k++) setTimeout(() => celebrateBurst(b.left + b.width / 2, b.top), k * 250); toast(r.bingo.first ? '🎉 BINGO! You got there first!' : '🎉 BINGO!'); }
+    });
+  }
+  if (d.petcalls) { $('#petCallsForm [name=petCalls]').value = d.petcalls; return $('#petCallsForm').requestSubmit(); }
   if (d.ask) return ask(d.ask);
   if (d.chatinvite) { const m = chat.messages.find((x) => x.invite?.code === d.chatinvite); return inviteSheet(m.invite, m.invite.name); }
   if (d.ticket) return act(async () => { await api.patch(`/admin/tickets/${d.ticket}`, { status: d.status }); adminView(); });
@@ -724,6 +798,22 @@ document.addEventListener('click', (e) => {
     case 'close': return closeSheet();
     case 'demo': return demoSignIn();
     case 'help': return helpView();
+    case 'bingonew': return bingoNew();
+    case 'bingoback': bingo.game = null; clearInterval(bingo.timer); return bingoView();
+    case 'bingoend': if (!confirm('End this game for everyone?')) return; return act(async () => { await api.post(`/families/${state.fid}/bingo/games/${bingo.game}/end`); bingoGame(); });
+    case 'bingoprompt': {
+      const text = BINGO_PROMPT($('#bingoForm [name=title]').value.trim());
+      return navigator.clipboard?.writeText(text).then(() => toast('Prompt copied — paste it into Claude or ChatGPT, then paste the squares here'), () => prompt('Copy this prompt:', text));
+    }
+    case 'bingoclaude': {
+      const title = $('#bingoForm [name=title]').value.trim();
+      if (!title) return toast('Name the show first');
+      t.disabled = true; t.textContent = '✨ Writing…';
+      return api.post(`/families/${state.fid}/bingo/generate`, { show: title })
+        .then((r) => { $('#bingoForm [name=text]').value = r.squares.join('\n'); bingoCountLine(); toast('Here are Claude\'s squares — edit anything, then save'); })
+        .catch((err) => toast(err.message))
+        .finally(() => { t.disabled = false; t.textContent = '✨ Write them with Claude'; });
+    }
     case 'chatclear': chat.messages = []; return helpView();
     case 'reportproblem': return reportSheet();
     case 'admin': return adminView();
@@ -816,6 +906,7 @@ document.addEventListener('click', (e) => {
   }
   if (t.id === 'famSwitch') return show('me');
   if (t.id === 'newPostTop') return show('compose');
+  if (t.id === 'bingoTop') { bingo.game = null; return show('bingo'); }
 });
 
 document.addEventListener('change', async (e) => {
@@ -824,6 +915,14 @@ document.addEventListener('change', async (e) => {
     draft.text = $('#postForm textarea')?.value || draft.text;
     draft.photo = await shrinkPhoto(t.files[0]).catch(() => '');
     return compose();
+  }
+  if (t.name === 'bingofile' && t.files?.[0]) {
+    const text = await t.files[0].text();
+    let lines;
+    try { const j = JSON.parse(text); lines = (Array.isArray(j) ? j : j.squares || []).map((x) => (typeof x === 'string' ? x : x.text || '')); } catch { lines = text.split(/\r?\n/); }
+    $('#bingoForm [name=text]').value = lines.map((x) => x.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim()).filter(Boolean).join('\n');
+    if (!$('#bingoForm [name=title]').value) $('#bingoForm [name=title]').value = t.files[0].name.replace(/\.[a-z]+$/i, '').replace(/[-_]+/g, ' ');
+    return bingoCountLine();
   }
   if (t.name === 'petphoto' && t.files?.[0]) {
     petPhoto = await squarePhoto(t.files[0]).catch(() => { toast("Couldn't read that photo"); return petPhoto; });
@@ -881,6 +980,10 @@ document.addEventListener('submit', (e) => {
   if (f.id === 'famSettings') {
     e.preventDefault();
     return act(async () => { await api.patch(`/families/${state.fid}`, { name: v.name, modules: new FormData(f).getAll('mod'), goldenPosts: !!v.goldenPosts }); await loadFamily(); chrome(true); toast('Saved'); });
+  }
+  if (f.id === 'bingoForm') {
+    e.preventDefault();
+    return act(async () => { const r = await api.post(`/families/${state.fid}/bingo/packs`, { title: v.title, text: v.text }); closeSheet(); toast(`${r.pack.title}: ${r.pack.count} squares saved 🎲`); bingoView(); });
   }
   if (f.id === 'petCallsForm') {
     e.preventDefault();
@@ -967,3 +1070,4 @@ window.addEventListener('unhandledrejection', (e) => glitch(e.reason?.message ||
 const wantHelp = new URLSearchParams(location.search).has('help');
 if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
 boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; });
+document.addEventListener('input', (e) => { if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); });

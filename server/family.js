@@ -21,6 +21,9 @@
 //   gold:<fid>                 [{month, winners, points}] Gold Card hall of fame
 //   report:<fid>:<postId>      [{uid, reason, at}]        posts someone reported
 //   rate:<uid>:<minute>        count of changes (limits runaway clients and abuse)
+//   bingopacks:<fid>           [{id, title, squares, by, byName, at}]  show bingo card sets
+//   bingogames:<fid>           [{id, packId, title, squares, status, winners, by, at}]
+//   bingocard:<fid>:<gid>:<memberId>  {card: [25 square indexes, -1 free], marks: [25]}  one player's card
 //   ticket:<id>                a problem filed through Help (180 days)   tickets: [id] newest first
 //   glitch:<date>              {key: {message, where, n}} app errors phones reported that day (30 days)
 //   helprate:<who>:<minute|day> help-chat use per account or address
@@ -32,6 +35,7 @@
 // authors blocked (Apple 1.2).
 
 import { isGolden, dayHighlights, goldenMessage } from './goldenPost.js';
+import { parseSquares, makeCard, bingoLines, bingoPrompt, NEED, FREE } from './bingo.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
 const SESSION_TTL = 30 * 86400;
@@ -392,6 +396,108 @@ export async function familyApi(req, env, path) {
   }
 
   // ---- 🏆 the month's chores race: points per person, and the Gold Card ----
+  // ---- 🎲 show bingo ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/bingo(?:\/(packs|games|generate)(?:\/([a-z0-9]+)(\/mark|\/end)?)?)?$/);
+  if (m) {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const me = meIn(fam);
+    const [, , what, id, act] = m;
+    const packs = (await db.get(`bingopacks:${fam.fid}`)) || [];
+    const games = (await db.get(`bingogames:${fam.fid}`)) || [];
+    const players = fam.members.filter((x) => x.kind === 'person' && (x.uid || x.id === me.id));
+    const gameOut = (g) => ({ id: g.id, packId: g.packId, title: g.title, status: g.status, at: g.at, byName: g.byName, winners: g.winners });
+    if (!what && method === 'GET') {
+      return json({ packs: packs.map((p) => ({ id: p.id, title: p.title, count: p.squares.length, byName: p.byName, at: p.at, mine: p.by === me.id })), games: games.map(gameOut) });
+    }
+    if (what === 'generate' && method === 'POST') {
+      const show = clean(body.show, 80);
+      if (!show) return json({ error: 'which show?' }, 400);
+      if (env.DEMO || !(env.ANTHROPIC_API_KEY || env.__anthropic)) return json({ error: 'Claude isn\'t set up on the connector — copy the prompt into any chatbot instead', prompt: bingoPrompt(show) }, 501);
+      let client = env.__anthropic;
+      if (!client) { const { default: Anthropic } = await import('@anthropic-ai/sdk'); client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }); }
+      try {
+        const res = await client.beta.messages.create({ model: 'claude-opus-5-5', max_tokens: 2000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'low' },
+          system: 'You write playful, family-friendly bingo squares for couples watching TV together.', messages: [{ role: 'user', content: bingoPrompt(show) }] });
+        const squares = parseSquares((res.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n'));
+        if (squares.length < NEED) return json({ error: 'Claude came back with too few squares — try again', prompt: bingoPrompt(show) }, 502);
+        return json({ squares });
+      } catch { return json({ error: 'Claude is unavailable right now — copy the prompt into any chatbot instead', prompt: bingoPrompt(show) }, 502); }
+    }
+    if (what === 'packs' && !id && method === 'POST') {
+      const title = clean(body.title, 60);
+      const squares = parseSquares(Array.isArray(body.squares) ? JSON.stringify(body.squares) : body.text);
+      if (!title) return json({ error: 'name the show' }, 400);
+      if (squares.length < NEED) return json({ error: `that's ${squares.length} squares — a card needs at least ${NEED} (30 or more is best)` }, 400);
+      const pack = { id: randomId(8), title, squares, by: me.id, byName: me.name, at: Date.now() };
+      await db.put(`bingopacks:${fam.fid}`, [pack, ...packs].slice(0, 40));
+      return json({ pack: { id: pack.id, title, count: squares.length } });
+    }
+    if (what === 'packs' && id && method === 'DELETE') {
+      const p = packs.find((x) => x.id === id);
+      if (!p) return json({ error: 'not found' }, 404);
+      if (p.by !== me.id && me.role !== 'owner') return json({ error: 'only who added it can remove it' }, 403);
+      await db.put(`bingopacks:${fam.fid}`, packs.filter((x) => x.id !== id));
+      return json({ ok: true });
+    }
+    if (what === 'games' && !id && method === 'POST') {
+      const p = packs.find((x) => x.id === body.packId);
+      if (!p) return json({ error: 'pick a card set' }, 400);
+      const g = { id: randomId(8), packId: p.id, title: p.title, squares: p.squares, status: 'live', winners: [], by: me.id, byName: me.name, at: Date.now() };
+      // One live game at a time per set: starting again ends the old one.
+      const rest = games.map((x) => (x.packId === p.id && x.status === 'live' ? { ...x, status: 'done' } : x));
+      await db.put(`bingogames:${fam.fid}`, [g, ...rest].slice(0, 20));
+      return json({ game: gameOut(g) });
+    }
+    const g = what === 'games' && id ? games.find((x) => x.id === id) : null;
+    if (what === 'games' && id && !g) return json({ error: 'that game has ended' }, 404);
+    const cardOf = async (memberId, create) => {
+      let c = await db.get(`bingocard:${fam.fid}:${g.id}:${memberId}`);
+      if (!c && create) { c = { card: makeCard(g.squares.length), marks: Array(25).fill(false), at: Date.now() }; await db.put(`bingocard:${fam.fid}:${g.id}:${memberId}`, c, 60 * 86400); }
+      return c;
+    };
+    const view = async (c) => ({
+      game: gameOut(g),
+      card: { squares: c.card.map((i) => (i === -1 ? '' : g.squares[i])), marks: c.marks.map((x, i) => i === FREE || !!x), lines: bingoLines(c.marks).length },
+      players: await Promise.all(players.map(async (x) => { const pc = await cardOf(x.id, false); return { id: x.id, name: x.name, marked: pc ? pc.marks.filter(Boolean).length : 0, lines: pc ? bingoLines(pc.marks).length : 0, playing: !!pc }; })),
+    });
+    if (g && !act && method === 'GET') return json(await view(await cardOf(me.id, g.status === 'live')) );
+    if (g && act === '/mark' && method === 'POST') {
+      if (g.status !== 'live') return json({ error: 'this game has ended' }, 400);
+      const i = Number(body.i);
+      if (!Number.isInteger(i) || i < 0 || i > 24 || i === FREE) return json({ error: 'which square?' }, 400);
+      const c = await cardOf(me.id, true);
+      const had = bingoLines(c.marks).length;
+      c.marks[i] = !c.marks[i];
+      await db.put(`bingocard:${fam.fid}:${g.id}:${me.id}`, c, 60 * 86400);
+      const now = bingoLines(c.marks).length;
+      let bingo = null;
+      if (now > had && !g.winners.some((w) => w.id === me.id)) {
+        // BINGO: you're on the winners list, and it goes on the feed.
+        const fresh = (await db.get(`bingogames:${fam.fid}`)) || [];
+        const live = fresh.find((x) => x.id === g.id);
+        if (live) {
+          const first = !live.winners.length;
+          live.winners.push({ id: me.id, name: me.name, at: Date.now() });
+          g.winners = live.winners;
+          await db.put(`bingogames:${fam.fid}`, fresh);
+          const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '',
+            text: `🎉 BINGO! ${first ? 'First to win' : `Bingo #${live.winners.length}`} at ${g.title} bingo 🎲`, photo: '', tags: [], tagNames: {}, tagKinds: {}, audience: 'family', likes: [], comments: [], at: Date.now(), bingo: g.id };
+          await db.put(`post:${fam.fid}:${post.id}`, post);
+          await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
+          bingo = { first };
+        }
+      }
+      return json({ ...(await view(c)), bingo });
+    }
+    if (g && act === '/end' && method === 'POST') {
+      if (g.by !== me.id && me.role !== 'owner') return json({ error: 'only who started it can end it' }, 403);
+      await db.put(`bingogames:${fam.fid}`, games.map((x) => (x.id === g.id ? { ...x, status: 'done' } : x)));
+      return json({ ok: true });
+    }
+    return json({ error: 'not found' }, 404);
+  }
+
   m = path.match(/^\/families\/([a-z0-9]+)\/chores$/);
   if (m && method === 'GET') {
     const fam = await loadFamily(m[1]);
@@ -778,6 +884,17 @@ export function choresRace(logs, people) {
   const top = board[0]?.points || 0;
   return { board, top, leaders: top > 0 ? board.filter((r) => r.points === top).map((r) => r.id) : [] };
 }
+// What the dogs call the people they're thanking. By default they're Mom & Dad: someone who
+// hasn't set a name is the other of Mom / Dad when the rest have one, else it's "Mom & Dad".
+export function petNames(people) {
+  const set = people.filter((x) => x.petCalls).map((x) => x.petCalls);
+  const unset = people.length - set.length;
+  if (!unset) return set;
+  const lower = set.map((x) => x.toLowerCase());
+  const other = lower.includes('dad') && !lower.includes('mom') ? 'Mom' : lower.includes('mom') && !lower.includes('dad') ? 'Dad' : null;
+  if (other && unset === 1) return [...set, other];
+  return [...set.filter((x) => !['mom', 'dad'].includes(x.toLowerCase())), 'Mom', 'Dad'];
+}
 // The dogs' thank-you post for a golden day (once per day; the family can turn it off).
 async function goldenDayPost(db, fam, date, list) {
   if (fam.goldenPosts === false || !(fam.modules || MODULES).includes('dogs')) return null;
@@ -786,9 +903,9 @@ async function goldenDayPost(db, fam, date, list) {
   await db.put(`goldenpost:${fam.fid}:${date}`, 1, 40 * 86400);
   // Thank whoever took them out or gave the treat, by what the dogs call them.
   const ids = [...new Set(list.filter((e) => ['walk', 'park', 'treat'].includes(e.kind)).flatMap((e) => e.by))];
-  const people = ids.map((id) => fam.members.find((x) => x.id === id && x.kind === 'person')).filter(Boolean).map((x) => x.petCalls || x.name.split(/\s+/)[0]);
+  const people = petNames(ids.map((id) => fam.members.find((x) => x.id === id && x.kind === 'person')).filter(Boolean));
   const recent = (await db.get(`goldenmsg:${fam.fid}`)) || [];
-  const { text, used } = goldenMessage({ pets: dogs.map((d) => d.name), people: people.length ? people : ['family'], day: dayHighlights(list), recent });
+  const { text, used } = goldenMessage({ pets: dogs.map((d) => d.name), people, day: dayHighlights(list), recent });
   await db.put(`goldenmsg:${fam.fid}`, [used, ...recent].slice(0, 4));
   const names = dogs.map((d) => d.name);
   const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: dogs[0].id, byUid: null, fromPets: dogs.map((d) => d.id), golden: date,
@@ -810,6 +927,7 @@ async function removeMember(db, fam, t, { keepPosts = true } = {}) {
   await db.put(`family:${fam.fid}`, fam);
   await db.del(`data:${fam.fid}:${t.id}`);
   await db.del(`dataprev:${fam.fid}:${t.id}`);
+  for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) await db.del(`bingocard:${fam.fid}:${g.id}:${t.id}`);
   if (keepPosts || !t.uid) return;
   // The family keeps its dog-care log, without their name on it.
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) {
@@ -846,6 +964,9 @@ async function deleteFamily(db, fam) {
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) await db.del(`care:${fam.fid}:${d}`);
   await db.del(`careidx:${fam.fid}`);
   await db.del(`goldenmsg:${fam.fid}`);
+  for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) for (const x of fam.members) await db.del(`bingocard:${fam.fid}:${g.id}:${x.id}`);
+  await db.del(`bingogames:${fam.fid}`);
+  await db.del(`bingopacks:${fam.fid}`);
   for (const c of fam.connections || []) {
     const o = await db.get(`family:${c}`);
     if (o) { o.connections = (o.connections || []).filter((f) => f !== fam.fid); await db.put(`family:${o.fid}`, o); }

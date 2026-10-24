@@ -1,7 +1,7 @@
 // ⭐ Golden-day thank-you posts from the dogs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { familyApi, TERMS_VERSION } from '../server/family.js';
+import { familyApi, TERMS_VERSION, petNames } from '../server/family.js';
 import { isGolden, dayHighlights, goldenMessage } from '../server/goldenPost.js';
 
 test('golden days and what the dogs say about them', () => {
@@ -23,6 +23,15 @@ test('golden days and what the dogs say about them', () => {
   const texts = new Set();
   for (let i = 0; i < 4; i++) { const r = goldenMessage({ pets: ['Pip', 'Bo'], people: ['Dad'], day: 'two walks', recent }); recent = [r.used, ...recent].slice(0, 4); texts.add(r.text.split('\n')[1]); }
   assert.equal(texts.size, 4);
+});
+
+test('the dogs call people Mom & Dad unless told otherwise', () => {
+  assert.deepEqual(petNames([{ name: 'Sam' }]), ['Mom', 'Dad']);
+  assert.deepEqual(petNames([{ name: 'Sam' }, { name: 'Pat' }]), ['Mom', 'Dad']);
+  assert.deepEqual(petNames([{ name: 'Sam', petCalls: 'Dad' }]), ['Dad']);
+  assert.deepEqual(petNames([{ name: 'Sam', petCalls: 'Dad' }, { name: 'Pat' }]), ['Dad', 'Mom']);
+  assert.deepEqual(petNames([{ name: 'Sam', petCalls: 'Mom' }, { name: 'Pat' }]), ['Mom', 'Dad']);
+  assert.deepEqual(petNames([{ name: 'Sam', petCalls: 'Auntie' }]), ['Auntie']);
 });
 
 test('the day turning golden posts once, thanking whoever took the dogs out, by their pet name', async () => {
