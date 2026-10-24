@@ -977,7 +977,21 @@ async function renderToday() {
   const day = mine?.days?.[today];
   tiles.push(day?.left ? tile('🥗', 'Macros left', `${day.left.p}P · ${day.left.c}C · ${day.left.f}F`, `${Math.max(0, day.left.kcal).toLocaleString()} kcal`, 'data-trackers="1"') : tile('🥗', 'Trackers', 'Today\'s plan', 'open your trackers', 'data-trackers="1"'));
   el.innerHTML = `<div class="row between"><b>☀️ Today · ${new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</b>${weather ? `<span class="small muted">${Math.round(weather.hourly[weather.from].temp)}°</span>` : ''}</div>
-    <div class="grid4">${tiles.join('')}</div>`;
+    <div class="grid4">${tiles.join('')}</div>${await callLine()}`;
+}
+// 📞 One line under Today: the best time to call Mom (for whoever the trackers set it up for) —
+// the next window that's still open today, else tomorrow's first.
+async function callLine() {
+  if (!me()?.legacyId) return '';
+  const B = await import('../js/brief.js');
+  if (B.CALL.who !== me().legacyId) return '';
+  const now = Date.now();
+  let day = 'today', w = B.callWindows(isoLocal()).find((x) => x.end > now);
+  if (!w) { day = 'tomorrow'; w = B.callWindows(shiftLocal(isoLocal(), 1))[0]; }
+  if (!w) return '';
+  const t = (d, tz) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', ...(tz ? { timeZone: tz } : {}) }).replace(':00', '');
+  const live = w.start <= now;
+  return `<p class="call-line small">📞 <b>Call Mom</b> ${live ? `<span class="ok">now</span> — until ${t(w.end)}` : `${day} ${t(w.start)}–${t(w.end)}`} <span class="muted">(${t(w.start, B.CALL.there.tz)} her time)</span></p>`;
 }
 // 📅 Coming up (one line): the next dog appointment (and an open leg), and the next agreed plan.
 function renderComingLine() {
@@ -1063,13 +1077,13 @@ async function refreshFeeds(force = false) {
   if (state.view === 'calendar') renderCal();
 }
 // Everything on one day, in time order: events, linked calendars, dog drop-offs and pick-ups,
-// plans, Call Mom windows. {time, icon, title, sub, cls, open}
+// plans. {time, icon, title, sub, cls, open, who}
 async function dayEntries(day) {
   const out = [];
   const C = calm.C;
-  for (const e of C.eventsOn(calm.events, day)) out.push({ time: e.allDay ? '' : e.start, icon: '📅', title: e.title, sub: [e.place, (e.who || []).map((id) => (id === fam().me ? 'You' : member(id)?.name)).filter(Boolean).join(', ')].filter(Boolean).join(' · '), cls: 'fam', open: `data-event="${e.id}"` });
+  for (const e of C.eventsOn(calm.events, day)) out.push({ time: e.allDay ? '' : e.start, end: e.allDay ? '' : e.end, allDay: !!e.allDay, icon: '📅', title: e.title, place: e.place || '', rpt: C.repeatText?.(e) || '', who: calWho(e.who), sub: e.place || '', cls: 'fam', open: `data-event="${e.id}"` });
   const cache = feedCache();
-  for (const f of calm.feeds) for (const e of C.eventsOn(cache[f.id]?.events || [], day)) out.push({ time: e.allDay ? '' : e.start, icon: '📲', title: e.title, sub: `${f.name}${f.by !== fam().me ? ` · ${member(f.by)?.name || ''}` : ''}`, cls: 'fam' });
+  for (const f of calm.feeds) for (const e of C.eventsOn(cache[f.id]?.events || [], day)) out.push({ time: e.allDay ? '' : e.start, end: e.allDay ? '' : e.end, allDay: !!e.allDay, icon: '📲', title: e.title, place: e.place || '', feed: f.name, who: f.who === 'both' ? 'both' : f.who || f.by, sub: `${f.name}${f.by !== fam().me ? ` · ${member(f.by)?.name || ''}` : ''}`, cls: 'fam' });
   for (const a of dogsHub.appts.filter((x) => x.status !== 'done')) {
     const pets = a.pets.map((id) => member(id)?.name).filter(Boolean).join(' & ');
     const [ico, label] = APPT[a.type] || APPT.other;
@@ -1077,67 +1091,148 @@ async function dayEntries(day) {
       const at = a[`${k}At`];
       if (!at || at.slice(0, 10) !== day) continue;
       const by = a[`${k}By`];
-      out.push({ time: at.slice(11, 16), icon: k === 'drop' ? ico : '🏁', title: `${verb} ${pets} · ${label.toLowerCase()}`, sub: by ? who(by) : '<span class="tone-warn">nobody yet — tap to take it</span>', cls: 'dog', open: `data-apptopen="${a.id}"` });
+      out.push({ time: at.slice(11, 16), icon: k === 'drop' ? ico : '🏁', title: `${verb} ${pets} · ${label.toLowerCase()}`, sub: by ? who(by) : '<span class="tone-warn">nobody yet — tap to take it</span>', who: by || 'nobody', cls: 'dog', open: `data-apptopen="${a.id}"` });
     }
   }
-  for (const p of us.plans.filter((x) => !x.done && x.day === day)) out.push({ time: p.time || '', icon: (KINDS[p.kind] || KINDS.other)[0], title: planTitle(p), sub: p.agreed ? "it's a plan 🙌" : 'waiting for an answer', cls: 'plan' });
-  // 📞 Call Mom windows, for whoever the trackers set them up for.
-  if (me()?.legacyId) {
-    const B = await import('../js/brief.js');
-    if (B.CALL.who === me().legacyId) for (const w of B.callWindows(day)) out.push({ time: `${String(w.start.getHours()).padStart(2, '0')}:${String(w.start.getMinutes()).padStart(2, '0')}`, icon: '📞', title: 'Call Mom window', sub: `until ${w.end.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`, cls: 'fam' });
-  }
+  for (const p of us.plans.filter((x) => !x.done && x.day === day)) out.push({ time: p.time || '', icon: (KINDS[p.kind] || KINDS.other)[0], title: planTitle(p), sub: p.agreed ? "it's a plan 🙌" : 'waiting for an answer', who: 'both', cls: 'plan' });
   return out.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 }
 const timeLabel = (t) => (t ? new Date(`2000-01-01T${t}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(':00', '').replace(' ', '').toLowerCase() : 'all day');
 async function calendarView() {
   calm.month ||= isoLocal().slice(0, 7); calm.day ||= isoLocal();
-  $('#view').innerHTML = `${demoBanner()}<section class="card" id="calMonth"><div class="skeleton line"></div></section><div id="calRhythm"></div><div id="calDay"></div><div id="calNext"></div><div id="calFeeds"></div>
+  $('#view').innerHTML = `${demoBanner()}<div class="tcal"><button type="button" class="ghost wide add-ev" data-act="eventnew">＋ Add an event</button><section class="card" id="calMonth"><div class="skeleton line"></div></section><div id="calRhythm"></div><div id="calDay"></div><div id="calNext"></div><div id="calFeeds"></div></div>
     <p class="tiny muted center pad">🔒 Only your family sees this calendar — friends' families see nothing. Titles, places and notes are end-to-end encrypted.</p>`;
   await loadCal();
   importCal().catch(() => {});
   renderCal();
 }
+// The grown-ups, in family order: each gets a colour (blue, pink…), and "both" is green.
+const calPeople = () => fam().members.filter((m) => m.kind === 'person' && m.relation !== 'child');
+function calWho(list) {
+  const ids = (Array.isArray(list) ? list : [list]).filter(Boolean);
+  const adults = calPeople().map((m) => m.id);
+  if (!ids.length || adults.every((id) => ids.includes(id)) && adults.length > 1) return 'both';
+  return ids.length === 1 ? ids[0] : 'both';
+}
+const whoCls = (w) => (w === 'both' ? 'w-both' : w === 'nobody' ? 'w-none' : `w-p${Math.min(3, Math.max(0, calPeople().findIndex((m) => m.id === w)))}`);
+const whoName = (w) => (w === 'both' ? 'Both' : w === 'nobody' ? 'Open' : w === fam().me ? 'You' : member(w)?.name || '');
+const calDayLabel = (d) => (d === isoLocal() ? 'Today' : d === shiftLocal(isoLocal(), 1) ? 'Tomorrow' : new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }));
+function calRow(e, day = null) {
+  const t = e.allDay || !e.time ? 'All day' : timeLabel(e.time);
+  return `<li class="ev ${e.feed ? 'feed' : ''} ${e.cls}"><button type="button" class="ev-main" ${e.open || ''}>
+    <span class="ev-time">${day ? `${esc(calDayLabel(day))}<br>` : ''}${t}</span>
+    <span class="ev-body"><b>${e.icon} ${esc(e.title)}</b>${e.rpt ? `<small class="muted">🔁 ${esc(e.rpt)}</small>` : ''}${e.place ? `<small class="muted">📍 ${esc(e.place)}</small>` : ''}${e.feed ? `<small class="muted">📲 ${esc(e.feed)}</small>` : e.cls !== 'fam' && e.sub ? `<small class="muted">${e.sub}</small>` : ''}</span>
+    ${e.who ? `<span class="who-chip ${whoCls(e.who)}">${esc(whoName(e.who))}</span>` : ''}
+  </button></li>`;
+}
 async function renderCal() {
   if (!$('#calMonth')) return;
   const [y, mo] = calm.month.split('-').map(Number);
-  const first = new Date(y, mo - 1, 1), start = new Date(first); start.setDate(1 - first.getDay());
-  const days = Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return isoLocal(d); });
-  const weeks = days.slice(35).every((d) => !d.startsWith(calm.month)) ? days.slice(0, 35) : days;
+  const first = new Date(y, mo - 1, 1);
+  const daysIn = new Date(y, mo, 0).getDate();
+  const today = isoLocal();
   const cache = feedCache();
-  const dots = (d) => {
-    const out = [];
-    if (dogsHub.appts.some((a) => a.status !== 'done' && [a.dropAt, a.pickAt].some((x) => x?.startsWith(d)))) out.push('dv');
-    if (calm.C.eventsOn(calm.events, d).length || calm.feeds.some((f) => calm.C.eventsOn(cache[f.id]?.events || [], d).length)) out.push('df');
-    if (us.plans.some((p) => !p.done && p.day === d)) out.push('dp');
-    if (calm.golden.includes(d)) out.push('dg');
-    return out.map((c) => `<i class="${c}"></i>`).join('');
-  };
-  $('#calMonth').innerHTML = `<div class="row between"><button type="button" class="linkish" data-calmove="-1" aria-label="Previous month">‹</button><b>${first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</b><button type="button" class="linkish" data-calmove="1" aria-label="Next month">›</button></div>
-    <div class="cal7">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((x) => `<div class="dh">${x}</div>`).join('')}${weeks.map((d) => `<button type="button" class="d ${d.startsWith(calm.month) ? '' : 'o'} ${d === isoLocal() ? 't' : ''} ${d === calm.day ? 'sel' : ''}" data-calday="${d}">${+d.slice(8)}<span class="dots">${dots(d)}</span></button>`).join('')}</div>
-    <div class="legend"><span><i class="dv"></i>Dogs</span><span><i class="df"></i>Family</span><span><i class="dp"></i>Plans</span><span><i class="dg"></i>⭐ Golden</span></div>`;
-  const list = (entries) => entries.map((e) => `<button type="button" class="ev ${e.cls}" ${e.open || ''}><span class="tm">${timeLabel(e.time)}</span><span><b>${e.icon} ${esc(e.title)}</b>${e.sub ? `<small class="muted"> · ${e.sub}</small>` : ''}</span></button>`).join('');
+  const hearts = {};
+  for (const r of calm.rhythm || []) (hearts[r.date] ||= []).push(r);
+  const cells = Array.from({ length: first.getDay() }, () => '<span class="cal-pad"></span>');
+  for (let i = 1; i <= daysIn; i++) {
+    const d = `${calm.month}-${String(i).padStart(2, '0')}`;
+    const evs = [...calm.C.eventsOn(calm.events, d).map((e) => calWho(e.who)), ...calm.feeds.flatMap((f) => calm.C.eventsOn(cache[f.id]?.events || [], d).map(() => (f.who === 'both' ? 'both' : f.who || f.by)))];
+    const dog = dogsHub.appts.some((a) => a.status !== 'done' && [a.dropAt, a.pickAt].some((x) => x?.startsWith(d)));
+    const plan = us.plans.some((p) => !p.done && p.day === d);
+    const marks = `${calm.golden.includes(d) ? '⭐' : ''}${hearts[d] ? '❤️' : ''}${dog ? '🐾' : ''}${plan ? '💞' : ''}`;
+    cells.push(`<button type="button" class="cd ${d === calm.day ? 'sel' : ''} ${d === today ? 'today' : ''}" data-calday="${d}" aria-label="${d}${evs.length ? `, ${evs.length} events` : ''}"><span>${i}</span><span class="dots">${evs.slice(0, 3).map((w) => `<i class="${whoCls(w)}"></i>`).join('')}</span>${marks ? `<span class="marks">${marks}</span>` : ''}</button>`);
+  }
+  const people = calPeople().slice(0, 4);
+  const gold = calm.golden.filter((d) => d.startsWith(calm.month)).length;
+  const dates = Object.entries(hearts).filter(([d]) => d.startsWith(calm.month)).flatMap(([, l]) => l).filter((r) => r.kind === 'date').length;
+  $('#calMonth').innerHTML = `<div class="row between" style="margin-top:0"><button type="button" class="ghost small" data-calmove="-1" aria-label="Previous month">‹</button><b>${first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</b><button type="button" class="ghost small" data-calmove="1" aria-label="Next month">›</button></div>
+    <div class="cal-grid month">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((x) => `<span class="cal-h">${x}</span>`).join('')}${cells.join('')}</div>
+    <div class="cal-key small muted"><span><i class="w-both"></i>Both</span>${people.map((m) => `<span><i class="${whoCls(m.id)}"></i>${esc(m.id === fam().me ? `${m.name} (you)` : m.name)}</span>`).join('')}<span>⭐ Golden day</span><span>❤️ Us time</span><span>🐾 Dogs</span><span>💞 Plans</span></div>
+    ${dates || gold ? `<p class="small cal-month-sum">This month: ${dates ? `❤️ ${dates} date${dates === 1 ? '' : 's'}` : ''}${dates && gold ? ' · ' : ''}${gold ? `⭐ ${gold} golden day${gold === 1 ? '' : 's'} for the dogs` : ''}</p>` : ''}`;
+  // The chosen day.
   const sel = await dayEntries(calm.day);
-  const label = calm.day === isoLocal() ? 'Today' : new Date(`${calm.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-  $('#calDay').innerHTML = `<h3 class="row between"><span>${esc(label)}</span><button type="button" class="linkish small" data-act="eventnew">＋ Event</button></h3>
-    <section class="card agenda">${sel.length ? list(sel) : '<p class="small muted">Nothing on this day.</p>'}</section>`;
+  const dayMarks = [
+    ...(hearts[calm.day] || []).map((r) => `<li class="mark-row">❤️ <span>${esc(r.kind === 'date' ? `Date${r.place ? ` · ${r.place}` : ''}` : r.kind === 'overnight' ? 'Overnight trip' : r.kind === 'getaway' ? 'Getaway' : 'Us time')}</span></li>`),
+    ...(calm.golden.includes(calm.day) ? ['<li class="mark-row">⭐ <span>Golden day for the dogs</span></li>'] : []),
+  ];
+  $('#calDay').innerHTML = `<section class="card"><div class="row between" style="margin-top:0"><div class="eyebrow">${esc(calDayLabel(calm.day))}${calm.day !== today ? ` · ${new Date(`${calm.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })}` : ''}</div><button type="button" class="linkish small" data-act="eventnew">＋ Event</button></div>
+    ${dayMarks.length ? `<ul class="mark-list">${dayMarks.join('')}</ul>` : ''}
+    ${sel.length ? `<ul class="ev-list">${sel.map((e) => calRow(e)).join('')}</ul>` : dayMarks.length ? '' : '<p class="small muted">Nothing planned. Tap ＋ to add something.</p>'}</section>
+    <div id="calDress"></div>`;
+  renderCalDress(calm.day).catch(() => {});
   // Coming up: the next two weeks after the chosen day.
   const next = [];
-  for (let i = 1, d = shiftLocal(calm.day, 1); i <= 14 && next.length < 10; i++, d = shiftLocal(d, 1)) for (const e of await dayEntries(d)) next.push({ ...e, time: e.time, day: d });
-  $('#calNext').innerHTML = next.length ? `<h3>Coming up</h3><section class="card agenda">${next.slice(0, 10).map((e) => `<button type="button" class="ev ${e.cls}" ${e.open || ''}><span class="tm">${new Date(`${e.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' })} ${timeLabel(e.time)}</span><span><b>${e.icon} ${esc(e.title)}</b>${e.sub ? `<small class="muted"> · ${e.sub}</small>` : ''}</span></button>`).join('')}</section>` : '';
+  for (let i = 1, d = shiftLocal(calm.day, 1); i <= 14 && next.length < 8; i++, d = shiftLocal(d, 1)) for (const e of await dayEntries(d)) next.push({ ...e, day: d });
+  $('#calNext').innerHTML = next.length ? `<section class="card"><div class="eyebrow">Coming up</div><ul class="ev-list">${next.slice(0, 8).map((e) => calRow(e, e.day)).join('')}</ul></section>` : '';
   const fc = feedCache();
   $('#calFeeds').innerHTML = `<details class="card"><summary><b>📲 Linked calendars</b> <span class="small muted">${calm.feeds.length ? `${calm.feeds.length} linked` : 'bring in your iPhone or Google calendar'}</span></summary>
-    ${calm.feeds.length ? `<ul class="list">${calm.feeds.map((f) => `<li class="row between small"><span><b>${esc(f.name)}</b> <small class="${fc[f.id]?.error ? 'tone-warn' : 'muted'}">${fc[f.id]?.error ? esc(fc[f.id].error) : fc[f.id]?.events ? `${fc[f.id].events.length} events` : 'loading…'}</small></span>${f.by === fam().me ? `<button type="button" class="linkish small danger" data-feeddel="${f.id}">Unlink</button>` : ''}</li>`).join('')}</ul><button type="button" class="linkish small" data-act="feedsrefresh">↻ Refresh</button>` : ''}
+    ${calm.feeds.length ? `<ul class="list">${calm.feeds.map((f) => `<li class="row between small"><span><i class="who-dot ${whoCls(f.who === 'both' ? 'both' : f.who || f.by)}"></i> <b>${esc(f.name)}</b> <small class="${fc[f.id]?.error ? 'tone-warn' : 'muted'}">${fc[f.id]?.error ? esc(fc[f.id].error) : fc[f.id]?.events ? `${fc[f.id].events.length} events` : 'loading…'}</small></span>${f.by === fam().me ? `<button type="button" class="linkish small danger" data-feeddel="${f.id}">Unlink</button>` : ''}</li>`).join('')}</ul><button type="button" class="linkish small" data-act="feedsrefresh">↻ Refresh</button>` : ''}
     <form id="feedForm" class="stack"><p class="small">iPhone: Calendar app › Calendars › ⓘ next to yours › turn on <b>Public Calendar</b> › Share Link › Copy. Google: Settings › your calendar › <b>Secret address in iCal format</b>.</p>
       <label>Name<input name="name" maxlength="40" required placeholder="My iPhone calendar"></label><label>Link<input name="url" required placeholder="webcal://p…icloud.com/…"></label>
       <label class="check"><input type="checkbox" name="both"><span>It's for both of us</span></label><button>Link it</button></form></details>`;
   // 💞 2-2-2-2: what's due, from the trackers' log.
   rhythmLine().catch(() => {});
 }
+
+// 👔 Dress for the day, for each grown-up: where the calendar puts them (else home), and how to
+// layer for that place's feels-like temperatures from leaving to getting home.
+const dressPicks = () => { try { return JSON.parse(LS.get('fam.dressPicks') || '{}'); } catch { return {}; } };
+async function dressHours(place, date) {
+  const B = await import('../js/brief.js');
+  let cache = {};
+  try { cache = JSON.parse(LS.get('fam.dressWx') || '{}'); } catch { /* none */ }
+  let c = cache[place.id];
+  if (!c || Date.now() - c.at > 60 * 60000) {
+    const r = await fetch(B.weatherUrls(place, 7).forecast);
+    if (!r.ok) throw new Error(`weather ${r.status}`);
+    c = { at: Date.now(), forecast: await r.json() };
+    cache[place.id] = c;
+    try { LS.set('fam.dressWx', JSON.stringify(cache)); } catch { /* full */ }
+  }
+  return B.parseWeather(c.forecast, null).filter((h) => isoLocal(h.time) === date);
+}
+async function renderCalDress(date) {
+  const el = $('#calDress');
+  if (!el) return;
+  const today = isoLocal(), last = shiftLocal(today, 6);
+  const people = calPeople().filter((m) => m.status === 'active' || m.id === fam().me).slice(0, 2);
+  if (!people.length || date < today || date > last) { el.innerHTML = ''; return; }
+  const D = await import('../js/dress.js');
+  const entries = (await dayEntries(date)).filter((e) => e.cls === 'fam');
+  const label = date === today ? 'today' : new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  if (!el.innerHTML) el.innerHTML = `<section class="card dress-card"><div class="eyebrow">👔 Dress for ${esc(label)}</div><p class="small muted">Getting the weather…</p></section>`;
+  const picks = dressPicks();
+  const temps = (t) => `<div class="dress-temps"><span>🌅 ${D.hourLabel(t.leave.hour)} <b>${t.leave.f}°</b></span><i>→</i><span>☀️ ${D.hourLabel(t.peak.hour)} <b>${t.peak.f}°</b></span><i>→</i><span>🌆 ${D.hourLabel(t.back.hour)} <b>${t.back.f}°</b></span></div>`;
+  let body;
+  try {
+    const parts = await Promise.all(people.map(async (m) => {
+      const evs = entries.map((e) => ({ title: e.title, place: e.place, start: e.time, end: e.end, allDay: e.allDay || !e.time, who: e.who === 'both' || e.who === m.id ? m.id : '-' }));
+      const where = D.whereOn(evs, m.id, D.PLACES, picks[`${m.id}|${date}`] || null);
+      const plan = D.dressFor(await dressHours(where.place, date), where.leave, where.back);
+      const why = where.picked ? 'picked by hand' : where.fromCalendar ? `📅 from “${esc(where.event.title)}”` : 'nothing on the calendar — home';
+      return `<div class="dress-person">
+        <div class="row between dress-who"><b><i class="who-dot ${whoCls(m.id)}"></i> ${esc(m.name)}</b>
+          <select data-dresspick="${m.id}" data-dressdate="${date}" aria-label="Where ${esc(m.name)} will be">${D.PLACES.map((p) => `<option value="${p.id}" ${p.id === where.place.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}${where.picked ? '<option value="">↺ Use the calendar</option>' : ''}</select></div>
+        <small class="muted">${why} · out ${D.hourLabel(where.leave)}–${D.hourLabel(where.back)}</small>
+        ${plan ? `${temps(plan.temps)}<div class="dress-shape">${esc(plan.label)}</div>
+          <ul class="dress-layers">${plan.layers.map((l) => `<li><span>${l.icon}</span><span>${esc(l.text)}${l.carry ? ' <em class="dress-carry">take off later</em>' : ''}</span></li>`).join('')}</ul>
+          ${plan.when ? `<p class="small dress-when">⏱ ${esc(plan.when)}</p>` : ''}${plan.extras.length ? `<p class="small muted">${plan.extras.map(esc).join(' · ')}</p>` : ''}`
+        : '<p class="small muted">No forecast for this day yet.</p>'}</div>`;
+    }));
+    body = parts.join('');
+  } catch (err) { body = `<p class="small tone-warn">Couldn't get the weather (${esc(err.message)}).</p>`; }
+  if ($('#calDress') && calm.day === date) $('#calDress').innerHTML = `<section class="card dress-card"><div class="eyebrow">👔 Dress for ${esc(label)}</div>${body}<p class="tiny muted">Feels-like temperatures from when you leave to when you're home (from the calendar, else 8 AM–6 PM). An event whose title or place names San Francisco or Oakland puts that person there. Weather: Open-Meteo.</p></section>`;
+}
 async function rhythmLine() {
   const el = $('#calRhythm');
   if (!el) return;
   const mine = await openData(await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null));
   const entries = Array.isArray(mine?.rhythm) ? mine.rhythm : [];
+  const had = JSON.stringify(calm.rhythm || []);
+  calm.rhythm = entries.filter((r) => r?.date && !r.deleted);
+  // New ❤️ moments: draw the month again (this runs again from there, finds nothing new, and stops).
+  if (had !== JSON.stringify(calm.rhythm) && state.view === 'calendar') setTimeout(() => renderCal());
   if (!entries.length) { el.innerHTML = ''; return; }
   const R = await import('../js/rhythm.js');
   const st = R.rhythmStatus(entries, isoLocal());
@@ -2004,6 +2099,12 @@ document.addEventListener('change', async (e) => {
     draft.text = $('#postForm textarea')?.value || draft.text;
     draft.photo = await shrinkPhoto(t.files[0]).catch(() => '');
     return compose();
+  }
+  if (t.dataset.dresspick) {
+    const picks = dressPicks(), k = `${t.dataset.dresspick}|${t.dataset.dressdate}`;
+    if (t.value) picks[k] = t.value; else delete picks[k];
+    LS.set('fam.dressPicks', JSON.stringify(picks));
+    return renderCalDress(t.dataset.dressdate);
   }
   if (t.dataset.notifypref) {
     const prefs = Object.fromEntries([...document.querySelectorAll('[data-notifypref]')].map((x) => [x.dataset.notifypref, x.checked]));

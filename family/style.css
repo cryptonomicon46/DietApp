@@ -416,3 +416,45 @@ details.house .fold { margin-left: auto; color: var(--brand); font-weight: 700; 
 .whodid .muted { margin-right: 2px; }
 .whodid button { background: var(--bg); color: var(--ink); border: 1px solid var(--line); padding: 6px 12px; font-size: .85rem; }
 .whodid button.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+
+/* 📅 Calendar, in the trackers' look: a colour for each of you, green for both */
+.tcal .add-ev { margin-bottom: 10px; }
+.tcal .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-top: 8px; }
+.tcal .cal-h { text-align: center; font-size: .7rem; color: var(--muted); font-weight: 700; }
+.tcal .cd { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; aspect-ratio: 1; padding: 4px 0 0; border-radius: 10px; background: var(--bg); color: var(--ink); border: 1px solid transparent; font-weight: 600; font-size: .8rem; min-width: 0; }
+.tcal .cd.today { border-color: var(--brand); }
+.tcal .cd.sel { background: var(--brand); color: var(--brand-ink); }
+.tcal .cd .dots { display: flex; gap: 2px; height: 6px; }
+.tcal .cd .dots i, .tcal .cal-key i, .who-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
+.tcal .cd .marks { font-size: .62rem; line-height: 1; letter-spacing: -1px; }
+.tcal .cal-key { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; margin-top: 10px; }
+.tcal .cal-key i { width: 8px; height: 8px; margin-right: 4px; }
+.tcal .cal-month-sum { margin: 8px 0 0; }
+.w-both { background: var(--brand); } .tcal .cd.sel .dots i.w-both { background: var(--brand-ink); }
+.w-p0 { background: #3a6cc0; } .w-p1 { background: #c0457a; } .w-p2 { background: #d08a1e; } .w-p3 { background: #7a55c0; } .w-none { background: #b45309; }
+.who-dot { width: 8px; height: 8px; vertical-align: middle; }
+.tcal .ev-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
+.tcal .ev { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.tcal .ev.feed { border-style: dashed; }
+.tcal .ev.dog { border-left: 4px solid #e07a5f; } .tcal .ev.plan { border-left: 4px solid #b06fd8; }
+.tcal .ev-main { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: center; width: 100%; text-align: left; background: none; color: var(--ink); border: 0; border-radius: 0; padding: 10px 12px; font-weight: 400; }
+.tcal .ev-time { font-size: .78rem; font-weight: 700; color: var(--muted); line-height: 1.25; }
+.tcal .ev-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.tcal .who-chip { font-size: .7rem; font-weight: 800; border-radius: 999px; padding: 2px 8px; color: #fff; white-space: nowrap; }
+.tcal .who-chip.w-both { color: var(--brand-ink); }
+.tcal .mark-list { list-style: none; padding: 0; margin: 6px 0; }
+.tcal .mark-row { display: flex; gap: 6px; align-items: baseline; padding: 4px 0; font-size: .9rem; }
+.tcal .mark-row span { flex: 1; }
+.dress-person { padding: 10px 0; border-top: 1px solid var(--line); }
+.dress-person:first-of-type { border-top: 0; padding-top: 4px; }
+.dress-who select { width: auto; max-width: 55%; padding: 4px 8px; font-size: .9rem; }
+.dress-temps { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; margin: 8px 0 4px; font-size: .8rem; }
+.dress-temps span { background: var(--bg); border-radius: 999px; padding: 2px 7px; white-space: nowrap; }
+.dress-temps i { font-style: normal; color: var(--muted); }
+.dress-shape { font-weight: 700; margin: 4px 0; }
+.dress-layers { list-style: none; padding: 0; margin: 4px 0; }
+.dress-layers li { display: flex; gap: 8px; padding: 3px 0; }
+.dress-carry { font-style: normal; font-size: .75rem; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+.dress-when { margin: 4px 0; }
+.call-line { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); }
+.call-line .ok { color: var(--brand); font-weight: 700; }
