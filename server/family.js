@@ -1325,6 +1325,13 @@ export async function familyApi(req, env, path, ctx = null) {
       if (!help.from) return json({ error: 'which day do you need help?' }, 400);
     }
     if (!text && !photo && !help) return json({ error: 'write something or add a photo' }, 400);
+    // The same post sent again (a retry, a second tap): the one already saved, not a copy.
+    const cid = /^[a-z0-9]{8,24}$/.test(body.cid || '') ? body.cid : null;
+    if (cid) {
+      const had = await db.get(`postcid:${user.uid}:${cid}`);
+      const p = had && await db.get(`post:${fam.fid}:${had}`);
+      if (p) return json({ post: postOut(p, user, { own: true, familyName: fam.name }), note: '', dup: true });
+    }
     const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '', text, photo,
       tags: (Array.isArray(body.tags) ? body.tags : []).filter((id) => fam.members.some((x) => x.id === id)).slice(0, 10),
       tagNames: {}, audience: body.audience === 'connections' ? 'connections' : 'family', likes: [], comments: [], at: Date.now(), ...(help ? { help } : {}), ...(pk ? { pk } : {}) };
@@ -1337,6 +1344,7 @@ export async function familyApi(req, env, path, ctx = null) {
     }
     await db.put(`post:${fam.fid}:${post.id}`, post);
     await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
+    if (cid) await db.put(`postcid:${user.uid}:${cid}`, post.id, 2 * 86400);
     return json({ post: postOut(post, user, { own: true, familyName: fam.name }), note });
   }
   m = path.match(/^\/posts\/([a-z0-9]+)\/([a-z0-9]+)(\/like|\/comments|\/report|\/hide|\/block|\/offer|\/accept)?$/);

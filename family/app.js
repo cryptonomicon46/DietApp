@@ -406,6 +406,7 @@ function helpBlock(p) {
 }
 
 let draft = { text: '', photo: '', tags: [], audience: 'family' };
+let posting = false; // one post at a time: extra taps while it sends do nothing
 function compose() {
   const tags = fam().members.filter((m) => m.id !== fam().me);
   const h = draft.help;
@@ -2515,7 +2516,16 @@ document.addEventListener('submit', (e) => {
   }
   if (f.id === 'postForm') {
     e.preventDefault();
+    if (posting) return;
     if (lockedHere()) return toast('🔒 This device needs the family key first — Me › 🔐 Encryption');
+    // The same post id on a retry, so the server never saves it twice (a dropped connection, a
+    // second tap after an error).
+    draft.cid ||= Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('');
+    posting = true;
+    const btn = f.querySelector('button:not([type=button])'), label = btn?.innerHTML;
+    const step = (t) => { if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spin"></span> ${t}`; } };
+    f.classList.add('sending');
+    step(draft.photo ? 'Locking your photo…' : 'Posting…');
     return act(async () => {
       const help = draft.help ? { type: draft.help.type, from: v.from, to: v.to || v.from, time: v.time } : null;
       // 🔐 Locked on this phone: with the family key, or (for friends' families) the post's own key.
@@ -2530,11 +2540,18 @@ document.addEventListener('submit', (e) => {
         }
         text = text ? await seal(k, text) : ''; photo = photo ? await seal(k, photo) : '';
       }
-      const r = await api.post(`/families/${state.fid}/posts`, { text, photo, pk, tags: draft.tags, audience: draft.audience, help });
+      step(photo ? 'Sending photo…' : 'Posting…');
+      const r = await api.post(`/families/${state.fid}/posts`, { text, photo, pk, tags: draft.tags, audience: draft.audience, help, cid: draft.cid });
       r.post = await openPost(r.post);
       draft = { text: '', photo: '', tags: [], audience: 'family' };
+      if (state.feed.some((x) => x.id === r.post.id)) state.feed = state.feed.filter((x) => x.id !== r.post.id);
       state.view = 'feed'; closeSheet(); state.feed = [r.post, ...state.feed]; show('feed');
       if (r.note) toast(r.note); else if (help) toast(r.post.audience === 'connections' ? 'Asked your family and connected families 🙋' : 'Asked your family 🙋');
+      else toast(r.dup ? 'Already posted ✓' : 'Posted ✓');
+    }).finally(() => {
+      posting = false;
+      // Still open (it didn't go through): ready to try again, as the same post.
+      if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = label; f.classList.remove('sending'); }
     });
   }
   if (f.classList.contains('comment-form')) {
