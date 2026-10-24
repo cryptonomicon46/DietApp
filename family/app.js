@@ -1078,12 +1078,37 @@ async function refreshFeeds(force = false) {
 }
 // Everything on one day, in time order: events, linked calendars, dog drop-offs and pick-ups,
 // plans. {time, icon, title, sub, cls, open, who}
-async function dayEntries(day) {
-  const out = [];
-  const C = calm.C;
-  for (const e of C.eventsOn(calm.events, day)) out.push({ time: e.allDay ? '' : e.start, end: e.allDay ? '' : e.end, allDay: !!e.allDay, icon: '📅', title: e.title, place: e.place || '', rpt: C.repeatText?.(e) || '', who: calWho(e.who), sub: e.place || '', cls: 'fam', open: `data-event="${e.id}"` });
+// One day's calendar events: the family's own and linked calendars'. The same event in two
+// calendars (an invite you both accepted, or one also added here) shows once, for both of you.
+function calItems(day) {
+  const C = calm.C, out = [];
+  for (const e of C.eventsOn(calm.events, day)) out.push({ uid: '', time: e.allDay ? '' : e.start, end: e.allDay ? '' : e.end, allDay: !!e.allDay, icon: '📅', title: e.title, place: e.place || '', rpt: C.repeatText?.(e) || '', who: calWho(e.who), sub: e.place || '', cls: 'fam', open: `data-event="${e.id}"` });
   const cache = feedCache();
-  for (const f of calm.feeds) for (const e of C.eventsOn(cache[f.id]?.events || [], day)) out.push({ time: e.allDay ? '' : e.start, end: e.allDay ? '' : e.end, allDay: !!e.allDay, icon: '📲', title: e.title, place: e.place || '', feed: f.name, who: f.who === 'both' ? 'both' : f.who || f.by, sub: `${f.name}${f.by !== fam().me ? ` · ${member(f.by)?.name || ''}` : ''}`, cls: 'fam' });
+  for (const f of calm.feeds) for (const e of C.eventsOn(cache[f.id]?.events || [], day)) out.push({ uid: String(e.id || '').replace(/-\d+$/, ''), time: e.allDay ? '' : e.start, end: e.allDay ? '' : e.end, allDay: !!e.allDay, icon: '📲', title: e.title, place: e.place || '', feed: f.name, who: f.who === 'both' ? 'both' : f.who || f.by, cls: 'fam' });
+  return mergeSame(out);
+}
+const sameKey = (e) => `${e.allDay ? 'all' : e.time}|${String(e.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '')}`;
+function mergeSame(list) {
+  const adults = calPeople().map((m) => m.id);
+  const out = [];
+  for (const e of list) {
+    const twin = out.find((x) => (e.uid && x.uids.includes(e.uid)) || sameKey(x) === sameKey(e));
+    if (!twin) { out.push({ ...e, uids: e.uid ? [e.uid] : [], whos: e.who === 'both' ? [...adults] : [e.who], feeds: e.feed ? [e.feed] : [] }); continue; }
+    if (e.uid && !twin.uids.includes(e.uid)) twin.uids.push(e.uid);
+    for (const w of e.who === 'both' ? adults : [e.who]) if (!twin.whos.includes(w)) twin.whos.push(w);
+    if (e.feed && !twin.feeds.includes(e.feed)) twin.feeds.push(e.feed);
+    // The family's own copy is the one you can open and edit; a linked copy fills in what it lacks.
+    if (!twin.open && e.open) Object.assign(twin, { open: e.open, icon: e.icon, rpt: e.rpt });
+    twin.place ||= e.place; twin.end ||= e.end;
+  }
+  for (const e of out) {
+    e.who = adults.length > 1 && adults.every((id) => e.whos.includes(id)) ? 'both' : e.whos.length === 1 ? e.whos[0] : 'both';
+    e.feed = e.open ? '' : e.feeds.join(' + ');
+  }
+  return out;
+}
+async function dayEntries(day) {
+  const out = calItems(day);
   for (const a of dogsHub.appts.filter((x) => x.status !== 'done')) {
     const pets = a.pets.map((id) => member(id)?.name).filter(Boolean).join(' & ');
     const [ico, label] = APPT[a.type] || APPT.other;
@@ -1131,13 +1156,12 @@ async function renderCal() {
   const first = new Date(y, mo - 1, 1);
   const daysIn = new Date(y, mo, 0).getDate();
   const today = isoLocal();
-  const cache = feedCache();
   const hearts = {};
   for (const r of calm.rhythm || []) (hearts[r.date] ||= []).push(r);
   const cells = Array.from({ length: first.getDay() }, () => '<span class="cal-pad"></span>');
   for (let i = 1; i <= daysIn; i++) {
     const d = `${calm.month}-${String(i).padStart(2, '0')}`;
-    const evs = [...calm.C.eventsOn(calm.events, d).map((e) => calWho(e.who)), ...calm.feeds.flatMap((f) => calm.C.eventsOn(cache[f.id]?.events || [], d).map(() => (f.who === 'both' ? 'both' : f.who || f.by)))];
+    const evs = calItems(d).map((e) => e.who);
     const dog = dogsHub.appts.some((a) => a.status !== 'done' && [a.dropAt, a.pickAt].some((x) => x?.startsWith(d)));
     const plan = us.plans.some((p) => !p.done && p.day === d);
     const marks = `${calm.golden.includes(d) ? '⭐' : ''}${hearts[d] ? '❤️' : ''}${dog ? '🐾' : ''}${plan ? '💞' : ''}`;
