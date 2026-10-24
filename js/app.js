@@ -3083,8 +3083,16 @@ function renderAccount() {
     ? `<div class="card"><div class="eyebrow">☁️ Saved to your account</div>
         <p class="small">Your meals, weigh-ins, training and notes are saved to <b>${esc(acct.email)}</b> in <b>${esc(acct.family)}</b>, so they're the same on every phone or computer you sign in on.</p>
         <p class="small muted">Only people in ${esc(acct.family)} you've turned sharing on for can see them (Families › Me › Who can see my diet &amp; fitness). Friends' families never see your trackers or your kids' details.</p>
-        <p class="small muted">${global.get('pushError', null) ? `<span class="tone-warn">Not saved yet: ${esc(global.get('pushError', ''))}</span>` : `Saved ${global.get('pushedAt', 0) ? ago(global.get('pushedAt', 0)) : 'soon'}`} · <a href="family/">Open OurPawmily Families ›</a></p></div>`
-    : `<div class="card"><div class="eyebrow">☁️ Save to your account</div><p class="small">Sign in to <a href="family/">OurPawmily Families</a> with Google and your trackers are saved to your account, so they follow you to any phone or computer — and only the family members you choose can see them.</p></div>`;
+        <p class="small">On this device: ${(() => { const ps = profileStore(acct.profile); const n = (v) => (Array.isArray(v) ? v.length : Object.keys(v || {}).length); return `${n(ps.get('mealLog', {}))} days of meals · ${n(ps.get('weights', []))} weigh-ins · ${n(ps.get('dogProfiles', {}))} dogs`; })()}</p>
+        <p class="small muted">${global.get('pushError', null) ? `<span class="tone-warn">Not saved yet: ${esc(global.get('pushError', ''))}</span>` : `Saved ${global.get('pushedAt', 0) ? ago(global.get('pushedAt', 0)) : 'soon'}`} · checked ${global.get('pulledAt', 0) ? ago(global.get('pulledAt', 0)) : 'not yet'} · <button type="button" class="linkish" id="accountSync">Sync now</button> · <a href="family/">Open OurPawmily Families ›</a></p></div>`
+    : `<div class="card"><div class="eyebrow">☁️ Save to your account</div><p class="small">Sign in to OurPawmily Families with Google <b>from here</b> and your trackers are saved to your account, so they follow you to any phone or computer — and only the family members you choose can see them.</p>
+        <p class="small muted">On a phone, the home-screen app and the browser keep separate sign-ins, so sign in from inside the app you use for the trackers.</p>
+        <a class="btn-link" href="family/">Sign in to save to your account ›</a></div>`;
+  if ($('#accountSync')) $('#accountSync').onclick = async () => {
+    $('#accountSync').textContent = 'Syncing…';
+    try { await sync.push(); const changed = await sync.pull(); if (changed) location.reload(); else renderAccount(); }
+    catch (err) { $('#accountSync').textContent = err.message; }
+  };
 }
 $('#shareNewCode').onclick = () => { $('#shareCode').value = newHouseholdCode(); };
 $('#shareSave').onclick = async () => {
@@ -3219,7 +3227,7 @@ if (!sync.readOnly() && (justConnected || Date.now() - store.get('lastSync', 0) 
 applyPendingLink();
 if (sync.enabled() || account.get() || (() => { try { return localStorage.getItem('fam.token.live'); } catch { return null; } })()) {
   sync.push().catch(() => {});
-  sync.pull().then((changed) => { if (changed) registerMyFoods(); updateNotesBadge(); updateCalBadge(); if (changed) renderHome(); if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
+  sync.pull().then((changed) => { renderAccount(); if (changed) registerMyFoods(); updateNotesBadge(); updateCalBadge(); if (changed) renderHome(); if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
   const onNotes = () => document.querySelector('#tab-notes').classList.contains('active');
   const onBrief = () => document.querySelector('#tab-brief').classList.contains('active');
   const refresh = () => sync.pull().then((changed) => {

@@ -79,18 +79,22 @@ export const account = {
     if (mine.status === 200) {
       const remote = mine.data;
       const first = !global.get('account.pulled', false);
-      const local = Object.keys(exportProfile(a.profile, { shared: true })).length > 0;
-      if (first && local) {
-        // The device you've been using: its copy is the latest, so it goes up.
+      if (first || (remote.savedAt || 0) > global.get('account.mineAt', 0)) {
+        // Another device saved since this one last looked: the two copies are combined, never
+        // swapped, so a nearly empty device can't wipe a full one (or the other way round).
+        const local = exportProfile(a.profile, { shared: true });
+        const theirs = remote.data || {};
+        const remoteWins = first ? Object.keys(local).length < Object.keys(theirs).length : true;
+        const merged = mergeData(local, theirs, remoteWins);
+        if (!same(merged, local)) {
+          importProfile(a.profile, merged);
+          out.changed = true;
+          if (!first && typeof window !== 'undefined') window.dispatchEvent(new Event('lp:mine'));
+        }
+        global.set('account.mineAt', remote.savedAt || 0);
         global.set('account.pulled', true);
-        await this.push();
-      } else if ((remote.savedAt || 0) > global.get('account.mineAt', 0) && Object.keys(remote.data || {}).length) {
-        importProfile(a.profile, remote.data);
-        global.set('account.mineAt', remote.savedAt);
-        out.changed = true;
-        if (!first && typeof window !== 'undefined') window.dispatchEvent(new Event('lp:mine'));
+        if (!same(merged, theirs)) await this.push();
       }
-      global.set('account.pulled', true);
     }
     for (const p of PROFILES.filter((x) => x.id !== a.profile)) {
       const id = a.members[p.id];
@@ -116,4 +120,35 @@ export async function accountBoot() {
   try {
     await Promise.race([(async () => { if (await account.connect()) await account.pull(); })(), new Promise((r) => setTimeout(r, 6000))]);
   } catch { /* offline: the trackers start from this device's copy */ }
+}
+
+// ---------- combining two copies of one person's trackers ----------
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const plain = (v) => v && typeof v === 'object' && !Array.isArray(v);
+// Lists keep everything from both copies. Entries with an id match by id; lists with one entry
+// per date (weigh-ins) match by date; anything else matches only if identical.
+function mergeList(x, y, yWins) {
+  const all = [...x, ...y];
+  const byDate = all.every((v) => plain(v) && v.date && v.id == null)
+    && new Set(x.map((v) => v.date)).size === x.length && new Set(y.map((v) => v.date)).size === y.length;
+  const key = (v) => (plain(v) && v.id != null ? `id:${v.id}` : byDate ? `d:${v.date}` : JSON.stringify(v));
+  const out = [...x];
+  const at = new Map(out.map((v, i) => [key(v), i]));
+  for (const v of y) {
+    const i = at.get(key(v));
+    if (i == null) { at.set(key(v), out.length); out.push(v); } else if (yWins) out[i] = v;
+  }
+  return byDate ? out.sort((a, b) => String(a.date).localeCompare(String(b.date))) : out;
+}
+// Everything from both; where both have a different single value, yWins picks y's.
+export function mergeData(x, y, yWins = true) {
+  if (x === undefined) return y;
+  if (y === undefined) return x;
+  if (Array.isArray(x) && Array.isArray(y)) return mergeList(x, y, yWins);
+  if (plain(x) && plain(y)) {
+    const out = {};
+    for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) out[k] = mergeData(x[k], y[k], yWins);
+    return out;
+  }
+  return yWins ? y : x;
 }

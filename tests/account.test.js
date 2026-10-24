@@ -107,3 +107,37 @@ test('a device signed in as someone else never takes over this tracker profile',
   cur.delete('fam.token.live');
   assert.equal(account.active(), false);
 });
+
+test('two copies are combined, so a nearly empty device never wipes a full one', async () => {
+  const { mergeData } = await import('../js/account.js');
+  assert.deepEqual(mergeData({ weights: [{ date: '2026-10-01', weight: 160 }], profile: { name: 'Sam', goal: 'cut' } },
+    { weights: [{ date: '2026-10-01', weight: 161 }, { date: '2026-10-02', weight: 159 }], profile: { name: 'Sam' }, dogProfiles: { d1: { name: 'Rex' } } }, true),
+  { weights: [{ date: '2026-10-01', weight: 161 }, { date: '2026-10-02', weight: 159 }], profile: { name: 'Sam', goal: 'cut' }, dogProfiles: { d1: { name: 'Rex' } } });
+  // Several workouts on one day are all kept.
+  assert.equal(mergeData({ activities: [{ date: '2026-10-01', type: 'run' }] }, { activities: [{ date: '2026-10-01', type: 'run' }, { date: '2026-10-01', type: 'lift' }] }).activities.length, 2);
+
+  const sam = await signIn('sam2@example.com');
+  const { family } = await api('/families', sam, 'POST', { name: 'Fam2' });
+  const conn = { 'lp.g.sync': { url: 'https://c.test' }, 'fam.token.live': sam, 'fam.fid': family.fid };
+  const full = { 'lp.p.sandman.mealLog': { '2026-10-01': { meals: ['eggs'] } }, 'lp.p.sandman.dogProfiles': { d1: { name: 'Rex' } }, 'lp.p.sandman.weights': [{ date: '2026-10-01', weight: 160 }] };
+  // The phone connects first and uploads everything.
+  device({ ...conn, 'lp.g.owner': 'sandman', ...full });
+  await account.connect(); await sync.pull();
+  const phone = new Map(cur);
+  // The Mac had opened the trackers before and has just a profile on it.
+  device({ ...conn, 'lp.g.owner': 'sandman', 'lp.p.sandman.profile': { name: 'Sam' } });
+  await account.connect(); await sync.pull();
+  assert.deepEqual(J('lp.p.sandman.dogProfiles'), { d1: { name: 'Rex' } }, 'the Mac gets the dogs and meals');
+  assert.deepEqual(J('lp.p.sandman.mealLog'), { '2026-10-01': { meals: ['eggs'] } });
+  cur.set('lp.p.sandman.weights', JSON.stringify([{ date: '2026-10-01', weight: 160 }, { date: '2026-10-03', weight: 158 }]));
+  await sync.push();
+  // Back on the phone: nothing lost, and the Mac's weigh-in and profile arrive.
+  cur = phone;
+  globalThis.window = { dispatchEvent: () => {} };
+  await sync.pull();
+  delete globalThis.window;
+  assert.deepEqual(J('lp.p.sandman.dogProfiles'), { d1: { name: 'Rex' } });
+  assert.deepEqual(J('lp.p.sandman.mealLog'), { '2026-10-01': { meals: ['eggs'] } });
+  assert.equal(J('lp.p.sandman.weights').length, 2);
+  assert.deepEqual(J('lp.p.sandman.profile'), { name: 'Sam' });
+});
