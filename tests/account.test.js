@@ -178,3 +178,32 @@ test('one set of dogs: family pets show in the trackers, tracker details go back
   assert.deepEqual(names, ['Bo', 'Pippa', 'Zed']);
   assert.equal((await api(`/families/${family.fid}`, sam)).family.members.filter((m) => m.kind === 'pet').length, 3);
 });
+
+test('🔐 an encrypted family: the trackers send only locked data, and a device without the key reads nothing', async () => {
+  const { newKey, makeCheck, keys, isSealed } = await import('../family/crypto.js');
+  const sam = await signIn('lock@example.com');
+  const { family } = await api('/families', sam, 'POST', { name: 'Locked' });
+  const FK = newKey();
+  await api(`/families/${family.fid}`, sam, 'PATCH', { e2ee: true, keyCheck: await makeCheck(FK) });
+  const conn = { 'lp.g.sync': { url: 'https://c.test' }, 'fam.token.live': sam, 'fam.fid': family.fid };
+  // The phone has the key (as the family app stores it) and full trackers.
+  device({ ...conn, 'lp.g.owner': 'sandman', 'lp.p.sandman.weights': [{ date: '2026-10-01', weight: 160 }] });
+  await keys.set(family.fid, FK);
+  await account.connect(); await sync.pull();
+  const stored = await api(`/families/${family.fid}/members/${family.members[0].id}/data`, sam);
+  assert.ok(isSealed(stored.data.enc) && !JSON.stringify(stored).includes('weights'), 'only locked data on the server');
+  // A second device with the key gets the trackers.
+  device({ ...conn });
+  await keys.set(family.fid, FK);
+  const { accountBoot } = await import('../js/account.js');
+  await accountBoot();
+  assert.deepEqual(J('lp.p.sandman.weights'), [{ date: '2026-10-01', weight: 160 }]);
+  // A device without the key: nothing is read, and nothing readable is sent.
+  device({ ...conn, 'lp.g.owner': 'sandman', 'lp.p.sandman.weights': [{ date: '2026-10-09', weight: 158 }] });
+  await account.connect();
+  await sync.pull();
+  assert.deepEqual(J('lp.p.sandman.weights'), [{ date: '2026-10-09', weight: 158 }], 'its own copy is untouched');
+  await assert.rejects(account.push(), /family key/);
+  const after = await api(`/families/${family.fid}/members/${family.members[0].id}/data`, sam);
+  assert.equal(after.data.enc, stored.data.enc, 'the locked copy is unchanged');
+});

@@ -3,6 +3,7 @@
 // The trackers (food, training, dogs, calendar) stay in the current app for now; their data
 // comes over with "Bring over the current app".
 import { api } from './api.js';
+import { keys, seal, tryOpen, newKey, makeCheck, checkKey, lockBackup, unlockBackup, newPhrase, keyFromHash, deviceLink, isSealed } from './crypto.js';
 import { planImport, legacySnapshot, backupBlob, runImport, importCare, verifyImport } from './migrate.js';
 
 const $ = (s) => document.querySelector(s);
@@ -25,6 +26,51 @@ const download = (blob, name) => { const a = document.createElement('a'); a.href
 const VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
 const state = { user: null, families: [], fid: LS.get('fam.fid'), family: null, connected: [], feed: [], view: 'feed', memberId: null, invite: null, open: {} };
 const fam = () => state.family;
+
+// ---------- 🔐 end-to-end encryption (keys never leave the family's devices; see crypto.js) ----------
+const famKeys = {}; // {familyId: key} on this device, each checked against the family's key check
+async function loadKeys() {
+  const all = await keys.all();
+  for (const f of [...state.families, ...(state.family ? [state.family] : [])]) {
+    const k = all[f.fid];
+    famKeys[f.fid] = k && (!f.keyCheck || await checkKey(k, f.keyCheck)) ? k : null;
+  }
+}
+const fk = (fid = state.fid) => famKeys[fid] || null;
+const lockedHere = () => !!fam()?.e2ee && !fk();
+// Lock a value for this family (when this device has its key); unlock what the server sends.
+const lock = async (v, fid = state.fid) => (fk(fid) && v ? seal(fk(fid), v) : v);
+const unlock = (v, fid = state.fid) => tryOpen(fk(fid), v, null);
+const openData = async (rec, fid = state.fid) => { const d = rec?.data || {}; return d.enc == null ? d : (await tryOpen(fk(fid), d.enc, null)) || { locked: true }; };
+const sealData = async (data, fid = state.fid) => (fk(fid) ? { enc: await seal(fk(fid), data) } : data);
+// A family starts encrypted: a fresh key on this device and a key check on the server.
+async function encryptFamily(fid) {
+  const k = newKey();
+  await keys.set(fid, k);
+  famKeys[fid] = k;
+  return api.patch(`/families/${fid}`, { e2ee: true, keyCheck: await makeCheck(k) });
+}
+// A post's key: the family key, or (shared with friends' families) its own key, unlocked through
+// the family key or the connection's key.
+async function postKey(p) {
+  if (!p.pk) return fk(p.fid);
+  if (fk(p.fid)) return tryOpen(fk(p.fid), p.pk.fam, null);
+  for (const f of state.families) {
+    const ck = f.connkeys?.[p.fid] ? await tryOpen(fk(f.fid), f.connkeys[p.fid], null) : null;
+    if (ck && p.pk.conns?.[f.fid]) return tryOpen(ck, p.pk.conns[f.fid], null);
+  }
+  return null;
+}
+async function openPost(p) {
+  const k = await postKey(p);
+  const o = (v) => tryOpen(k, v, null);
+  const text = await o(p.text), photo = await o(p.photo);
+  const comments = await Promise.all((p.comments || []).map(async (c) => ({ ...c, text: (await o(c.text)) ?? '🔒' })));
+  const help = p.help ? { ...p.help, offers: await Promise.all((p.help.offers || []).map(async (x) => ({ ...x, msg: (await o(x.msg)) ?? '' }))) } : p.help;
+  return { ...p, text: text ?? '', photo: photo ?? '', comments, help, locked: text === null || photo === null, _key: k };
+}
+// What only family members can read on an appointment: where, notes, how it went.
+const openAppt = async (a) => ({ ...a, place: (await unlock(a.place)) ?? '🔒', notes: (await unlock(a.notes)) ?? '', outcome: (await unlock(a.outcome)) ?? '' });
 // How someone shows up: relations are as the person who added them described them.
 const relLabel = (m) => (m.id === fam()?.me ? 'You' : m.kind === 'pet' ? SPECIES[m.species] || 'Pet' : m.relation === 'self' ? 'Family creator' : RELATION[m.relation] || 'Family');
 const me = () => fam()?.members.find((m) => m.id === fam().me);
@@ -65,7 +111,16 @@ async function act(fn) { try { return await fn(); } catch (err) { if (err.status
 // ---------- start ----------
 async function boot() {
   const m = location.hash.match(/invite=([a-z0-9]{12,40})/);
-  if (m) { LS.set('fam.invite', m[1]); history.replaceState(null, '', location.pathname); }
+  if (m) {
+    // An invite can carry the family key (k) or the connection key (ck), after the "#".
+    LS.set('fam.invite', m[1]);
+    LS.set('fam.inviteKey', location.hash.match(/[#&]k=([A-Za-z0-9_-]{43})/)?.[1] || null);
+    LS.set('fam.inviteCk', location.hash.match(/[#&]ck=([A-Za-z0-9_-]{43})/)?.[1] || null);
+    history.replaceState(null, '', location.pathname);
+  }
+  // "Add a device": the family key, straight into this device's key store.
+  const dk = keyFromHash(location.hash);
+  if (dk) { await keys.set(dk.fid, dk.key); history.replaceState(null, '', location.pathname); state.fid = dk.fid; state.keyAdded = true; }
   state.invite = LS.get('fam.invite');
   if (!api.token()) return signIn();
   const r = await api.get('/me').catch((err) => (err.status === 401 ? null : Promise.reject(err)));
@@ -83,9 +138,26 @@ async function loadFamily() {
   const r = await api.get(`/families/${state.fid}`);
   state.family = r.family; state.connected = r.connected;
   LS.set('fam.fid', state.fid);
+  await loadKeys();
+  if (state.keyAdded) { state.keyAdded = false; setTimeout(() => toast(fk() ? '🔐 This device can now read your family' : "That link's key doesn't match this family"), 400); }
+  lockMyData().catch(() => {});
+}
+// Once the family is encrypted: lock anything of yours still stored readable (e.g. data saved
+// before this device had the key).
+async function lockMyData() {
+  if (!fam().e2ee || !fk() || state.lockedMine === state.fid) return;
+  state.lockedMine = state.fid;
+  const rec = await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null);
+  if (rec?.data && rec.data.enc == null && Object.keys(rec.data).length) await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData(rec.data) });
 }
 function chrome(on) {
   $('#bar').hidden = !on; $('#nav').hidden = !on;
+  const lb = $('#lockBanner');
+  if (lb) {
+    lb.hidden = !(on && lockedHere());
+    lb.innerHTML = `<span>🔒 <b>${esc(fam()?.name || 'This family')} is end-to-end encrypted</b> and this device doesn't have its key yet, so posts and private details show as locked.</span>
+      <span class="row wrap"><button type="button" class="small" data-act="keylink">Use a link from my phone</button><button type="button" class="ghost small" data-act="keyrestore">Use my recovery phrase</button></span>`;
+  }
   document.body.classList.toggle('with-nav', on);
   if (on) document.querySelector('#nav [data-view=pets]').hidden = !(fam().modules || []).some((x) => x === 'dogs' || x === 'chores');
   if (on) $('#navTrackers').hidden = !(fam().modules || []).includes('health');
@@ -225,7 +297,7 @@ async function feedView() {
   goldNews();
   const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts()]);
   if (!r) return;
-  state.feed = r.posts;
+  state.feed = await Promise.all(r.posts.map(openPost));
   renderPosts();
 }
 // The first week of a month: last month's Gold Card winner tops the feed.
@@ -251,13 +323,29 @@ function renderPosts() {
   el.innerHTML = state.feed.length ? (asks.length ? `<h3>🙋 Can you help?</h3>${asks.map(postCard).join('')}${rest.length ? '<h3>Latest</h3>' : ''}` : '') + rest.map(postCard).join('')
     : `<div class="empty card"><div class="big">📸</div><b>No posts yet</b><p class="small muted">Share a photo of the dogs, a win at the gym, or what's for dinner. Only your family${state.connected.length ? ' (and the families you connect with, if you choose)' : ''} can see it.</p><button type="button" data-view="compose">Make the first post</button></div>`;
 }
+// A vaccination done: on each dog's record, given that day and next due when the vet said.
+async function recordVaccine(a, given, due) {
+  for (const pid of a.pets) {
+    const rec = await api.get(`/families/${state.fid}/members/${pid}/data`).catch(() => null);
+    const data = await openData(rec);
+    if (data.locked) continue;
+    const prof = { ...(data.profile || {}) };
+    const vax = [...(prof.vaccines || [])];
+    const i = vax.findIndex((x) => x.name?.trim().toLowerCase() === a.vaccine.toLowerCase());
+    const entry = { ...(i >= 0 ? vax[i] : { name: a.vaccine }), given, due: due || given };
+    if (i >= 0) vax[i] = entry; else vax.push(entry);
+    const now = Date.now();
+    prof.vaccines = vax; prof.times = { ...(prof.times || {}), vaccines: now }; prof.updatedAt = now;
+    await api.put(`/families/${state.fid}/members/${pid}/data`, { data: await sealData({ ...data, profile: prof }) });
+  }
+}
 // After any change to an appointment: refresh whichever screen shows them.
 async function apptChanged() {
   await loadAppts();
   if (state.view === 'pets') {
     renderComing(); renderVax(); renderSpend();
     // A finished vaccination changes the dog's record: show the new due date.
-    for (const p of dogsOf()) dogsHub.profiles[p.id] = (await api.get(`/families/${state.fid}/members/${p.id}/data`).catch(() => null))?.data?.profile || dogsHub.profiles[p.id];
+    for (const p of dogsOf()) dogsHub.profiles[p.id] = (await openData(await api.get(`/families/${state.fid}/members/${p.id}/data`).catch(() => null)))?.profile || dogsHub.profiles[p.id];
     renderVax();
     const cards = $('#dogcards');
     if (cards) cards.innerHTML = dogsOf().map((p) => dogCard(p)).join('');
@@ -289,10 +377,11 @@ function postCard(p) {
     <div class="actions"><button type="button" data-act="like" class="${p.liked ? 'liked' : ''}" aria-label="Like">${p.liked ? '❤️' : '🤍'}</button><button type="button" data-act="comment" aria-label="Comment">💬</button>
       <span class="small muted">${p.likes ? `${p.likes} like${p.likes > 1 ? 's' : ''}` : ''}</span></div>
     ${p.text ? `<p class="caption"><b>${esc(who.name)}</b> ${esc(p.text)}</p>` : ''}
+    ${p.locked ? '<p class="caption muted">🔒 Locked on this device</p>' : ''}
     ${p.tags?.length ? `<p class="tags">${p.tags.map((id) => `<button type="button" class="chip" ${member(id) ? `data-member="${id}"` : ''}>${(member(id)?.kind || p.tagKinds?.[id]) === 'pet' ? '🐾' : '👤'} ${esc(p.tagNames?.[id] || member(id)?.name || '')}</button>`).join('')}</p>` : ''}
     ${p.comments.length > 2 && !open ? `<button type="button" class="linkish small" data-act="allcomments">View all ${p.comments.length} comments</button>` : ''}
     <ul class="comments">${comments.map((c) => `<li><b>${esc(c.name)}</b> ${esc(c.text)} <small class="muted">${ago(c.at)}</small></li>`).join('')}</ul>
-    <form class="comment-form"><input name="text" maxlength="500" placeholder="Add a comment…" aria-label="Add a comment"><button class="linkish">Post</button></form>
+    ${p.locked ? '' : '<form class="comment-form"><input name="text" maxlength="500" placeholder="Add a comment…" aria-label="Add a comment"><button class="linkish">Post</button></form>'}
   </article>`;
 }
 
@@ -371,7 +460,7 @@ const who = (id) => (id === fam().me ? 'You' : member(id)?.name || '');
 const daysTo = (d) => Math.round((Date.parse(`${d}T12:00:00`) - Date.parse(`${isoLocal()}T12:00:00`)) / 864e5);
 async function loadAppts() {
   const r = await api.get(`/families/${state.fid}/appts?today=${isoLocal()}`).catch(() => null);
-  if (r) { dogsHub.appts = r.appts; dogsHub.spending = r.spending; }
+  if (r) { dogsHub.appts = await Promise.all(r.appts.map(openAppt)); dogsHub.spending = r.spending; }
   return dogsHub.appts;
 }
 async function petsView() {
@@ -394,7 +483,7 @@ async function petsView() {
   renderWalk();
   await loadAppts();
   renderComing();
-  await Promise.all(dogsOf().map(async (p) => { dogsHub.profiles[p.id] = (await api.get(`/families/${state.fid}/members/${p.id}/data`).catch(() => null))?.data?.profile || {}; }));
+  await Promise.all(dogsOf().map(async (p) => { dogsHub.profiles[p.id] = (await openData(await api.get(`/families/${state.fid}/members/${p.id}/data`).catch(() => null)))?.profile || {}; }));
   const cards = $('#dogcards');
   if (cards) cards.innerHTML = dogsOf().map((p) => dogCard(p)).join('');
   renderVax(); renderSpend(); renderHappy();
@@ -636,8 +725,10 @@ async function memberView() {
     ${!self && m.role !== 'owner' && (me().role === 'owner' || m.status !== 'active') ? `<button type="button" class="danger linkish small pad" data-act="removemember" data-id="${m.id}">Remove ${esc(m.name)} from ${esc(fam().name)}</button>` : ''}`;
   const el = $('#memberData');
   try {
-    const { data, savedAt } = await api.get(`/families/${state.fid}/members/${m.id}/data`);
-    el.innerHTML = m.kind === 'pet' ? petDetails(m, data) : healthCard(m, data, savedAt, self);
+    const rec = await api.get(`/families/${state.fid}/members/${m.id}/data`);
+    const data = await openData(rec), savedAt = rec.savedAt;
+    el.innerHTML = data.locked ? '<div class="locked">🔒 <b>Locked on this device</b><p class="small muted">This device needs the family key to show it.</p></div>'
+      : m.kind === 'pet' ? petDetails(m, data) : healthCard(m, data, savedAt, self);
   } catch (err) {
     el.innerHTML = err.data?.locked ? `<div class="locked">🔒 <b>Diet & fitness is private</b><p class="small muted">${esc(m.name)} can share it with you from their Me tab.</p></div>` : `<p class="small muted">${esc(err.message)}</p>`;
   }
@@ -703,6 +794,8 @@ function meView() {
     <section class="card stack"><button type="button" class="ghost" data-act="help">💬 Help &amp; questions</button>
       <p class="tiny muted">How families, invites, chores and the diet app work — and it can check your account, resend an invite, or pass a problem to the app's maintainer.</p></section>
     ${state.user.isAdmin ? '<h3>Maintainer</h3><section class="card"><button type="button" class="ghost wide" data-act="admin">🛠 Problems, glitches &amp; the nightly check</button></section>' : ''}
+    <h3>🔐 Encryption</h3>
+    <section class="card stack" id="e2eeCard">${e2eeCard()}</section>
     <h3>Account & security</h3>
     <section class="card stack">
       <div id="sessions" class="small muted">Loading your sign-ins…</div>
@@ -716,6 +809,10 @@ function meView() {
     <section class="card links"><a href="../">🥗 Open your trackers (food, macros, training, calendar) ›</a><p class="tiny muted">Saved to this account, so they're the same on every device you sign in on. Only the people you turn sharing on for above can see them — never friends' families.</p></section>
     <button type="button" class="ghost wide" data-act="signout">Sign out</button>
     <p class="tiny muted center pad">OurPawmily Families · beta</p>`;
+  if (fk()) api.get('/account/keybackup').then((r) => {
+    const el = $('#backupState');
+    if (el) el.innerHTML = r.backup ? `🔑 Recovery backup saved ${new Date(r.backup.at).toLocaleDateString()}. Made a new family or joined one since? Make a new phrase so it's included.` : '<span class="tone-warn">⚠️ No recovery phrase yet — if you lose all your devices, nobody can unlock your family. Tap 🔑 Recovery phrase.</span>';
+  }).catch(() => {});
   api.get('/account/sessions').then((r) => {
     const el = $('#sessions');
     if (el) el.innerHTML = `<b>Signed in on</b><ul class="list">${r.sessions.slice().reverse().map((x) => `<li class="row between"><span>${esc(x.device || 'A device')}${x.current ? ' <span class="pill">This one</span>' : ''}</span><small>${ago(x.at)}</small></li>`).join('')}</ul>`;
@@ -899,6 +996,93 @@ async function adminView() {
       ${r.glitches.length ? `<ul class="small">${r.glitches.map((g) => `<li><b>${g.n}×</b> ${esc(g.message)} <small class="muted">${esc(g.where)} · v${esc(g.version)} · ${ago(g.last)}</small></li>`).join('')}</ul>` : '<p class="small muted">✅ None reported.</p>'}</section>`);
 }
 
+// ---------- 🔐 encryption: turning it on, adding a device, the recovery phrase ----------
+function e2eeCard() {
+  const f = fam(), owner = me().role === 'owner';
+  if (!f.e2ee) return `<p class="small">Posts, photos, notes, plans, diet &amp; fitness and the dogs' details are stored readable on your server today.</p>
+    ${owner ? `<p class="small">Turn on <b>end-to-end encryption</b> and only your family's devices can read them — not the server, not Cloudflare, not anyone who maintains the app.</p><button type="button" data-act="e2eeon">🔐 Turn on encryption</button>`
+      : `<p class="small muted">${esc(f.members.find((m) => m.role === 'owner')?.name || "The family's creator")} can turn on end-to-end encryption from their Me tab.</p>`}`;
+  if (!fk()) return `<p class="small">🔒 ${esc(f.name)} is end-to-end encrypted, and this device doesn't have the key yet.</p>
+    <div class="row wrap"><button type="button" data-act="keylink">Use a link from my phone</button><button type="button" class="ghost" data-act="keyrestore">Use my recovery phrase</button></div>`;
+  return `<p class="small">✅ <b>End-to-end encrypted.</b> Posts, photos, comments, notes, plans, diet &amp; fitness, the dogs' details and appointment notes are locked on your devices before they're sent; the server only keeps text it can't read.</p>
+    <div class="row wrap"><button type="button" class="ghost" data-act="adddevice">📲 Add a device</button><button type="button" class="ghost" data-act="phrase">🔑 Recovery phrase</button></div>
+    <p class="tiny muted">Not encrypted (the server needs these to work): names of family members and pets, the chores log and Gold Card, games, and the golden-day notes.</p>
+    <p class="tiny muted" id="backupState"></p>`;
+}
+async function turnOnEncryption(log) {
+  const fid = state.fid;
+  log('🔑 Making your family key on this phone…');
+  await encryptFamily(fid);
+  await loadFamily();
+  const k = fk();
+  // Every post: its text, photo, comments and offers, locked. Posts shared with friends' families get their own key.
+  let from = 0, n = 0;
+  do {
+    const r = await api.get(`/families/${fid}/posts?from=${from}`);
+    for (const p of r.posts) {
+      const body = {};
+      let pkKey = k;
+      if (p.audience === 'connections' && !p.pk) {
+        pkKey = newKey();
+        const conns = {};
+        for (const [other, sc] of Object.entries(fam().connkeys || {})) { const ck = await tryOpen(k, sc, null); if (ck) conns[other] = await seal(ck, pkKey); }
+        body.pk = { fam: await seal(k, pkKey), conns };
+      }
+      if (p.text && !isSealed(p.text)) body.text = await seal(pkKey, p.text);
+      if (p.photo && !isSealed(p.photo)) body.photo = await seal(pkKey, p.photo);
+      const cs = (p.comments || []).filter((c) => c.text && !isSealed(c.text));
+      if (cs.length) body.comments = await Promise.all(cs.map(async (c) => ({ id: c.id, text: await seal(pkKey, c.text) })));
+      const os = (p.help?.offers || []).filter((o) => o.msg && !isSealed(o.msg));
+      if (os.length) body.offers = await Promise.all(os.map(async (o) => ({ id: o.id, msg: await seal(pkKey, o.msg) })));
+      if (Object.keys(body).length && (body.text || body.photo || body.comments || body.offers)) { await api.patch(`/posts/${fid}/${p.id}`, body); n++; }
+    }
+    from = r.next;
+    if (n) log(`📸 Locked ${n} post${n === 1 ? '' : 's'}…`);
+  } while (from != null);
+  // Diet & fitness and the dogs' details: yours, the pets', and anyone's you're holding until they join.
+  let d = 0;
+  for (const m of fam().members) {
+    const rec = await api.get(`/families/${fid}/members/${m.id}/data`).catch(() => null);
+    if (!rec?.data || rec.data.enc != null || !Object.keys(rec.data).length) continue;
+    if (await api.put(`/families/${fid}/members/${m.id}/data`, { data: await sealData(rec.data) }).then(() => true, () => false)) d++;
+  }
+  log(`🥗 Locked ${d} set${d === 1 ? '' : 's'} of tracker and dog details`);
+  const ap = await api.get(`/families/${fid}/appts`).catch(() => ({ appts: [] }));
+  let a = 0;
+  for (const x of ap.appts) {
+    if ((!x.place || isSealed(x.place)) && (!x.notes || isSealed(x.notes))) continue;
+    await api.patch(`/families/${fid}/appts/${x.id}`, { edit: { place: x.place ? await seal(k, x.place) : '', notes: x.notes ? await seal(k, x.notes) : '' } });
+    a++;
+  }
+  if (a) log(`🐾 Locked ${a} appointment${a === 1 ? '' : 's'}`);
+  log('✅ Done. Your family is end-to-end encrypted.');
+}
+function phraseSheet() {
+  const phrase = newPhrase();
+  openSheet(`<h2>🔑 Your recovery phrase</h2>
+    <p class="small">If you ever lose all your devices, this phrase unlocks your family again. <b>Write it down</b> and keep it somewhere safe — it's never stored readable anywhere, so nobody (including us) can recover it for you.</p>
+    <div class="phrase">${phrase.split('-').map((g) => `<span>${g}</span>`).join('')}</div>
+    <form id="phraseForm" class="stack" data-phrase="${phrase}"><label class="check"><input type="checkbox" required><span>I've written it down</span></label>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save my backup</button></div></form>
+    <p class="tiny muted">Making a new phrase replaces the old one.</p>`);
+}
+function addDeviceSheet() {
+  const link = deviceLink(`${location.origin}${location.pathname}`, state.fid, fk());
+  openSheet(`<h2>📲 Add a device</h2>
+    <p class="small">Open this link on your other phone or computer (signed in to OurPawmily) and it can read ${esc(fam().name)}. Send it <b>only to yourself</b> — AirDrop, or a note to yourself.</p>
+    <div class="linkbox"><input readonly value="${esc(link)}" aria-label="Device link"></div>
+    <div class="row wrap">${navigator.share ? '<button type="button" data-act="sharedevice">Share…</button>' : ''}<button type="button" class="ghost" data-act="copydevice">Copy link</button></div>
+    <p class="tiny muted">For your partner: their invite link already carries the key. If they joined before encryption was on, send them this link too.</p>`);
+}
+function keyLinkSheet() {
+  openSheet(`<h2>Use a link from my phone</h2><p class="small">On a phone that can read ${esc(fam()?.name || 'your family')}: Me › 🔐 Encryption › 📲 Add a device. Open that link here, or paste it:</p>
+    <form id="keyLinkForm" class="stack"><input name="link" required placeholder="https://…/family/#k=…" autocomplete="off"><div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Unlock</button></div></form>`);
+}
+function keyRestoreSheet() {
+  openSheet(`<h2>Use my recovery phrase</h2><form id="restoreForm" class="stack"><label>Recovery phrase<input name="phrase" required autocomplete="off" autocapitalize="none" placeholder="xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"></label>
+    <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Unlock</button></div></form>`);
+}
+
 // ---------- add people & pets, invites ----------
 function addPerson() {
   openSheet(`<h2>Add a person</h2>
@@ -939,8 +1123,9 @@ function addPet(p = null) {
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>${p ? 'Save' : 'Add'}</button></div>
     </form>`);
 }
-function inviteSheet(invite, who) {
-  const link = inviteLink(invite.code);
+function inviteSheet(invite, who, ck = null) {
+  // 🔐 The key rides after the "#": the family key for a member, the connection key for a friend's family.
+  const link = `${inviteLink(invite.code)}${invite.kind === 'member' && fk() ? `&k=${fk()}` : ''}${ck ? `&ck=${ck}` : ''}`;
   const subject = encodeURIComponent(`Join ${fam().name} on OurPawmily`);
   const body = encodeURIComponent(`${me().name} invited you to ${invite.kind === 'family' ? 'connect your family with' : 'join'} ${fam().name} on OurPawmily.\n\nOpen this link and sign in with this Google account (${invite.email}):\n${link}\n\nThe invite works for 14 days.`);
   openSheet(`<h2>💌 Invite ready</h2>
@@ -961,11 +1146,11 @@ async function runTheImport() {
   const legacy = await legacySnapshot();
   const ops = planImport(legacy, fam());
   if (!ops.length) { log.innerHTML = '<div class="muted">Nothing to bring over.</div>'; return; }
-  const done = await runImport(api, state.fid, ops, say);
+  const done = await runImport(api, state.fid, ops, say, (d) => sealData(d));
   await loadFamily();
   await importCare(api, state.fid, legacy, fam(), say);
   // Read everything back and compare it with this phone, section by section.
-  const checks = await verifyImport(api, state.fid, done);
+  const checks = await verifyImport(api, state.fid, done, (rec) => openData(rec));
   const highlight = (c) => c.sections.filter((x) => ['weigh-ins', 'days of meals', 'workouts', 'calendar events', 'meal combos', 'feedings'].includes(x.label) && x.count).map((x) => `${x.count} ${x.count === 1 ? x.label.replace(/^days of /, 'day of ').replace(/s$/, '') : x.label}`).join(', ');
   log.innerHTML += `<div class="verify">${checks.map((c) => `<div class="${c.ok ? 'good' : 'tone-warn'}">${c.ok ? '✅' : '⚠️'} <b>${esc(c.name)}</b>: ${c.ok ? `${c.sections.length === 1 ? 'everything matches' : `all ${c.sections.length} sections match`}${highlight(c) ? ` (${esc(highlight(c))})` : ''}` : `didn't match: ${esc(c.missing.join(', '))} — tap Bring it over again`}</div>`).join('')}</div>`;
   say('Done. Your partner can claim theirs by accepting an invite — open them under Family and tap "Invite by email".');
@@ -1063,6 +1248,21 @@ document.addEventListener('click', (e) => {
     case 'close': return closeSheet();
     case 'demo': return demoSignIn();
     case 'help': return helpView();
+    case 'e2eeon': return openSheet(`<h2>🔐 Turn on encryption</h2>
+      <p class="small">This phone makes a secret family key and locks everything private that's already stored: posts, photos, comments, diet &amp; fitness, the dogs' details and appointment notes. From then on the server only keeps text it can't read.</p>
+      <p class="small">Afterwards: send your partner <b>📲 Add a device</b> (once), and write down your <b>🔑 recovery phrase</b>.</p>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Not now</button><button type="button" data-act="e2eego">Turn it on</button></div><div id="e2eeLog" class="small"></div>`);
+    case 'e2eego': {
+      t.disabled = true; t.textContent = 'Locking…';
+      const out = $('#e2eeLog');
+      return act(async () => { await turnOnEncryption((s) => { out.insertAdjacentHTML('beforeend', `<div>${esc(s)}</div>`); }); toast('🔐 Encrypted'); setTimeout(() => { meView(); phraseSheet(); }, 900); });
+    }
+    case 'adddevice': return addDeviceSheet();
+    case 'sharedevice': return navigator.share({ title: 'OurPawmily on my other device', url: $('.linkbox input').value }).catch(() => {});
+    case 'copydevice': return navigator.clipboard?.writeText($('.linkbox input').value).then(() => toast('Copied — open it on your other device'));
+    case 'phrase': return phraseSheet();
+    case 'keylink': return keyLinkSheet();
+    case 'keyrestore': return keyRestoreSheet();
     case 'apptnew': return apptSheet();
     case 'bingonew': return bingoNew();
     case 'seasonnew': return seasonNew();
@@ -1095,7 +1295,8 @@ document.addEventListener('click', (e) => {
     case 'nophoto': draft.photo = ''; return compose();
     case 'accept': return act(async () => {
       const r = await api.post(`/invites/${state.invite}/accept`);
-      LS.set('fam.invite', null); state.invite = null; state.fid = r.family.fid; state.view = 'feed';
+      if (LS.get('fam.inviteKey')) await keys.set(r.family.fid, LS.get('fam.inviteKey'));
+      LS.set('fam.invite', null); LS.set('fam.inviteKey', null); state.invite = null; state.fid = r.family.fid; state.view = 'feed';
       toast(`Welcome to ${r.family.name}!`); boot();
     });
     case 'declineinvite': LS.set('fam.invite', null); state.invite = null; return boot();
@@ -1109,8 +1310,9 @@ document.addEventListener('click', (e) => {
       const msg = d.act === 'offer' ? prompt('Add a note? (optional)', "Happy to help — tell me what they need!") : '';
       if (msg == null) return;
       return act(async () => {
-        const r = await api.post(`/posts/${post.dataset.fid}/${post.dataset.post}/offer`, d.act === 'offer' ? { msg } : { withdraw: true });
-        const p = state.feed.find((x) => x.id === post.dataset.post); p.help = r.help; post.outerHTML = postCard(p);
+        const p = state.feed.find((x) => x.id === post.dataset.post);
+        const r = await api.post(`/posts/${post.dataset.fid}/${post.dataset.post}/offer`, d.act === 'offer' ? { msg: p._key && msg ? await seal(p._key, msg) : msg } : { withdraw: true });
+        p.help = (await openPost({ ...p, text: '', photo: '', comments: [], help: r.help })).help; post.outerHTML = postCard(p);
         if (d.act === 'offer') toast('💛 Offer sent');
       });
     }
@@ -1150,7 +1352,20 @@ document.addEventListener('click', (e) => {
       if (v == null) return;
       return act(async () => { await api.patch(`/families/${state.fid}`, { goldPrize: v }); renderRace(); });
     }
-    case 'export': return act(async () => { const r = await api.get('/account/export'); download(new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }), `ourpawmily-my-data-${isoLocal()}.json`); toast('Your data is downloaded'); });
+    case 'export': return act(async () => {
+      const r = await api.get('/account/export');
+      // 🔐 Unlocked on this phone, so the file is readable.
+      for (const f of r.families) {
+        for (const x of [...f.posts, ...f.comments]) {
+          const k = await postKey({ fid: f.fid, pk: x.pk });
+          x.text = (await tryOpen(k, x.text, null)) ?? '(locked)';
+          if (x.photo != null) x.photo = (await tryOpen(k, x.photo, null)) ?? '';
+          delete x.pk;
+        }
+        f.myData = await openData({ data: f.myData }, f.fid);
+        delete f.fid;
+      }
+      download(new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }), `ourpawmily-my-data-${isoLocal()}.json`); toast('Your data is downloaded'); });
     case 'logoutall': if (!confirm('Sign out on every device, including this one?')) return; return act(async () => { await api.post('/auth/logout-all'); api.setToken(null); boot(); });
     case 'deleteaccount': return openSheet(`<h2>Delete your account</h2>
       <p class="small">This permanently deletes:</p>
@@ -1246,6 +1461,7 @@ document.addEventListener('submit', (e) => {
     const mods = new FormData(f).getAll('mod');
     return act(async () => {
       const r = await api.post('/families', v); state.fid = r.family.fid;
+      await encryptFamily(r.family.fid);
       if (mods.length) await api.patch(`/families/${r.family.fid}`, { modules: mods });
       closeSheet(); toast(`${r.family.name} is ready`); state.view = 'family'; boot();
     });
@@ -1258,11 +1474,33 @@ document.addEventListener('submit', (e) => {
     e.preventDefault();
     return act(async () => { await api.patch(`/families/${state.fid}`, { name: v.name, modules: new FormData(f).getAll('mod'), goldenPosts: !!v.goldenPosts }); await loadFamily(); chrome(true); toast('Saved'); });
   }
+  if (f.id === 'phraseForm') {
+    e.preventDefault();
+    return act(async () => { await api.put('/account/keybackup', { backup: await lockBackup(f.dataset.phrase, await keys.all()) }); closeSheet(); toast('🔑 Recovery backup saved'); });
+  }
+  if (f.id === 'keyLinkForm') {
+    e.preventDefault();
+    const k = keyFromHash(v.link.slice(v.link.indexOf('#')));
+    if (!k) return toast("That isn't a device link");
+    return act(async () => { await keys.set(k.fid, k.key); closeSheet(); state.fid = k.fid; await boot(); toast(fk() ? '🔐 Unlocked on this device' : "That link's key doesn't match"); });
+  }
+  if (f.id === 'restoreForm') {
+    e.preventDefault();
+    return act(async () => {
+      const { backup } = await api.get('/account/keybackup');
+      if (!backup) throw new Error('No recovery backup is saved for this account');
+      const ks = await unlockBackup(v.phrase, backup);
+      for (const [fid, k] of Object.entries(ks)) await keys.set(fid, k);
+      closeSheet(); await boot(); toast('🔐 Unlocked with your recovery phrase');
+    });
+  }
   if (f.id === 'apptForm') {
     e.preventDefault();
     const fd = new FormData(f);
     const body = { ...v, pets: fd.getAll('pets'), repeatWeeks: +v.repeatWeeks };
+    const sealIt = async () => { body.place = await lock(body.place); body.notes = await lock(body.notes); };
     return act(async () => {
+      await sealIt();
       if (f.dataset.id) await api.patch(`/families/${state.fid}/appts/${f.dataset.id}`, { edit: body });
       else await api.post(`/families/${state.fid}/appts`, body);
       closeSheet(); await apptChanged(); toast(f.dataset.id ? 'Saved' : '🐾 Added — it\'s on the feed and the calendar');
@@ -1271,7 +1509,9 @@ document.addEventListener('submit', (e) => {
   if (f.id === 'apptDoneForm') {
     e.preventDefault();
     return act(async () => {
-      const r = await api.patch(`/families/${state.fid}/appts/${f.dataset.id}`, { done: true, ...v });
+      const r = await api.patch(`/families/${state.fid}/appts/${f.dataset.id}`, { done: true, ...v, outcome: await lock(v.outcome) });
+      // An encrypted family's dog records are locked, so this phone writes the new due date.
+      if (fam().e2ee && r.appt.type === 'vaccine' && r.appt.vaccine) await recordVaccine(r.appt, v.date || (r.appt.dropAt || r.appt.pickAt).slice(0, 10), v.nextDue);
       closeSheet(); await apptChanged();
       toast(r.next ? `✓ Done · next one ${whenText(r.next.dropAt || r.next.pickAt)}` : '✓ Done');
     });
@@ -1315,7 +1555,12 @@ document.addEventListener('submit', (e) => {
     e.preventDefault();
     return act(async () => {
       const r = await api.post(`/invites/${state.invite}/accept`, { fid: v.fid || '', familyName: v.familyName });
-      LS.set('fam.invite', null); state.invite = null; state.fid = r.family.fid; state.view = 'family';
+      // 🔐 Our family is encrypted from the start, and keeps its copy of the connection key.
+      const all = await keys.all();
+      if (!r.family.e2ee) await encryptFamily(r.family.fid); else famKeys[r.family.fid] = all[r.family.fid] || null;
+      const ck = LS.get('fam.inviteCk');
+      if (ck && fk(r.family.fid) && r.connectedFid) await api.put(`/families/${r.family.fid}/connkeys/${r.connectedFid}`, { ck: await seal(fk(r.family.fid), ck) });
+      LS.set('fam.invite', null); LS.set('fam.inviteCk', null); state.invite = null; state.fid = r.family.fid; state.view = 'family';
       toast(`Connected with ${r.connectedTo}`); boot();
     });
   }
@@ -1340,13 +1585,32 @@ document.addEventListener('submit', (e) => {
   }
   if (f.id === 'famInviteForm') {
     e.preventDefault();
-    return act(async () => { const r = await api.post(`/families/${state.fid}/invites`, { kind: 'family', ...v }); inviteSheet(r.invite, v.email); });
+    return act(async () => {
+      const r = await api.post(`/families/${state.fid}/invites`, { kind: 'family', ...v });
+      let ck = null;
+      if (fk()) { ck = newKey(); await api.put(`/families/${state.fid}/connkeys/pending/${r.invite.code}`, { ck: await seal(fk(), ck) }); }
+      inviteSheet(r.invite, v.email, ck);
+    });
   }
   if (f.id === 'postForm') {
     e.preventDefault();
+    if (lockedHere()) return toast('🔒 This device needs the family key first — Me › 🔐 Encryption');
     return act(async () => {
       const help = draft.help ? { type: draft.help.type, from: v.from, to: v.to || v.from, time: v.time } : null;
-      const r = await api.post(`/families/${state.fid}/posts`, { text: v.text, photo: draft.photo, tags: draft.tags, audience: draft.audience, help });
+      // 🔐 Locked on this phone: with the family key, or (for friends' families) the post's own key.
+      let text = v.text, photo = draft.photo, pk;
+      if (fk()) {
+        let k = fk();
+        if (draft.audience === 'connections') {
+          k = newKey();
+          const conns = {};
+          for (const [other, sealedCk] of Object.entries(fam().connkeys || {})) { const ck = await tryOpen(fk(), sealedCk, null); if (ck) conns[other] = await seal(ck, k); }
+          pk = { fam: await seal(fk(), k), conns };
+        }
+        text = text ? await seal(k, text) : ''; photo = photo ? await seal(k, photo) : '';
+      }
+      const r = await api.post(`/families/${state.fid}/posts`, { text, photo, pk, tags: draft.tags, audience: draft.audience, help });
+      r.post = await openPost(r.post);
       draft = { text: '', photo: '', tags: [], audience: 'family' };
       state.view = 'feed'; closeSheet(); state.feed = [r.post, ...state.feed]; show('feed');
       if (r.note) toast(r.note); else if (help) toast(r.post.audience === 'connections' ? 'Asked your family and connected families 🙋' : 'Asked your family 🙋');
@@ -1357,8 +1621,9 @@ document.addEventListener('submit', (e) => {
     const post = f.closest('[data-post]');
     if (!v.text?.trim()) return;
     return act(async () => {
-      const r = await api.post(`/posts/${post.dataset.fid}/${post.dataset.post}/comments`, { text: v.text });
       const p = state.feed.find((x) => x.id === post.dataset.post);
+      const r = await api.post(`/posts/${post.dataset.fid}/${post.dataset.post}/comments`, { text: p._key ? await seal(p._key, v.text) : v.text });
+      r.comment.text = v.text;
       p.comments.push(r.comment); post.outerHTML = postCard(p);
     });
   }

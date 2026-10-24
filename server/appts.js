@@ -33,18 +33,18 @@ export function shiftWeeks(at, weeks) {
 }
 
 // A clean appointment from what the phone sent. petIds/memberIds: who may be named.
-export function cleanAppt(body, { petIds, memberIds, clean }) {
+export function cleanAppt(body, { petIds, memberIds, clean, text = clean }) {
   const pets = (Array.isArray(body.pets) ? body.pets : []).filter((id) => petIds.includes(id));
   const who = (id) => (memberIds.includes(id) ? id : '');
   return {
     type: APPT_TYPES[body.type] ? body.type : 'other',
     pets,
-    place: clean(body.place, 80),
+    place: text(body.place, 80),
     dropAt: when(body.dropAt), dropBy: who(body.dropBy),
     pickAt: when(body.pickAt), pickBy: who(body.pickBy),
     repeatWeeks: [0, 4, 6, 8, 12].includes(Number(body.repeatWeeks)) ? Number(body.repeatWeeks) : 0,
     vaccine: body.type === 'vaccine' ? clean(body.vaccine, 40) : '',
-    notes: clean(body.notes, 300),
+    notes: text(body.notes, 300),
     remind: (Array.isArray(body.remind) ? body.remind : []).filter((x) => ['day', 'hour'].includes(x)),
   };
 }

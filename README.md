@@ -73,6 +73,11 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
 - **Feed:** a private, Instagram-style feed with photos, captions, tags for the people and pets in a photo, likes and comments. A family's posts are seen only by that family.
 - **Connected families:** anyone can invite a close friend, who then creates their own family (or uses one they run). The two families are then connected, and a post shared with *+ connected families* shows up for them too. Nothing else is shared with them, not even email addresses.
 - **Privacy:** your diet & fitness (weight, meals, training) is private until you turn sharing on for a specific person in **Me › Who can see my diet & fitness**.
+- **🔐 End-to-end encryption:** each family has a secret key that lives only on its members' devices. Posts, photos, comments, notes and plans, everyone's diet & fitness, the dogs' details and appointment notes are locked on the phone before they're sent, so the server (and Cloudflare, and the app's maintainer) only stores text it can't read. New families start encrypted; an existing family's creator turns it on in **Me › 🔐 Encryption**, which locks everything already stored.
+  - **Getting the key on a device:** an invite link carries it (after the "#", which never reaches a server); **📲 Add a device** makes a link for your other phone or computer (or for a partner who joined before encryption); or **🔑 Recovery phrase** (25 letters/digits you write down) unlocks a backup of your keys on a new device.
+  - **Friends' families:** each connection has its own key, carried in the connection invite; posts shared with them get a key of their own, locked for your family and each connection.
+  - **Not encrypted** (the server needs these to work): names of family members and pets, who's in which family, the chores log and Gold Card, games, golden-day notes and appointment dates and drivers.
+  - A device without the key shows a 🔒 banner and locked posts, and the trackers don't send anything until it has the key.
 - **Profiles:** each person's profile shows their posts and, if they've shared it with you, their weight trend and how many days they logged meals. Each pet's profile shows its breed, age, food, vaccines (with a heads-up when one is due) and vet.
 - **Bring over the current app** (Me tab): copies everything the current app keeps on that phone into the family. Your own data goes to you, your partner's shared copy is held for them until they accept their invite, and each dog becomes a pet. **Download a backup** first saves the whole current app as a file. Nothing is deleted, and running it again refreshes the copies. Afterwards it reads every copy back from the server and compares it with the phone, section by section (✅ Sam: all 27 sections match: 412 weigh-ins, 210 days of meals…), and flags anything that didn't arrive.
 - **Demo:** until the connector is updated and given a Google client ID (see server/README.md), **Try it on this phone** runs the whole thing on the phone itself. You can sign in as different people to try invites.
@@ -395,6 +400,7 @@ Run `node scripts/bump-version.mjs` before committing. It gives every app file a
 | `js/app.js` | Tabs, Home, Food, check-ins, profiles, sharing settings |
 | `js/plan.js`, `js/foods.js` | Targets, meal planning, foods, check-in math |
 | `js/brief.js`, `js/briefTab.js` | Weather, walk / run / ride windows, dog buttons, golden days, scoreboard |
+| `family/crypto.js` | 🔐 End-to-end encryption: sealing, keys on the device, recovery phrase |
 | `family/` | 👨‍👩‍👧 OurPawmily Families (preview): sign-in, families, invites, feed, privacy, bringing data over |
 | `server/family.js` | The family API (`/v2/…` on the connector; also runs on the phone for the demo), help desk, nightly maintenance |
 | `server/appts.js` | 🐾 Dog appointments: drivers, repeats, vaccine due dates, spending |

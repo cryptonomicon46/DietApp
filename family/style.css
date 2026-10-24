@@ -289,3 +289,10 @@ details.house > summary::-webkit-details-marker { display: none; }
 details.house .fold { margin-left: auto; color: var(--brand); font-weight: 700; font-size: .8rem; text-transform: none; letter-spacing: 0; }
 .care-acts { display: inline-flex; align-items: center; gap: 14px; flex: none; }
 .care-acts button + button::before { content: '·'; color: var(--muted); margin-right: 14px; font-weight: 400; }
+
+/* 🔐 encryption */
+.lockbanner { max-width: 560px; margin: 4px 16px 0; padding: 12px 14px; border-radius: 14px; background: #fff1e6; color: #6b3a00; border: 1px solid #f3c58f; font-size: .88rem; display: grid; gap: 8px; }
+@media (prefers-color-scheme: dark) { .lockbanner { background: #3a2a14; color: #f6d9b0; border-color: #6b4a1e; } }
+.phrase { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 12px 0; }
+.phrase span { font: 700 1.05rem ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 2px; letter-spacing: .04em; }
+@media (min-width: 592px) { .lockbanner { margin: 4px auto 0; } }

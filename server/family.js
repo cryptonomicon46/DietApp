@@ -62,6 +62,13 @@ const b64urlBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/
 const b64urlJson = (s) => JSON.parse(new TextDecoder().decode(b64urlBytes(s)));
 export const randomId = (bytes = 9) => [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('');
 const clean = (s, max = 80) => String(s ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, max);
+// 🔐 End-to-end encrypted text ("e1:…", sealed on a family member's device with the family key
+// — see family/crypto.js). The server stores it as-is and can't read it. Once a family turns
+// encryption on (fam.e2ee), the private fields only accept sealed text.
+const SEALED_RE = /^e1:[A-Za-z0-9_-]+$/;
+const sealed = (v, max) => (typeof v === 'string' && v.length <= max && SEALED_RE.test(v) ? v : null);
+// A private text field: sealed text, or (families not yet encrypted) plain text.
+const privText = (fam, v, max) => sealed(v, max * 2 + 200) ?? (fam?.e2ee ? '' : clean(v, max));
 // A member's picture: an emoji, or a small photo (data URL, resized on the phone). No outside
 // links, so a picture can't be used to track who's looking.
 const avatarOf = (v) => (typeof v === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(v) && v.length <= 120_000 ? v : /[:/]/.test(String(v ?? '')) ? '' : clean(v, 8));
@@ -258,10 +265,10 @@ export async function familyApi(req, env, path) {
       for (const id of (await db.get(`feed:${f.fid}`)) || []) {
         const p = await db.get(`post:${f.fid}:${id}`);
         if (!p) continue;
-        if (p.by === mine.id) posts.push({ text: p.text, photo: p.photo, at: new Date(p.at).toISOString(), audience: p.audience, likes: p.likes.length, comments: p.comments.length });
-        for (const c of p.comments) if (c.uid === user.uid) comments.push({ text: c.text, at: new Date(c.at).toISOString() });
+        if (p.by === mine.id) posts.push({ text: p.text, photo: p.photo, at: new Date(p.at).toISOString(), audience: p.audience, likes: p.likes.length, comments: p.comments.length, ...(p.pk ? { pk: p.pk } : {}) });
+        for (const c of p.comments) if (c.uid === user.uid) comments.push({ text: c.text, at: new Date(c.at).toISOString(), ...(p.pk ? { pk: p.pk } : {}) });
       }
-      out.families.push({ name: f.name, role: mine.role, me: memberView(mine, true), myData: (await db.get(`data:${f.fid}:${mine.id}`))?.data || {}, posts, comments,
+      out.families.push({ fid: f.fid, name: f.name, role: mine.role, me: memberView(mine, true), myData: (await db.get(`data:${f.fid}:${mine.id}`))?.data || {}, posts, comments,
         members: f.members.map((x) => ({ name: x.name, kind: x.kind, relation: x.relation })) });
     }
     return json(out);
@@ -269,6 +276,18 @@ export async function familyApi(req, env, path) {
   if (path === '/account/delete' && method === 'POST') {
     if (body.confirm !== 'DELETE') return json({ error: 'type DELETE to confirm' }, 400);
     return json(await deleteAccount(db, user));
+  }
+  // 🔐 Your recovery backup: your family keys locked with your recovery phrase (on the phone).
+  // The server keeps it so a new device can unlock it; without the phrase it's unreadable.
+  if (path === '/account/keybackup') {
+    if (method === 'GET') return json({ backup: (await db.get(`keybackup:${user.uid}`)) || null });
+    if (method === 'PUT') {
+      const b = body.backup;
+      const ok = b && b.v === 1 && [b.salt, b.iv, b.ct].every((x) => typeof x === 'string' && /^[A-Za-z0-9_-]+$/.test(x)) && b.ct.length < 20000 && Number.isInteger(b.iter) && b.iter >= 100000;
+      if (!ok) return json({ error: 'not a backup' }, 400);
+      await db.put(`keybackup:${user.uid}`, { v: 1, salt: b.salt, iv: b.iv, ct: b.ct, iter: b.iter, at: Date.now() });
+      return json({ ok: true });
+    }
   }
   m = path.match(/^\/account\/blocks\/([a-z0-9]+)$/);
   if (m && method === 'DELETE') {
@@ -309,6 +328,11 @@ export async function familyApi(req, env, path) {
       if (Array.isArray(body.modules)) fam.modules = body.modules.filter((x) => MODULES.includes(x));
       if (body.goldPrize != null) fam.goldPrize = clean(body.goldPrize, 80);
       if (typeof body.goldenPosts === 'boolean') fam.goldenPosts = body.goldenPosts;
+      // 🔐 Turning on end-to-end encryption (one way): the key check proves which key is right.
+      if (body.e2ee === true && !fam.e2ee) {
+        if (!sealed(body.keyCheck, 300)) return json({ error: 'missing key check' }, 400);
+        fam.e2ee = true; fam.keyCheck = body.keyCheck; fam.e2eeAt = Date.now();
+      }
       if (body.share && typeof body.share === 'object') fam.share = { kids: !!body.share.kids, pets: body.share.pets !== false };
       await db.put(`family:${fam.fid}`, fam);
       return json({ family: familyOut(fam, user) });
@@ -338,8 +362,9 @@ export async function familyApi(req, env, path) {
       if (me.relation === 'child') return json({ error: 'ask a grown-up' }, 403);
       const other = await db.get(`family:${clean(body.fid, 24)}`);
       fam.connections = (fam.connections || []).filter((f) => f !== body.fid);
+      if (fam.connkeys) delete fam.connkeys[body.fid];
       await db.put(`family:${fam.fid}`, fam);
-      if (other) { other.connections = (other.connections || []).filter((f) => f !== fam.fid); await db.put(`family:${other.fid}`, other); }
+      if (other) { other.connections = (other.connections || []).filter((f) => f !== fam.fid); if (other.connkeys) delete other.connkeys[fam.fid]; await db.put(`family:${other.fid}`, other); }
       return json({ ok: true });
     }
   }
@@ -424,7 +449,7 @@ export async function familyApi(req, env, path) {
     const key = `appts:${fam.fid}`;
     const list = (await db.get(key)) || [];
     const save = (l) => db.put(key, l.sort((a, b) => startOf(a).localeCompare(startOf(b))).slice(-300));
-    const ctx = { petIds: fam.members.filter((x) => x.kind === 'pet').map((x) => x.id), memberIds: fam.members.filter((x) => x.kind === 'person').map((x) => x.id), clean };
+    const ctx = { petIds: fam.members.filter((x) => x.kind === 'pet').map((x) => x.id), memberIds: fam.members.filter((x) => x.kind === 'person').map((x) => x.id), clean, text: (v, max) => privText(fam, v, max) };
     if (!m[2] && method === 'GET') {
       const today = /^\d{4}-\d{2}-\d{2}$/.test(url(req).searchParams.get('today') || '') ? url(req).searchParams.get('today') : new Date().toISOString().slice(0, 10);
       const recent = shiftDay(today, -60);
@@ -459,9 +484,10 @@ export async function familyApi(req, env, path) {
         a.status = 'done';
         a.doneAt = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? body.date : startOf(a).slice(0, 10);
         a.cost = Math.max(0, Math.min(100000, Math.round((+body.cost || 0) * 100) / 100));
-        a.outcome = clean(body.outcome, 300);
+        a.outcome = privText(fam, body.outcome, 300);
         // A vaccination updates each dog's record: given today, next due in a year or three.
-        if (a.type === 'vaccine' && a.vaccine) {
+        // (In an encrypted family the record is locked, so the phone that marks it done does this.)
+        if (a.type === 'vaccine' && a.vaccine && !fam.e2ee) {
           const due = /^\d{4}-\d{2}-\d{2}$/.test(body.nextDue || '') ? body.nextDue : nextDue(a.vaccine, a.doneAt);
           for (const pid of a.pets) {
             const rec = (await db.get(`data:${fam.fid}:${pid}`)) || { data: {} };
@@ -813,7 +839,10 @@ export async function familyApi(req, env, path) {
     if (method === 'PUT') {
       // Yours, a pet's, or (bringing data over) someone who hasn't joined yet.
       if (!(self || t.kind === 'pet' || (!t.uid && t.addedBy === me.id))) return json({ error: 'not allowed' }, 403);
-      if (!body || typeof body.data !== 'object') return json({ error: 'expected {data}' }, 400);
+      if (!body || typeof body.data !== 'object' || body.data === null) return json({ error: 'expected {data}' }, 400);
+      // 🔐 Encrypted families keep only locked data: {enc: "e1:…"}.
+      if (body.data.enc != null && (!sealed(body.data.enc, 8_000_000) || Object.keys(body.data).length !== 1)) return json({ error: 'expected {data: {enc}}' }, 400);
+      if (fam.e2ee && body.data.enc == null) return json({ error: 'this family is end-to-end encrypted — update the app and try again' }, 400);
       const savedAt = Date.now();
       const old = await db.get(`data:${fam.fid}:${t.id}`);
       const size = (x) => JSON.stringify(x || {}).length;
@@ -821,6 +850,27 @@ export async function familyApi(req, env, path) {
       await db.put(`data:${fam.fid}:${t.id}`, { savedAt, data: body.data });
       return json({ ok: true, savedAt });
     }
+  }
+
+  // 🔐 Keys for friends' families: one per connection, locked with each family's own key. The
+  // inviting family parks theirs under the invite until it's accepted.
+  m = path.match(/^\/families\/([a-z0-9]+)\/connkeys\/(pending\/)?([a-z0-9]{6,40})$/);
+  if (m && method === 'PUT') {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    if (meIn(fam).relation === 'child') return json({ error: 'ask a grown-up' }, 403);
+    const ck = sealed(body.ck, 300);
+    if (!ck) return json({ error: 'expected a sealed key' }, 400);
+    if (m[2]) {
+      const inv = await db.get(`invite:${m[3]}`);
+      if (!inv || inv.fid !== fam.fid || inv.kind !== 'family') return json({ error: 'not found' }, 404);
+      fam.connpend = { ...(fam.connpend || {}), [m[3]]: ck };
+    } else {
+      if (!(fam.connections || []).includes(m[3])) return json({ error: 'not connected' }, 404);
+      fam.connkeys = { ...(fam.connkeys || {}), [m[3]]: ck };
+    }
+    await db.put(`family:${fam.fid}`, fam);
+    return json({ ok: true });
   }
 
   // ---- invites ----
@@ -875,10 +925,12 @@ export async function familyApi(req, env, path) {
       }
       if (!own.connections.includes(fam.fid)) own.connections.push(fam.fid);
       if (!fam.connections.includes(own.fid)) fam.connections.push(own.fid);
+      // The inviter's key for this connection, parked under the invite, now belongs to it.
+      if (fam.connpend?.[m[1]]) { fam.connkeys = { ...(fam.connkeys || {}), [own.fid]: fam.connpend[m[1]] }; delete fam.connpend[m[1]]; }
       await db.put(`family:${own.fid}`, own);
       await db.put(`family:${fam.fid}`, fam);
       await db.del(`invite:${m[1]}`);
-      return json({ family: familyOut(own, user), connectedTo: fam.name });
+      return json({ family: familyOut(own, user), connectedTo: fam.name, connectedFid: fam.fid });
     }
   }
 
@@ -907,12 +959,28 @@ export async function familyApi(req, env, path) {
     return json({ posts: posts.slice(0, 60) });
   }
   m = path.match(/^\/families\/([a-z0-9]+)\/posts$/);
+  // All of one family's posts, a page at a time (turning on encryption locks the older ones).
+  if (m && method === 'GET') {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const ids = (await db.get(`feed:${fam.fid}`)) || [];
+    const from = Math.max(0, +url(req).searchParams.get('from') || 0);
+    const posts = [];
+    for (const id of ids.slice(from, from + 12)) {
+      const p = await db.get(`post:${fam.fid}:${id}`);
+      if (p) posts.push(postOut(p, user, { own: true, familyName: fam.name }));
+    }
+    return json({ posts, next: from + 12 < ids.length ? from + 12 : null });
+  }
   if (m && method === 'POST') {
     const fam = await loadFamily(m[1]);
     if (!fam) return json({ error: 'not found' }, 404);
     const me = meIn(fam);
-    const text = clean(body.text, 2000).replace(/ {2,}/g, ' ');
-    const photo = typeof body.photo === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(body.photo) && body.photo.length < 2_500_000 ? body.photo : '';
+    const text = sealed(body.text, 6000) ?? (fam.e2ee ? '' : clean(body.text, 2000).replace(/ {2,}/g, ' '));
+    const photo = sealed(body.photo, 3_600_000) ?? (!fam.e2ee && typeof body.photo === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(body.photo) && body.photo.length < 2_500_000 ? body.photo : '');
+    if (fam.e2ee && ((body.text && !sealed(body.text, 6000)) || (body.photo && !sealed(body.photo, 3_600_000)))) return json({ error: 'this family is end-to-end encrypted — update the app and try again' }, 400);
+    // A post shared with friends' families has its own key, locked for the family and for each connection.
+    const pk = body.pk && sealed(body.pk.fam, 300) ? { fam: body.pk.fam, conns: Object.fromEntries(Object.entries(body.pk.conns || {}).filter(([f, v]) => (fam.connections || []).includes(f) && sealed(v, 300))) } : null;
     // 🙋 A request for help: pet sitting, babysitting, a ride… with the dates it's for.
     let help = null;
     if (body.help) {
@@ -923,7 +991,7 @@ export async function familyApi(req, env, path) {
     if (!text && !photo && !help) return json({ error: 'write something or add a photo' }, 400);
     const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '', text, photo,
       tags: (Array.isArray(body.tags) ? body.tags : []).filter((id) => fam.members.some((x) => x.id === id)).slice(0, 10),
-      tagNames: {}, audience: body.audience === 'connections' ? 'connections' : 'family', likes: [], comments: [], at: Date.now(), ...(help ? { help } : {}) };
+      tagNames: {}, audience: body.audience === 'connections' ? 'connections' : 'family', likes: [], comments: [], at: Date.now(), ...(help ? { help } : {}), ...(pk ? { pk } : {}) };
     post.tagKinds = {};
     for (const id of post.tags) { const x = fam.members.find((y) => y.id === id); post.tagNames[id] = x.name; post.tagKinds[id] = x.kind; }
     // Tagging a kid (or pet) the family keeps private keeps the post in the family.
@@ -945,13 +1013,25 @@ export async function familyApi(req, env, path) {
     const viaConnection = !own && p.audience === 'connections' && fams.some((f) => (f.connections || []).includes(fid));
     if (!own && !viaConnection) return json({ error: 'not found' }, 404);
     const myName = own ? meIn(own).name : user.name;
+    // 🔐 Locking an older post when the family turns on encryption: only sealed values are taken,
+    // so a post can only ever go from readable to locked, never back.
+    if (!action && method === 'PATCH') {
+      if (!own) return json({ error: 'not found' }, 404);
+      if (body.text != null) { const v = sealed(body.text, 6000); if (!v) return json({ error: 'expected sealed text' }, 400); p.text = v; }
+      if (body.photo != null) { const v = sealed(body.photo, 3_600_000); if (!v) return json({ error: 'expected a sealed photo' }, 400); p.photo = v; }
+      for (const c of Array.isArray(body.comments) ? body.comments : []) { const t = p.comments.find((x) => x.id === c.id); const v = sealed(c.text, 2000); if (t && v) t.text = v; }
+      for (const o of Array.isArray(body.offers) ? body.offers : []) { const t = p.help?.offers.find((x) => x.id === o.id); const v = sealed(o.msg, 600); if (t && v) t.msg = v; }
+      if (body.pk && sealed(body.pk.fam, 300)) p.pk = { fam: body.pk.fam, conns: Object.fromEntries(Object.entries(body.pk.conns || {}).filter(([f, v]) => (own.connections || []).includes(f) && sealed(v, 300))) };
+      await db.put(`post:${fid}:${id}`, p);
+      return json({ ok: true });
+    }
     if (action === '/like' && method === 'POST') {
       p.likes = p.likes.includes(user.uid) ? p.likes.filter((u) => u !== user.uid) : [...p.likes, user.uid];
       await db.put(`post:${fid}:${id}`, p);
       return json({ liked: p.likes.includes(user.uid), likes: p.likes.length });
     }
     if (action === '/comments' && method === 'POST') {
-      const text = clean(body.text, 500);
+      const text = sealed(body.text, 2000) ?? ((await db.get(`family:${fid}`))?.e2ee ? '' : clean(body.text, 500));
       if (!text) return json({ error: 'empty comment' }, 400);
       const c = { id: randomId(5), uid: user.uid, name: myName, text, at: Date.now() };
       p.comments = [...p.comments, c].slice(-200);
@@ -972,7 +1052,7 @@ export async function familyApi(req, env, path) {
       if (p.byUid === user.uid) return json({ error: "that's your own request" }, 400);
       const others = p.help.offers.filter((o) => o.uid !== user.uid);
       const myFam = own || fams.find((f) => (f.connections || []).includes(fid));
-      p.help.offers = body.withdraw ? others : [...others, { id: randomId(6), uid: user.uid, name: myName, family: myFam?.name || '', msg: clean(body.msg, 140), at: Date.now() }].slice(-30);
+      p.help.offers = body.withdraw ? others : [...others, { id: randomId(6), uid: user.uid, name: myName, family: myFam?.name || '', msg: sealed(body.msg, 600) ?? clean(body.msg, 140), at: Date.now() }].slice(-30);
       await db.put(`post:${fid}:${id}`, p);
       return json({ help: postOut(p, user, {}).help });
     }
@@ -1034,7 +1114,7 @@ async function makeInvite(db, inv) {
 }
 function familyOut(fam, user) {
   const me = fam.members.find((m) => m.uid === user.uid);
-  return { fid: fam.fid, name: fam.name, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', goldenPosts: fam.goldenPosts !== false, share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
+  return { fid: fam.fid, name: fam.name, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', goldenPosts: fam.goldenPosts !== false, e2ee: !!fam.e2ee, keyCheck: fam.keyCheck || '', connkeys: fam.connkeys || {}, share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
 }
 const url = (req) => new URL(req.url);
 // A post as one viewer sees it: no account ids (theirs or anyone else's), just "is it mine".
@@ -1176,7 +1256,7 @@ async function deleteFamily(db, fam) {
   await db.del(`picks:${fam.fid}`);
   for (const c of fam.connections || []) {
     const o = await db.get(`family:${c}`);
-    if (o) { o.connections = (o.connections || []).filter((f) => f !== fam.fid); await db.put(`family:${o.fid}`, o); }
+    if (o) { o.connections = (o.connections || []).filter((f) => f !== fam.fid); if (o.connkeys) delete o.connkeys[fam.fid]; await db.put(`family:${o.fid}`, o); }
   }
   for (const x of fam.members) if (x.uid) {
     const u = await db.get(`user:${x.uid}`);
@@ -1201,6 +1281,7 @@ export async function deleteAccount(db, user) {
     await removeMember(db, fam, me, { keepPosts: false });
   }
   for (const x of user.sessions || []) await db.del(`session:${x.t}`);
+  await db.del(`keybackup:${user.uid}`);
   await db.del(`user:${user.uid}`);
   return { deleted: true, ...summary };
 }

@@ -8,6 +8,16 @@
 //     only answers members of the family.
 // The household code keeps working alongside while a partner hasn't moved over yet.
 import { PROFILES, global, ownerId, setOwner, exportProfile, importProfile } from './storage.js';
+import { keys, seal, tryOpen, checkKey } from '../family/crypto.js';
+
+// 🔐 An end-to-end encrypted family: this device's family key (the family app keeps it), checked.
+// Locked copies are {enc: "e1:…"}; without the key they can't be read, so they're left alone.
+async function familyKey(a) {
+  const k = await keys.get(a.fid);
+  return k && (!a.keyCheck || await checkKey(k, a.keyCheck)) ? k : null;
+}
+const lockData = async (a, data) => { const k = await familyKey(a); if (a.e2ee && !k) throw new Error('This device needs the family key — open OurPawmily › Me › 🔐 Encryption'); return k ? { enc: await seal(k, data) } : data; };
+const openData = async (a, data) => (data?.enc == null ? data || {} : tryOpen(await familyKey(a), data.enc, null));
 
 const LS = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const CONNECTOR = 'https://lean-plate-connect.sandman-amani.workers.dev';
@@ -53,7 +63,7 @@ export const account = {
     const members = {};
     for (const m of fam.members) if (m.kind === 'person' && ids.includes(m.legacyId)) members[m.legacyId] = m.id;
     members[profile] = me.id;
-    const acct = { fid: fam.fid, family: fam.name, email: r.data.user.email, me: me.id, profile, members };
+    const acct = { fid: fam.fid, family: fam.name, email: r.data.user.email, me: me.id, profile, members, e2ee: !!fam.e2ee, keyCheck: fam.keyCheck || '' };
     global.set('account', acct);
     return acct;
   },
@@ -62,8 +72,9 @@ export const account = {
   // device can't overwrite your data with an empty profile.
   async push() {
     const a = this.get();
+    if (a?.e2ee && !(await familyKey(a))) throw new Error('This device needs the family key — open OurPawmily › Me › 🔐 Encryption');
     if (!a || !global.get('account.pulled', false)) return;
-    const r = await call('PUT', `/families/${a.fid}/members/${a.me}/data`, { data: exportProfile(a.profile, { shared: true }) });
+    const r = await call('PUT', `/families/${a.fid}/members/${a.me}/data`, { data: await lockData(a, exportProfile(a.profile, { shared: true })) });
     if (r.status !== 200) throw new Error(r.data.error || `account upload failed (${r.status})`);
     global.set('account.mineAt', r.data.savedAt || Date.now());
     global.set('pushedAt', Date.now());
@@ -91,7 +102,7 @@ export const account = {
       }
       links[id] = p.id;
       const d = await call('GET', `/families/${a.fid}/members/${p.id}/data`);
-      const prof = (d.status === 200 && d.data.data?.profile) || {};
+      const prof = (d.status === 200 && (await openData(a, d.data.data))?.profile) || {};
       const photo = /^data:image\//.test(p.avatar || '') ? p.avatar : '';
       const ident = { name: p.name, breed: p.breed || prof.breed || '', birthday: p.born || prof.birthday || '', photo, emoji: photo ? prof.emoji || '🐕' : p.avatar || prof.emoji || '🐕' };
       const times = { ...(prof.times || {}) };
@@ -127,7 +138,7 @@ export const account = {
           await call('PATCH', `/families/${a.fid}/members/${pid}`, { name: d.name, breed: d.breed || '', born: d.birthday || '', avatar });
         }
       }
-      if ((await call('PUT', `/families/${a.fid}/members/${pid}/data`, { data: { profile } })).status === 200) sent[d.id] = sig;
+      if ((await call('PUT', `/families/${a.fid}/members/${pid}/data`, { data: await lockData(a, { profile }) })).status === 200) sent[d.id] = sig;
     }
     global.set('famDogLinks', links);
     global.set('famDogSent', sent);
@@ -141,9 +152,10 @@ export const account = {
     if (!a) return out;
     const mine = await call('GET', `/families/${a.fid}/members/${a.me}/data`);
     if (mine.status === 200) {
-      const remote = mine.data;
+      const remote = { ...mine.data, data: await openData(a, mine.data.data) };
       const first = !global.get('account.pulled', false);
-      if (first || (remote.savedAt || 0) > global.get('account.mineAt', 0)) {
+      // A locked copy this device can't open is left alone (and nothing is sent until it can).
+      if (remote.data && (first || (remote.savedAt || 0) > global.get('account.mineAt', 0))) {
         // Another device saved since this one last looked: the two copies are combined, never
         // swapped, so a nearly empty device can't wipe a full one (or the other way round).
         const local = exportProfile(a.profile, { shared: true });
@@ -168,8 +180,9 @@ export const account = {
       const r = await call('GET', `/families/${a.fid}/members/${id}/data`);
       if (r.status !== 200) continue; // not shared with you (or not there): the household code may still have it
       out.got.push(p.id);
-      if ((r.data.savedAt || 0) > global.get(`seen.${p.id}`, 0) && Object.keys(r.data.data || {}).length) {
-        importProfile(p.id, r.data.data);
+      const theirData = await openData(a, r.data.data);
+      if (theirData && (r.data.savedAt || 0) > global.get(`seen.${p.id}`, 0) && Object.keys(theirData).length) {
+        importProfile(p.id, theirData);
         global.set(`seen.${p.id}`, r.data.savedAt);
         out.changed = true;
       }

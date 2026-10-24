@@ -6,6 +6,7 @@
 // which keeps a copy of your data from household sharing.
 import { PROFILES, global, ownerId, exportProfile, importProfile } from './storage.js';
 import { account, mergeData } from './account.js';
+import { keys, tryOpen } from '../family/crypto.js';
 
 const n = (v) => (Array.isArray(v) ? v.length : v && typeof v === 'object' ? Object.keys(v).length : 0);
 // What a copy holds, in words people recognise.
@@ -54,10 +55,15 @@ export async function findCopies(person = ownerId()) {
   if (a && person === a.profile) {
     const url = (() => { try { return JSON.parse(localStorage.getItem('lp.g.sync'))?.url; } catch { return null; } })() || 'https://lean-plate-connect.sandman-amani.workers.dev';
     const auth = { Authorization: `Bearer ${localStorage.getItem('fam.token.live')}` };
+    // 🔐 Locked copies open with this device's family key (or are skipped without it).
+    const k = await keys.get(a.fid);
+    const unlocked = async (d) => (d?.enc == null ? d : tryOpen(k, d.enc, null));
     const cur = await getJson(`${url}/v2/families/${a.fid}/members/${a.me}/data`, auth);
-    if (cur?.data) copies.push({ id: 'account', label: 'Your OurPawmily account', data: cur.data, at: cur.savedAt });
+    const curData = await unlocked(cur?.data);
+    if (curData) copies.push({ id: 'account', label: 'Your OurPawmily account', data: curData, at: cur.savedAt });
     const prev = await getJson(`${url}/v2/families/${a.fid}/members/${a.me}/data/prev`, auth);
-    if (prev?.data && n(prev.data)) copies.push({ id: 'account-prev', label: 'An earlier, bigger copy in your account', data: prev.data, at: prev.savedAt });
+    const prevData = await unlocked(prev?.data);
+    if (prevData && n(prevData)) copies.push({ id: 'account-prev', label: 'An earlier, bigger copy in your account', data: prevData, at: prev.savedAt });
   }
   const s = global.get('sync', null);
   if (s?.url && s?.code) {

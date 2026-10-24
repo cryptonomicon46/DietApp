@@ -75,8 +75,8 @@ export function backupBlob() {
   for (const k of Object.keys(localStorage)) if (k.startsWith('lp.')) out[k] = localStorage.getItem(k);
   return new Blob([JSON.stringify({ app: 'OurPawmily', savedAt: new Date().toISOString(), localStorage: out })], { type: 'application/json' });
 }
-// Runs a plan against the API; reports each step.
-export async function runImport(api, fid, ops, report = () => {}) {
+// Runs a plan against the API; reports each step. wrap locks each copy (end-to-end encryption).
+export async function runImport(api, fid, ops, report = () => {}, wrap = async (d) => d) {
   const done = [];
   for (const o of ops) {
     if (o.op === 'tag') { await api.patch(`/families/${fid}/members/${o.memberId}`, { legacyId: o.legacyId }); continue; }
@@ -86,7 +86,7 @@ export async function runImport(api, fid, ops, report = () => {}) {
       id = r.member.id;
       report(`Added ${o.name}`);
     }
-    await api.put(`/families/${fid}/members/${id}/data`, { data: o.data });
+    await api.put(`/families/${fid}/members/${id}/data`, { data: await wrap(o.data) });
     report(`Brought over ${o.name}'s data`);
     done.push({ memberId: id, name: o.name, data: o.data });
   }
@@ -104,10 +104,10 @@ export function compareData(local = {}, remote = {}) {
   return Object.entries(local).map(([key, v]) => ({ key, label: LABELS[key] || key, count: count(v), ok: JSON.stringify(v) === JSON.stringify(remote?.[key]) }));
 }
 // Reads back every copy just brought over. → [{name, sections: [...], ok, missing: [...]}]
-export async function verifyImport(api, fid, done) {
+export async function verifyImport(api, fid, done, unwrap = async (rec) => rec.data) {
   const out = [];
   for (const d of done) {
-    const remote = (await api.get(`/families/${fid}/members/${d.memberId}/data`)).data || {};
+    const remote = (await unwrap(await api.get(`/families/${fid}/members/${d.memberId}/data`))) || {};
     const sections = compareData(d.data, remote);
     out.push({ name: d.name, sections, ok: sections.every((x) => x.ok), missing: sections.filter((x) => !x.ok).map((x) => x.label) });
   }
