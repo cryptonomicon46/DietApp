@@ -245,3 +245,9 @@ button.bingo-row { grid-template-columns: 1fr auto; } button.bingo-row small { g
 .bingo-grid.done .bsq { opacity: .7; }
 .bingo-players { list-style: none; padding: 0; margin: 12px 0 4px; display: grid; gap: 6px; }
 .bingo-players li { display: flex; align-items: center; gap: 8px; } .bingo-players small { margin-left: auto; }
+.couple summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: space-between; }
+.couple .lbl { font-size: .75rem; font-weight: 700; color: var(--muted); margin-top: 10px; }
+.couple .chip.hap.on { background: #e8c25a; border-color: #e8c25a; color: #3d2c00; }
+.couple .happened-lbl { border-top: 1px dashed var(--line); padding-top: 8px; }
+.pts-big { font-size: 1.1rem; min-width: 2ch; text-align: right; }
+#addCoupleForm { align-items: center; gap: 6px; } #addCoupleForm input { flex: 1; min-width: 0; }

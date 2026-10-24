@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { familyApi, TERMS_VERSION, petNames } from '../server/family.js';
-import { isGolden, dayHighlights, goldenMessage } from '../server/goldenPost.js';
+import { isGolden, dayHighlights, goldenMessage, GREETINGS } from '../server/goldenPost.js';
 
 test('golden days and what the dogs say about them', () => {
   assert.equal(isGolden([{ kind: 'walk' }]), false);
@@ -18,6 +18,7 @@ test('golden days and what the dogs say about them', () => {
   const two = goldenMessage({ pets: ['Pip', 'Bo'], people: ['Mom', 'Dad'], day: 'two walks', rnd: () => 0.5 });
   assert.match(two.text, /Mom & Dad/);
   assert.match(two.text, /Pip & Bo/);
+  assert.ok(GREETINGS.every((g) => g.includes('{people}')), 'every note says who it thanks');
   // Recent lines aren't reused, so posts in a row differ.
   let recent = [];
   const texts = new Set();

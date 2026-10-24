@@ -533,14 +533,16 @@ function meView() {
 // ---------- 🎲 show bingo ----------
 // Card sets are lists of squares anyone can add (pasted from a chatbot, a file, or written by
 // Claude), so a new show never needs an app update. Each player gets their own shuffled card.
-const bingo = { list: null, game: null, view: null, timer: null };
+const bingo = { list: null, game: null, view: null, timer: null, season: null, seasons: [], open: {} };
 const BINGO_PROMPT = (show) => `Make a bingo card set for watching "${show || 'our show'}" together.
 Give me 30 short squares (under 8 words each) — funny, specific moments and clichés that are likely to happen in an episode, a mix of easy and rare.
 Reply with just the squares, one per line, no numbers or bullets.`;
 async function bingoView() {
   if (bingo.game) return bingoGame();
-  const r = await act(() => api.get(`/families/${state.fid}/bingo`));
+  if (bingo.season) return seasonView();
+  const [r, pk] = await Promise.all([act(() => api.get(`/families/${state.fid}/bingo`)), api.get(`/families/${state.fid}/picks`).catch(() => ({ seasons: [] }))]);
   if (!r || state.view !== 'bingo') return;
+  bingo.seasons = pk.seasons;
   bingo.list = r;
   const live = r.games.filter((g) => g.status === 'live'), past = r.games.filter((g) => g.status !== 'live').slice(0, 5);
   $('#view').innerHTML = `${demoBanner()}
@@ -551,6 +553,10 @@ async function bingoView() {
       <div class="row"><button type="button" data-bingostart="${p.id}">▶ Start a game</button>${p.mine || me().role === 'owner' ? `<button type="button" class="linkish small danger" data-bingodel="${p.id}">Remove</button>` : ''}</div></div>`).join('')
       : '<p class="small muted">No card sets yet — add one for the next show you watch.</p>'}
     <button type="button" class="ghost wide" data-act="bingonew">＋ New card set</button>
+    <h3>💑 Couples picks</h3>
+    <p class="small muted">Predict what each couple will do — fights, tears, cheating, "I do" at the altar — and score points as the season plays out.</p>
+    ${bingo.seasons.map((s) => `<button type="button" class="card bingo-row" data-season="${s.id}"><b>${esc(s.title)}</b><small class="muted">${s.couples} couples · ${s.status === 'live' ? 'playing' : 'finished'}</small><span class="go">Open ›</span></button>`).join('')}
+    <button type="button" class="ghost wide" data-act="seasonnew">＋ New season</button>
     ${past.length ? `<h3>Earlier games</h3><ul class="list small">${past.map((g) => `<li class="row between"><span>${esc(g.title)} <small class="muted">${ago(g.at)}</small></span><span>${g.winners.length ? `🏆 ${g.winners.map((w) => esc(w.name)).join(', ')}` : 'no bingo'}</span></li>`).join('')}</ul>` : ''}`;
 }
 function bingoNew(prefill = {}) {
@@ -585,6 +591,46 @@ async function bingoGame(r) {
     ${done ? '<p class="small muted center">This game has ended.</p>' : '<p class="tiny muted center">Tap a square when it happens. A full row, column or diagonal is BINGO.</p>'}`;
   clearInterval(bingo.timer);
   if (!done) bingo.timer = setInterval(() => { if (state.view === 'bingo' && bingo.game && document.visibilityState === 'visible') api.get(`/families/${state.fid}/bingo/games/${bingo.game}`).then((x) => { if (state.view === 'bingo' && bingo.game) bingoGame(x); }).catch(() => {}); }, 8000);
+}
+
+// 💑 Couples picks: one season of a dating show, everyone's predictions and the leaderboard.
+function seasonNew() {
+  openSheet(`<h2>💑 New season</h2>
+    <form id="seasonForm" class="stack">
+      <label>Show<input name="title" maxlength="60" value="Love Is Blind"></label>
+      <label>Couples — one per line<textarea name="text" rows="7" placeholder="Name & Name&#10;Name & Name"></textarea></label>
+      <label>Anything else to predict? (optional, one per line)<textarea name="events" rows="3" placeholder="Talks about their dog&#10;Brings up astrology"></textarea></label>
+      <p class="tiny muted">Built in: they fight · someone cries · someone cheats · gets drunk &amp; passes out · says "I love you" · family disapproves · an ex comes up · fights about money — and how it ends: 💍 I do, 🙅 a no at the altar, or 💔 split before the wedding.</p>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Start</button></div>
+    </form>`);
+}
+async function seasonView(r) {
+  r ||= await act(() => api.get(`/families/${state.fid}/picks/${bingo.season}`));
+  if (!r || state.view !== 'bingo') return;
+  bingo.view = r;
+  const s = r.season, mine = r.mine || {};
+  const ev = (id) => s.events.find((e) => e.id === id)?.label || id;
+  const chip = (on, attrs, label, extra = '') => `<button type="button" class="chip ${on ? 'on' : ''} ${extra}" ${attrs}>${esc(label)}</button>`;
+  $('#view').innerHTML = `<div class="row between bingo-top"><button type="button" class="linkish" data-act="bingoback">‹ Show games</button></div>
+    <h2 class="bingo-title">${esc(s.title)} <small>couples picks</small></h2>
+    <section class="card"><b>🏆 Leaderboard</b><ul class="bingo-players">${r.board.map((p, i) => `<li>${avatar(member(p.id), 26)}<span>${i === 0 && p.points > 0 ? '👑 ' : ''}${esc(p.id === fam().me ? 'You' : p.name)}</span><small class="muted">${p.hits} right · ${p.endings} ending${p.endings === 1 ? '' : 's'}</small><b class="pts-big">${p.points}</b></li>`).join('')}</ul>
+      <p class="tiny muted">+2 for each pick that happens · +5 for calling the ending · −1 for a pick that never happened once the couple's ending is in.</p></section>
+    ${s.couples.map((c) => {
+      const my = mine[c.id] || { events: [], outcome: null }, happened = new Set(s.happened[c.id] || []), end = s.outcome[c.id];
+      const open = bingo.open[c.id] ?? !c.locked;
+      return `<details class="card couple" data-couple="${c.id}" ${open ? 'open' : ''}><summary><b>${esc(c.a)}${c.b ? ` &amp; ${esc(c.b)}` : ''}</b> <span class="pill">${end ? esc(s.outcomes[end]) : c.locked ? '🔒 picks locked' : '✏️ make your picks'}</span></summary>
+        ${c.locked ? `<div class="small"><b>Your picks:</b> ${my.events.length || my.outcome ? [...my.events.map((e) => `${happened.has(e) ? '✅' : end ? '❌' : '⏳'} ${esc(ev(e))}`), my.outcome ? `${end ? (my.outcome === end ? '✅' : '❌') : '⏳'} ${esc(s.outcomes[my.outcome])}` : ''].filter(Boolean).join(' · ') : '<span class="muted">none</span>'}</div>
+          ${(r.revealed[c.id] || []).map((o) => `<div class="small muted"><b>${esc(o.name)}:</b> ${[...o.events.map((e) => `${happened.has(e) ? '✅' : ''}${esc(ev(e))}`), o.outcome ? esc(s.outcomes[o.outcome]) : ''].filter(Boolean).join(' · ') || 'none'}</div>`).join('')}`
+        : `<div class="lbl">Your picks <span class="muted">(only you see them until something happens)</span></div>
+          <div class="chips">${s.events.map((e) => chip(my.events.includes(e.id), `data-pick="${e.id}"`, e.label)).join('')}</div>
+          <div class="lbl">How it ends</div><div class="chips">${Object.entries(s.outcomes).map(([k, v]) => chip(my.outcome === k, `data-pickend="${k}"`, v)).join('')}</div>`}
+        ${s.status === 'live' ? `<div class="lbl happened-lbl">What happened ${c.locked ? '' : '<span class="muted">(marking anything locks everyone\'s picks)</span>'}</div>
+          <div class="chips">${s.events.map((e) => chip(happened.has(e.id), `data-happened="${e.id}"`, `${happened.has(e.id) ? '✓ ' : ''}${e.label}`, 'hap')).join('')}</div>
+          <div class="chips">${Object.entries(s.outcomes).map(([k, v]) => chip(end === k, `data-ending="${k}"`, v, 'hap')).join('')}</div>` : ''}
+      </details>`;
+    }).join('')}
+    ${s.status === 'live' ? `<form id="addCoupleForm" class="row card"><input name="a" placeholder="Name" maxlength="30" required><span>&amp;</span><input name="b" placeholder="Name" maxlength="30"><button class="ghost small">＋ Couple</button></form>` : ''}
+    ${s.mine || me().role === 'owner' ? `<button type="button" class="linkish small" data-act="seasonstatus">${s.status === 'live' ? 'Finish the season' : 'Reopen the season'}</button>` : ''}`;
 }
 
 // ---------- help: chat with the assistant, report a problem ----------
@@ -771,6 +817,26 @@ document.addEventListener('click', (e) => {
   }
   if (d.careundo) return act(async () => { await api.del(`/families/${state.fid}/care/${isoLocal()}/${d.careundo}`); renderCare(); renderRace(); });
   if (d.unblock) return act(async () => { await api.del(`/account/blocks/${d.unblock}`); state.user.blocked = state.user.blocked.filter((b) => b.id !== d.unblock); meView(); });
+  if (d.season) { bingo.season = d.season; return seasonView(); }
+  if (d.pick || d.pickend) {
+    const cid = t.closest('[data-couple]').dataset.couple, cur = bingo.view.mine?.[cid] || { events: [], outcome: null };
+    const events = d.pick ? (cur.events.includes(d.pick) ? cur.events.filter((x) => x !== d.pick) : [...cur.events, d.pick]) : cur.events;
+    const outcome = d.pickend ? (cur.outcome === d.pickend ? null : d.pickend) : cur.outcome;
+    t.classList.toggle('on');
+    return act(async () => seasonView(await api.put(`/families/${state.fid}/picks/${bingo.season}/mine`, { couple: cid, events, outcome })));
+  }
+  if (d.happened || d.ending) {
+    const cid = t.closest('[data-couple]').dataset.couple, s = bingo.view.season;
+    const c = s.couples.find((x) => x.id === cid);
+    if (!c.locked && !confirm(`Mark this for ${c.a}${c.b ? ` & ${c.b}` : ''}? Everyone's picks for them lock.`)) return;
+    return act(async () => {
+      const r = d.happened
+        ? await api.post(`/families/${state.fid}/picks/${bingo.season}/happened`, { couple: cid, event: d.happened, on: !(s.happened[cid] || []).includes(d.happened) })
+        : await api.post(`/families/${state.fid}/picks/${bingo.season}/outcome`, { couple: cid, outcome: s.outcome[cid] === d.ending ? null : d.ending });
+      seasonView(r);
+      if (d.ending && r.season.outcome[cid] === d.ending) { const b = t.getBoundingClientRect(); celebrateBurst(b.left + b.width / 2, b.top); toast(r.mine?.[cid]?.outcome === d.ending ? '🔮 You called it! +5' : `${r.season.outcomes[d.ending]}`); }
+    });
+  }
   if (d.bingogame) { bingo.game = d.bingogame; return bingoGame(); }
   if (d.bingostart) return act(async () => { const r = await api.post(`/families/${state.fid}/bingo/games`, { packId: d.bingostart }); bingo.game = r.game.id; bingoGame(); });
   if (d.bingodel) { if (!confirm('Remove this card set?')) return; return act(async () => { await api.del(`/families/${state.fid}/bingo/packs/${d.bingodel}`); bingoView(); }); }
@@ -799,7 +865,9 @@ document.addEventListener('click', (e) => {
     case 'demo': return demoSignIn();
     case 'help': return helpView();
     case 'bingonew': return bingoNew();
-    case 'bingoback': bingo.game = null; clearInterval(bingo.timer); return bingoView();
+    case 'seasonnew': return seasonNew();
+    case 'seasonstatus': return act(async () => seasonView(await api.patch(`/families/${state.fid}/picks/${bingo.season}`, { status: bingo.view.season.status === 'live' ? 'done' : 'live' })));
+    case 'bingoback': bingo.game = null; bingo.season = null; clearInterval(bingo.timer); return bingoView();
     case 'bingoend': if (!confirm('End this game for everyone?')) return; return act(async () => { await api.post(`/families/${state.fid}/bingo/games/${bingo.game}/end`); bingoGame(); });
     case 'bingoprompt': {
       const text = BINGO_PROMPT($('#bingoForm [name=title]').value.trim());
@@ -981,6 +1049,17 @@ document.addEventListener('submit', (e) => {
     e.preventDefault();
     return act(async () => { await api.patch(`/families/${state.fid}`, { name: v.name, modules: new FormData(f).getAll('mod'), goldenPosts: !!v.goldenPosts }); await loadFamily(); chrome(true); toast('Saved'); });
   }
+  if (f.id === 'seasonForm') {
+    e.preventDefault();
+    return act(async () => {
+      const r = await api.post(`/families/${state.fid}/picks`, { title: v.title, text: v.text, events: v.events.split(/\n/).map((x) => x.trim()).filter(Boolean) });
+      closeSheet(); bingo.season = r.season.id; seasonView(); toast('💑 Make your picks — they stay private until something happens');
+    });
+  }
+  if (f.id === 'addCoupleForm') {
+    e.preventDefault();
+    return act(async () => seasonView(await api.patch(`/families/${state.fid}/picks/${bingo.season}`, { addCouple: { a: v.a, b: v.b } })));
+  }
   if (f.id === 'bingoForm') {
     e.preventDefault();
     return act(async () => { const r = await api.post(`/families/${state.fid}/bingo/packs`, { title: v.title, text: v.text }); closeSheet(); toast(`${r.pack.title}: ${r.pack.count} squares saved 🎲`); bingoView(); });
@@ -1070,4 +1149,5 @@ window.addEventListener('unhandledrejection', (e) => glitch(e.reason?.message ||
 const wantHelp = new URLSearchParams(location.search).has('help');
 if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
 boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; });
+document.addEventListener('toggle', (e) => { const c = e.target.closest?.('[data-couple]'); if (c && e.target === c) bingo.open[c.dataset.couple] = c.open; }, true);
 document.addEventListener('input', (e) => { if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); });

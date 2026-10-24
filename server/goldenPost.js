@@ -25,9 +25,9 @@ export function dayHighlights(list = []) {
 
 // {We} {we} {us} {our} {are} {were} {Ours} change for one dog vs several; {people} is who to
 // thank ("Dad", "Mom & Dad"); {day} is dayHighlights.
-const GREETINGS = [
+export const GREETINGS = [
   'Dear {people},', 'Hey {people}!', '{people}!!', 'Attention {people}:', 'Breaking news for {people}:',
-  'To the best {humans} in the whole world,', 'Psst… {people}.', 'Hi {people}, it\'s {us} again.',
+  'To {people}, the best {humans} in the whole world,', 'Psst… {people}.', 'Hi {people}, it\'s {us} again.',
   'Official memo to {people}:', 'Good evening {people},', 'Bark bark (that means hi, {people}).', '{people}, a word please.',
 ];
 const DAYS = [

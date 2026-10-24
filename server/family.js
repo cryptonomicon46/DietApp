@@ -24,6 +24,8 @@
 //   bingopacks:<fid>           [{id, title, squares, by, byName, at}]  show bingo card sets
 //   bingogames:<fid>           [{id, packId, title, squares, status, winners, by, at}]
 //   bingocard:<fid>:<gid>:<memberId>  {card: [25 square indexes, -1 free], marks: [25]}  one player's card
+//   picks:<fid>                [{id, title, couples, events, happened, outcome, status}]  💑 couples picks seasons
+//   pickcard:<fid>:<sid>:<memberId>  {coupleId: {events, outcome}}  one player's predictions
 //   ticket:<id>                a problem filed through Help (180 days)   tickets: [id] newest first
 //   glitch:<date>              {key: {message, where, n}} app errors phones reported that day (30 days)
 //   helprate:<who>:<minute|day> help-chat use per account or address
@@ -36,6 +38,7 @@
 
 import { isGolden, dayHighlights, goldenMessage } from './goldenPost.js';
 import { parseSquares, makeCard, bingoLines, bingoPrompt, NEED, FREE } from './bingo.js';
+import { EVENTS as PICK_EVENTS, OUTCOMES, locked as pickLocked, score as pickScore, parseCouples } from './picks.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
 const SESSION_TTL = 30 * 86400;
@@ -498,6 +501,86 @@ export async function familyApi(req, env, path) {
     return json({ error: 'not found' }, 404);
   }
 
+  // ---- 💑 couples picks (predictions for dating shows) ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/picks(?:\/([a-z0-9]+)(\/mine|\/happened|\/outcome)?)?$/);
+  if (m) {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const me = meIn(fam);
+    const [, , sid, act] = m;
+    const key = `picks:${fam.fid}`;
+    const seasons = (await db.get(key)) || [];
+    const save = (list) => db.put(key, list.slice(0, 10));
+    if (!sid && method === 'GET') return json({ seasons: seasons.map((s) => ({ id: s.id, title: s.title, status: s.status, couples: s.couples.length, at: s.at, byName: s.byName })) });
+    if (!sid && method === 'POST') {
+      const couples = (Array.isArray(body.couples) ? body.couples.map((c) => ({ a: clean(c.a, 30), b: clean(c.b, 30) })) : parseCouples(body.text)).filter((c) => c.a).slice(0, 16);
+      if (!couples.length) return json({ error: 'add the couples, one per line (e.g. "Sam & Pat")' }, 400);
+      const extra = (Array.isArray(body.events) ? body.events : []).map((x) => clean(x, 40)).filter(Boolean).slice(0, 8);
+      const s = { id: randomId(8), title: clean(body.title, 60) || 'Love Is Blind', couples: couples.map((c) => ({ id: randomId(5), ...c })),
+        events: [...PICK_EVENTS, ...extra.map((label) => ({ id: randomId(5), label }))], happened: {}, outcome: {}, status: 'live', by: me.id, byName: me.name, at: Date.now() };
+      await save([s, ...seasons]);
+      return json({ season: { id: s.id } });
+    }
+    const s = seasons.find((x) => x.id === sid);
+    if (!s) return json({ error: 'not found' }, 404);
+    const cardKey = (memberId) => `pickcard:${fam.fid}:${s.id}:${memberId}`;
+    const players = fam.members.filter((x) => x.kind === 'person' && (x.uid || x.id === me.id));
+    const view = async () => {
+      const cards = Object.fromEntries(await Promise.all(players.map(async (x) => [x.id, (await db.get(cardKey(x.id))) || {}])));
+      return {
+        season: { id: s.id, title: s.title, status: s.status, couples: s.couples.map((c) => ({ ...c, locked: pickLocked(s, c.id) })), events: s.events, happened: s.happened, outcome: s.outcome, outcomes: OUTCOMES, byName: s.byName, mine: s.by === me.id },
+        mine: cards[me.id],
+        // Everyone's picks for a couple show once that couple is locked.
+        revealed: Object.fromEntries(s.couples.filter((c) => pickLocked(s, c.id)).map((c) => [c.id, players.filter((x) => x.id !== me.id && cards[x.id][c.id]).map((x) => ({ name: x.name, ...cards[x.id][c.id] }))])),
+        board: players.map((x) => ({ id: x.id, name: x.name, ...pickScore(s, cards[x.id]), picked: Object.keys(cards[x.id]).length })).sort((a, b) => b.points - a.points),
+      };
+    };
+    if (!act && method === 'GET') return json(await view());
+    if (!act && method === 'PATCH') {
+      if (body.addCouple) { const [c] = parseCouples(`${clean(body.addCouple.a, 30)} & ${clean(body.addCouple.b, 30)}`); if (c && s.couples.length < 16) s.couples.push({ id: randomId(5), ...c }); }
+      if (body.addEvent && s.events.length < 20) s.events.push({ id: randomId(5), label: clean(body.addEvent, 40) });
+      if (body.status === 'done' || body.status === 'live') s.status = body.status;
+      await save(seasons);
+      return json(await view());
+    }
+    const c = s.couples.find((x) => x.id === body.couple);
+    if (!c) return json({ error: 'which couple?' }, 400);
+    if (act === '/mine' && method === 'PUT') {
+      if (pickLocked(s, c.id)) return json({ error: `${c.a} & ${c.b}'s picks are locked — something already happened` }, 400);
+      const card = (await db.get(cardKey(me.id))) || {};
+      const ids = new Set(s.events.map((e) => e.id));
+      card[c.id] = { events: (Array.isArray(body.events) ? body.events : []).filter((e) => ids.has(e)), outcome: OUTCOMES[body.outcome] ? body.outcome : null };
+      await db.put(cardKey(me.id), card, 365 * 86400);
+      return json(await view());
+    }
+    if (act === '/happened' && method === 'POST') {
+      if (!s.events.some((e) => e.id === body.event)) return json({ error: 'what happened?' }, 400);
+      const list = new Set(s.happened[c.id] || []);
+      if (body.on === false) list.delete(body.event); else list.add(body.event);
+      s.happened[c.id] = [...list];
+      await save(seasons);
+      return json(await view());
+    }
+    if (act === '/outcome' && method === 'POST') {
+      const had = s.outcome[c.id];
+      if (body.outcome && !OUTCOMES[body.outcome]) return json({ error: 'how did it end?' }, 400);
+      if (body.outcome) s.outcome[c.id] = body.outcome; else delete s.outcome[c.id];
+      await save(seasons);
+      // The ending goes on the feed, with who called it.
+      if (body.outcome && body.outcome !== had) {
+        const called = [];
+        for (const x of players) if (((await db.get(cardKey(x.id))) || {})[c.id]?.outcome === body.outcome) called.push(x.name);
+        const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '',
+          text: `${OUTCOMES[body.outcome]} — ${c.a} & ${c.b} (${s.title}). ${called.length ? `🔮 Called it: ${called.join(', ')}!` : 'Nobody saw that coming! 😱'}`,
+          photo: '', tags: [], tagNames: {}, tagKinds: {}, audience: 'family', likes: [], comments: [], at: Date.now() };
+        await db.put(`post:${fam.fid}:${post.id}`, post);
+        await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
+      }
+      return json(await view());
+    }
+    return json({ error: 'not found' }, 404);
+  }
+
   m = path.match(/^\/families\/([a-z0-9]+)\/chores$/);
   if (m && method === 'GET') {
     const fam = await loadFamily(m[1]);
@@ -928,6 +1011,7 @@ async function removeMember(db, fam, t, { keepPosts = true } = {}) {
   await db.del(`data:${fam.fid}:${t.id}`);
   await db.del(`dataprev:${fam.fid}:${t.id}`);
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) await db.del(`bingocard:${fam.fid}:${g.id}:${t.id}`);
+  for (const s of (await db.get(`picks:${fam.fid}`)) || []) await db.del(`pickcard:${fam.fid}:${s.id}:${t.id}`);
   if (keepPosts || !t.uid) return;
   // The family keeps its dog-care log, without their name on it.
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) {
@@ -967,6 +1051,8 @@ async function deleteFamily(db, fam) {
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) for (const x of fam.members) await db.del(`bingocard:${fam.fid}:${g.id}:${x.id}`);
   await db.del(`bingogames:${fam.fid}`);
   await db.del(`bingopacks:${fam.fid}`);
+  for (const s of (await db.get(`picks:${fam.fid}`)) || []) for (const x of fam.members) await db.del(`pickcard:${fam.fid}:${s.id}:${x.id}`);
+  await db.del(`picks:${fam.fid}`);
   for (const c of fam.connections || []) {
     const o = await db.get(`family:${c}`);
     if (o) { o.connections = (o.connections || []).filter((f) => f !== fam.fid); await db.put(`family:${o.fid}`, o); }
