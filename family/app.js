@@ -1310,8 +1310,8 @@ function ideasCard() {
   return `<div class="row between"><b class="us-h">${due ? '💡 Time for a date?' : '💡 Date ideas'}</b><span><button type="button" class="linkish small" data-act="ideaset" aria-label="Date idea settings">⚙︎</button> <button type="button" class="linkish small" data-act="ideas">All ›</button></span></div>
     ${due ? `<p class="small muted">${st.last ? 'It\'s been a while since your last date.' : 'Your first date on the 2-2-2-2 is waiting.'} 💗 what you'd like — when you both pick the same one, it's a match.</p>` : '<p class="tiny muted">🔒 Your 💗 stay private until you both pick the same one.</p>'}
     <div class="idealist">${top.map((x) => `<div class="idearow"><span class="ii">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : ideaIcon(x)}</span><div class="grow"><b>${esc(x.title)}</b><small class="muted">${ideaMeta(x) || esc(x.why || '')}${scoreLine(x) ? ` · ${scoreLine(x)}` : ''}</small></div>
-      <button type="button" class="icon-btn" data-idea="${esc(x.id)}:pass" aria-label="Not for us">✕</button><button type="button" class="icon-btn pick" data-idea="${esc(x.id)}:pick" aria-label="Pick">💗</button></div>`).join('') || '<p class="small muted">You\'ve been through them all — new ones come every Thursday.</p>'}</div>
-    ${ideas.week ? `<p class="tiny muted">This week around ${esc(ideas.week.area?.label || ideas.settings?.label || 'you')} · ${ideas.week.ideas.length} ideas</p>` : '<p class="tiny muted">Movies, events and new places for your area arrive every Thursday morning.</p>'}`;
+      <button type="button" class="icon-btn" data-idea="${esc(x.id)}:pass" aria-label="Not for us">✕</button><button type="button" class="icon-btn pick" data-idea="${esc(x.id)}:pick" aria-label="Pick">💗</button></div>`).join('') || '<p class="small muted">You\'ve been through them all — new ones come every Wednesday.</p>'}</div>
+    ${ideas.week ? `<p class="tiny muted">This week around ${esc(ideas.week.area?.label || ideas.settings?.label || 'you')} · ${ideas.week.ideas.length} ideas</p>` : '<p class="tiny muted">Movies, events and new places for your area arrive every Wednesday morning.</p>'}`;
 }
 function renderIdeasCard() { const el = $('#usIdeasC'); if (el) { el.innerHTML = ideasCard(); el.hidden = !ideas.loaded; } }
 // The deck: one idea at a time.
@@ -1326,14 +1326,22 @@ function ideasSheet() {
   openSheet(`<div class="row between"><h2>💡 Date ideas</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     <div class="rchips ideatabs">${tabs}</div>
     ${x ? `<article class="ideacard">${x.img ? `<img class="poster" src="${esc(x.img)}" alt="">` : `<div class="ideabig">${ideaIcon(x)}</div>`}
-      <h3>${esc(x.title)}</h3>
+      <h3>${esc(x.title)}${x.pick ? ' <span class="tag pk">Critics\' pick</span>' : ''}</h3>
       ${ideaMeta(x) ? `<p class="small">${ideaMeta(x)}</p>` : ''}${scoreLine(x) ? `<p class="small"><b>${scoreLine(x)}</b> <span class="tiny muted">critics · audiences</span></p>` : ''}
       ${x.why ? `<p class="small muted">${esc(x.why)}</p>` : ''}${times}
       ${links ? `<div class="row wrap">${links}</div>` : ''}
       <div class="deckbtns"><button type="button" class="ghost" data-idea="${esc(x.id)}:pass">✕ Not for us</button><button type="button" class="ghost" data-idea="${esc(x.id)}:later">⏭ Later</button>${picked(x) ? `<button type="button" data-idea="${esc(x.id)}:unpick">💗 Picked</button>` : `<button type="button" class="hot" data-idea="${esc(x.id)}:pick">💗 I'd love this</button>`}</div>
       <p class="tiny muted center">${ideas.i + 1} of ${list.length}${x.src ? ` · ${esc(x.src)}` : ''}</p></article>`
-      : '<p class="small muted">Nothing left here — try another tab, or check back Thursday.</p>'}
+      : ideasEmpty()}
     <p class="tiny muted">🔒 ${esc(partnerName())} can't see what you 💗 — only a match, when you've both picked it.</p>`);
+}
+// Why the deck is empty, and what to do about it.
+function ideasEmpty() {
+  const w = ideas.week, tab = ideas.tab, label = ideas.I.TABS[tab].replace(/^\S+ /, '').toLowerCase();
+  const all = tab === 'all' || tab === 'starter' ? null : (w?.ideas || []).filter((x) => x.kind === tab).length;
+  if (!w && tab !== 'starter') return `<div class="card"><b class="small">The scout hasn't run for your area yet.</b><p class="tiny muted">New ${tab === 'all' ? 'ideas' : label} arrive Wednesday mornings.${state.user?.isAdmin ? ' Me › Maintainer › Run the scout now.' : ''}</p></div>`;
+  if (all === 0) return `<div class="card"><b class="small">No ${esc(label)} this week.</b><p class="tiny muted">${w.problems?.length ? 'The scout had trouble this time — new ones Wednesday.' : 'New ones arrive Wednesday mornings.'}</p></div>`;
+  return `<div class="card"><b class="small">You've been through all of them.</b><p class="tiny muted"><button type="button" class="linkish tiny" data-act="ideaunpass">Show the ones you passed</button> · new ones Wednesday</p></div>`;
 }
 async function ideaAct(id, what) {
   const x = ideaById(id);
@@ -1395,7 +1403,7 @@ function ideaSettingsSheet() {
       <label>Movie theatres (one per line, up to 4)<textarea name="theatres" rows="3" maxlength="300">${esc((s.theatres || []).join('\n'))}</textarea></label>
       <div class="two"><label>Critics at least<select name="critic">${[60, 70, 75, 80, 85, 90, 95].map((n) => `<option value="${n}" ${n === s.critic ? 'selected' : ''}>${n}%</option>`).join('')}</select></label>
         <label>Audiences at least<select name="audience">${[60, 65, 70, 75, 80, 85].map((n) => `<option value="${n}" ${n === s.audience ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
-      <p class="tiny muted">Critics: Rotten Tomatoes (else Metacritic). Audiences: IMDb ×10 (else TMDB). The weekly scout only ever gets your area and the dates — never your names, plans or picks. New settings apply from the next Thursday.</p>
+      <p class="tiny muted">Critics: Rotten Tomatoes (else Metacritic). Audiences: IMDb ×10 (else TMDB). The weekly scout only ever gets your area and the dates — never your names, plans or picks. New settings apply from the next Wednesday.</p>
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save</button></div>
     </form>`);
 }
@@ -2176,7 +2184,7 @@ async function adminView() {
   const scoutCard = sc ? `<section class="card stack"><b>💡 Date scout</b>
       <p class="small">${Object.entries(sc.keys).map(([k, on]) => `${on ? '✅' : '⚪️'} ${esc(k)}`).join(' · ')}</p>
       <p class="small muted">${esc(sc.model)} · ${runs.length} Claude run${runs.length === 1 ? '' : 's'} this month · ${runs.reduce((n, x) => n + (x.searches || 0), 0)} searches · ${Math.round(runs.reduce((n, x) => n + (x.input || 0) + (x.output || 0), 0) / 1000)}k tokens</p>
-      ${wk ? `<p class="small">${wk.ideas.length} ideas for ${esc(wk.area?.label || '')} · ${ago(wk.at)}: ${['movie', 'event', 'food'].map((k) => `${wk.ideas.filter((x) => x.kind === k).length} ${k === 'food' ? 'places' : `${k}s`}`).join(', ')}</p>` : '<p class="small muted">Hasn\'t run yet — it runs Thursday mornings.</p>'}
+      ${wk ? `<p class="small">${wk.ideas.length} ideas for ${esc(wk.area?.label || '')} · ${ago(wk.at)}: ${['movie', 'event', 'food'].map((k) => `${wk.ideas.filter((x) => x.kind === k).length} ${k === 'food' ? 'places' : `${k}s`}`).join(', ')}</p>` : '<p class="small muted">Hasn\'t run yet — it runs Wednesday mornings.</p>'}
       ${wk?.problems?.length ? `<ul class="small danger">${wk.problems.map((x) => `<li>⚠️ ${esc(x)}</li>`).join('')}</ul>` : ''}
       <button type="button" class="ghost" data-act="scoutrun">Run the scout now</button></section>` : '';
   const rep = r.report;
@@ -2590,6 +2598,7 @@ document.addEventListener('click', (e) => {
     case 'outing': return outingAsk();
     case 'outsave': return outingSave();
     case 'outsend': return act(outingSend);
+    case 'ideaunpass': LS.set(passKey(), null); ideas.i = 0; return ideasSheet();
     case 'ideas': return act(async () => { if (!ideas.loaded) await loadIdeas(); ideas.i = 0; ideasSheet(); });
     case 'ideaset': return act(async () => { if (!ideas.loaded) await loadIdeas(); ideaSettingsSheet(); });
     case 'scoutrun': t.disabled = true; t.textContent = 'Scouting… (a minute or two)'; return act(async () => { const r = await api.post('/admin/scout/run'); toast(`💡 ${r.areas?.map((a) => `${a.ideas ?? 0} ideas`).join(', ') || 'Done'}`); adminView(); });

@@ -305,7 +305,7 @@ export async function familyApi(req, env, path, ctx = null) {
     }
     if (path === '/admin/scout/run' && method === 'POST') {
       if (env.DEMO && !env.__anthropic) return json({ error: 'the scout runs on the live connector' }, 400);
-      return json(await runScout(env, { db, force: !!body.force }));
+      return json(await runScout(env, { db, force: body.force !== false, refresh: !!body.refresh }));
     }
     m = path.match(/^\/admin\/tickets\/([a-z0-9]+)$/);
     if (m && method === 'PATCH') {
@@ -811,7 +811,7 @@ export async function familyApi(req, env, path, ctx = null) {
     const mineOnly = () => ({ mine: (picks.members[me.id] || []).map((x) => x.t), matches: picks.matches.filter((x) => x.who.includes(me.id) && !x.done) });
     if (!what && method === 'GET') {
       const week = await db.get(`ideas:${areaKey(area)}`);
-      return json({ week: week || null, settings: { zip: area.zip, label: area.label, theatres: area.theatres, critic: area.critic, audience: area.audience }, ...mineOnly() });
+      return json({ week: week ? { ...week, claude: undefined } : null, settings: { zip: area.zip, label: area.label, theatres: area.theatres, critic: area.critic, audience: area.audience }, ...mineOnly() });
     }
     if (me.relation === 'child' || !partner) return json({ error: 'date ideas are for a couple in the family' }, 403);
     if (what === 'settings' && method === 'PUT') {
@@ -1709,7 +1709,7 @@ const shiftDay = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(
 const validTz = (tz) => { if (typeof tz !== 'string' || tz.length > 64) return false; try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; } };
 // The 15-minute reminders (appointments, calendar events, vaccines due) — see push.js.
 // 💡 Thursday morning: the date scout for every area a couple lives in (at most 10 areas).
-export async function runScout(env, { db = store(env.HOUSEHOLD), force = false, now = new Date() } = {}) {
+export async function runScout(env, { db = store(env.HOUSEHOLD), force = false, refresh = false, now = new Date() } = {}) {
   const areas = new Map([[areaKey(DEFAULT_AREA), DEFAULT_AREA]]);
   let cursor;
   do {
@@ -1722,9 +1722,19 @@ export async function runScout(env, { db = store(env.HOUSEHOLD), force = false, 
     }
     cursor = r.list_complete === false ? r.cursor : null;
   } while (cursor && areas.size < 10);
-  const out = [];
-  for (const a of [...areas.values()].slice(0, 10)) out.push(await scoutArea(env, db, a, { now, force }).catch((e) => ({ key: areaKey(a), problems: [e.message] })));
-  return { areas: out };
+  // One area per run (each run gets 50 outside requests on the free plan); the cron fires every
+  // hour that morning, so each run takes the next area not done yet.
+  const list = [...areas.values()].slice(0, 10);
+  const fresh = refresh ? 20 * 3600e3 : 5 * 864e5;
+  const todo = [];
+  for (const a of list) {
+    const w = await db.get(`ideas:${areaKey(a)}`);
+    if (!w || now.getTime() - ((refresh ? w.refreshed || w.at : w.at) || 0) > fresh) todo.push(a);
+  }
+  const a = todo[0] || (force ? list[0] : null);
+  if (!a) return { areas: [], remaining: 0 };
+  const r = await scoutArea(env, db, a, { now, force, refresh }).catch((e) => ({ key: areaKey(a), problems: [e.message] }));
+  return { areas: [r], remaining: Math.max(0, todo.length - 1) };
 }
 export const runFamilyReminders = (env, at) => runReminders(env, at, { db: store(env.HOUSEHOLD) });
 export const MODULES = ['dogs', 'chores', 'feed', 'health', 'calendar'];

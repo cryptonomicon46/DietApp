@@ -577,3 +577,4 @@ button:disabled { opacity: .7; cursor: default; }
 .card.soft { background: var(--brand-soft); border: 0; padding: 10px 12px; margin-bottom: 10px; }
 .tips { margin: 6px 0 10px; padding-left: 18px; } .tips li { margin: 2px 0; }
 button.hot.grow { background: var(--like); color: #fff; }
+.tag.pk { background: #ffe3ec; color: #b0164b; font-size: .68rem; vertical-align: middle; }

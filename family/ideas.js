@@ -69,7 +69,7 @@ export function againIdeas(rhythm = []) {
 export function deck({ week, rhythm, passed = {}, tab = 'all', today, now = Date.now() }) {
   const live = (x) => !(passed[x.id] > now) && (!x.day || x.day >= today);
   const scouted = (week?.ideas || []).filter(live);
-  const byKind = (k) => scouted.filter((x) => x.kind === k).sort((a, b) => (a.day || '9').localeCompare(b.day || '9') || (b.scores?.critic || 0) - (a.scores?.critic || 0));
+  const byKind = (k) => scouted.filter((x) => x.kind === k).sort((a, b) => (k === 'movie' ? (b.pick ? 1 : 0) - (a.pick ? 1 : 0) || (b.rank || 0) - (a.rank || 0) : (a.day || '9').localeCompare(b.day || '9')));
   const starters = [...againIdeas(rhythm), ...STARTERS].filter(live);
   if (tab === 'starter') return starters;
   if (tab !== 'all') return byKind(tab);

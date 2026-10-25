@@ -24,4 +24,4 @@ bucket_name = "ourpawmily-photos"
 # and writes a report the maintainer sees in Me › Maintainer. Every 15 minutes: notification
 # reminders (appointments, calendar events, vaccines due). Thursdays: the 💡 date scout (scout.js).
 [triggers]
-crons = ["13 10 * * *", "*/15 * * * *", "13 13 * * 4"]
+crons = ["13 10 * * *", "*/15 * * * *", "13 13-22 * * 3", "43 13-22 * * 4"]

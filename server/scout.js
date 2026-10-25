@@ -48,37 +48,40 @@ export async function seatgeek(env, area, win, fetcher = fetch) {
     price: e.stats?.lowest_price || null, url: e.url || '', img: e.performers?.[0]?.image || '', tags: [e.type?.replace(/_/g, ' ')].filter(Boolean), src: 'SeatGeek' })).filter((e) => e.title && e.day);
 }
 
-// Movies in US theatres now, with critics' (Rotten Tomatoes, Metacritic) and audience (IMDb,
-// TMDB) scores; only the ones both rate highly.
-export async function movies(env, area, fetcher = fetch) {
+// Movies in US theatres now, with critics' (Rotten Tomatoes, else Metacritic) and audiences'
+// (IMDb, else TMDB) scores, best first. One TMDB call, then one OMDb call per film (by title and
+// year) — a run has to stay under Cloudflare's 50 outside requests. The family's bar doesn't hide
+// a film: the ones over it are marked as a critics' pick.
+export const scoreOf = (s) => { const v = [s.critic, s.audience].filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length - (v.length < 2 ? 10 : 0) : 0; };
+export async function movies(env, area, fetcher = fetch, max = 16) {
   if (!env.TMDB_KEY) return [];
   const bearer = env.TMDB_KEY.length > 60; // a v4 read token; else a v3 key
-  const tmdb = (path, params = {}) => fetcher(`https://api.themoviedb.org/3${path}?${new URLSearchParams({ ...params, ...(bearer ? {} : { api_key: env.TMDB_KEY }) })}`, bearer ? { headers: { Authorization: `Bearer ${env.TMDB_KEY}` } } : undefined).then((r) => { if (!r.ok) throw new Error(`tmdb ${r.status}`); return r.json(); });
-  const now = await tmdb('/movie/now_playing', { region: 'US', language: 'en-US', page: '1' });
-  const list = (now.results || []).slice(0, 20);
-  const out = [];
-  for (const m of list) {
-    const ext = await tmdb(`/movie/${m.id}/external_ids`).catch(() => ({}));
-    let o = null;
-    if (env.OMDB_KEY && ext.imdb_id) o = await fetcher(`https://www.omdbapi.com/?${new URLSearchParams({ apikey: env.OMDB_KEY, i: ext.imdb_id })}`).then((r) => r.json()).catch(() => null);
+  const r = await fetcher(`https://api.themoviedb.org/3/movie/now_playing?${new URLSearchParams({ region: 'US', language: 'en-US', page: '1', ...(bearer ? {} : { api_key: env.TMDB_KEY }) })}`, bearer ? { headers: { Authorization: `Bearer ${env.TMDB_KEY}` } } : undefined);
+  if (!r.ok) throw new Error(`tmdb ${r.status}`);
+  const list = ((await r.json()).results || []).slice(0, max);
+  const out = await Promise.all(list.map(async (m) => {
+    const year = (m.release_date || '').slice(0, 4);
+    const o = env.OMDB_KEY ? await fetcher(`https://www.omdbapi.com/?${new URLSearchParams({ apikey: env.OMDB_KEY, t: m.title, type: 'movie', ...(year ? { y: year } : {}) })}`).then((x) => x.json()).then((j) => (j?.Response === 'False' ? null : j)).catch(() => null) : null;
     const rt = parseInt(o?.Ratings?.find((x) => x.Source === 'Rotten Tomatoes')?.Value || '', 10);
     const meta = parseInt(o?.Metascore || '', 10);
     const imdb = parseFloat(o?.imdbRating || '');
     const critic = Number.isFinite(rt) ? rt : Number.isFinite(meta) ? meta : null;
     const audience = Number.isFinite(imdb) ? Math.round(imdb * 10) : m.vote_count > 50 ? Math.round(m.vote_average * 10) : null;
-    out.push({ id: `mv${m.id}`, kind: 'movie', title: m.title, released: m.release_date || '', img: m.poster_path ? `https://image.tmdb.org/t/p/w342${m.poster_path}` : '',
-      scores: { critic, rt: Number.isFinite(rt) ? rt : null, meta: Number.isFinite(meta) ? meta : null, imdb: Number.isFinite(imdb) ? imdb : null, audience },
-      runtime: o?.Runtime && o.Runtime !== 'N/A' ? o.Runtime : '', rated: o?.Rated && o.Rated !== 'N/A' ? o.Rated : '', genre: o?.Genre && o.Genre !== 'N/A' ? o.Genre : '', tags: ['movie', ...(o?.Genre || '').toLowerCase().split(/,\s*/).filter(Boolean)],
-      url: `https://www.fandango.com/search?q=${encodeURIComponent(m.title)}`, src: 'TMDB · OMDb' });
-  }
-  return out.filter((x) => x.scores.critic != null && x.scores.audience != null && x.scores.critic >= (area.critic ?? 85) && x.scores.audience >= (area.audience ?? 75));
+    const scores = { critic, rt: Number.isFinite(rt) ? rt : null, meta: Number.isFinite(meta) ? meta : null, imdb: Number.isFinite(imdb) ? imdb : null, audience };
+    return { id: `mv${m.id}`, kind: 'movie', title: m.title, released: m.release_date || '', img: m.poster_path ? `https://image.tmdb.org/t/p/w342${m.poster_path}` : '', scores,
+      pick: critic != null && audience != null && critic >= (area.critic ?? 85) && audience >= (area.audience ?? 75), rank: Math.round(scoreOf(scores)),
+      runtime: o?.Runtime && o.Runtime !== 'N/A' ? o.Runtime : '', rated: o?.Rated && o.Rated !== 'N/A' ? o.Rated : '', genre: o?.Genre && o.Genre !== 'N/A' ? o.Genre : '', tags: ['movie', ...(o?.Genre || '').toLowerCase().split(/,\s*/).filter((g) => g && g !== 'n/a')],
+      why: [o?.Genre && o.Genre !== 'N/A' ? o.Genre.split(',')[0] : '', o?.Runtime && o.Runtime !== 'N/A' ? o.Runtime : '', o?.Rated && o.Rated !== 'N/A' ? o.Rated : ''].filter(Boolean).join(' · '),
+      url: `https://www.fandango.com/search?q=${encodeURIComponent(m.title)}`, src: 'TMDB · OMDb' };
+  }));
+  return out.filter((x) => x.scores.critic != null || x.scores.audience != null).sort((a, b) => (b.pick - a.pick) || b.rank - a.rank);
 }
 
 // ---------- Claude: showtimes at your theatres, new and trendy places, a few hidden gems ----------
 export function scoutPrompt(area, win, goodMovies) {
   return `You are a date-night scout for couples who live near ${area.label || 'their city'} (ZIP ${area.zip}). Today is ${iso(win.from)}. Use web search to find, for ${iso(win.from)} to ${iso(win.to)}:
 
-1. Showtimes (Friday to Sunday) at these theatres: ${area.theatres.join('; ')} — only for these movies: ${goodMovies.map((m) => m.title).join('; ') || '(none — skip this part)'}. Use each theatre's own showtimes page (AMC, Cinemark) or Fandango. Include the page URL.
+1. Showtimes (Friday to Sunday) at these theatres: ${area.theatres.join('; ')} — only for these movies: ${goodMovies.slice(0, 6).map((m) => m.title).join('; ') || '(none — skip this part)'}. Use each theatre's own showtimes page (AMC, Cinemark) or Fandango. Include the page URL.
 2. Up to 8 new (opened in roughly the last 6 months) or currently buzzy bars and restaurants within about 15 miles, from recent local food coverage (Eater SF, The Mercury News, San Jose Spotlight, SF Chronicle). Say whether it takes OpenTable reservations if you can tell.
 3. Up to 6 other date ideas happening in that window that a listings site would miss: festivals, markets, special screenings, tastings, outdoor events.
 
@@ -155,7 +158,7 @@ export function assemble({ events = [], films = [], claude = null, win, area }) 
 }
 
 // Runs the scout for one area: listings, then Claude (within the monthly cap).
-export async function scoutArea(env, db, area, { now = new Date(), fetcher = fetch, force = false } = {}) {
+export async function scoutArea(env, db, area, { now = new Date(), fetcher = fetch, force = false, refresh = false } = {}) {
   const win = windowFrom(now);
   const month = iso(now).slice(0, 7), key = areaKey(area);
   const runs = (await db.get(`scoutruns:${key}:${month}`)) || [];
@@ -164,11 +167,15 @@ export async function scoutArea(env, db, area, { now = new Date(), fetcher = fet
   const safe = (p, what) => p.catch((e) => { problems.push(`${what}: ${e.message}`); return []; });
   const [tm, sg, films] = await Promise.all([safe(ticketmaster(env, area, win, fetcher), 'Ticketmaster'), safe(seatgeek(env, area, win, fetcher), 'SeatGeek'), safe(movies(env, area, fetcher), 'Movies')]);
   let claude = null, usage = null;
-  if (runs.length < cap || force) {
+  // Thursday's refresh: new films, scores and events (all free), keeping Wednesday's showtimes and places.
+  const prev = refresh ? await db.get(`ideas:${key}`) : null;
+  if (refresh) claude = prev?.claude || null;
+  else if (!(env.ANTHROPIC_API_KEY || env.__anthropic)) problems.push('Claude skipped: no ANTHROPIC_API_KEY');
+  else if (runs.length < cap || force) {
     try { ({ data: claude, usage } = await claudeScout(env, area, win, films)); } catch (e) { problems.push(`Claude: ${e.message}`); }
   } else problems.push(`Claude skipped: ${cap} runs this month already`);
   const week = assemble({ events: [...tm, ...sg], films, claude, win, area });
-  week.problems = problems;
+  Object.assign(week, { problems, claude, refreshed: refresh ? Date.now() : null, at: refresh && prev?.at ? prev.at : week.at });
   await db.put(`ideas:${key}`, week, 30 * 86400);
   if (usage) await db.put(`scoutruns:${key}:${month}`, [...runs, { at: Date.now(), ...usage, ideas: week.ideas.length }], 62 * 86400);
   return { key, ideas: week.ideas.length, usage, problems };

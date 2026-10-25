@@ -9,24 +9,24 @@ const res = (j, ok = true) => ({ ok, status: ok ? 200 : 500, json: async () => j
 const fakeFetch = async (url) => {
   if (url.includes('ticketmaster')) return res({ _embedded: { events: [{ id: 'A1', name: 'Khruangbin', url: 'https://tm/k', dates: { start: { localDate: '2026-10-31', localTime: '20:00:00' } }, priceRanges: [{ min: 45.5 }], classifications: [{ segment: { name: 'Music' }, genre: { name: 'Rock' } }], _embedded: { venues: [{ name: 'The Warfield', city: { name: 'San Francisco' } }] } }] } });
   if (url.includes('now_playing')) return res({ results: [{ id: 1, title: 'Great Film', vote_average: 8, vote_count: 900, poster_path: '/p.jpg' }, { id: 2, title: 'Meh Film', vote_average: 6, vote_count: 900 }] });
-  if (url.includes('/movie/1/external_ids')) return res({ imdb_id: 'tt1' });
-  if (url.includes('/movie/2/external_ids')) return res({ imdb_id: 'tt2' });
-  if (url.includes('omdbapi') && url.includes('tt1')) return res({ Ratings: [{ Source: 'Rotten Tomatoes', Value: '94%' }], imdbRating: '8.1', Runtime: '124 min', Rated: 'PG-13', Genre: 'Drama' });
+  if (url.includes('/external_ids')) throw new Error('one call per film');
+  if (url.includes('omdbapi') && url.includes('t=Great+Film')) return res({ Ratings: [{ Source: 'Rotten Tomatoes', Value: '94%' }], imdbRating: '8.1', Runtime: '124 min', Rated: 'PG-13', Genre: 'Drama' });
   if (url.includes('omdbapi')) return res({ Ratings: [{ Source: 'Rotten Tomatoes', Value: '40%' }], imdbRating: '6.0' });
   throw new Error(`unexpected ${url}`);
 };
 const env0 = { TICKETMASTER_KEY: 'k', TMDB_KEY: 'shortv3key', OMDB_KEY: 'o' };
 const win = { from: new Date('2026-10-29T13:00:00Z'), to: new Date('2026-11-08T13:00:00Z') };
 
-test('listings: events, and only movies both critics and audiences rate highly', async () => {
+test('listings: events, and every film playing, best first, the ones over your bar marked', async () => {
   const ev = await ticketmaster(env0, DEFAULT_AREA, win, fakeFetch);
   assert.equal(ev[0].title, 'Khruangbin');
   assert.equal(ev[0].time, '20:00');
   assert.equal(ev[0].price, 46);
   assert.deepEqual(ev[0].tags, ['music', 'rock']);
   const films = await movies(env0, DEFAULT_AREA, fakeFetch);
-  assert.deepEqual(films.map((f) => f.title), ['Great Film']);
+  assert.deepEqual(films.map((f) => [f.title, f.pick]), [['Great Film', true], ['Meh Film', false]]);
   assert.deepEqual([films[0].scores.rt, films[0].scores.audience], [94, 81]);
+  assert.equal(films[0].why, 'Drama · 124 min · PG-13');
   assert.deepEqual(await ticketmaster({}, DEFAULT_AREA, win, fakeFetch), [], 'no key: skipped');
 });
 
@@ -85,4 +85,20 @@ test('picks are private until you both pick the same idea', async () => {
   // Settings: theatres and score minimums.
   const s = await call(`${I}/settings`, sam, 'PUT', { theatres: ['AMC Mercado 20, Santa Clara'], critic: 90 });
   assert.deepEqual([s.settings.theatres, s.settings.critic], [['AMC Mercado 20, Santa Clara'], 90]);
+});
+
+test("Thursday's refresh updates films and events without Claude, keeping Wednesday's places; one area per run", async () => {
+  const m = new Map(), db = { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); } };
+  let calls = 0, fetches = 0;
+  const anthropic = { messages: { create: async () => { calls++; return { stop_reason: 'end_turn', content: [{ type: 'text', text: '{"showtimes":[{"movie":"Great Film","theater":"AMC Mercado 20","times":[{"day":"2026-10-31","time":"19:10"}]}],"places":[{"name":"Taqueria X"}],"extras":[]}' }], usage: {} }; } } };
+  const env = { ...env0, __anthropic: anthropic };
+  const counting = (u) => { fetches++; return fakeFetch(u); };
+  await scoutArea(env, db, DEFAULT_AREA, { now: win.from, fetcher: counting });
+  assert.ok(fetches <= 20, `outside requests: ${fetches}`);
+  const r = await scoutArea(env, db, DEFAULT_AREA, { now: win.from, fetcher: fakeFetch, refresh: true });
+  assert.equal(calls, 1, 'no Claude on the refresh');
+  const week = m.get(`ideas:${areaKey(DEFAULT_AREA)}`);
+  assert.ok(week.refreshed && week.ideas.some((x) => x.title === 'Taqueria X'));
+  assert.equal(week.ideas.find((x) => x.title === 'Great Film').theatres[0].times[0].time, '19:10');
+  assert.deepEqual(r.problems, []);
 });

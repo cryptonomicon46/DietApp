@@ -36,7 +36,10 @@ export default {
   async scheduled(event, env, ctx) {
     if (!env.HOUSEHOLD) return;
     if (event.cron === '13 10 * * *') ctx.waitUntil(runMaintenance(env));
-    else if (event.cron === '13 13 * * 4') ctx.waitUntil(runScout(env)); // 💡 Thursdays, 6:13 AM Pacific
+    // 💡 The scout: Wednesday mornings from 6:13 AM Pacific, one area an hour; Thursday's refresh
+    // (new films, scores, events — no Claude) the same way.
+    else if (event.cron === '13 13-22 * * 3') ctx.waitUntil(runScout(env));
+    else if (event.cron === '43 13-22 * * 4') ctx.waitUntil(runScout(env, { refresh: true }));
     else ctx.waitUntil(runFamilyReminders(env, event.scheduledTime));
   },
   async fetch(req, env, ctx) {
