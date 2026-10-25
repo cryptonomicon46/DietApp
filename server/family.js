@@ -59,7 +59,8 @@ export const POINTS = { breakfast: 1, dinner: 1, walk: 2, park: 2, treat: 0, med
 const CARE = Object.keys(POINTS);
 // The family's own chores ("x_<id>"), added in the app: [{id, icon, label, pts, section, gone?}].
 export const customPoints = (fam) => Object.fromEntries((fam.chores || []).map((c) => [`x_${c.id}`, c.pts]));
-const isChore = (fam, kind) => CARE.includes(kind) || (fam.chores || []).some((c) => !c.gone && `x_${c.id}` === kind);
+// Built-in chores a family has removed are in fam.hiddenChores (their history stays).
+const isChore = (fam, kind) => (CARE.includes(kind) && !(fam.hiddenChores || []).includes(kind)) || (fam.chores || []).some((c) => !c.gone && `x_${c.id}` === kind);
 const MAX_WRITES_PER_MIN = 120;
 
 const HELP_PER_MIN = 10, HELP_PER_DAY = 80;
@@ -1082,12 +1083,13 @@ export async function familyApi(req, env, path, ctx = null) {
       icon: [...String(c.icon || '✅').trim()].slice(0, 2).join('') || '✅',
       label: clean(c.label, 24),
       pts: Math.max(0, Math.min(5, Math.round(+c.pts || 0))),
-      section: ['house', 'kitchen', 'dogs'].includes(c.section) ? c.section : 'house',
+      section: c.section === 'dogs' ? 'dogs' : 'house',
     })).filter((c) => c.label);
     // A chore left out is marked gone (its entries keep their name and points), not deleted.
     fam.chores = [...sent, ...old.filter((c) => !sent.some((x) => x.id === c.id)).map((c) => ({ ...c, gone: true }))].slice(-60);
+    if (Array.isArray(body.hidden)) fam.hiddenChores = [...new Set(body.hidden.filter((k) => CARE.includes(k)))];
     await db.put(`family:${fam.fid}`, fam);
-    return json({ chores: fam.chores });
+    return json({ chores: fam.chores, hidden: fam.hiddenChores || [] });
   }
   m = path.match(/^\/families\/([a-z0-9]+)\/chores$/);
   if (m && method === 'GET') {
@@ -1527,7 +1529,7 @@ async function makeInvite(db, inv) {
 }
 function familyOut(fam, user) {
   const me = fam.members.find((m) => m.uid === user.uid);
-  return { fid: fam.fid, name: fam.name, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', chores: fam.chores || [], goldenPosts: fam.goldenPosts !== false, e2ee: !!fam.e2ee, keyCheck: fam.keyCheck || '', connkeys: fam.connkeys || {}, share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
+  return { fid: fam.fid, name: fam.name, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', chores: fam.chores || [], hiddenChores: fam.hiddenChores || [], goldenPosts: fam.goldenPosts !== false, e2ee: !!fam.e2ee, keyCheck: fam.keyCheck || '', connkeys: fam.connkeys || {}, share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
 }
 const url = (req) => new URL(req.url);
 // A post as one viewer sees it: no account ids (theirs or anyone else's), just "is it mine".

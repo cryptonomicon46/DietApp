@@ -56,4 +56,10 @@ test('cooking counts, and a family can add (and retire) its own chores', async (
   assert.equal((await call(C, token, 'POST', { date: '2026-10-24', kind })).status, 400);
   assert.equal(await board(), 5);
   assert.equal((await call(`/families/${family.fid}`, token)).family.chores[0].gone, true);
+  // A built-in chore can be removed too, and brought back.
+  await call(`/families/${family.fid}/chores/custom`, token, 'PUT', { chores: [], hidden: ['trash', 'not-a-chore'] });
+  assert.deepEqual((await call(`/families/${family.fid}`, token)).family.hiddenChores, ['trash']);
+  assert.equal((await call(C, token, 'POST', { date: '2026-10-24', kind: 'trash' })).status, 400);
+  await call(`/families/${family.fid}/chores/custom`, token, 'PUT', { chores: [], hidden: [] });
+  assert.equal((await call(C, token, 'POST', { date: '2026-10-24', kind: 'trash' })).status, 200);
 });

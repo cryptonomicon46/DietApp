@@ -17,13 +17,17 @@ const MODULES = { dogs: '🐶 Dogs — feeding, walks, vet & meds', chores: '�
 const CARE = { breakfast: ['🍳', 'Breakfast'], dinner: ['🍲', 'Dinner'], walk: ['🦮', 'Walk'], park: ['🌳', 'Dog park'], treat: ['🦴', 'Treat'], meds: ['💊', 'Meds'],
   poop: ['💩', 'Poop patrol'], trash: ['🗑️', 'Garbage'], laundry: ['🧺', 'Laundry'], groceries: ['🛒', 'Groceries'], cleaning: ['🧽', 'Cleaning'], dishes: ['🍽️', 'Dishes'],
   cook_b: ['🍳', 'Cooked breakfast'], cook_l: ['🥪', 'Cooked lunch'], cook_d: ['🍝', 'Cooked dinner'] };
-const DOG_KINDS = ['breakfast', 'dinner', 'walk', 'park', 'treat', 'meds'], HOUSE_KINDS = ['poop', 'trash', 'laundry', 'groceries', 'cleaning', 'dishes'], KITCHEN_KINDS = ['cook_b', 'cook_l', 'cook_d'];
+const DOG_KINDS = ['breakfast', 'dinner', 'walk', 'park', 'treat', 'meds'], HOUSE_KINDS = ['cook_b', 'cook_l', 'cook_d', 'dishes', 'trash', 'laundry', 'groceries', 'cleaning', 'poop'];
 const PTS = { breakfast: 1, dinner: 1, walk: 2, park: 2, treat: 0, meds: 1, poop: 2, trash: 1, laundry: 3, groceries: 3, cleaning: 4, dishes: 1, cook_b: 2, cook_l: 2, cook_d: 3 };
 // The family's own chores (added with ＋ Add a chore) sit with the built-in ones: "x_<id>".
 const ownChores = () => (fam()?.chores || []);
 const careMeta = (k) => CARE[k] || (() => { const c = ownChores().find((x) => `x_${x.id}` === k); return c ? [c.icon, c.label] : ['✅', 'Chore']; })();
 const ptsOf = (k) => PTS[k] ?? ownChores().find((x) => `x_${x.id}` === k)?.pts ?? 0;
-const kindsIn = (section, base) => [...base, ...ownChores().filter((c) => !c.gone && c.section === section).map((c) => `x_${c.id}`)];
+// Two rows: the dogs and the house (older "kitchen" chores belong to the house). Built-in chores
+// a family removed (fam.hiddenChores) are left out.
+const hiddenChores = () => fam()?.hiddenChores || [];
+const sectionOf = (c) => (c.section === 'dogs' ? 'dogs' : 'house');
+const kindsIn = (section, base) => [...base.filter((k) => !hiddenChores().includes(k)), ...ownChores().filter((c) => !c.gone && sectionOf(c) === section).map((c) => `x_${c.id}`)];
 const HELP = { petsit: ['🐾', 'Pet sitting'], babysit: ['🧸', 'Babysitting'], walk: ['🦮', 'Dog walk'], ride: ['🚗', 'A ride'], meal: ['🍲', 'A meal'], other: ['🙋', 'A hand'] };
 const dayRange = (a, b) => { const f = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); return !b || b === a ? f(a) : `${f(a)} – ${f(b)}`; };
 const monthName = (m) => new Date(`${m}-15T12:00:00`).toLocaleDateString(undefined, { month: 'long' });
@@ -837,10 +841,10 @@ async function renderCare() {
         const open = LS.get(`fam.${key}Open`) !== '0';
         return `<details class="house" data-house="${key}" ${open ? 'open' : ''}><summary class="care-sec">${title} <span class="muted">${done ? `· ${done} done today` : ''}</span><span class="fold">${open ? 'Hide' : 'Show'}</span></summary>${grid(kinds)}</details>`;
       };
-      return fold('house', '🏠 The house', kindsIn('house', HOUSE_KINDS)) + fold('kitchen', '👩‍🍳 Kitchen', kindsIn('kitchen', KITCHEN_KINDS))
-        + (grownUp ? '<button type="button" class="linkish small add-chore" data-act="chores">＋ Add a chore</button>' : '');
+      return fold('house', '🏠 The house', kindsIn('house', HOUSE_KINDS));
     })() : ''}
     ${other ? `<div class="whodid" role="radiogroup" aria-label="Who did it"><span class="small muted">Who did it?</span>${[['me', 'Me'], ['both', '👫 Both'], [other.id, esc(other.name)]].map(([v, l]) => `<button type="button" role="radio" aria-checked="${careWho === v}" class="${careWho === v ? 'on' : ''}" data-carewho="${v}">${l}</button>`).join('')}</div>` : ''}
+    ${grownUp && (mods.includes('chores') || mods.includes('dogs')) ? '<button type="button" class="linkish small add-chore" data-act="chores">✎ Edit chores — add or remove</button>' : ''}
     ${list.length ? `<ul class="care-log">${list.slice().reverse().map((e) => {
       const whoNow = e.by.length > 1 ? 'both' : e.by[0];
       const swaps = other && grownUp ? [[fam().me, 'Me'], ['both', '👫 Both'], [other.id, esc(other.name)]].filter(([v]) => v !== whoNow) : [];
@@ -1894,23 +1898,30 @@ function refreshPush() {
 }
 if (pushOk()) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data?.open && state.family) show(e.data.open === 'dogs' ? 'pets' : e.data.open); });
 
-// ＋ Add a chore: your family's own, in the house, the kitchen or with the dogs.
+// ✎ Edit chores: remove any chore (built-in or your own) from the buttons, bring one back, or
+// add your own to the dogs or the house. What's already logged always keeps its points.
 function choresSheet() {
-  const mine = ownChores().filter((c) => !c.gone);
-  const SECT = { house: '🏠 House', kitchen: '👩‍🍳 Kitchen', dogs: '🐾 Dogs' };
-  openSheet(`<h2>Your chores</h2>
-    ${mine.length ? `<ul class="list">${mine.map((c) => `<li class="row between"><span>${esc(c.icon)} <b>${esc(c.label)}</b> <small class="muted">${SECT[c.section]} · ${c.pts ? `+${c.pts}` : '♡'}</small></span><button type="button" class="linkish small danger" data-act="choredel" data-id="${c.id}">Remove</button></li>`).join('')}</ul>` : '<p class="small muted">Add anything your family shares: watering the plants, paying the bills, bath time for the dogs…</p>'}
+  const mods = fam().modules || [];
+  const SECT = { ...(mods.includes('dogs') ? { dogs: ['🐾 The dogs', DOG_KINDS] } : {}), ...(mods.includes('chores') ? { house: ['🏠 The house', HOUSE_KINDS] } : {}) };
+  const row = (k, on) => { const [ico, label] = careMeta(k); return `<li class="row between"><span>${esc(ico)} <b>${esc(label)}</b> <small class="muted">${ptsOf(k) ? `+${ptsOf(k)}` : '♡'}</small></span>${on ? `<button type="button" class="linkish small danger" data-act="chorehide" data-chorekind="${k}">Remove</button>` : `<button type="button" class="linkish small" data-act="choreshow" data-chorekind="${k}">＋ Bring back</button>`}</li>`; };
+  openSheet(`<h2>✎ Edit chores</h2>
+    ${Object.entries(SECT).map(([sec, [title, base]]) => {
+      const off = base.filter((k) => hiddenChores().includes(k));
+      return `<h3>${title}</h3><ul class="list">${kindsIn(sec, base).map((k) => row(k, true)).join('')}</ul>${off.length ? `<details class="small"><summary class="muted">Removed (${off.length})</summary><ul class="list">${off.map((k) => row(k, false)).join('')}</ul></details>` : ''}`;
+    }).join('')}
+    <h3>＋ Add a chore</h3>
     <form id="choreForm" class="stack">
       <div class="row"><label style="flex:0 0 74px">Emoji<input name="icon" maxlength="4" value="✅" autocomplete="off"></label><label class="grow">Chore<input name="label" maxlength="24" required placeholder="e.g. Water the plants"></label></div>
-      <div class="seg">${Object.entries(SECT).map(([k, l], i) => `<label class="segopt"><input type="radio" name="section" value="${k}" ${i === 0 ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+      <div class="seg">${Object.entries(SECT).map(([k, [l]], i) => `<label class="segopt"><input type="radio" name="section" value="${k}" ${(k === 'house' || Object.keys(SECT).length === 1) && i >= 0 ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
       <label>Points <select name="pts">${[0, 1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === 2 ? 'selected' : ''}>${n ? `+${n}` : '♡ just for love'}</option>`).join('')}</select></label>
       <p class="tiny muted">Points by effort: dishes +1, walks +2, cooking dinner +3, cleaning +4. Removing a chore keeps what's already logged.</p>
       <div class="row end"><button type="button" class="ghost" data-act="close">Done</button><button>＋ Add</button></div>
     </form>`);
 }
-async function saveChores(list) {
-  const r = await api.put(`/families/${state.fid}/chores/custom`, { chores: list.map(({ gone, ...c }) => c) });
+async function saveChores(list, hidden = hiddenChores()) {
+  const r = await api.put(`/families/${state.fid}/chores/custom`, { chores: list.map(({ gone, ...c }) => c), hidden });
   state.family.chores = r.chores;
+  state.family.hiddenChores = r.hidden || [];
 }
 
 function e2eeCard() {
@@ -2246,9 +2257,14 @@ document.addEventListener('click', (e) => {
     case 'games': bingo.game = null; bingo.season = null; return show('bingo');
     case 'watchadd': return watchAddSheet();
     case 'chores': return choresSheet();
-    case 'choredel': {
-      const id = t.dataset.id;
-      return act(async () => { await saveChores(ownChores().filter((c) => !c.gone && c.id !== id)); choresSheet(); renderCare(); toast('Removed — past entries keep their points'); });
+    case 'chorehide': case 'choreshow': {
+      const k = t.dataset.chorekind, show = d.act === 'choreshow';
+      const own = ownChores().filter((c) => !c.gone);
+      return act(async () => {
+        if (k.startsWith('x_')) await saveChores(own.filter((c) => `x_${c.id}` !== k));
+        else await saveChores(own, show ? hiddenChores().filter((x) => x !== k) : [...hiddenChores(), k]);
+        choresSheet(); renderCare(); toast(show ? `${careMeta(k)[0]} ${careMeta(k)[1]} is back` : 'Removed — past entries keep their points');
+      });
     }
     case 'lognew': return momentSheet(state.view === 'calendar' ? {} : { date: isoLocal() });
     case 'momentdel': {
