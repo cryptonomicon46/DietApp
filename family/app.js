@@ -1036,6 +1036,7 @@ const KINDS = {
   lunch: ['🥗', 'Lunch', 'Anything special? (optional)', 'Where?'], coffee: ['☕', 'Coffee', '', 'Where?'],
   walk: ['🚶', 'Walk / hike', '', 'Where?'], workout: ['🏋️', 'Work out together', 'What? e.g. a run', 'Where? (optional)'],
   date: ['🍷', 'Date night', 'Anything special? (optional)', 'Where? (optional)'],
+  drinks: ['🍸', 'Drinks', 'Anything special? (optional)', 'Where?'], event: ['🎟', 'Event', 'Which event?', 'Where? (optional)'],
   outing: ['🧭', 'Outing', '', ''],
   other: ['✨', 'Something else', 'What are you feeling like?', 'Where? (optional)'],
 };
@@ -1072,20 +1073,25 @@ function planWhen(p) {
   return `${new Date(`${p.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}${t}`;
 }
 const planTitle = (p) => `${(KINDS[p.kind] || KINDS.other)[1]}${p.what ? `: ${p.what}` : ''}`;
-function feelSheet(kind = 'dinner') {
+function feelSheet(kind = 'dinner', preset = null) {
   const k = KINDS[kind] || KINDS.other;
   openSheet(`<h2>✨ Suggest a plan</h2><p class="small muted">to ${esc(partnerName())}</p>
     <form id="feelForm" class="stack">
       <div class="kinds radios">${Object.entries(KINDS).filter(([key]) => key !== 'outing').map(([key, [ico, label]]) => `<label><input type="radio" name="kind" value="${key}" ${key === kind ? 'checked' : ''}><span><b>${ico}</b>${esc(label)}</span></label>`).join('')}</div>
       <label class="kwhat" ${k[2] ? '' : 'hidden'}><span>${esc(k[2] || 'What?')}</span><input name="what" maxlength="80"></label>
       <label class="kwhere" ${k[3] ? '' : 'hidden'}><span>${esc(k[3] || 'Where?')}</span><input name="where" maxlength="80"></label>
+      <input type="hidden" name="idea">
       <div class="seg2 radios whens">${Object.entries(WHENS).filter(([key]) => key !== 'today').map(([key, t]) => `<label><input type="radio" name="when" value="${key}" ${key === 'tonight' ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div>
       <label class="kday" hidden>Day<input type="date" name="day" min="${isoLocal()}" value="${isoLocal()}"></label>
       <div class="two"><label>Time (optional)<input type="time" name="time"></label><label>Who<select name="audience"><option value="couple">Just us two</option><option value="family">The whole family</option></select></label></div>
+      <div id="feelPicks" class="feelpicks"></div>
       <label>Note (optional)<input name="note" maxlength="140" placeholder="😊"></label>
       <p class="tiny muted">${esc(partnerName())} answers 🙌 I'm in · 🤔 Maybe · ⏰ Another time in 💞 Us. When you're both in, it goes on the 📅 calendar for both of you. 🔐 Only the people it's for can read it.</p>
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Send to ${esc(partnerName())} 💞</button></div>
     </form>`);
+  feel.cuisine = '';
+  if (preset) { const f = $('#feelForm'); feelFill(preset.idea, preset.show); if (preset.note) f.note.value = preset.note; }
+  renderFeelPicks();
 }
 function noteSheet() {
   openSheet(`<h2>💌 Leave a note</h2><p class="small muted">A post-it only you and ${esc(partnerName())} see.</p>
@@ -1106,6 +1112,7 @@ async function renderToday() {
     (fam().modules || []).includes('dogs') ? api.get(`/families/${state.fid}/care?to=${today}&days=1`).catch(() => null) : null,
     myTrackers(),
     (fam().modules || []).includes('dogs') ? walkWeather().catch(() => null) : null,
+    partnerMember() && !ideas.loaded ? loadIdeas().catch(() => {}) : null,
   ]);
   if (!$('#today')) return;
   const tiles = [];
@@ -1118,7 +1125,7 @@ async function renderToday() {
   }
   if (weather?.pick) tiles.push(tile('🦮', 'Next walk', `${weather.hr(weather.pick.index)}–${weather.hr(weather.pick.index + 1)}`, weather.hot && weather.hot.asphalt >= 125 ? `🔥 pavement hot ~${weather.hr(weather.hot.index)}` : 'pavement cool ✓', 'data-view="pets"'));
   const tonight = us.plans.filter((p) => isUpcoming(p) && p.day === today).sort((a, b) => (b.agreed ? 1 : 0) - (a.agreed ? 1 : 0))[0];
-  tiles.push(tonight ? tile((KINDS[tonight.kind] || KINDS.other)[0], 'Tonight', esc(planTitle(tonight)), tonight.agreed ? 'it\'s a plan 🙌' : 'waiting for an answer', 'data-view="us"') : tile('✨', 'Tonight', 'Nothing yet', 'suggest something', 'data-feel="dinner"'));
+  tiles.push(tonight ? tile((KINDS[tonight.kind] || KINDS.other)[0], 'Tonight', esc(planTitle(tonight)), tonight.agreed ? 'it\'s a plan 🙌' : 'waiting for an answer', 'data-view="us"') : (tonightPick() ? tile('✨', 'Tonight?', esc(tonightPick().title), esc(tonightPick().sub), 'data-tonight="1"') : tile('✨', 'Tonight', 'Nothing yet', 'suggest something', 'data-feel="dinner"')));
   const day = mine?.days?.[today];
   tiles.push(day?.left ? tile('🥗', 'Macros left', `${day.left.p}P · ${day.left.c}C · ${day.left.f}F`, `${Math.max(0, day.left.kcal).toLocaleString()} kcal`, 'data-trackers="1"') : tile('🥗', 'Trackers', 'Today\'s plan', 'open your trackers', 'data-trackers="1"'));
   el.innerHTML = `<div class="row between"><b>☀️ Today · ${new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</b>${weather ? `<span class="small muted">${Math.round(weather.hourly[weather.from].temp)}°</span>` : ''}</div>
@@ -1224,6 +1231,7 @@ function renderUs() {
     ${f.matches.map((m) => `<div class="fy"><span class="fy-i">💞</span><div><b>It's a match: ${esc(m.idea.title)}</b><small>You both 💗 it${m.idea.day ? ` · ${esc(dayText(m.idea.day, m.idea.time))}` : ''}</small>
       <div class="ans"><button type="button" class="small" data-match="${esc(m.t)}">📅 Make it a plan</button></div></div></div>`).join('')}
     ${f.ask.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>${esc(member(x.by)?.name || pName)} suggested ${esc(planTitle(x).toLowerCase().startsWith('date night') ? 'a date night' : planTitle(x))}</b><small>${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}${x.note ? ` · “${esc(x.note)}”` : ''}</small>
+      ${x.idea ? ideaStrip(x) : ''}
       ${x.outing ? `<small class="muted">${x.outing.stops.map((st) => `${STOP_ICON[st.kind] || '📍'} ${esc(hm(st.time))}`).join(' → ')}</small><button type="button" class="linkish small" data-outplan="${x.id}">🧭 See the plan</button>` : ''}
       <div class="ans">${Object.entries(ANSWERS).map(([k, t], i) => `<button type="button" class="${i ? 'ghost' : ''} small" data-answer="${x.id}:${k}">${t}</button>`).join('')}</div></div></div>`).join('')}
     ${f.notes.map((n) => `<div class="fy"><span class="fy-i">💌</span><div><b>New note from ${esc(member(n.by)?.name || pName)}</b><small>“${esc(n.text)}”</small></div><button type="button" class="heart" data-noteheart="${n.id}" aria-label="Heart">${n.hearts?.includes(meId) ? '❤️' : '🤍'}</button></div>`).join('')}
@@ -1242,7 +1250,7 @@ function renderUs() {
     : x.by === meId ? (x.to.map((id) => x.replies?.[id]?.r).find(Boolean) ? `<span class="tag tw">${esc(pName)}: ${esc(ANSWERS[x.to.map((id) => x.replies?.[id]?.r).find(Boolean)].replace(/^\S+ /, '').toLowerCase())}</span>` : `<span class="tag">waiting for ${esc(pName)}</span>`)
       : `<span class="tag">you: ${esc((ANSWERS[x.replies?.[meId]?.r] || '').replace(/^\S+ /, '').toLowerCase())}</span>`);
   $('#usPlansC').innerHTML = `<div class="row between"><b class="us-h">✨ Plans</b><button type="button" class="linkish small" data-act="feel">＋ Suggest</button></div>
-    ${up.length ? up.map((x) => `<div class="planrow" data-plan="${x.id}"><span>${wn(x)[0]} <b>${esc(planTitle(x))}</b> <small class="muted">· ${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}</small>${x.outing ? ` <button type="button" class="linkish small" data-outplan="${x.id}">See plan</button>` : ''}</span>${status(x)}
+    ${up.length ? up.map((x) => `<div class="planrow" data-plan="${x.id}"><span>${wn(x)[0]} <b>${esc(planTitle(x))}</b> <small class="muted">· ${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}</small>${x.outing ? ` <button type="button" class="linkish small" data-outplan="${x.id}">See plan</button>` : ''}${x.agreed && x.idea?.reserve ? ` <a class="linkish small" href="${esc(x.idea.reserve)}" target="_blank" rel="noopener">🍽 Reserve</a>` : ''}${x.agreed && x.idea?.kind === 'movie' && x.idea.url ? ` <a class="linkish small" href="${esc(x.idea.url)}" target="_blank" rel="noopener">🎟 Book seats</a>` : ''}</span>${status(x)}
       ${x.by === meId && !x.agreed ? `<span class="planacts"><button type="button" class="linkish small" data-planmove="${x.id}">Another day</button> · <button type="button" class="linkish small" data-plandel="${x.id}">Cancel</button></span>` : ''}</div>`).join('')
       : `<p class="small muted">Nothing planned. <button type="button" class="linkish" data-act="feel">Suggest something for this weekend ✨</button></p>`}`;
   // 2-2-2-2
@@ -1330,11 +1338,26 @@ function ideasSheet() {
       ${ideaMeta(x) ? `<p class="small">${ideaMeta(x)}</p>` : ''}${scoreLine(x) ? `<p class="small"><b>${scoreLine(x)}</b> <span class="tiny muted">critics · audiences</span></p>` : ''}
       ${x.why ? `<p class="small muted">${esc(x.why)}</p>` : ''}${times}
       ${links ? `<div class="row wrap">${links}</div>` : ''}
+      <button type="button" class="linkish small" data-ideasuggest="${esc(x.id)}">✨ Suggest it to ${esc(partnerName())} now</button>
       <div class="deckbtns"><button type="button" class="ghost" data-idea="${esc(x.id)}:pass">✕ Not for us</button><button type="button" class="ghost" data-idea="${esc(x.id)}:later">⏭ Later</button>${picked(x) ? `<button type="button" data-idea="${esc(x.id)}:unpick">💗 Picked</button>` : `<button type="button" class="hot" data-idea="${esc(x.id)}:pick">💗 I'd love this</button>`}</div>
       <p class="tiny muted center">${ideas.i + 1} of ${list.length}${x.src ? ` · ${esc(x.src)}` : ''}</p></article>`
       : ideasEmpty()}
     <p class="tiny muted">🔒 ${esc(partnerName())} can't see what you 💗 — only a match, when you've both picked it.</p>`);
 }
+// ✨ Tonight?: the best thing from the scout for tonight — a showing at least 45 minutes away, else
+// a new place for dinner.
+function tonightPick() {
+  if (!partnerMember() || !ideas.week) return null;
+  const today = isoLocal(), soon = new Date(Date.now() + 45 * 60000).toTimeString().slice(0, 5);
+  const films = ideas.week.ideas.filter((x) => x.kind === 'movie' && !(passed()[x.id] > Date.now())).map((x) => ({ x, show: (x.theatres || []).flatMap((th) => th.times.filter((t) => t.day === today && t.time >= soon).map((t) => ({ ...t, where: th.name })))[0] })).filter((y) => y.show)
+    .sort((a, b) => (b.x.pick ? 1 : 0) - (a.x.pick ? 1 : 0) || (b.x.rank || 0) - (a.x.rank || 0));
+  if (films[0]) return { kind: 'movie', idea: films[0].x, show: films[0].show, title: `${films[0].x.title} ${hm(films[0].show.time)}`, sub: `${scoreLine(films[0].x) || films[0].show.where} · tap to suggest` };
+  const place = ideas.week.ideas.find((x) => x.kind === 'food' && !(passed()[x.id] > Date.now()));
+  return place ? { kind: 'dinner', idea: place, title: place.title, sub: `${place.price ? `${place.price} · ` : ''}dinner? tap to suggest` } : null;
+}
+// A suggested plan from a scout pick: its poster, scores and links, for whoever's answering.
+const ideaStrip = (p) => `<div class="istrip">${p.idea.img ? `<img src="${esc(p.idea.img)}" alt="" loading="lazy">` : ''}<small class="muted">${p.idea.pick ? '<span class="tag pk">Critics\' pick</span> ' : ''}${scoreLine(p.idea) || esc(p.idea.why || '')}${p.idea.format ? ` · ${esc(p.idea.format)}` : ''}
+  ${p.idea.reserve ? ` · <a href="${esc(p.idea.reserve)}" target="_blank" rel="noopener">OpenTable</a>` : ''}${p.idea.url ? ` · <a href="${esc(p.idea.url)}" target="_blank" rel="noopener">${p.idea.kind === 'movie' ? 'Showtimes' : 'More'}</a>` : ''}</small></div>`;
 // Why the deck is empty, and what to do about it.
 function ideasEmpty() {
   const w = ideas.week, tab = ideas.tab, label = ideas.I.TABS[tab].replace(/^\S+ /, '').toLowerCase();
@@ -1537,6 +1560,80 @@ function outingSave() {
 const outingNotes = (o) => [...o.getting.map((g) => `${MODE_ICON[g.mode] || '🚌'} ${g.depart ? `${hm(g.depart)} ` : ''}${g.text}`),
   ...o.stops.map((x) => `${hm(x.time)} ${STOP_ICON[x.kind] || '📍'} ${x.name}${x.reserve ? ` — ${x.reserve}` : ''}`), o.back ? `↩︎ ${o.back}` : '', '🧭 planned in Us'].filter(Boolean).join('\n');
 function renderOutingCard() { const el = $('#usOutC'); if (el) el.innerHTML = outingCard(); }
+
+// ---------- ✨ the scout inside Suggest: picks for the kind, day and time you chose ----------
+const CUISINE_WORDS = { sushi: ['sushi', 'japanese', 'omakase', 'izakaya'], thai: ['thai'], indian: ['indian', 'curry'], tapas: ['tapas', 'spanish', 'basque'], italian: ['italian', 'pasta', 'trattoria'], mexican: ['mexican', 'taco', 'taqueria'], american: ['american', 'burger', 'bbq', 'steak', 'diner'], chinese: ['chinese', 'dim sum', 'dumpling', 'sichuan'], korean: ['korean'], vietnamese: ['vietnamese', 'pho'], mediterranean: ['mediterranean', 'greek', 'middle eastern'], seafood: ['seafood', 'oyster', 'fish'], pizza: ['pizza'], french: ['french', 'bistro'], vegetarian: ['vegetarian', 'vegan'] };
+const FOOD_KINDS = ['dinner', 'lunch', 'brunch', 'drinks', 'date'];
+const feel = { picks: [], cuisine: '', found: {} };
+// The day the form is set to ("weekend" = Saturday and Sunday).
+function feelDays(f) {
+  const when = f.when.value, today = isoLocal();
+  if (when === 'date') return [f.day.value || today];
+  if (when === 'tomorrow') return [shiftLocal(today, 1)];
+  if (when === 'weekend') { const sat = planDayOf('weekend', today); return [sat, shiftLocal(sat, 1)]; }
+  return [today];
+}
+const cuisineOf = (x, c) => !c || (CUISINE_WORDS[c] || [c]).some((w) => `${x.title} ${(x.tags || []).join(' ')} ${x.why || ''}`.toLowerCase().includes(w));
+async function renderFeelPicks() {
+  const f = $('#feelForm'), el = $('#feelPicks');
+  if (!f || !el) return;
+  if (!ideas.loaded) { el.innerHTML = '<div class="skeleton line"></div>'; await loadIdeas().catch(() => {}); if (!$('#feelPicks')) return; }
+  const kind = f.kind.value, days = feelDays(f), time = f.time.value, now = new Date();
+  const later = (d, t) => d > isoLocal() || `${d}T${t}` > `${isoLocal()}T${now.toTimeString().slice(0, 5)}`;
+  const week = ideas.week?.ideas || [];
+  feel.picks = [];
+  let html = '';
+  if (kind === 'movie') {
+    const films = week.filter((x) => x.kind === 'movie').map((x) => ({ ...x, shows: (x.theatres || []).flatMap((th) => th.times.filter((s) => days.includes(s.day) && later(s.day, s.time)).map((s) => ({ ...s, where: th.name }))) }))
+      .sort((a, b) => (b.shows.length ? 1 : 0) - (a.shows.length ? 1 : 0) || (b.pick ? 1 : 0) - (a.pick ? 1 : 0) || (b.rank || 0) - (a.rank || 0)).slice(0, 6);
+    feel.picks = films;
+    html = films.length ? `<div class="grp">🍿 Playing ${esc(days.length > 1 ? 'this weekend' : dayText(days[0]).replace(/ ·.*/, ''))} near you</div>${films.map((x, i) => `<div class="fpick"><span class="fp-i">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : '🎬'}</span><div class="grow"><b>${esc(x.title)}</b>${x.pick ? ' <span class="tag pk">Critics\' pick</span>' : ''}<small class="muted">${scoreLine(x)}${x.why ? ` · ${esc(x.why)}` : ''}</small>
+        <div class="stimes">${x.shows.slice(0, 6).map((s, j) => `<button type="button" class="st" data-feelshow="${i}:${j}">${esc(days.length > 1 ? dayText(s.day, s.time).replace(/, \w+ \d+/, '') : hm(s.time))}${s.format ? ` ${esc(s.format)}` : ''} <small>${esc(s.where.split(/[ ,]/)[0])}</small></button>`).join('') || `<button type="button" class="st" data-feelpick="${i}">Pick it</button> <a class="tiny" href="${esc(x.url)}" target="_blank" rel="noopener">Showtimes on Fandango</a>`}</div></div></div>`).join('')}`
+      : `<p class="tiny muted">${ideas.week ? 'No movies from the scout this week.' : 'Movie picks arrive Wednesday mornings.'} Type one above.</p>`;
+  } else if (FOOD_KINDS.includes(kind)) {
+    const places = week.filter((x) => x.kind === 'food' && cuisineOf(x, feel.cuisine));
+    const found = feel.found[`${feel.cuisine}|${days[0]}|${time}`] || [];
+    const again = (ideas.I?.againIdeas(calm.rhythm || []) || []).map((x) => ({ ...x, kind: 'again', where: x.title.replace(/^Back to /, '') }));
+    feel.picks = [...found, ...places.slice(0, 5), ...again.slice(0, 3)];
+    const row = (x, i) => `<div class="fpick"><span class="fp-i">${x.kind === 'again' ? '🔁' : '🍽'}</span><div class="grow"><b>${esc(x.kind === 'again' ? x.where : x.title || x.name)}</b>${x.opened ? ' <span class="tag tg">New</span>' : ''}<small class="muted">${esc([x.price, x.where && x.kind !== 'again' ? x.where : '', x.why].filter(Boolean).join(' · '))}</small></div>
+      <button type="button" class="ghost small" data-feelpick="${i}">Pick</button></div>`;
+    html = `<div class="rchips cuis">${[['', 'Any'], ...CUISINES.slice(0, 8)].map(([v, l]) => `<button type="button" class="chip ${feel.cuisine === v ? 'on' : ''}" data-feelcuisine="${v}">${l}</button>`).join('')}</div>
+      ${feel.picks.length ? `<div class="grp">${kind === 'drinks' ? '🍸' : '🍽'} For ${days[0] === isoLocal() ? `tonight${time ? ` · ${esc(hm(time))}` : ''}` : esc(dayText(days[0], time))} near you</div>${feel.picks.map(row).join('')}` : ''}
+      ${feel.cuisine && !found.length ? `<button type="button" class="linkish small" data-feelfind="1">🔎 Find ${esc(feel.cuisine)} places for ${esc(dayText(days[0], time || '19:00').replace(/^\w+, /, ''))}</button>` : ''}
+      <div class="fpick"><span class="fp-i">🧭</span><div class="grow"><b>Somewhere further?</b><small class="muted">Plan an evening in SF, Oakland or Marin</small></div><button type="button" class="ghost small" data-act="outing">Outing ›</button></div>`;
+  } else if (['walk', 'coffee', 'workout', 'other'].includes(kind)) {
+    const sub = { walk: ['active', 'out'], workout: ['active'], coffee: ['food', 'out'], other: ['out', 'home', 'food', 'active'] }[kind];
+    const evs = kind === 'other' ? week.filter((x) => x.kind === 'event' && days.includes(x.day)).slice(0, 3) : [];
+    feel.picks = [...evs, ...(ideas.I?.STARTERS || []).filter((x) => sub.includes(x.sub)).sort(() => Math.random() - 0.5).slice(0, 4)];
+    html = feel.picks.length ? `<div class="grp">💡 Ideas</div>${feel.picks.map((x, i) => `<div class="fpick"><span class="fp-i">${x.icon || '🎟'}</span><div class="grow"><b>${esc(x.title)}</b><small class="muted">${esc(x.day ? ideaMeta(x).replace(/&amp;/g, '&') : x.why || '')}</small></div><button type="button" class="ghost small" data-feelpick="${i}">Pick</button></div>`).join('')}` : '';
+  }
+  el.innerHTML = html;
+}
+// A pick fills in the form (and remembers the idea, so the plan shows its poster, scores and links).
+function feelFill(x, show) {
+  const f = $('#feelForm');
+  const k = f.kind.value;
+  const name = x.kind === 'again' ? x.where : x.title || x.name;
+  const whatShown = !f.querySelector('.kwhat').hidden;
+  if (whatShown && !FOOD_KINDS.includes(k)) f.what.value = name; else f.where.value = name;
+  if (k === 'movie' && show) f.where.value = show.where;
+  if (x.where && k === 'other') f.where.value = x.where;
+  const day = show?.day || x.day;
+  if (day && day !== isoLocal()) { f.querySelector(`[name=when][value=date]`).checked = true; f.day.value = day; f.querySelector('.kday').hidden = false; }
+  if (show?.time || x.time) f.time.value = show?.time || x.time;
+  f.idea.value = JSON.stringify({ id: x.id, kind: x.kind, img: x.img || '', scores: x.scores || null, pick: !!x.pick, url: x.url || '', reserve: x.reserve ? x.reserve.replace(/dateTime=[^&]+/, `dateTime=${f.day.value || isoLocal()}T${encodeURIComponent(f.time.value || '19:30')}`) : '', why: x.why || '', format: show?.format || '' });
+  f.querySelectorAll('.fpick.on').forEach((n) => n.classList.remove('on'));
+  toast(`✨ ${name}${show ? ` · ${hm(show.time)}` : ''}`);
+  f.querySelector('button:not(.ghost):not([type=button])')?.scrollIntoView({ block: 'nearest' });
+}
+async function feelFind() {
+  const f = $('#feelForm'), days = feelDays(f), time = f.time.value || '19:00';
+  const key = `${feel.cuisine}|${days[0]}|${f.time.value}`;
+  const b = $('[data-feelfind]'); if (b) { b.disabled = true; b.textContent = '🔎 Looking… (about 20 seconds)'; }
+  const r = await api.post(`/families/${state.fid}/outing/swap`, { area: ideas.settings?.label || 'San Jose', day: days[0], time, kind: f.kind.value === 'drinks' ? 'drinks' : 'dinner', cuisine: feel.cuisine }).catch((err) => { toast(err.message); return null; });
+  if (r) feel.found[key] = r.options.map((x) => ({ ...x, title: x.name, opened: '' }));
+  renderFeelPicks();
+}
 
 // Bringing over the trackers' "Feeling like" plans, answers and notes (once per family, each
 // person their own, locked before they're sent).
@@ -2513,6 +2610,12 @@ document.addEventListener('click', (e) => {
   if (d.feeddel) return act(async () => { await saveFeeds(calm.feeds.filter((f) => f.by === fam().me && f.id !== d.feeddel)); await loadCal(); renderCal(); });
   if (d.feel) return feelSheet(d.feel);
   if (d.trackers) { location.href = '../'; return; }
+  if (d.tonight) { const t = tonightPick(); return t && feelSheet(t.kind, { idea: t.idea, show: t.show }); }
+  if (d.ideasuggest) { const x = ideaById(d.ideasuggest); if (!x) return; const kind = x.kind === 'movie' ? 'movie' : x.kind === 'food' ? 'dinner' : 'other'; const show = x.theatres?.flatMap((th) => th.times.map((t) => ({ ...t, where: th.name }))).find((t) => t.day >= isoLocal()); return feelSheet(kind, { idea: x, show }); }
+  if (d.feelshow) { const [i, j] = d.feelshow.split(':').map(Number); const x = feel.picks[i]; return x && feelFill(x, x.shows[j]); }
+  if (d.feelpick != null) { const x = feel.picks[+d.feelpick]; return x && feelFill(x); }
+  if (d.feelcuisine != null) { feel.cuisine = d.feelcuisine; return renderFeelPicks(); }
+  if (d.feelfind) return act(feelFind);
   if (d.outplace) return outingAsk(d.outplace);
   if (d.outfill) { const i = $('#outForm [name=text]'); i.value = d.outfill; return i.focus(); }
   if (d.outsaved != null) { outing.cur = savedOutings()[+d.outsaved]; outing.tab = 'plan'; outing.plan = null; return outing.cur && outingView(); }
@@ -2811,10 +2914,12 @@ document.addEventListener('change', async (e) => {
     const w = t.form.querySelector('.kwhat'), h = t.form.querySelector('.kwhere');
     w.hidden = !k[2]; w.querySelector('span').textContent = k[2] || 'What?';
     h.hidden = !k[3]; h.querySelector('span').textContent = k[3] || 'Where?';
-    return;
+    t.form.idea.value = '';
+    return renderFeelPicks();
   }
   if (t.form?.id === 'outForm' && t.name === 'day') { const pd = t.form.querySelector('[name=pickday]'); pd.hidden = t.value !== 'pick'; if (!pd.hidden) pd.focus(); return; }
-  if (t.form?.id === 'feelForm' && t.name === 'when') { t.form.querySelector('.kday').hidden = t.value !== 'date'; return; }
+  if (t.form?.id === 'feelForm' && t.name === 'when') { t.form.querySelector('.kday').hidden = t.value !== 'date'; return renderFeelPicks(); }
+  if (t.form?.id === 'feelForm' && (t.name === 'day' || t.name === 'time')) return renderFeelPicks();
   if (t.name === 'type' && t.form?.id === 'apptForm') { t.form.querySelector('.vaxonly').hidden = t.value !== 'vaccine'; return; }
   if (t.name === 'bingofile' && t.files?.[0]) {
     const text = await t.files[0].text();
@@ -2955,7 +3060,8 @@ document.addEventListener('submit', (e) => {
     if (k[3] && !k[3].includes('optional') && !v.where.trim()) return toast(k[3]);
     return act(async () => {
       const day = planDayOf(v.when, isoLocal(), v.day);
-      const body = await lock({ kind: v.kind, what: v.what.trim(), where: v.where.trim(), when: v.when, time: v.time, note: v.note.trim() });
+      let idea = null; try { idea = v.idea ? JSON.parse(v.idea) : null; } catch { /* typed by hand */ }
+      const body = await lock({ kind: v.kind, what: v.what.trim(), where: v.where.trim(), when: v.when, time: v.time, note: v.note.trim(), ...(idea ? { idea } : {}) });
       await api.post(`/families/${state.fid}/us/plans`, { day, weekend: v.when === 'weekend', audience: v.audience, body });
       closeSheet(); await usChanged(); toast(`💌 Sent to ${v.audience === 'family' ? 'the family' : partnerName()}`);
     });

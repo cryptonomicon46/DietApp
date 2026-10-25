@@ -578,3 +578,20 @@ button:disabled { opacity: .7; cursor: default; }
 .tips { margin: 6px 0 10px; padding-left: 18px; } .tips li { margin: 2px 0; }
 button.hot.grow { background: var(--like); color: #fff; }
 .tag.pk { background: #ffe3ec; color: #b0164b; font-size: .68rem; vertical-align: middle; }
+
+/* ✨ Picks inside Suggest */
+.feelpicks:empty { display: none; }
+.fpick { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-top: 1px solid var(--line); }
+.fpick .grow { min-width: 0; } .fpick small { display: block; }
+.fp-i { flex: none; width: 36px; height: 48px; border-radius: 8px; background: var(--bg); display: grid; place-items: center; font-size: 1.2rem; overflow: hidden; }
+.fp-i img { width: 100%; height: 100%; object-fit: cover; }
+.stimes { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; align-items: center; }
+.st { background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 9px; padding: 4px 8px; font-size: .76rem; font-weight: 700; }
+.st small { font-weight: 500; color: var(--muted); }
+.cuis { flex-wrap: nowrap; overflow-x: auto; } .cuis .chip { flex: none; }
+.istrip { display: flex; gap: 8px; align-items: center; margin: 4px 0; } .istrip img { width: 30px; height: 44px; object-fit: cover; border-radius: 5px; }
+.tile[data-tonight] { border-color: #f3c1cf; background: #fff6f8; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .tile[data-tonight] { background: #2e1d24; border-color: #5a2e3e; } }
+:root[data-theme=dark] .tile[data-tonight] { background: #2e1d24; border-color: #5a2e3e; }
+#feelForm > *, .feelpicks { min-width: 0; max-width: 100%; } .feelpicks { overflow: hidden; }
+#feelForm .kinds.radios { grid-template-columns: repeat(4, 1fr); } #feelForm .kinds.radios span { font-size: .68rem; padding: 6px 2px; }
