@@ -66,10 +66,12 @@ export function againIdeas(rhythm = []) {
 
 // The deck: past days and passed ideas out; dated things soonest first; then the tabs taking
 // turns so "All" isn't ten concerts in a row.
-export function deck({ week, rhythm, passed = {}, tab = 'all', today, now = Date.now() }) {
-  const live = (x) => !(passed[x.id] > now) && (!x.day || x.day >= today);
+export function deck({ week, rhythm, passed = {}, tab = 'all', today, now = Date.now(), taste = null }) {
+  const live = (x) => !(passed[x.id] > now) && (!x.day || x.day >= today) && !(taste && fit(x, taste).hide);
+  // Your taste nudges the order inside each kind (a stable sort keeps the scout's order on ties).
+  const byFit = (l) => (taste?.n ? l.map((x, i) => [x, fit(x, taste).score, i]).sort((a, b) => b[1] - a[1] || a[2] - b[2]).map(([x]) => x) : l);
   const scouted = (week?.ideas || []).filter(live);
-  const byKind = (k) => scouted.filter((x) => x.kind === k).sort((a, b) => (k === 'movie' ? (b.pick ? 1 : 0) - (a.pick ? 1 : 0) || (b.rank || 0) - (a.rank || 0) : (a.day || '9').localeCompare(b.day || '9')));
+  const byKind = (k) => byFit(scouted.filter((x) => x.kind === k).sort((a, b) => (k === 'movie' ? (b.pick ? 1 : 0) - (a.pick ? 1 : 0) || (b.rank || 0) - (a.rank || 0) : (a.day || '9').localeCompare(b.day || '9'))));
   const starters = [...againIdeas(rhythm), ...STARTERS].filter(live);
   if (tab === 'starter') return starters;
   if (tab !== 'all') return byKind(tab);
@@ -81,3 +83,53 @@ export function deck({ week, rhythm, passed = {}, tab = 'all', today, now = Date
 
 // What a pick carries (locked before it's sent): enough to show the match on both phones.
 export const pickBox = (x) => ({ id: x.id, kind: x.kind, icon: x.icon || '', title: x.title, day: x.day || '', time: x.time || '', where: x.where || '', url: x.url || '', reserve: x.reserve || '', img: x.img || '' });
+
+// ---------- ⭐ ratings → your taste ----------
+// A rating: { id, at, date, plan, what, overall: 1 😕 | 2 🙂 | 3 😍, stops: [{ name, kind, tags, price, r: -1 👎 | 1 👍 | 2 ❤️ }], tags: [...] }.
+export const CUISINE_WORDS = { sushi: ['sushi', 'japanese', 'omakase', 'izakaya'], thai: ['thai'], indian: ['indian', 'curry'], tapas: ['tapas', 'spanish', 'basque'], italian: ['italian', 'pasta', 'trattoria'], mexican: ['mexican', 'taco', 'taqueria'], american: ['american', 'burger', 'bbq', 'steak', 'diner'], chinese: ['chinese', 'dim sum', 'dumpling', 'sichuan'], korean: ['korean'], vietnamese: ['vietnamese', 'pho'], mediterranean: ['mediterranean', 'greek', 'middle eastern'], seafood: ['seafood', 'oyster', 'fish'], pizza: ['pizza'], french: ['french', 'bistro'], vegetarian: ['vegetarian', 'vegan'] };
+export const RATE_TAGS = { food: '😋 Great food', cozy: '🕯 Cozy', fun: '🎉 Fun', again: '🔁 Would go again', loud: '🔊 Too loud', pricey: '💸 Pricey', wait: '⏳ Long wait', far: '🚗 Too far' };
+const text = (x) => `${x.name || x.title || ''} ${(x.tags || []).join(' ')} ${x.why || ''} ${x.kind || ''}`.toLowerCase();
+export const cuisinesOf = (x) => Object.keys(CUISINE_WORDS).filter((c) => CUISINE_WORDS[c].some((w) => text(x).includes(w)));
+const genresOf = (x) => (x.kind === 'movie' ? (x.tags || []).filter((t) => t !== 'movie') : []);
+const placeKey = (n) => String(n || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+export function tasteOf(ratings = []) {
+  const t = { cuisines: {}, genres: {}, price: {}, places: {}, names: {}, tags: {}, n: 0 };
+  const add = (o, k, v) => { if (k) o[k] = (o[k] || 0) + v; };
+  for (const r of ratings) {
+    if (!r || r.skip) continue;
+    t.n++;
+    const base = r.overall === 3 ? 2 : r.overall === 1 ? -2 : r.overall === 2 ? 1 : 0;
+    for (const tag of r.tags || []) add(t.tags, tag, 1);
+    const stops = r.stops?.length ? r.stops : [];
+    for (const s of stops) {
+      const v = s.r === 2 ? 2 : s.r === 1 ? 1 : s.r === -1 ? -2 : base;
+      for (const c of cuisinesOf(s)) add(t.cuisines, c, v);
+      for (const g of genresOf(s)) add(t.genres, g, v);
+      if (s.price) add(t.price, s.price, v > 0 ? 1 : -1);
+      add(t.places, placeKey(s.name), v); t.names[placeKey(s.name)] = s.name;
+    }
+  }
+  return t;
+}
+// How much an idea fits your taste, and why (for the "Because you ❤️'d sushi" line).
+export function fit(x, t) {
+  if (!t?.n) return { score: 0, why: '' };
+  const place = t.places[placeKey(x.title || x.name)] || 0;
+  if (place <= -2) return { score: -99, why: '', hide: true };
+  let score = place * 1.5, why = place >= 2 ? 'You loved it' : '';
+  for (const c of cuisinesOf(x)) { score += t.cuisines[c] || 0; if (!why && (t.cuisines[c] || 0) >= 2) why = `Because you ❤️ ${c}`; }
+  for (const g of genresOf(x)) { score += (t.genres[g] || 0) * 0.7; if (!why && (t.genres[g] || 0) >= 2) why = `You like ${g}`; }
+  if (x.price && t.price[x.price]) score += t.price[x.price] * 0.5;
+  if (x.price === '$$$$' && (t.tags.pricey || 0) >= 2) score -= 2;
+  return { score, why };
+}
+// The line an outing request can carry (you can switch it off): likes, dislikes, no names of people.
+export function tasteLine(t) {
+  if (!t?.n) return '';
+  const top = (o, sign) => Object.entries(o).filter(([, v]) => (sign > 0 ? v >= 2 : v <= -2)).sort((a, b) => sign * (b[1] - a[1])).slice(0, 3).map(([k]) => k);
+  const loved = top(t.places, 1), skip = top(t.places, -1), like = top(t.cuisines, 1), nope = top(t.cuisines, -1);
+  const price = Object.entries(t.price).filter(([, v]) => v > 0).map(([k]) => k).sort();
+  const avoid = [['loud', 'loud places'], ['wait', 'long waits'], ['far', 'long drives'], ['pricey', 'very expensive places']].filter(([k]) => (t.tags[k] || 0) >= 2).map(([, l]) => l);
+  return [like.length && `They love ${like.join(' and ')}`, nope.length && `not keen on ${nope.join(' or ')}`, price.length && `usually ${price[0]}${price.length > 1 ? `–${price[price.length - 1]}` : ''}`,
+    avoid.length && `avoid ${avoid.join(', ')}`, loved.length && `they loved ${loved.map((k) => t.names[k]).join(', ')}`, skip.length && `skip ${skip.map((k) => t.names[k]).join(', ')}`].filter(Boolean).join('; ').slice(0, 300);
+}

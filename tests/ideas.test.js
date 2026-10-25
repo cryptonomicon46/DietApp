@@ -39,3 +39,25 @@ test('pick tokens: the same for both of you, different in another family, nothin
   assert.notEqual(await ideaToken(null, 'f1', 'mv1'), await ideaToken(null, 'f2', 'mv1'));
   assert.deepEqual(Object.keys(pickBox(week.ideas[4])).sort(), ['day', 'icon', 'id', 'img', 'kind', 'reserve', 'time', 'title', 'url', 'where']);
 });
+
+test('ratings become a taste: what fits, why, what to hide, and the line an outing can carry', async () => {
+  const { tasteOf, fit, tasteLine } = await import('../family/ideas.js');
+  const t = tasteOf([
+    { overall: 3, stops: [{ name: 'Omakase counter', kind: 'dinner', tags: ['sushi'], price: '$$$', r: 2 }], tags: ['food'] },
+    { overall: 1, stops: [{ name: 'Loud Tapas', kind: 'dinner', tags: ['tapas'], price: '$$', r: -1 }], tags: ['loud', 'wait'] },
+    { overall: 2, stops: [{ name: 'Another Sushi', kind: 'dinner', tags: ['japanese'], r: 1 }], tags: ['loud', 'wait'] },
+    { skip: true },
+  ]);
+  assert.equal(t.n, 3);
+  const sushi = fit({ kind: 'food', title: 'New sushi bar', tags: ['food', 'sushi'], price: '$$$' }, t);
+  const tapas = fit({ kind: 'food', title: 'Tapas place', tags: ['tapas'] }, t);
+  assert.ok(sushi.score > 0 && tapas.score < 0);
+  assert.equal(sushi.why, 'Because you ❤️ sushi');
+  assert.ok(fit({ kind: 'food', title: 'Loud Tapas' }, t).hide, "a place you didn't like is hidden");
+  const line = tasteLine(t);
+  assert.match(line, /love sushi/);
+  assert.match(line, /not keen on tapas/);
+  assert.match(line, /avoid loud places, long waits/);
+  assert.match(line, /loved Omakase counter/);
+  assert.equal(tasteLine(tasteOf([])), '');
+});

@@ -595,3 +595,13 @@ button.hot.grow { background: var(--like); color: #fff; }
 :root[data-theme=dark] .tile[data-tonight] { background: #2e1d24; border-color: #5a2e3e; }
 #feelForm > *, .feelpicks { min-width: 0; max-width: 100%; } .feelpicks { overflow: hidden; }
 #feelForm .kinds.radios { grid-template-columns: repeat(4, 1fr); } #feelForm .kinds.radios span { font-size: .68rem; padding: 6px 2px; }
+
+/* ⭐ Ratings */
+.faces.radios { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; } .faces label { display: block; } .faces input, .thumbs input { position: absolute; opacity: 0; pointer-events: none; }
+.faces span { display: grid; justify-items: center; border: 1px solid var(--line); border-radius: 14px; padding: 8px 4px; font-size: .78rem; font-weight: 600; background: var(--card); cursor: pointer; } .faces b { font-size: 1.7rem; }
+.faces input:checked + span { border-color: var(--like); background: #ffe3ec; color: #1d2420; }
+.rstop { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); } .rstop > span:first-child { min-width: 0; }
+.thumbs { display: flex; gap: 4px; flex: none; } .thumbs span { display: block; border: 1px solid var(--line); border-radius: 10px; padding: 4px 8px; font-size: 1.05rem; cursor: pointer; background: var(--card); }
+.thumbs input:checked + span { border-color: var(--like); background: #ffe3ec; }
+.fitwhy { display: block; color: var(--like); font-weight: 600; font-size: .74rem; }
+.switch-row small { display: block; font-weight: 400; }

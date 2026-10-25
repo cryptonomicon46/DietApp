@@ -1190,7 +1190,7 @@ function forYou() {
   const meId = fam().me, seen = +(LS.get(usSeenKey()) || 0);
   const ask = us.plans.filter((p) => isUpcoming(p) && p.by !== meId && p.to?.includes(meId) && !p.replies?.[meId]);
   const notes = us.notes.filter((n) => n.by !== meId && n.at > seen);
-  const after = us.plans.filter((p) => p.agreed && !p.done && !isUpcoming(p) && p.day >= shiftLocal(isoLocal(), -7));
+  const after = us.plans.filter((p) => p.agreed && !p.done && !isUpcoming(p) && p.day >= shiftLocal(isoLocal(), -7) && !ratedByMe(p.id));
   const matches = ideas.matches || [];
   return { ask, notes, after, matches, count: ask.length + notes.length + matches.length };
 }
@@ -1235,8 +1235,8 @@ function renderUs() {
       ${x.outing ? `<small class="muted">${x.outing.stops.map((st) => `${STOP_ICON[st.kind] || '📍'} ${esc(hm(st.time))}`).join(' → ')}</small><button type="button" class="linkish small" data-outplan="${x.id}">🧭 See the plan</button>` : ''}
       <div class="ans">${Object.entries(ANSWERS).map(([k, t], i) => `<button type="button" class="${i ? 'ghost' : ''} small" data-answer="${x.id}:${k}">${t}</button>`).join('')}</div></div></div>`).join('')}
     ${f.notes.map((n) => `<div class="fy"><span class="fy-i">💌</span><div><b>New note from ${esc(member(n.by)?.name || pName)}</b><small>“${esc(n.text)}”</small></div><button type="button" class="heart" data-noteheart="${n.id}" aria-label="Heart">${n.hearts?.includes(meId) ? '❤️' : '🤍'}</button></div>`).join('')}
-    ${f.after.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>How was ${esc(planTitle(x))}?</b><small>${esc(planWhen(x))}</small>
-      <div class="ans"><button type="button" class="small" data-planlog="${x.id}">❤️ Log it as a date</button><button type="button" class="ghost small" data-plandone="${x.id}">✓ Done</button></div></div></div>`).join('')}</div>` : '';
+    ${f.after.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>How was ${esc(x.outing ? x.outing.title : (FOOD_KINDS.includes(x.kind) && x.where) || planTitle(x))}?</b><small>${esc(planWhen(x))}</small>
+      <div class="ans"><button type="button" class="small" data-rate="${x.id}">⭐ Rate it</button><button type="button" class="ghost small" data-rateskip="${x.id}">Skip</button></div></div></div>`).join('')}</div>` : '';
   // Notes
   const mine = (n) => n.by === meId;
   $('#usNotesC').innerHTML = `<div class="row between"><b class="us-h">💌 Notes</b><span class="tiny muted">🔒 just you two</span></div>
@@ -1296,7 +1296,7 @@ async function loadIdeas() {
   await Promise.all(all.filter((x) => !ideas.tok[x.id]).map(async (x) => { ideas.tok[x.id] = await ideas.I.ideaToken(fk(), state.fid, x.id); }));
 }
 const ideaById = (id) => [...(ideas.week?.ideas || []), ...(ideas.I?.STARTERS || []), ...(ideas.I?.againIdeas(calm.rhythm || []) || [])].find((x) => x.id === id);
-const ideaDeck = (tab = ideas.tab) => (ideas.I ? ideas.I.deck({ week: ideas.week, rhythm: calm.rhythm || [], passed: passed(), tab, today: isoLocal() }) : []);
+const ideaDeck = (tab = ideas.tab) => (ideas.I ? ideas.I.deck({ week: ideas.week, rhythm: calm.rhythm || [], passed: passed(), tab, today: isoLocal(), taste: taste() }) : []);
 const picked = (x) => ideas.mine.includes(ideas.tok[x.id]);
 const dayText = (d, t) => `${new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}${t ? ` · ${new Date(`2000-01-01T${t}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : ''}`;
 function ideaMeta(x) {
@@ -1336,7 +1336,7 @@ function ideasSheet() {
     ${x ? `<article class="ideacard">${x.img ? `<img class="poster" src="${esc(x.img)}" alt="">` : `<div class="ideabig">${ideaIcon(x)}</div>`}
       <h3>${esc(x.title)}${x.pick ? ' <span class="tag pk">Critics\' pick</span>' : ''}</h3>
       ${ideaMeta(x) ? `<p class="small">${ideaMeta(x)}</p>` : ''}${scoreLine(x) ? `<p class="small"><b>${scoreLine(x)}</b> <span class="tiny muted">critics · audiences</span></p>` : ''}
-      ${x.why ? `<p class="small muted">${esc(x.why)}</p>` : ''}${times}
+      ${x.why ? `<p class="small muted">${esc(x.why)}</p>` : ''}${taste() && ideas.I.fit(x, taste()).why ? `<p class="fitwhy small">${esc(ideas.I.fit(x, taste()).why)}</p>` : ''}${times}
       ${links ? `<div class="row wrap">${links}</div>` : ''}
       <button type="button" class="linkish small" data-ideasuggest="${esc(x.id)}">✨ Suggest it to ${esc(partnerName())} now</button>
       <div class="deckbtns"><button type="button" class="ghost" data-idea="${esc(x.id)}:pass">✕ Not for us</button><button type="button" class="ghost" data-idea="${esc(x.id)}:later">⏭ Later</button>${picked(x) ? `<button type="button" data-idea="${esc(x.id)}:unpick">💗 Picked</button>` : `<button type="button" class="hot" data-idea="${esc(x.id)}:pick">💗 I'd love this</button>`}</div>
@@ -1464,6 +1464,7 @@ function outingAsk(place = '') {
       <div class="grp">When</div><div class="rchips radios chipradios">${days.map(([d, l], i) => `<label><input type="radio" name="day" value="${d}" ${i === (days.length > 2 ? 2 : 0) ? 'checked' : ''}><span class="chip">${l}${l.length < 4 ? ` ${new Date(`${d}T12:00:00`).getDate()}` : ''}</span></label>`).join('')}<label><input type="radio" name="day" value="pick"><span class="chip">Pick…</span></label></div>
       <input type="date" name="pickday" min="${isoLocal()}" hidden>
       ${Object.entries(OUT_CHIPS).map(([g, l]) => `<div class="grp">${g}</div><div class="rchips radios chipradios">${l.map(([v, t]) => `<label><input type="checkbox" name="chip" value="${esc(v)}" ${['dinner', 'walk'].includes(v) ? 'checked' : ''}><span class="chip">${t}</span></label>`).join('')}</div>`).join('')}
+      ${tasteLineNow() ? `<label class="switch-row"><span>💞 Use our taste<small class="muted">“${esc(tasteLineNow())}”</small></span><input type="checkbox" name="usetaste" ${LS.get('fam.useTaste') === '0' ? '' : 'checked'}><i class="switch"></i></label>` : ''}
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>🧭 Plan it</button></div>
       <p class="tiny muted">🔒 Only the place, the day, these choices and your home town go out — never your names or anything else in the app. Takes about a minute.</p>
     </form>`);
@@ -1474,7 +1475,9 @@ async function outingGo(f) {
   if (!day) return toast('Which day?');
   const chips = [...f.querySelectorAll('[name=chip]:checked')].map((x) => x.value);
   openSheet(`<h2>🧭 Planning ${esc(v.text)}…</h2><p class="small muted">Looking up places, what's open ${esc(dayText(day))} and how to get there. About a minute — you can keep this open.</p><div class="skeleton line"></div><div class="skeleton line"></div><div class="skeleton line"></div>`);
-  const r = await api.post(`/families/${state.fid}/outing`, { text: v.text, day, chips }).catch((err) => { openSheet(`<h2>🧭 Hmm</h2><p class="small">${esc(err.message)}</p><div class="row end"><button type="button" data-act="outing">Try again</button></div>`); return null; });
+  LS.set('fam.useTaste', v.usetaste ? '1' : f.querySelector('[name=usetaste]') ? '0' : LS.get('fam.useTaste'));
+  outing.taste = v.usetaste ? tasteLineNow() : '';
+  const r = await api.post(`/families/${state.fid}/outing`, { text: v.text, day, chips, taste: outing.taste }).catch((err) => { openSheet(`<h2>🧭 Hmm</h2><p class="small">${esc(err.message)}</p><div class="row end"><button type="button" data-act="outing">Try again</button></div>`); return null; });
   if (!r) return;
   outing.cur = r.outing; outing.tab = 'plan'; outing.plan = null;
   outingView();
@@ -1545,7 +1548,7 @@ function cuisineSheet(i) {
 async function cuisinePick(i, cuisine) {
   const o = outing.cur, x = o.stops[i];
   openSheet(`<h2>🍽 Finding ${esc(cuisine || 'something else')}…</h2><p class="small muted">Near ${esc(o.area)}, ${esc(hm(x.time))}. Takes 20–30 seconds.</p><div class="skeleton line"></div><div class="skeleton line"></div>`);
-  const r = await api.post(`/families/${state.fid}/outing/swap`, { area: o.area, day: o.day, time: x.time, kind: x.kind, cuisine, avoid: x.name }).catch((err) => { toast(err.message); return null; });
+  const r = await api.post(`/families/${state.fid}/outing/swap`, { area: o.area, day: o.day, time: x.time, kind: x.kind, cuisine, avoid: x.name, taste: outing.taste || '' }).catch((err) => { toast(err.message); return null; });
   if (!r) return outingView();
   o.options.eat = [...r.options.map((y) => ({ ...y, fresh: true })), ...(o.options.eat || []).filter((y) => !y.fresh)].slice(0, 10);
   outing.tab = 'eat'; outing.swapFor = i;
@@ -1591,11 +1594,12 @@ async function renderFeelPicks() {
         <div class="stimes">${x.shows.slice(0, 6).map((s, j) => `<button type="button" class="st" data-feelshow="${i}:${j}">${esc(days.length > 1 ? dayText(s.day, s.time).replace(/, \w+ \d+/, '') : hm(s.time))}${s.format ? ` ${esc(s.format)}` : ''} <small>${esc(s.where.split(/[ ,]/)[0])}</small></button>`).join('') || `<button type="button" class="st" data-feelpick="${i}">Pick it</button> <a class="tiny" href="${esc(x.url)}" target="_blank" rel="noopener">Showtimes on Fandango</a>`}</div></div></div>`).join('')}`
       : `<p class="tiny muted">${ideas.week ? 'No movies from the scout this week.' : 'Movie picks arrive Wednesday mornings.'} Type one above.</p>`;
   } else if (FOOD_KINDS.includes(kind)) {
-    const places = week.filter((x) => x.kind === 'food' && cuisineOf(x, feel.cuisine));
+    const t = taste();
+    const places = week.filter((x) => x.kind === 'food' && cuisineOf(x, feel.cuisine)).map((x) => ({ ...x, fit: t ? ideas.I.fit(x, t) : { score: 0, why: '' } })).filter((x) => !x.fit.hide).sort((a, b) => b.fit.score - a.fit.score);
     const found = feel.found[`${feel.cuisine}|${days[0]}|${time}`] || [];
     const again = (ideas.I?.againIdeas(calm.rhythm || []) || []).map((x) => ({ ...x, kind: 'again', where: x.title.replace(/^Back to /, '') }));
     feel.picks = [...found, ...places.slice(0, 5), ...again.slice(0, 3)];
-    const row = (x, i) => `<div class="fpick"><span class="fp-i">${x.kind === 'again' ? '🔁' : '🍽'}</span><div class="grow"><b>${esc(x.kind === 'again' ? x.where : x.title || x.name)}</b>${x.opened ? ' <span class="tag tg">New</span>' : ''}<small class="muted">${esc([x.price, x.where && x.kind !== 'again' ? x.where : '', x.why].filter(Boolean).join(' · '))}</small></div>
+    const row = (x, i) => `<div class="fpick"><span class="fp-i">${x.kind === 'again' ? '🔁' : '🍽'}</span><div class="grow"><b>${esc(x.kind === 'again' ? x.where : x.title || x.name)}</b>${x.opened ? ' <span class="tag tg">New</span>' : ''}<small class="muted">${esc([x.price, x.where && x.kind !== 'again' ? x.where : '', x.why].filter(Boolean).join(' · '))}</small>${x.fit?.why ? `<small class="fitwhy">${esc(x.fit.why)}</small>` : ''}</div>
       <button type="button" class="ghost small" data-feelpick="${i}">Pick</button></div>`;
     html = `<div class="rchips cuis">${[['', 'Any'], ...CUISINES.slice(0, 8)].map(([v, l]) => `<button type="button" class="chip ${feel.cuisine === v ? 'on' : ''}" data-feelcuisine="${v}">${l}</button>`).join('')}</div>
       ${feel.picks.length ? `<div class="grp">${kind === 'drinks' ? '🍸' : '🍽'} For ${days[0] === isoLocal() ? `tonight${time ? ` · ${esc(hm(time))}` : ''}` : esc(dayText(days[0], time))} near you</div>${feel.picks.map(row).join('')}` : ''}
@@ -1630,9 +1634,52 @@ async function feelFind() {
   const f = $('#feelForm'), days = feelDays(f), time = f.time.value || '19:00';
   const key = `${feel.cuisine}|${days[0]}|${f.time.value}`;
   const b = $('[data-feelfind]'); if (b) { b.disabled = true; b.textContent = '🔎 Looking… (about 20 seconds)'; }
-  const r = await api.post(`/families/${state.fid}/outing/swap`, { area: ideas.settings?.label || 'San Jose', day: days[0], time, kind: f.kind.value === 'drinks' ? 'drinks' : 'dinner', cuisine: feel.cuisine }).catch((err) => { toast(err.message); return null; });
+  const r = await api.post(`/families/${state.fid}/outing/swap`, { area: ideas.settings?.label || 'San Jose', day: days[0], time, kind: f.kind.value === 'drinks' ? 'drinks' : 'dinner', cuisine: feel.cuisine, taste: LS.get('fam.useTaste') === '0' ? '' : tasteLineNow() }).catch((err) => { toast(err.message); return null; });
   if (r) feel.found[key] = r.options.map((x) => ({ ...x, title: x.name, opened: '' }));
   renderFeelPicks();
+}
+
+// ---------- ⭐ How was it? Ratings kept in your own (encrypted) trackers; they shape the picks ----------
+let tasteCache = null;
+const tasteLineNow = () => (ideas.I && taste() ? ideas.I.tasteLine(taste()) : '');
+const taste = () => (ideas.I ? (tasteCache ||= ideas.I.tasteOf(calm.ratings || [])) : null);
+const ratedByMe = (planId) => (calm.myRatings || []).some((r) => r.plan === planId);
+function rateSheet(p) {
+  const k = KINDS[p.kind] || KINDS.other;
+  const stops = p.outing ? p.outing.stops.map((x) => ({ name: x.name, kind: x.kind, price: x.price || '', tags: [x.kind] }))
+    : [{ name: (FOOD_KINDS.includes(p.kind) ? p.where : p.what) || p.what || p.where || planTitle(p), kind: p.kind, price: p.idea?.price || '', tags: [...(p.idea?.tags || []), p.kind] }];
+  const logged = (calm.rhythm || []).some((e) => e.kind === 'date' && e.date === p.day);
+  rateSheet.cur = { p, stops };
+  openSheet(`<div class="row between"><h2>⭐ How was ${esc(p.outing ? p.outing.title : stops[0].name)}?</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <p class="small muted">${esc(planWhen(p))} · it helps the scout pick better for you two</p>
+    <form id="rateForm" class="stack">
+      <div class="faces radios">${[[1, '😕', 'Meh'], [2, '🙂', 'Good'], [3, '😍', 'Loved it']].map(([v, e, l]) => `<label><input type="radio" name="overall" value="${v}" ${v === 2 ? 'checked' : ''}><span><b>${e}</b>${l}</span></label>`).join('')}</div>
+      ${stops.map((x, i) => `<div class="rstop"><span>${STOP_ICON[x.kind] || k[0]} <b>${esc(x.name)}</b></span><span class="thumbs radios">${[[-1, '👎'], [1, '👍'], [2, '❤️']].map(([v, e]) => `<label><input type="radio" name="s${i}" value="${v}"><span>${e}</span></label>`).join('')}</span></div>`).join('')}
+      <div class="rchips radios chipradios">${Object.entries(ideas.I.RATE_TAGS).map(([v, l]) => `<label><input type="checkbox" name="tag" value="${v}"><span class="chip">${l}</span></label>`).join('')}</div>
+      <label class="switch-row"><span>❤️ Log it as a date (2-2-2-2)</span><input type="checkbox" name="log" ${logged ? '' : 'checked'}><i class="switch"></i></label>
+      <div class="row end"><button type="button" class="ghost" data-rateskip="${p.id}">Skip</button><button>Save</button></div>
+      <p class="tiny muted">🔒 Kept in your trackers, end-to-end encrypted — ${esc(partnerName())} sees them if you share your trackers.</p>
+    </form>`);
+}
+async function saveRating(f) {
+  const { p, stops } = rateSheet.cur;
+  const v = new FormData(f);
+  const at = Date.now();
+  const rating = { id: at.toString(36), at, date: p.day, plan: p.id, what: p.outing ? p.outing.title : planTitle(p), overall: +v.get('overall') || 2,
+    stops: stops.map((x, i) => ({ ...x, r: +v.get(`s${i}`) || 0 })), tags: v.getAll('tag') };
+  await saveRhythm((r) => {
+    if (v.get('log')) r.entries.push({ id: at.toString(36) + Math.random().toString(36).slice(2, 5), kind: 'date', date: p.day, at, what: rating.what.replace(/^Date night: ?/, '') || 'Date night', ...(p.where ? { place: p.where } : {}) });
+  }, (data) => { data.taste = { ratings: [...(data.taste?.ratings || []), rating].slice(-200) }; });
+  calm.myRatings = [...(calm.myRatings || []), rating]; calm.ratings = [...(calm.ratings || []), rating]; tasteCache = null;
+  closeSheet(); calm.rhythm = await loadRhythm().catch(() => calm.rhythm); renderUs(); usBadge();
+  toast(rating.overall === 3 ? '😍 Noted — more like this' : rating.overall === 1 ? "😕 Noted — we'll steer clear" : '🙂 Thanks — noted');
+}
+async function skipRating(id) {
+  const p = us.plans.find((x) => x.id === id);
+  if (!p) return;
+  await saveRhythm(() => {}, (data) => { data.taste = { ratings: [...(data.taste?.ratings || []), { id: Date.now().toString(36), plan: id, skip: true, at: Date.now() }].slice(-200) }; });
+  calm.myRatings = [...(calm.myRatings || []), { plan: id, skip: true }];
+  closeSheet(); renderUs(); usBadge();
 }
 
 // Bringing over the trackers' "Feeling like" plans, answers and notes (once per family, each
@@ -1887,6 +1934,9 @@ async function loadRhythm() {
   const partner = us.partner;
   const [mine, theirs] = await Promise.all([myTrackers(), partner ? api.get(`/families/${state.fid}/members/${partner.id}/data`).then(openData).catch(() => null) : null]);
   calm.R = R;
+  calm.myRatings = mine?.taste?.ratings || [];
+  calm.ratings = [...calm.myRatings, ...(theirs && !theirs.locked ? theirs.taste?.ratings || [] : [])];
+  tasteCache = null;
   return R.mergeRhythm([{ person: fam().me, rhythm: mine?.rhythm || {} }, ...(partner && theirs && !theirs.locked ? [{ person: partner.id, rhythm: theirs.rhythm || {} }] : [])]);
 }
 async function rhythmLine() {
@@ -1925,7 +1975,7 @@ async function momentSheet({ id = null, date = calm.day && calm.day <= isoLocal(
 }
 // Your own trackers' rhythm, changed and saved back (sealed). An edit or delete of your
 // partner's moment is recorded as "removed" in yours — the two copies combine that way.
-async function saveRhythm(change) {
+async function saveRhythm(change, changeData = null) {
   mineCache = null;
   const mine = await myTrackers();
   if (mine?.locked) throw new Error('This device needs the family key first');
@@ -1933,6 +1983,7 @@ async function saveRhythm(change) {
   const r = { entries: [...(data.rhythm?.entries || [])], removed: [...(data.rhythm?.removed || [])] };
   change(r);
   data.rhythm = { entries: r.entries.slice(-400), removed: [...new Set(r.removed)].slice(-400) };
+  if (changeData) changeData(data);
   await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData(data) });
   mineCache = null;
 }
@@ -2610,6 +2661,8 @@ document.addEventListener('click', (e) => {
   if (d.feeddel) return act(async () => { await saveFeeds(calm.feeds.filter((f) => f.by === fam().me && f.id !== d.feeddel)); await loadCal(); renderCal(); });
   if (d.feel) return feelSheet(d.feel);
   if (d.trackers) { location.href = '../'; return; }
+  if (d.rate) { const p = us.plans.find((x) => x.id === d.rate); if (!p) return; return act(async () => { ideas.I ||= await import('./ideas.js'); rateSheet(p); }); }
+  if (d.rateskip) return act(() => skipRating(d.rateskip));
   if (d.tonight) { const t = tonightPick(); return t && feelSheet(t.kind, { idea: t.idea, show: t.show }); }
   if (d.ideasuggest) { const x = ideaById(d.ideasuggest); if (!x) return; const kind = x.kind === 'movie' ? 'movie' : x.kind === 'food' ? 'dinner' : 'other'; const show = x.theatres?.flatMap((th) => th.times.map((t) => ({ ...t, where: th.name }))).find((t) => t.day >= isoLocal()); return feelSheet(kind, { idea: x, show }); }
   if (d.feelshow) { const [i, j] = d.feelshow.split(':').map(Number); const x = feel.picks[i]; return x && feelFill(x, x.shows[j]); }
@@ -2956,6 +3009,7 @@ document.addEventListener('submit', (e) => {
     f.text.value = ''; f.querySelector('button').disabled = true;
     return ask(v.text || '');
   }
+  if (f.id === 'rateForm') { e.preventDefault(); return act(() => saveRating(f)); }
   if (f.id === 'outForm') { e.preventDefault(); return act(() => outingGo(f)); }
   if (f.id === 'matchForm') { e.preventDefault(); return act(() => matchToPlan(f.dataset.t, v)); }
   if (f.id === 'ideaSetForm') {

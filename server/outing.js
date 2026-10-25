@@ -11,9 +11,9 @@ export const CUISINES = ['sushi', 'japanese', 'thai', 'indian', 'tapas', 'italia
 export const CHIPS = [...CUISINES, 'dinner', 'drinks', 'coffee', 'brunch', 'lunch', 'walk', 'shops', 'museum', 'music', 'views', 'caltrain', 'bart', 'ferry', 'drive', 'dogs', '$', '$$', '$$$', '$$$$', 'no long waits', 'easy walking', 'kid-friendly'];
 const EAT = ['coffee', 'brunch', 'lunch', 'dinner', 'drinks', 'dessert'];
 
-export function outingPrompt({ text, day, chips, from }) {
+export function outingPrompt({ text, day, chips, from, taste = '' }) {
   return `Plan an outing for a couple who live in ${from}, California.
-They asked: "${text}" on ${day}${chips.length ? `. They'd like: ${chips.join(', ')}` : ''}.
+They asked: "${text}" on ${day}${chips.length ? `. They'd like: ${chips.join(', ')}` : ''}.${taste ? `\nWhat they've liked before (from their own ratings): ${taste}.` : ''}
 
 Search the web for what's good there now: well-reviewed places (new ones are a plus), what's open that day, and how to get there from ${from} (Caltrain, BART, ferry or the drive, with real schedules if you can find them, and where to park). Plan a realistic timeline for that day with travel and walking time between stops; leave room to breathe. Give 2-3 other good options for each meal or drink stop and for things to do.
 
@@ -66,7 +66,7 @@ export async function planOuting(env, db, fam, body, from, now = new Date()) {
   const runs = (await db.get(key)) || [];
   const cap = Math.max(1, +env.OUTING_MAX_RUNS || 20);
   if (runs.filter((x) => !x.swap).length >= cap) return { error: `that's ${cap} outings planned this month — more next month` };
-  const { text: answer, usage } = await askClaude(env, outingPrompt({ text, day, chips, from }), { city: from, maxUses: 8 });
+  const { text: answer, usage } = await askClaude(env, outingPrompt({ text, day, chips, from, taste: clean(body.taste, 300) }), { city: from, maxUses: 8 });
   await db.put(key, [...runs, { at: Date.now(), ...usage }], 62 * 86400);
   const outing = shapeOuting(parseScout(answer), { day, from, text });
   if (!outing) return { error: "Claude couldn't put that one together — try saying it another way" };
@@ -74,9 +74,9 @@ export async function planOuting(env, db, fam, body, from, now = new Date()) {
 }
 
 // ⇄ Swap one stop: 2-3 other places of a cuisine (or kind) near the same spot, for the same time.
-export function swapPrompt({ area, day, time, kind, cuisine, avoid }) {
+export function swapPrompt({ area, day, time, kind, cuisine, avoid, taste = '' }) {
   return `A couple is spending ${day} in ${area}, California. For their ${kind} around ${time}, they'd like ${cuisine ? `${cuisine} food` : `something different from ${avoid}`} instead${avoid ? ` of ${avoid}` : ''}.
-Search the web and suggest 3 well-reviewed places within a short walk of ${area} that are open then.
+Search the web and suggest 3 well-reviewed places within a short walk of ${area} that are open then.${taste ? ` What they've liked before: ${taste}.` : ''}
 Answer with only this JSON: {"options":[{"kind":"${kind}","name":"","why":"one line","where":"street or block","price":"$-$$$$","note":"walk-in / book ahead…","url":"https://… official site","opentable":true|false}]}`;
 }
 export async function swapStop(env, db, fam, body, from, now = new Date()) {
@@ -92,7 +92,7 @@ export async function swapStop(env, db, fam, body, from, now = new Date()) {
   const runs = (await db.get(key)) || [];
   const cap = Math.max(1, +env.OUTING_MAX_RUNS || 20) * 3; // swaps are small: three per outing on average
   if (runs.length >= cap) return { error: 'that\'s a lot of planning this month — more next month' };
-  const { text, usage } = await askClaude(env, swapPrompt({ area, day, time, kind, cuisine, avoid }), { city: from, maxUses: 3, maxTokens: 3000 });
+  const { text, usage } = await askClaude(env, swapPrompt({ area, day, time, kind, cuisine, avoid, taste: clean(body.taste, 300) }), { city: from, maxUses: 3, maxTokens: 3000 });
   await db.put(key, [...runs, { at: Date.now(), swap: true, ...usage }], 62 * 86400);
   const options = shape(parseScout(text));
   return options.length ? { options } : { error: "Couldn't find any — try another cuisine" };
