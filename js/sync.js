@@ -129,12 +129,19 @@ export const sync = {
     if (account.active()) await account.push();
     const s = this.settings();
     if (!this.household()) return;
+    // Nothing changed since the last upload: no write (the free plan allows 1,000 a day).
+    const data = exportProfile(ownerId(), { shared: true });
+    const text = JSON.stringify(data);
+    let h = 2166136261; for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+    const sig = `${s.code}:${ownerId()}:${(h >>> 0).toString(36)}${text.length.toString(36)}`;
+    if (sig === global.get('householdSentSig', '')) return;
     const res = await fetch(`${s.url}/household/${encodeURIComponent(s.code)}/${ownerId()}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ savedAt: Date.now(), data: exportProfile(ownerId(), { shared: true }) }),
+      body: JSON.stringify({ savedAt: Date.now(), data }),
     });
     if (!res.ok) throw new Error(`upload failed (${res.status})`);
+    global.set('householdSentSig', sig);
     global.set('pushedAt', Date.now());
   },
 

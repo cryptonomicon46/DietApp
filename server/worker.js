@@ -55,6 +55,8 @@ export default {
       if (url.pathname.startsWith('/v2/')) {
         if (!env.HOUSEHOLD) return json({ error: 'HOUSEHOLD storage not set up — see server/README.md' }, 501);
         const r = await familyApi(req, env, url.pathname.slice(3), ctx);
+        // 📸 A photo file: locked bytes, the same forever for that id, so phones can keep it.
+        if (r.raw) return new Response(r.raw, { status: 200, headers: { ...cors, 'Content-Type': 'application/octet-stream', 'Cache-Control': 'private, max-age=31536000, immutable' } });
         return json(r.data, r.status);
       }
 

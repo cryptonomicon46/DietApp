@@ -44,6 +44,18 @@ export async function tryOpen(key, v, fallback = null) {
   try { return await open(key, v); } catch { return fallback; }
 }
 
+// Files (photos): bytes in, bytes out (<iv><ciphertext>) — no text conversion, so big photos stay quick.
+export async function sealBytes(key, bytes) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await cryptoKey(key), bytes);
+  const out = new Uint8Array(12 + ct.byteLength);
+  out.set(iv); out.set(new Uint8Array(ct), 12);
+  return out;
+}
+export async function openBytes(key, bytes) {
+  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(0, 12) }, await cryptoKey(key), bytes.slice(12)));
+}
+
 // A key check stored with the family, to tell whether a key on this device is the right one.
 export const CHECK = 'ourpawmily';
 export const makeCheck = (key) => seal(key, CHECK);

@@ -13,6 +13,13 @@ APP_ORIGIN = "https://cryptonomicon46.github.io/DietApp/"
 binding = "HOUSEHOLD"
 id = "PASTE_KV_NAMESPACE_ID_HERE"
 
+# 📸 Post photos (thumbnails and full size, locked on the phones). Create the bucket once with:
+#   npx wrangler r2 bucket create ourpawmily-photos
+# Leave this out and posts keep their photos inside them, as before.
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "ourpawmily-photos"
+
 # Nightly families maintenance check (3:13 am Pacific in summer): repairs half-finished changes
 # and writes a report the maintainer sees in Me › Maintainer. Every 15 minutes: notification
 # reminders (appointments, calendar events, vaccines due).

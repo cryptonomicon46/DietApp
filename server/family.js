@@ -45,6 +45,7 @@ import { REPLIES, NOTE_DAYS, partnerOf, visibleTo, upcoming, agreed, streak } fr
 import { APPT_TYPES, cleanAppt, nextDue, shiftWeeks, startOf, spending } from './appts.js';
 import { parseSquares, makeCard, bingoLines, bingoPrompt, NEED, FREE } from './bingo.js';
 import { EVENTS as PICK_EVENTS, OUTCOMES, locked as pickLocked, score as pickScore, parseCouples } from './picks.js';
+import { blobStore, okPhotoId, photoKey, SIZES, quotaBytes, familyUsage, noteUsage, deletePhoto, deleteFamilyPhotos } from './photos.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
@@ -121,16 +122,21 @@ const memberView = (m, inside) => ({
 
 export async function familyApi(req, env, path, ctx = null) {
   const db = store(env.HOUSEHOLD);
+  db.blobs = blobStore(env); // photo files go with the posts they belong to
   const json = (data, status = 200) => ({ status, data });
   const method = req.method;
-  let body = {};
-  if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
+  let body = {}, bytes = null;
+  // 📸 A photo file (already locked on the phone): raw bytes, not JSON.
+  if (method === 'PUT' && /^\/families\/[a-z0-9]+\/photos\/[a-z0-9]+$/.test(path)) {
+    bytes = new Uint8Array(await req.arrayBuffer());
+    if (bytes.length > SIZES.full) return json({ error: 'that photo is too large' }, 413);
+  } else if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
     const text = await req.text();
     if (text.length > 6_000_000) return json({ error: 'too large' }, 413);
     try { body = text ? JSON.parse(text) : {}; } catch { return json({ error: 'not JSON' }, 400); }
   }
 
-  if (path === '/config') return json({ googleClientId: env.GOOGLE_CLIENT_ID || '', ready: !!env.GOOGLE_CLIENT_ID, supportEmail: env.SUPPORT_EMAIL || '', termsVersion: TERMS_VERSION });
+  if (path === '/config') return json({ googleClientId: env.GOOGLE_CLIENT_ID || '', ready: !!env.GOOGLE_CLIENT_ID, supportEmail: env.SUPPORT_EMAIL || '', termsVersion: TERMS_VERSION, photos: !!blobStore(env) });
 
   // ---- sign in ----
   if (path === '/auth/google' && method === 'POST') {
@@ -316,7 +322,7 @@ export async function familyApi(req, env, path, ctx = null) {
       for (const id of (await db.get(`feed:${f.fid}`)) || []) {
         const p = await db.get(`post:${f.fid}:${id}`);
         if (!p) continue;
-        if (p.by === mine.id) posts.push({ text: p.text, photo: p.photo, at: new Date(p.at).toISOString(), audience: p.audience, likes: p.likes.length, comments: p.comments.length, ...(p.pk ? { pk: p.pk } : {}) });
+        if (p.by === mine.id) posts.push({ text: p.text, photo: p.photo, ...(p.photoId ? { photoId: p.photoId } : {}), at: new Date(p.at).toISOString(), audience: p.audience, likes: p.likes.length, comments: p.comments.length, ...(p.pk ? { pk: p.pk } : {}) });
         for (const c of p.comments) if (c.uid === user.uid) comments.push({ text: c.text, at: new Date(c.at).toISOString(), ...(p.pk ? { pk: p.pk } : {}) });
       }
       out.families.push({ fid: f.fid, name: f.name, role: mine.role, me: memberView(mine, true), myData: (await db.get(`data:${f.fid}:${mine.id}`))?.data || {}, posts, comments,
@@ -1294,6 +1300,34 @@ export async function familyApi(req, env, path, ctx = null) {
     posts.sort((a, b) => b.at - a.at);
     return json({ posts: posts.slice(0, 60) });
   }
+  // ---- 📸 photo files: a thumbnail and the full photo per post, locked on the phone ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/photos(?:\/([a-z0-9]+))?$/);
+  if (m) {
+    const blobs = blobStore(env);
+    if (!blobs) return json({ error: 'photo storage is not set up on the connector yet — see server/README.md' }, 501);
+    const size = url(req).searchParams.get('size') === 'thumb' ? 'thumb' : 'full';
+    let fam = await loadFamily(m[1]);
+    // Friends' families can see the photos on posts shared with them (still locked to them).
+    const viaConnection = !fam && method === 'GET' && m[2] && (await families()).some((f) => (f.connections || []).includes(m[1]));
+    if (!fam && !viaConnection) return json({ error: 'not found' }, 404);
+    if (!m[2] && method === 'GET') return json({ used: await familyUsage(blobs, fam.fid, true), quota: quotaBytes(env) });
+    if (!okPhotoId(m[2])) return json({ error: 'not found' }, 404);
+    const key = photoKey(m[1], m[2], size);
+    if (method === 'GET') {
+      const b = await blobs.get(key);
+      return b ? { status: 200, raw: b } : json({ error: 'not found' }, 404);
+    }
+    if (meIn(fam).relation === 'child' && method === 'DELETE') return json({ error: 'ask a grown-up' }, 403);
+    if (method === 'PUT') {
+      if (!bytes?.length || bytes.length > SIZES[size]) return json({ error: 'that photo is too large' }, 413);
+      if ((await familyUsage(blobs, fam.fid)) + bytes.length > quotaBytes(env)) return json({ error: `${fam.name}'s photo space is full (${Math.round(quotaBytes(env) / 1048576 / 1024 * 10) / 10} GB). Delete some older photo posts to make room.` }, 413);
+      await blobs.put(key, bytes);
+      noteUsage(fam.fid, bytes.length);
+      return json({ ok: true });
+    }
+    if (method === 'DELETE') { await deletePhoto(blobs, fam.fid, m[2]); return json({ ok: true }); }
+    return json({ error: 'not found' }, 404);
+  }
   m = path.match(/^\/families\/([a-z0-9]+)\/posts$/);
   // All of one family's posts, a page at a time (turning on encryption locks the older ones).
   if (m && method === 'GET') {
@@ -1324,7 +1358,9 @@ export async function familyApi(req, env, path, ctx = null) {
       help = { type: HELP[body.help.type] ? body.help.type : 'other', from: day(body.help.from), to: day(body.help.to) || day(body.help.from), time: clean(body.help.time, 40), offers: [], status: 'open' };
       if (!help.from) return json({ error: 'which day do you need help?' }, 400);
     }
-    if (!text && !photo && !help) return json({ error: 'write something or add a photo' }, 400);
+    const photoId = okPhotoId(body.photoId) && blobStore(env) ? body.photoId : '';
+    const aspect = Math.min(3, Math.max(0.3, +body.aspect || 1));
+    if (!text && !photo && !photoId && !help) return json({ error: 'write something or add a photo' }, 400);
     // The same post sent again (a retry, a second tap): the one already saved, not a copy.
     const cid = /^[a-z0-9]{8,24}$/.test(body.cid || '') ? body.cid : null;
     if (cid) {
@@ -1334,7 +1370,7 @@ export async function familyApi(req, env, path, ctx = null) {
     }
     const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '', text, photo,
       tags: (Array.isArray(body.tags) ? body.tags : []).filter((id) => fam.members.some((x) => x.id === id)).slice(0, 10),
-      tagNames: {}, audience: body.audience === 'connections' ? 'connections' : 'family', likes: [], comments: [], at: Date.now(), ...(help ? { help } : {}), ...(pk ? { pk } : {}) };
+      tagNames: {}, audience: body.audience === 'connections' ? 'connections' : 'family', likes: [], comments: [], at: Date.now(), ...(photoId ? { photoId, aspect, photoLocked: !!fam.e2ee } : {}), ...(help ? { help } : {}), ...(pk ? { pk } : {}) };
     post.tagKinds = {};
     for (const id of post.tags) { const x = fam.members.find((y) => y.id === id); post.tagNames[id] = x.name; post.tagKinds[id] = x.kind; }
     // Tagging a kid (or pet) the family keeps private keeps the post in the family.
@@ -1365,6 +1401,13 @@ export async function familyApi(req, env, path, ctx = null) {
       if (body.photo != null) { const v = sealed(body.photo, 3_600_000); if (!v) return json({ error: 'expected a sealed photo' }, 400); p.photo = v; }
       for (const c of Array.isArray(body.comments) ? body.comments : []) { const t = p.comments.find((x) => x.id === c.id); const v = sealed(c.text, 2000); if (t && v) t.text = v; }
       for (const o of Array.isArray(body.offers) ? body.offers : []) { const t = p.help?.offers.find((x) => x.id === o.id); const v = sealed(o.msg, 600); if (t && v) t.msg = v; }
+      // 📸 Moving an older photo out of the post into its own files (first device to do it wins).
+      if (okPhotoId(body.photoId) && blobStore(env)) {
+        if (!p.photo || p.photoId) return json({ error: 'already moved', photoId: p.photoId || '' }, 409);
+        p.photoId = body.photoId; p.aspect = Math.min(3, Math.max(0.3, +body.aspect || 1)); p.photo = ''; p.photoLocked = !!own.e2ee;
+      }
+      // Turning on encryption: the phone re-sent this post's photo files locked (one way only).
+      if (body.photoLocked === true && p.photoId) p.photoLocked = true;
       if (body.pk && sealed(body.pk.fam, 300)) p.pk = { fam: body.pk.fam, conns: Object.fromEntries(Object.entries(body.pk.conns || {}).filter(([f, v]) => (own.connections || []).includes(f) && sealed(v, 300))) };
       await db.put(`post:${fid}:${id}`, p);
       return json({ ok: true });
@@ -1425,6 +1468,7 @@ export async function familyApi(req, env, path, ctx = null) {
       await db.del(`post:${fid}:${id}`);
       await db.del(`report:${fid}:${id}`);
       await db.put(`feed:${fid}`, ((await db.get(`feed:${fid}`)) || []).filter((x) => x !== id));
+      if (p.photoId) await deletePhoto(blobStore(env), fid, p.photoId).catch(() => {});
       return json({ ok: true });
     }
   }
@@ -1582,7 +1626,7 @@ async function scrubPosts(db, fid, uid, memberId) {
   for (const id of ids) {
     const p = await db.get(`post:${fid}:${id}`);
     if (!p) continue;
-    if ((memberId && p.by === memberId) || p.byUid === uid) { await db.del(`post:${fid}:${id}`); await db.del(`report:${fid}:${id}`); continue; }
+    if ((memberId && p.by === memberId) || p.byUid === uid) { await db.del(`post:${fid}:${id}`); await db.del(`report:${fid}:${id}`); if (p.photoId) await deletePhoto(db.blobs, fid, p.photoId).catch(() => {}); continue; }
     keep.push(id);
     const comments = p.comments.filter((c) => c.uid !== uid), likes = p.likes.filter((u) => u !== uid);
     if (comments.length !== p.comments.length || likes.length !== p.likes.length) await db.put(`post:${fid}:${id}`, { ...p, comments, likes });
@@ -1593,6 +1637,7 @@ async function scrubPosts(db, fid, uid, memberId) {
 async function deleteFamily(db, fam) {
   for (const id of (await db.get(`feed:${fam.fid}`)) || []) { await db.del(`post:${fam.fid}:${id}`); await db.del(`report:${fam.fid}:${id}`); }
   await db.del(`feed:${fam.fid}`);
+  await deleteFamilyPhotos(db.blobs, fam.fid).catch(() => {});
   for (const x of fam.members) { await db.del(`data:${fam.fid}:${x.id}`); await db.del(`dataprev:${fam.fid}:${x.id}`); }
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) await db.del(`care:${fam.fid}:${d}`);
   await db.del(`careidx:${fam.fid}`);
@@ -1643,7 +1688,19 @@ export async function deleteAccount(db, user) {
 
 // ---------- help desk ----------
 // Counts one use against a limit; false once it's used up.
+// Short counters (per minute) live in this connector instance's memory: slowing down a burst
+// doesn't need to cost a storage write per change. Daily ones are stored.
+const shortCounts = new Map();
 async function underLimit(db, key, max, ttl) {
+  if (ttl <= 300) {
+    const now = Date.now();
+    if (shortCounts.size > 5000) for (const [k, v] of shortCounts) if (v.until < now) shortCounts.delete(k);
+    const c = shortCounts.get(key);
+    const n = (c && c.until > now ? c.n : 0) + 1;
+    if (n > max) return false;
+    shortCounts.set(key, { n, until: now + ttl * 1000 });
+    return true;
+  }
   const n = ((await db.get(key)) || 0) + 1;
   if (n > max) return false;
   await db.put(key, n, ttl);
@@ -1731,6 +1788,7 @@ async function helpTool(db, env, { user, token, name, input, app, transcript, ex
 // deleted families, expired sign-ins and filed problems. Writes a report for the maintainer.
 export async function runMaintenance(env) {
   const kv = env.HOUSEHOLD, db = store(kv);
+  db.blobs = blobStore(env);
   const report = { at: Date.now(), counts: { families: 0, accounts: 0, people: 0, pets: 0, openTickets: 0 }, fixes: [], problems: [] };
   const fix = (s) => report.fixes.push(s);
   const keys = async (prefix) => {

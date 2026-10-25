@@ -19,6 +19,8 @@ async function familyKey(a) {
 const lockData = async (a, data) => { const k = await familyKey(a); if (a.e2ee && !k) throw new Error('This device needs the family key — open OurPawmily › Me › 🔐 Encryption'); return k ? { enc: await seal(k, data) } : data; };
 const openData = async (a, data) => (data?.enc == null ? data || {} : tryOpen(await familyKey(a), data.enc, null));
 
+// A short fingerprint of some text (to tell whether anything changed).
+const hashOf = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return (h >>> 0).toString(36) + str.length.toString(36); };
 const LS = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const CONNECTOR = 'https://lean-plate-connect.sandman-amani.workers.dev';
 const connector = () => { try { return JSON.parse(LS('lp.g.sync'))?.url || CONNECTOR; } catch { return CONNECTOR; } };
@@ -78,8 +80,13 @@ export const account = {
     const a = this.get();
     if (a?.e2ee && !(await familyKey(a))) throw new Error('This device needs the family key — open OurPawmily › Me › 🔐 Encryption');
     if (!a || !global.get('account.pulled', false)) return;
-    const r = await call('PUT', `/families/${a.fid}/members/${a.me}/data`, { data: await lockData(a, exportProfile(a.profile, { shared: true })) });
+    // Nothing changed since the last upload: no write (the free plan allows 1,000 a day).
+    const mine = exportProfile(a.profile, { shared: true });
+    const sig = `${a.fid}:${a.me}:${hashOf(JSON.stringify(mine))}`;
+    if (sig === global.get('account.sentSig', '')) { await this.pushDogs(a).catch(() => {}); return; }
+    const r = await call('PUT', `/families/${a.fid}/members/${a.me}/data`, { data: await lockData(a, mine) });
     if (r.status !== 200) throw new Error(r.data.error || `account upload failed (${r.status})`);
+    global.set('account.sentSig', sig);
     global.set('account.mineAt', r.data.savedAt || Date.now());
     global.set('pushedAt', Date.now());
     await this.pushDogs(a).catch(() => {});

@@ -37,6 +37,23 @@ export const api = {
     if (status >= 400) { const e = new Error(data.error || `error ${status}`); e.status = status; e.data = data; throw e; }
     return data;
   },
+  // 📸 Photo files: PUT bytes up, GET bytes back (Uint8Array).
+  async bytes(method, path, body) {
+    let status, data, raw;
+    if (api.mode() === 'demo') {
+      demoApi ||= (await import('../server/family.js')).familyApi;
+      const u = new URL(`https://demo.local${path}`);
+      const req = new Request(u, { method, headers: api.token() ? { Authorization: `Bearer ${api.token()}` } : {}, body: body || undefined });
+      ({ status, data, raw } = await demoApi(req, { HOUSEHOLD: demoKv, DEMO: true }, u.pathname));
+    } else {
+      const res = await fetch(`${connectorUrl()}/v2${path}`, { method, headers: { ...(body ? { 'Content-Type': 'application/octet-stream' } : {}), ...(api.token() ? { Authorization: `Bearer ${api.token()}` } : {}) }, body: body || undefined });
+      status = res.status;
+      if (res.ok && method === 'GET') raw = new Uint8Array(await res.arrayBuffer());
+      else data = await res.json().catch(() => ({}));
+    }
+    if (status >= 400) { const e = new Error(data?.error || `error ${status}`); e.status = status; throw e; }
+    return raw || data;
+  },
   get: (p) => api.call('GET', p),
   post: (p, b = {}) => api.call('POST', p, b),
   put: (p, b) => api.call('PUT', p, b),

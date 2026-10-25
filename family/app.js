@@ -3,6 +3,7 @@
 // The trackers (food, training, dogs, calendar) stay in the current app for now; their data
 // comes over with "Bring over the current app".
 import { api } from './api.js';
+import { sealBytes, openBytes } from './crypto.js';
 import { keys, seal, tryOpen, newKey, makeCheck, checkKey, lockBackup, unlockBackup, newPhrase, keyFromHash, deviceLink, isSealed } from './crypto.js';
 import { planImport, legacySnapshot, backupBlob, runImport, importCare, verifyImport } from './migrate.js';
 
@@ -307,6 +308,7 @@ async function feedView() {
   if (!r) return;
   state.feed = await Promise.all(r.posts.map(openPost));
   renderPosts();
+  setTimeout(() => moveOldPhotos().catch(() => {}), 1500);
 }
 // The first week of a month: last month's Gold Card winner tops the feed.
 async function goldNews() {
@@ -381,7 +383,7 @@ function postCard(p) {
     <header><button type="button" class="who" ${author ? `data-member="${author.id}"` : ''}>${avatar(who, 38)}<span><b>${esc(who.name)}</b><small class="muted">${p.fid !== state.fid ? `${esc(p.familyName)} · ` : ''}${ago(p.at)} · ${p.audience === 'connections' ? '👥 Family & friends' : '🏠 Family'}</small></span></button>
       ${p.reported ? `<span class="pill warn" title="Reported by someone in the family">🚩 ${p.reported}</span>` : ''}<button type="button" class="icon-btn" data-act="postmenu" aria-label="Post options">⋯</button></header>
     ${p.help ? helpBlock(p) : ''}
-    ${p.photo ? `<img class="photo" src="${p.photo}" alt="" loading="lazy">` : ''}
+    ${p.photoId ? photoBox(p) : p.photo ? `<img class="photo" src="${p.photo}" alt="" loading="lazy">` : ''}
     <div class="actions"><button type="button" data-act="like" class="${p.liked ? 'liked' : ''}" aria-label="Like">${p.liked ? '❤️' : '🤍'}</button><button type="button" data-act="comment" aria-label="Comment">💬</button>
       <span class="small muted">${p.likes ? `${p.likes} like${p.likes > 1 ? 's' : ''}` : ''}</span></div>
     ${p.text ? `<p class="caption"><b>${esc(who.name)}</b> ${esc(p.text)}</p>` : ''}
@@ -425,6 +427,109 @@ function compose() {
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Share</button></div>
     </form>`);
 }
+// ---------- 📸 photos as files: two sizes, locked as bytes, loaded as they scroll into view ----------
+const randomToken = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('');
+let photoSupport = null;
+// Does the connector have photo storage (R2)? Asked once.
+function photosReady() {
+  photoSupport ||= api.get(`/families/${state.fid}/photos`).then(() => true).catch((e) => (e.status === 501 ? false : (photoSupport = null, false)));
+  return photoSupport;
+}
+// A picked photo (File, or the preview data URL) → {full, thumb: JPEG bytes, aspect}.
+async function photoFiles(src) {
+  // A data URL is turned into bytes here (the app's security policy doesn't allow fetching data: links).
+  const fromDataUrl = (u) => { const [head, b64] = u.split(','); const bin = atob(b64); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return new Blob([out], { type: head.slice(5).split(';')[0] || 'image/jpeg' }); };
+  const bmp = await createImageBitmap(src instanceof Blob ? src : fromDataUrl(src));
+  const make = async (max, q) => {
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', q));
+    return new Uint8Array(await blob.arrayBuffer());
+  };
+  return { full: await make(1600, 0.82), thumb: await make(560, 0.72), aspect: Math.round((bmp.width / bmp.height) * 1000) / 1000 };
+}
+// Unlocked photos: in memory for this visit, and on the phone (IndexedDB) for next time.
+const photoKeys = new Map();   // photoId → the post's key (null when not locked)
+const photoUrls = new Map();   // "id:size" → blob: URL
+const photoDb = () => new Promise((res, rej) => { const r = indexedDB.open('pawmily-photos', 1); r.onupgradeneeded = () => r.result.createObjectStore('p'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+async function photoCached(key) { try { const d = await photoDb(); return await new Promise((res) => { const q = d.transaction('p').objectStore('p').get(key); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }); } catch { return null; } }
+async function photoCache(key, bytes) { try { const d = await photoDb(); d.transaction('p', 'readwrite').objectStore('p').put(bytes, key); } catch { /* private mode */ } }
+function rememberPhoto(id, size, bytes) {
+  const k = `${id}:${size}`;
+  if (!photoUrls.has(k)) photoUrls.set(k, URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' })));
+  photoCache(k, bytes);
+  return photoUrls.get(k);
+}
+async function photoUrl(fid, id, size, key) {
+  const k = `${id}:${size}`;
+  if (photoUrls.has(k)) return photoUrls.get(k);
+  const cached = await photoCached(k);
+  if (cached) { photoUrls.set(k, URL.createObjectURL(new Blob([cached], { type: 'image/jpeg' }))); return photoUrls.get(k); }
+  const locked = await api.bytes('GET', `/families/${fid}/photos/${id}?size=${size}`);
+  return rememberPhoto(id, size, key ? await openBytes(key, locked) : locked);
+}
+async function photoDataUrl(fid, id, key) {
+  await photoUrl(fid, id, 'full', key);
+  const bytes = await photoCached(`${id}:full`);
+  if (!bytes) return '';
+  let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:image/jpeg;base64,${btoa(bin)}`;
+}
+// The box a photo shows in: the right shape straight away (no jumping), filled when it's near.
+function photoBox(p, cls = '') {
+  photoKeys.set(p.photoId, p._key || null);
+  const src = photoUrls.get(`${p.photoId}:thumb`) || '';
+  return `<button type="button" class="ph ${cls}" style="aspect-ratio:${cls === 'grid' ? 1 : p.aspect || 1}" data-photoid="${p.photoId}" data-pfid="${p.fid}" aria-label="Open photo"><img alt="" ${src ? `src="${src}"` : ''}></button>`;
+}
+const photoSeen = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver((list) => {
+  for (const x of list) {
+    if (!x.isIntersecting) continue;
+    photoSeen.unobserve(x.target);
+    const el = x.target, id = el.dataset.photoid, img = el.querySelector('img');
+    if (img.getAttribute('src')) continue;
+    el.classList.add('loading');
+    photoUrl(el.dataset.pfid, id, 'thumb', photoKeys.get(id)).then((u) => { img.src = u; }).catch(() => { el.classList.add('missing'); }).finally(() => el.classList.remove('loading'));
+  }
+}, { rootMargin: '600px 0px' }) : null;
+// Any photo box that appears on screen (feed, a person's page) gets watched.
+new MutationObserver(() => { for (const el of document.querySelectorAll('.ph[data-photoid]:not([data-w])')) { el.dataset.w = '1'; if (photoSeen) photoSeen.observe(el); else photoUrl(el.dataset.pfid, el.dataset.photoid, 'thumb', photoKeys.get(el.dataset.photoid)).then((u) => { el.querySelector('img').src = u; }).catch(() => {}); } })
+  .observe(document.body, { childList: true, subtree: true });
+// Tap: the full photo.
+async function photoViewer(fid, id) {
+  openSheet(`<div class="viewer"><img alt="" src="${photoUrls.get(`${id}:thumb`) || ''}"><p class="small muted center" id="viewerNote">Loading the full photo…</p><div class="row end"><button type="button" class="ghost" data-act="close">Close</button></div></div>`);
+  try { const u = await photoUrl(fid, id, 'full', photoKeys.get(id)); const img = $('.viewer img'); if (img) img.src = u; $('#viewerNote')?.remove(); }
+  catch { if ($('#viewerNote')) $('#viewerNote').textContent = "Couldn't load the full photo."; }
+}
+// Older posts kept their photo inside: moved to files in the background, once per family per
+// phone (only a device that can unlock them). It also frees the storage the old copies used.
+let moving = false;
+async function moveOldPhotos() {
+  const flag = `fam.photosMoved.${state.fid}`;
+  if (moving || LS.get(flag) || lockedHere() || !(await photosReady())) return;
+  moving = true;
+  let n = 0;
+  try {
+    for (let from = 0; from != null;) {
+      const r = await api.get(`/families/${state.fid}/posts?from=${from}`);
+      for (const raw of r.posts) {
+        if (!raw.photo || raw.photoId) continue;
+        const p = await openPost(raw);
+        if (!p.photo) continue;
+        const made = await photoFiles(p.photo);
+        const id = randomToken();
+        for (const size of ['thumb', 'full']) await api.bytes('PUT', `/families/${state.fid}/photos/${id}?size=${size}`, p._key ? await sealBytes(p._key, made[size]) : made[size]);
+        try { await api.patch(`/posts/${state.fid}/${p.id}`, { photoId: id, aspect: made.aspect }); n++; rememberPhoto(id, 'thumb', made.thumb); }
+        catch (e) { await api.bytes('DELETE', `/families/${state.fid}/photos/${id}`).catch(() => {}); if (e.status !== 409) throw e; } // another phone moved it first
+      }
+      from = r.next;
+    }
+    LS.set(flag, '1');
+    if (n) toast(`📸 Moved ${n} photo${n === 1 ? '' : 's'} to faster storage`);
+  } catch { /* try again next time */ } finally { moving = false; }
+}
+
 async function shrinkPhoto(file) {
   const bmp = await createImageBitmap(file);
   const k = Math.min(1, 1080 / Math.max(bmp.width, bmp.height));
@@ -787,7 +892,7 @@ async function memberView() {
   const m = member(state.memberId);
   if (!m) return show('family');
   const self = m.id === fam().me;
-  const theirPosts = state.feed.filter((p) => p.fid === state.fid && p.by === m.id && p.photo);
+  const theirPosts = state.feed.filter((p) => p.fid === state.fid && p.by === m.id && (p.photo || p.photoId));
   $('#view').innerHTML = `<button type="button" class="linkish back" data-view="family">‹ Family</button>
     <section class="card profile">${avatar(m, 84)}<h2>${esc(m.name)}</h2>
       <div class="muted">${esc(relLabel(m))}${m.kind === 'pet' && m.breed ? ` · ${esc(m.breed)}` : ''}${m.kind === 'pet' && m.born ? ` · ${ageOf(m.born)}` : ''}</div>
@@ -795,7 +900,7 @@ async function memberView() {
       ${m.status === 'managed' && m.kind === 'person' ? `<p class="small muted">No account yet. <button type="button" class="linkish" data-act="reinvite" data-id="${m.id}">Invite by email</button> — or keep managing them here (kids).</p>` : ''}
     </section>
     <section class="card" id="memberData"><div class="skeleton line"></div></section>
-    ${theirPosts.length ? `<h3>Posts</h3><div class="grid">${theirPosts.map((p) => `<img src="${p.photo}" alt="" loading="lazy">`).join('')}</div>` : ''}
+    ${theirPosts.length ? `<h3>Posts</h3><div class="grid">${theirPosts.map((p) => (p.photoId ? photoBox(p, 'grid') : `<img src="${p.photo}" alt="" loading="lazy">`)).join('')}</div>` : ''}
     ${!self && m.role !== 'owner' && (me().role === 'owner' || m.status !== 'active') ? `<button type="button" class="danger linkish small pad" data-act="removemember" data-id="${m.id}">Remove ${esc(m.name)} from ${esc(fam().name)}</button>` : ''}`;
   const el = $('#memberData');
   try {
@@ -1811,11 +1916,19 @@ async function turnOnEncryption(log) {
       }
       if (p.text && !isSealed(p.text)) body.text = await seal(pkKey, p.text);
       if (p.photo && !isSealed(p.photo)) body.photo = await seal(pkKey, p.photo);
+      // 📸 Photo files sent before encryption was on: fetched, locked, sent back under the same id.
+      if (p.photoId && !p.photoLocked) {
+        for (const size of ['thumb', 'full']) {
+          const plain = await api.bytes('GET', `/families/${fid}/photos/${p.photoId}?size=${size}`).catch(() => null);
+          if (plain) await api.bytes('PUT', `/families/${fid}/photos/${p.photoId}?size=${size}`, await sealBytes(pkKey, plain));
+        }
+        body.photoLocked = true;
+      }
       const cs = (p.comments || []).filter((c) => c.text && !isSealed(c.text));
       if (cs.length) body.comments = await Promise.all(cs.map(async (c) => ({ id: c.id, text: await seal(pkKey, c.text) })));
       const os = (p.help?.offers || []).filter((o) => o.msg && !isSealed(o.msg));
       if (os.length) body.offers = await Promise.all(os.map(async (o) => ({ id: o.id, msg: await seal(pkKey, o.msg) })));
-      if (Object.keys(body).length && (body.text || body.photo || body.comments || body.offers)) { await api.patch(`/posts/${fid}/${p.id}`, body); n++; }
+      if (Object.keys(body).length && (body.text || body.photo || body.comments || body.offers || body.photoLocked)) { await api.patch(`/posts/${fid}/${p.id}`, body); n++; }
     }
     from = r.next;
     if (n) log(`📸 Locked ${n} post${n === 1 ? '' : 's'}…`);
@@ -2031,6 +2144,7 @@ document.addEventListener('click', (e) => {
     });
   }
   if (d.bingogame) { bingo.game = d.bingogame; return bingoGame(); }
+  if (d.photoid && t.classList.contains('ph')) return photoViewer(d.pfid, d.photoid);
   if (d.momentedit) return momentSheet({ id: d.momentedit });
   if (d.watchtab) { watch.tab = d.watchtab; return renderWatch(); }
   if (d.watchnight) return act(async () => { await api.post(`/families/${state.fid}/watch/shows/${d.watchnight}/night`, { date: isoLocal() }); await watchSaved(); });
@@ -2134,7 +2248,7 @@ document.addEventListener('click', (e) => {
     case 'addpet': return addPet();
     case 'editpet': return addPet(member(d.id));
     case 'petnophoto': petPhoto = ''; $('#petPhotoBox').innerHTML = petPhotoBox(member($('#petForm').dataset.id)); return;
-    case 'nophoto': draft.photo = ''; return compose();
+    case 'nophoto': draft.photo = ''; draft.file = null; return compose();
     case 'accept': return act(async () => {
       const r = await api.post(`/invites/${state.invite}/accept`);
       if (LS.get('fam.inviteKey')) await keys.set(r.family.fid, LS.get('fam.inviteKey'));
@@ -2202,6 +2316,8 @@ document.addEventListener('click', (e) => {
           const k = await postKey({ fid: f.fid, pk: x.pk });
           x.text = (await tryOpen(k, x.text, null)) ?? '(locked)';
           if (x.photo != null) x.photo = (await tryOpen(k, x.photo, null)) ?? '';
+          // 📸 A photo kept as a file: fetched and unlocked into the download too.
+          if (x.photoId) { x.photo = await photoDataUrl(f.fid, x.photoId, k).catch(() => ''); delete x.photoId; }
           delete x.pk;
         }
         f.myData = await openData({ data: f.myData }, f.fid);
@@ -2238,7 +2354,9 @@ document.addEventListener('change', async (e) => {
   const t = e.target;
   if (t.name === 'photo' && t.files?.[0]) {
     draft.text = $('#postForm textarea')?.value || draft.text;
+    draft.file = t.files[0];
     draft.photo = await shrinkPhoto(t.files[0]).catch(() => '');
+    if (!draft.photo) draft.file = null;
     return compose();
   }
   if (t.dataset.dresspick) {
@@ -2529,7 +2647,7 @@ document.addEventListener('submit', (e) => {
     return act(async () => {
       const help = draft.help ? { type: draft.help.type, from: v.from, to: v.to || v.from, time: v.time } : null;
       // 🔐 Locked on this phone: with the family key, or (for friends' families) the post's own key.
-      let text = v.text, photo = draft.photo, pk;
+      let text = v.text, photo = draft.photo, pk, postK = null;
       if (fk()) {
         let k = fk();
         if (draft.audience === 'connections') {
@@ -2538,12 +2656,26 @@ document.addEventListener('submit', (e) => {
           for (const [other, sealedCk] of Object.entries(fam().connkeys || {})) { const ck = await tryOpen(fk(), sealedCk, null); if (ck) conns[other] = await seal(ck, k); }
           pk = { fam: await seal(fk(), k), conns };
         }
-        text = text ? await seal(k, text) : ''; photo = photo ? await seal(k, photo) : '';
+        text = text ? await seal(k, text) : '';
+        postK = k;
       }
-      step(photo ? 'Sending photo…' : 'Posting…');
-      const r = await api.post(`/families/${state.fid}/posts`, { text, photo, pk, tags: draft.tags, audience: draft.audience, help, cid: draft.cid });
+      // 📸 With photo storage: the photo goes up as two locked files, and the post just names it.
+      let photoId = '', aspect = 1;
+      if (photo && await photosReady()) {
+        step('Preparing photo…');
+        const made = await photoFiles(draft.file || photo);
+        photoId = draft.photoId ||= randomToken();
+        aspect = made.aspect;
+        step('Sending photo…');
+        for (const size of ['thumb', 'full']) await api.bytes('PUT', `/families/${state.fid}/photos/${photoId}?size=${size}`, postK ? await sealBytes(postK, made[size]) : made[size]);
+        rememberPhoto(photoId, 'thumb', made.thumb);
+        photo = '';
+      } else if (photo && postK) photo = await seal(postK, photo);
+      step(photoId || photo ? 'Posting…' : 'Posting…');
+      const r = await api.post(`/families/${state.fid}/posts`, { text, photo, photoId, aspect, pk, tags: draft.tags, audience: draft.audience, help, cid: draft.cid });
       r.post = await openPost(r.post);
       draft = { text: '', photo: '', tags: [], audience: 'family' };
+      if (r.post.photoId) photoKeys.set(r.post.photoId, r.post._key);
       if (state.feed.some((x) => x.id === r.post.id)) state.feed = state.feed.filter((x) => x.id !== r.post.id);
       state.view = 'feed'; closeSheet(); state.feed = [r.post, ...state.feed]; show('feed');
       if (r.note) toast(r.note); else if (help) toast(r.post.audience === 'connections' ? 'Asked your family and connected families 🙋' : 'Asked your family 🙋');
