@@ -16,7 +16,7 @@
 // 15-minute one sends notification reminders (push.js).
 
 import { assist } from './assistant.js';
-import { familyApi, runMaintenance, runFamilyReminders } from './family.js';
+import { familyApi, runMaintenance, runFamilyReminders, runScout } from './family.js';
 import { mergeEvents, icsCalendar } from '../js/calendar.js';
 
 const WHOOP = {
@@ -36,6 +36,7 @@ export default {
   async scheduled(event, env, ctx) {
     if (!env.HOUSEHOLD) return;
     if (event.cron === '13 10 * * *') ctx.waitUntil(runMaintenance(env));
+    else if (event.cron === '13 13 * * 4') ctx.waitUntil(runScout(env)); // 💡 Thursdays, 6:13 AM Pacific
     else ctx.waitUntil(runFamilyReminders(env, event.scheduledTime));
   },
   async fetch(req, env, ctx) {

@@ -46,6 +46,7 @@ import { APPT_TYPES, cleanAppt, nextDue, shiftWeeks, startOf, spending } from '.
 import { parseSquares, makeCard, bingoLines, bingoPrompt, NEED, FREE } from './bingo.js';
 import { EVENTS as PICK_EVENTS, OUTCOMES, locked as pickLocked, score as pickScore, parseCouples } from './picks.js';
 import { blobStore, okPhotoId, photoKey, SIZES, quotaBytes, familyUsage, noteUsage, deletePhoto, deleteFamilyPhotos } from './photos.js';
+import { DEFAULT_AREA, areaKey, scoutArea } from './scout.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
@@ -296,6 +297,14 @@ export async function familyApi(req, env, path, ctx = null) {
         }
       }
       return json({ tickets, glitches: Object.values(glitches).sort((a, b) => b.n - a.n).slice(0, 20), report: await db.get('admin:report'), history: (await db.get('admin:history')) || [] });
+    }
+    if (path === '/admin/scout' && method === 'GET') {
+      const month = new Date().toISOString().slice(0, 7), key = areaKey(DEFAULT_AREA);
+      return json({ runs: (await db.get(`scoutruns:${key}:${month}`)) || [], week: await db.get(`ideas:${key}`), keys: { ticketmaster: !!env.TICKETMASTER_KEY, seatgeek: !!env.SEATGEEK_CLIENT_ID, tmdb: !!env.TMDB_KEY, omdb: !!env.OMDB_KEY, claude: !!env.ANTHROPIC_API_KEY }, model: env.SCOUT_MODEL || 'claude-sonnet-5-5' });
+    }
+    if (path === '/admin/scout/run' && method === 'POST') {
+      if (env.DEMO && !env.__anthropic) return json({ error: 'the scout runs on the live connector' }, 400);
+      return json(await runScout(env, { db, force: !!body.force }));
     }
     m = path.match(/^\/admin\/tickets\/([a-z0-9]+)$/);
     if (m && method === 'PATCH') {
@@ -772,6 +781,67 @@ export async function familyApi(req, env, path, ctx = null) {
       delete w.status[id]; delete w.ratings[id]; delete w.progress[id];
       await save();
       return json({ ok: true });
+    }
+    return json({ error: 'not found' }, 404);
+  }
+
+  // ---- 💡 date ideas: this week's for the family's area, settings, and private 💗 picks ----
+  // A pick is a token the phones make from the idea (keyed with the family key in an encrypted
+  // family), so the server can tell two picks match without knowing what was picked.
+  m = path.match(/^\/families\/([a-z0-9]+)\/ideas(?:\/(settings|picks|matches)(?:\/([a-z0-9]{8,64}))?)?$/);
+  if (m) {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const me = meIn(fam), partner = partnerOf(fam, me);
+    const [, , what, tok] = m;
+    const area = { ...DEFAULT_AREA, ...(fam.ideas || {}) };
+    const pkey = `ideapicks:${fam.fid}`;
+    const picks = (await db.get(pkey)) || { members: {}, matches: [] };
+    const mineOnly = () => ({ mine: (picks.members[me.id] || []).map((x) => x.t), matches: picks.matches.filter((x) => x.who.includes(me.id) && !x.done) });
+    if (!what && method === 'GET') {
+      const week = await db.get(`ideas:${areaKey(area)}`);
+      return json({ week: week || null, settings: { zip: area.zip, label: area.label, theatres: area.theatres, critic: area.critic, audience: area.audience }, ...mineOnly() });
+    }
+    if (me.relation === 'child' || !partner) return json({ error: 'date ideas are for a couple in the family' }, 403);
+    if (what === 'settings' && method === 'PUT') {
+      const next = { ...(fam.ideas || {}) };
+      if (Array.isArray(body.theatres)) next.theatres = body.theatres.map((x) => clean(x, 60)).filter(Boolean).slice(0, 4);
+      if (body.critic != null) next.critic = Math.max(0, Math.min(100, Math.round(+body.critic || 0)));
+      if (body.audience != null) next.audience = Math.max(0, Math.min(100, Math.round(+body.audience || 0)));
+      if (/^\d{5}$/.test(body.zip || '') && body.zip !== (next.zip || DEFAULT_AREA.zip)) {
+        // Where that ZIP is (Open-Meteo's free place search) — the scout only ever gets this.
+        const place = env.__geocode ? await env.__geocode(body.zip) : await fetch(`https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({ name: body.zip, count: '1', country: 'US' })}`).then((r) => r.json()).then((j) => j.results?.[0]).catch(() => null);
+        if (!place) return json({ error: "couldn't find that ZIP code" }, 400);
+        Object.assign(next, { zip: body.zip, lat: place.latitude, lon: place.longitude, label: place.name || body.zip });
+      }
+      fam.ideas = next;
+      await db.put(`family:${fam.fid}`, fam);
+      return json({ settings: { ...DEFAULT_AREA, ...next } });
+    }
+    if (what === 'picks' && tok) {
+      const list = (picks.members[me.id] || []).filter((x) => x.t !== tok);
+      let match = null;
+      if (method === 'POST') {
+        const box = sealed(body.box, 3000) ?? (fam.e2ee ? null : (typeof body.box === 'object' && body.box ? JSON.stringify(body.box).slice(0, 2000) : null));
+        if (!box) return json({ error: 'this family is end-to-end encrypted — update the app and try again' }, 400);
+        list.push({ t: tok, box, at: Date.now() });
+        const theirs = (picks.members[partner.id] || []).find((x) => x.t === tok);
+        if (theirs && !picks.matches.some((x) => x.t === tok)) {
+          match = { t: tok, who: [me.id, partner.id], boxes: { [me.id]: box, [partner.id]: theirs.box }, at: Date.now(), done: false };
+          picks.matches = [match, ...picks.matches].slice(0, 60);
+          await tell(uidsOf(fam, [partner.id], user.uid), 'us', { title: "💞 It's a match!", body: `You and ${me.name} both picked the same date idea — open Us to make it a plan`, url: 'family/#us', tag: `match-${tok.slice(0, 12)}` });
+        }
+      }
+      picks.members[me.id] = list.slice(-200);
+      await db.put(pkey, picks);
+      return json({ ...mineOnly(), match });
+    }
+    if (what === 'matches' && tok && method === 'PATCH') {
+      const x = picks.matches.find((y) => y.t === tok && y.who.includes(me.id));
+      if (!x) return json({ error: 'not found' }, 404);
+      if (body.done) x.done = true;
+      await db.put(pkey, picks);
+      return json(mineOnly());
     }
     return json({ error: 'not found' }, 404);
   }
@@ -1627,6 +1697,24 @@ async function goldenDayPost(db, fam, date, list) {
 const shiftDay = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const validTz = (tz) => { if (typeof tz !== 'string' || tz.length > 64) return false; try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; } };
 // The 15-minute reminders (appointments, calendar events, vaccines due) — see push.js.
+// 💡 Thursday morning: the date scout for every area a couple lives in (at most 10 areas).
+export async function runScout(env, { db = store(env.HOUSEHOLD), force = false, now = new Date() } = {}) {
+  const areas = new Map([[areaKey(DEFAULT_AREA), DEFAULT_AREA]]);
+  let cursor;
+  do {
+    const r = await env.HOUSEHOLD.list({ prefix: 'v2:family:', cursor });
+    for (const k of r.keys) {
+      const fam = await db.get(k.name.slice(3));
+      if (!fam || !fam.members?.some((x) => x.relation === 'spouse' || x.relation === 'partner')) continue;
+      const a = { ...DEFAULT_AREA, ...(fam.ideas || {}) };
+      if (!areas.has(areaKey(a))) areas.set(areaKey(a), a);
+    }
+    cursor = r.list_complete === false ? r.cursor : null;
+  } while (cursor && areas.size < 10);
+  const out = [];
+  for (const a of [...areas.values()].slice(0, 10)) out.push(await scoutArea(env, db, a, { now, force }).catch((e) => ({ key: areaKey(a), problems: [e.message] })));
+  return { areas: out };
+}
 export const runFamilyReminders = (env, at) => runReminders(env, at, { db: store(env.HOUSEHOLD) });
 export const MODULES = ['dogs', 'chores', 'feed', 'health', 'calendar'];
 
