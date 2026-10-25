@@ -99,7 +99,7 @@ export function parseScout(text) {
 }
 // One Claude turn with web search (resumed if a long search turn pauses); the text it wrote,
 // and what it cost.
-export async function askClaude(env, prompt, { city = '', maxUses = 6, maxTokens = 8000, model: pick = '' } = {}) {
+export async function askClaude(env, prompt, { city = '', maxUses = 6, maxTokens = 8000, model: pick = '', search = true } = {}) {
   let client = env.__anthropic;
   if (!client) { const { default: Anthropic } = await import('@anthropic-ai/sdk'); client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }); }
   const model = pick || env.SCOUT_MODEL || 'claude-sonnet-5-5';
@@ -109,7 +109,7 @@ export async function askClaude(env, prompt, { city = '', maxUses = 6, maxTokens
   const usage = { input: 0, output: 0, searches: 0, model };
   let res;
   for (let i = 0; i < 4; i++) {
-    res = await client.messages.create({ model, max_tokens: maxTokens, thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, tools, messages });
+    res = await client.messages.create({ model, max_tokens: maxTokens, thinking: { type: 'adaptive' }, output_config: { effort: search ? 'medium' : 'low' }, ...(search ? { tools } : {}), messages });
     usage.input += res.usage?.input_tokens || 0;
     usage.output += res.usage?.output_tokens || 0;
     usage.searches += res.usage?.server_tool_use?.web_search_requests || 0;

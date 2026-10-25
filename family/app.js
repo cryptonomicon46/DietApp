@@ -145,7 +145,7 @@ async function boot() {
   if (!state.families.length) return onboard();
   if (!state.families.some((f) => f.fid === state.fid)) state.fid = state.families[0].fid;
   await loadFamily();
-  const hv = location.hash.match(/^#(feed|dogs|calendar|me|us)$/)?.[1];
+  const hv = location.hash.match(/^#(feed|dogs|calendar|me|us|threads)$/)?.[1];
   if (hv) { state.view = hv === 'dogs' ? 'pets' : hv; history.replaceState(null, '', location.pathname + location.search); }
   show(state.view === 'member' && !member(state.memberId) ? 'feed' : state.view === 'us' && !partnerMember() ? 'feed' : state.view);
   refreshPush();
@@ -299,6 +299,7 @@ async function inviteView() {
 
 // ---------- views ----------
 function show(view, extra) {
+  if (view === 'threads') { state.famTab = 'threads'; LS.set('fam.famTab', 'threads'); view = 'feed'; }
   if (view !== 'compose') state.prevView = view;
   state.view = view;
   if (view === 'member') state.memberId = extra;
@@ -313,7 +314,12 @@ function show(view, extra) {
 const demoBanner = () => (api.mode() === 'demo' ? '<div class="banner">Demo — everything stays on this phone.</div>' : '');
 
 async function feedView() {
-  $('#view').innerHTML = `${demoBanner()}
+  state.famTab ||= LS.get('fam.famTab') || 'moments';
+  $('#view').innerHTML = `${demoBanner()}<div class="seg famtabs" role="tablist">${[['moments', 'Moments'], ['threads', 'Threads']].map(([k, l]) => `<button type="button" role="tab" class="${state.famTab === k ? 'on' : ''}" data-famtab="${k}">${l}${k === 'threads' ? ' <i class="dot" id="thDot" hidden></i>' : ''}</button>`).join('')}</div>
+    <div id="famBody"></div>`;
+  if (th.list.length) $('#thDot').hidden = !unreadThreads().length;
+  if (state.famTab === 'threads') { threadsView(); loadUs().then(() => usBadge()); return; }
+  $('#famBody').innerHTML = `<div id="digest"></div>
     <button type="button" class="sharebar" data-act="post">${avatar(me(), 30)}<span>Share with the family…</span><b>📷 Photo</b></button>
     <section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>
     <section class="card today" id="today"><div class="skeleton line"></div></section>
@@ -323,8 +329,10 @@ async function feedView() {
   goldNews();
   renderYourDay();
   importUs().catch(() => {});
-  const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts(), loadUs()]);
+  const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts(), loadUs(), loadThreads().catch(() => {})]);
   renderToday(); renderComingLine(); usBadge();
+  if ($('#digest')) $('#digest').innerHTML = digestCard();
+  if ($('#thDot')) $('#thDot').hidden = !unreadThreads().length;
   if (!r) return;
   state.feed = await Promise.all(r.posts.map(openPost));
   renderPosts();
@@ -1165,6 +1173,7 @@ function renderComingLine() {
 function plusMenu() {
   const p = partnerMember();
   const fam4 = [
+    ['writeup', '📖', 'Write it up'],
     ['eventnew', '📅', 'Event'],
     ...((fam().modules || []).includes('dogs') ? [['apptnew', '🐾', 'Dog appt']] : []),
     ['post', '📸', 'Post'],
@@ -1173,7 +1182,7 @@ function plusMenu() {
   openSheet(`<div class="row between"><h2>Create</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     ${p ? `<div class="grp">💞 You &amp; ${esc(p.name)}</div><div class="create4">
       <button type="button" class="hot" data-act="feel"><b>✨</b>Suggest</button><button type="button" data-act="outing"><b>🧭</b>Outing</button><button type="button" data-act="note"><b>💌</b>Note</button><button type="button" data-act="lognew"><b>❤️</b>Log date</button></div>` : ''}
-    <div class="grp">👨‍👩‍👧 Family</div><div class="create4">${fam4.map(([a, i, l]) => `<button type="button" data-act="${a}"><b>${i}</b>${l}</button>`).join('')}</div>
+    <div class="grp">👨‍👩‍👧 Family</div><div class="create3">${fam4.map(([a, i, l]) => `<button type="button" data-act="${a}"><b>${i}</b>${l}</button>`).join('')}</div>
     <button type="button" class="ghost wide" data-act="close" style="margin-top:12px">Cancel</button>`);
 }
 
@@ -1195,7 +1204,8 @@ function forYou() {
   const notes = us.notes.filter((n) => n.by !== meId && n.at > seen);
   const after = us.plans.filter((p) => p.agreed && !p.done && !isUpcoming(p) && p.day >= shiftLocal(isoLocal(), -7) && !ratedByMe(p.id));
   const matches = ideas.matches || [];
-  return { ask, notes, after, matches, count: ask.length + notes.length + matches.length };
+  const letters = th.list.filter((t) => t.aud === 'us' && t.unread).sort((a, b) => (LS.get(`fam.tonight.${b.id}`) ? 1 : 0) - (LS.get(`fam.tonight.${a.id}`) ? 1 : 0));
+  return { ask, notes, after, matches, letters, count: ask.length + notes.length + matches.length + letters.length };
 }
 function usBadge() {
   const b = $('#usBadge');
@@ -1211,13 +1221,14 @@ async function usView() {
     <div class="us-title"><h2>💞 ${esc(me().name)} &amp; ${esc(p.name)}</h2><span class="small muted" id="usSub">🔒 Just you two</span></div>
     <section id="usFor"></section>
     <section class="card" id="usNotesC"><div class="skeleton line"></div></section>
+    <section class="card" id="usBookC"></section>
     <section class="card" id="usPlansC"></section>
     <section class="card" id="usIdeasC" hidden></section>
     <section class="card" id="usOutC"></section>
     <section class="card" id="usRhythmC"></section>
     <section id="usTonight"></section></div>`;
   importUs().catch(() => {});
-  await Promise.all([loadUs(), loadRhythm().then((r) => { calm.rhythm = r; }).catch(() => {}), loadWatch().catch(() => {}), loadIdeas().catch(() => {})]);
+  await Promise.all([loadUs(), loadRhythm().then((r) => { calm.rhythm = r; }).catch(() => {}), loadWatch().catch(() => {}), loadIdeas().catch(() => {}), loadThreads().catch(() => {})]);
   if (state.view !== 'us') return;
   renderUs();
   // Opening Us counts its new notes as seen (after this visit's "new" marks are drawn).
@@ -1230,7 +1241,9 @@ function renderUs() {
   const wn = (p) => (KINDS[p.kind] || KINDS.other);
   $('#usSub').textContent = `🔒 Just you two${us.streak > 1 ? ` · 💌 ${us.streak}-day note streak` : ''}`;
   // For you
-  $('#usFor').innerHTML = f.ask.length || f.notes.length || f.after.length || f.matches.length ? `<div class="foryou"><div class="row between"><b class="small up">For you</b>${f.count ? `<span class="small" style="color:var(--like);font-weight:800">${f.count}</span>` : ''}</div>
+  $('#usFor').innerHTML = f.ask.length || f.notes.length || f.after.length || f.matches.length || f.letters.length ? `<div class="foryou"><div class="row between"><b class="small up">For you</b>${f.count ? `<span class="small" style="color:var(--like);font-weight:800">${f.count}</span>` : ''}</div>
+    ${f.letters.map((t) => `<div class="fy"><span class="fy-i">📓</span><div><b>${t.mine ? `${esc(t.lastByName)} added a note to “${esc(t.title)}”` : `${esc(t.byName)} wrote: ${esc(t.title)}`}</b><small>${t.mins} min read${t.replies ? ` · ${t.replies} note${t.replies === 1 ? '' : 's'}` : ''}${LS.get(`fam.tonight.${t.id}`) ? ' · 🌙 saved for tonight' : ''}</small>
+      <div class="ans"><button type="button" class="small" data-thread="${t.fid}:${t.id}">Read</button>${LS.get(`fam.tonight.${t.id}`) ? '' : `<button type="button" class="ghost small" data-tonightlater="${t.id}">🌙 Tonight</button>`}</div></div></div>`).join('')}
     ${f.matches.map((m) => `<div class="fy"><span class="fy-i">💞</span><div><b>It's a match: ${esc(m.idea.title)}</b><small>You both 💗 it${m.idea.day ? ` · ${esc(dayText(m.idea.day, m.idea.time))}` : ''}</small>
       <div class="ans"><button type="button" class="small" data-match="${esc(m.t)}">📅 Make it a plan</button></div></div></div>`).join('')}
     ${f.ask.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>${esc(member(x.by)?.name || pName)} suggested ${esc(planTitle(x).toLowerCase().startsWith('date night') ? 'a date night' : planTitle(x))}</b><small>${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}${x.note ? ` · “${esc(x.note)}”` : ''}</small>
@@ -1268,6 +1281,12 @@ function renderUs() {
         : '<p class="small muted">Log your dates and it keeps the rhythm: a date every 2 weeks, us time twice a week, an overnight twice a year, a getaway every 2 years.</p>'}`;
   } else $('#usRhythmC').hidden = true;
   renderIdeasCard(); renderOutingCard();
+  // 📓 Our notebook: the write-ups just for the two of you, newest first.
+  const book = th.list.filter((t) => t.aud === 'us').sort((a, b) => (b.pinned - a.pinned) || b.lastAt - a.lastAt);
+  $('#usBookC').innerHTML = `<div class="row between"><b class="us-h">📓 Our notebook</b><button type="button" class="linkish small" data-act="writeup">✍️ Write</button></div>
+    ${book.length ? book.slice(0, 6).map((t) => `<button type="button" class="nbrow" data-thread="${t.fid}:${t.id}"><span class="fp-i">${(THREAD_CATS[t.cat] || THREAD_CATS.learned)[0]}</span><span class="grow"><b>${t.unread ? '<i class="dot"></i>' : ''}${esc(t.title)}</b><small class="muted">${esc(t.mine ? 'You' : t.byName)} · ${ago(t.lastAt)}${t.replies ? ` · ✍️ ${t.replies}` : ''}${t.pinned ? ' · 📌' : ''}</small></span></button>`).join('')
+      : `<p class="small muted">Read something, tried something, had an idea? Write ${esc(pName)} about it while it's fresh — it waits here until they have a moment.</p>`}
+    ${book.length > 6 ? '<button type="button" class="linkish small" data-board="us" data-famtab="threads">All of it ›</button>' : ''}`;
   // Tonight's show
   const on = (watch.shows || []).filter((x) => x.status === 'watching').sort((a, b) => (watch.S?.lastActive(b) || '').localeCompare(watch.S?.lastActive(a) || ''))[0];
   const tonightLogged = on?.nights.some((n) => n.date === isoLocal());
@@ -1791,6 +1810,197 @@ document.addEventListener('visibilitychange', () => {
     for (const j of jobList().filter((x) => x.status === 'running' && !jobs.told.has(x.id))) { jobs.told.add(j.id); api.post(`/families/${state.fid}/outing/job/${j.id}/notify`).catch(() => {}); }
   } else resumeJobs();
 });
+
+// ---------- 📖 threads: write-ups read in your own time, with replies, polls and best answers ----------
+const THREAD_CATS = { learned: ['📚', 'Learned'], talk: ['💬', 'Talk'], howto: ['📌', 'How-to'], ask: ['❓', 'Ask'], poll: ['📊', 'Poll'] };
+const THREAD_BOARDS = { us: '💞 Just us', family: '👨‍👩‍👧 Family', dogs: '🐾 Dogs', house: '🏠 House & money', friends: "🤝 Friends'" };
+const th = { list: [], board: 'new', cur: null, quote: null, loaded: 0 };
+const threadKey = (t) => (t.pk ? postKey(t) : Promise.resolve(fk(t.fid)));
+async function openThreadText(t, k) {
+  const o = async (v) => { if (v == null) return ''; const r = await tryOpen(k, v, null); return r ?? (isSealed(v) ? '🔒' : v); };
+  return { ...t, title: await o(t.title), body: await o(t.body),
+    replies: Array.isArray(t.replies) ? await Promise.all(t.replies.map(async (r) => ({ ...r, text: await o(r.text), quote: typeof r.quote === "string" ? await o(r.quote) : r.quote }))) : t.replies,
+    poll: t.poll?.opts ? { ...t.poll, opts: await Promise.all(t.poll.opts.map(o)) } : t.poll };
+}
+async function loadThreads() {
+  const r = await api.get('/threads').catch(() => null);
+  if (!r) return th.list;
+  th.list = await Promise.all(r.threads.map(async (t) => openThreadText(t, await threadKey(t))));
+  th.loaded = Date.now();
+  famBadge(); usBadge();
+  return th.list;
+}
+const unreadThreads = (us = false) => th.list.filter((t) => t.unread && (us ? t.aud === 'us' : t.aud !== 'us'));
+function famBadge() {
+  const b = $('#famBadge');
+  if (!b) return;
+  const n = unreadThreads().length;
+  b.hidden = !n; b.textContent = n > 9 ? '9+' : String(n);
+}
+// A little markdown: "## " headings, "- " lists, paragraphs, links. Each block is numbered, so a
+// reply can sit next to the paragraph it's about.
+function mdBlocks(text) {
+  const blocks = [];
+  let list = null;
+  for (const raw of String(text || '').split('\n')) {
+    const line = raw.trimEnd();
+    if (/^\s*[-•*]\s+/.test(line)) { if (!list) { list = { type: 'ul', items: [] }; blocks.push(list); } list.items.push(line.replace(/^\s*[-•*]\s+/, '')); continue; }
+    list = null;
+    if (!line.trim()) { blocks.push(null); continue; }
+    const h = line.match(/^#{1,3}\s+(.*)/);
+    if (h) { blocks.push({ type: 'h', text: h[1] }); continue; }
+    const last = blocks[blocks.length - 1];
+    if (last?.type === 'p') last.text += `\n${line}`; else blocks.push({ type: 'p', text: line });
+  }
+  return blocks.filter(Boolean);
+}
+const linkify = (s) => esc(s).replace(/https:\/\/[^\s<]+[^\s<.,;:!?)]/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u.replace(/^https:\/\/(www\.)?/, '').slice(0, 40)}${u.length > 52 ? '…' : ''}</a>`).replace(/\n/g, '<br>');
+const blockHtml = (b) => (b.type === 'h' ? `<h4>${linkify(b.text)}</h4>` : b.type === 'ul' ? `<ul>${b.items.map((i) => `<li>${linkify(i)}</li>`).join('')}</ul>` : `<p>${linkify(b.text)}</p>`);
+const blockText = (b) => (b.type === 'ul' ? b.items.join(' · ') : b.text);
+
+function threadRow(t) {
+  const [ico, cat] = THREAD_CATS[t.cat] || THREAD_CATS.talk;
+  const last = t.replies ? `${t.replies} repl${t.replies === 1 ? 'y' : 'ies'}${t.lastByName && t.lastAt > t.at ? ` · ${esc(t.lastByName)} ${ago(t.lastAt)}` : ''}` : `${t.mins} min read`;
+  return `<button type="button" class="th ${t.unread ? 'unread' : ''}" data-thread="${t.fid}:${t.id}"><span class="cat">${ico} ${cat} · <span class="aud a-${t.board}">${THREAD_BOARDS[t.board] || ''}</span>${t.pinned ? ' · 📌' : ''}${t.best ? ' · ✓ answered' : ''}${t.poll ? ` · ${t.poll.n} voted` : ''}</span>
+    <b>${t.unread ? '<i class="dot"></i>' : ''}${esc(t.title)}</b><small class="muted">${esc(t.mine ? 'You' : t.byName)}${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · ${last}</small></button>`;
+}
+// The Sunday digest: one calm summary of the week, on Sundays and Mondays until you close it.
+function digestCard() {
+  const d = new Date().getDay(), wk = shiftLocal(isoLocal(), -d);
+  if (![0, 1].includes(d) || LS.get('fam.digestSeen') === wk || !th.list.length) return '';
+  const since = Date.now() - 7 * 864e5;
+  const fresh = th.list.filter((t) => t.at > since && !t.mine), asks = th.list.filter((t) => t.cat === 'ask' && !t.best && t.at > Date.now() - 21 * 864e5 && !t.mine), polls = th.list.filter((t) => t.poll && !t.poll.voted && (!t.poll.closes || t.poll.closes >= isoLocal()));
+  const busy = th.list.filter((t) => t.replies >= 8 && t.lastAt > since);
+  const rows = [
+    fresh.length && ['📚', `${fresh.length} new thread${fresh.length === 1 ? '' : 's'}`, fresh.slice(0, 2).map((t) => t.title).join(' · ')],
+    asks.length && ['❓', `${asks.length} question${asks.length === 1 ? '' : 's'} waiting for an answer`, asks[0].title],
+    polls.length && ['📊', `${polls.length} poll${polls.length === 1 ? '' : 's'} to vote on`, `${polls[0].title}${polls[0].poll.closes ? ` · closes ${dayText(polls[0].poll.closes).replace(/ ·.*/, '')}` : ''}`],
+    busy.length && ['🧵', `${busy[0].title} went long`, `${busy[0].replies} replies`],
+  ].filter(Boolean);
+  if (!rows.length) return '';
+  return `<section class="digest"><div class="row between"><b>☕ This week in the family</b><button type="button" class="icon-btn" data-digestx="${wk}" aria-label="Close">✕</button></div>
+    ${rows.map(([i, a, b]) => `<button type="button" class="fpick" data-famtab="threads"><span class="fp-i">${i}</span><div class="grow"><b class="small">${esc(a)}</b><small class="muted">${esc(b)}</small></div></button>`).join('')}</section>`;
+}
+async function threadsView() {
+  const el = $('#famBody');
+  if (!el) return;
+  if (!th.loaded || Date.now() - th.loaded > 20000) { el.innerHTML = '<div class="skeleton card"></div>'; await loadThreads(); if (!$('#famBody') || state.famTab !== 'threads') return; }
+  const hasFriends = (fam().connections || []).length || th.list.some((t) => !t.own);
+  const boards = ['new', ...(partnerMember() ? ['us'] : []), 'family', ...((fam().modules || []).includes('dogs') ? ['dogs'] : []), 'house', ...(hasFriends ? ['friends'] : [])];
+  const list = th.board === 'new' ? th.list : th.list.filter((t) => t.board === th.board);
+  el.innerHTML = `<div class="row between"><div class="rchips boards">${boards.map((b) => `<button type="button" class="chip ${th.board === b ? 'on' : ''}" data-board="${b}">${b === 'new' ? 'New' : THREAD_BOARDS[b]}${b !== 'new' && th.list.some((t) => t.board === b && t.unread) ? ' <i class="dot"></i>' : ''}</button>`).join('')}</div></div>
+    <button type="button" class="input-like" data-act="writeup">✍️ Write something up…</button>
+    <div class="thlist">${list.map(threadRow).join('') || `<div class="card center"><p class="small">${th.board === 'us' ? `Write ${esc(partnerName())} something to read later — what you read about, a plan, an idea.` : 'Start a thread: something you learned, a question, a decision to talk through, or a how-to.'}</p><button type="button" data-act="writeup">✍️ Write it up</button></div>`}</div>`;
+}
+// One thread: just-us ones read like a letter (notes in the margin); the rest like a forum topic.
+async function threadView(fid, id) {
+  const r = await api.get(`/families/${fid}/threads/${id}`);
+  const k = await threadKey(r.thread);
+  th.cur = await openThreadText(r.thread, k);
+  th.cur._key = k;
+  const s = th.list.find((x) => x.id === id); if (s) { s.unread = false; famBadge(); usBadge(); }
+  renderThread();
+}
+function renderThread() {
+  const t = th.cur, meId = fam()?.me;
+  const [ico, cat] = THREAD_CATS[t.cat] || THREAD_CATS.talk;
+  const blocks = mdBlocks(t.body);
+  const letter = t.aud === 'us';
+  const atPara = (i) => t.replies.filter((r) => r.quote === i);
+  const replyHtml = (r, n) => `<div class="post" id="r-${r.id}"><span class="av ${r.mine ? 'a1' : 'a2'}">${esc((r.name || '?')[0])}</span><div class="grow">
+      <div class="h"><b>${esc(r.mine ? 'You' : r.name)}</b> · ${ago(r.at)}${letter ? '' : ` · #${n + 2}`}${t.bestId === r.id ? ' <span class="tag tg">✓ Best answer</span>' : ''}</div>
+      ${r.quote != null && !letter ? `<div class="quote">❝ ${esc(typeof r.quote === 'number' ? (blocks[r.quote] ? blockText(blocks[r.quote]).slice(0, 140) : '') : r.quote)} ❞</div>` : ''}
+      <div class="t">${linkify(r.text)}</div>
+      <div class="ractions">${t.cat === 'ask' ? `<button type="button" class="linkish tiny" data-thup="${r.id}">▲ ${r.ups}${r.upped ? ' · you' : ''}</button>` : ''}${t.cat === 'ask' && t.mine ? `<button type="button" class="linkish tiny" data-thbest="${r.id}">${t.bestId === r.id ? 'Unmark best' : '✓ Best answer'}</button>` : ''}
+        <button type="button" class="linkish tiny" data-thquote="r:${r.id}">❝ Quote</button>${r.mine ? `<button type="button" class="linkish tiny" data-thrdel="${r.id}">Delete</button>` : ''}</div></div></div>`;
+  const pollHtml = t.poll ? `<div class="poll">${t.poll.opts.map((o, i) => { const total = t.poll.counts.reduce((a, b) => a + b, 0) || 1; return `<button type="button" class="${t.poll.mine === i ? 'on' : ''}" data-thvote="${i}"><i style="width:${Math.round((t.poll.counts[i] / total) * 100)}%"></i><span>${t.poll.mine === i ? '✓ ' : ''}${esc(o)} · ${t.poll.counts[i]}</span></button>`; }).join('')}
+    <p class="tiny muted">${t.poll.closes ? `Closes ${esc(dayText(t.poll.closes).replace(/ ·.*/, ''))} · ` : ''}tap to vote, tap another to change</p></div>` : '';
+  const seen = !t.mine ? '' : letter ? (t.readers.length ? `✓ Read by ${esc(partnerName())} ${ago(Math.max(...t.readers))}` : `Not read yet by ${esc(partnerName())}`) : t.readCount ? `Seen by ${t.readCount}` : '';
+  const body = letter
+    ? `<article class="letter"><div class="lmeta">${esc(t.mine ? 'You' : t.byName)} · ${esc(new Date(t.at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }))} · ${t.mins} min</div><h3>${esc(t.title)}</h3>
+        ${blocks.map((b, i) => `<div class="para" data-para="${i}">${blockHtml(b)}${atPara(i).map((r) => `<div class="margin">✍️ <b>${esc(r.mine ? 'You' : r.name)}:</b> ${linkify(r.text)}</div>`).join('')}${b.type === 'h' ? '' : `<button type="button" class="linkish tiny note-btn" data-thquote="p:${i}">✍️ Note</button>`}</div>`).join('')}</article>`
+    : `<div class="cat">${ico} ${cat} · ${THREAD_BOARDS[t.board] || ''}</div><h2 class="thtitle">${esc(t.title)}</h2>
+       <div class="post first"><span class="av a1">${esc((t.byName || '?')[0])}</span><div class="grow"><div class="h"><b>${esc(t.mine ? 'You' : t.byName)}</b>${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · #1${t.editedAt ? ' · edited' : ''}</div><div class="t thbody">${blocks.map(blockHtml).join('')}</div></div></div>${pollHtml}`;
+  const replies = letter ? t.replies.filter((r) => r.quote == null || typeof r.quote !== 'number') : t.replies;
+  const sorted = t.cat === 'ask' ? [...replies].sort((a, b) => (b.id === t.bestId) - (a.id === t.bestId) || b.ups - a.ups || a.at - b.at) : replies;
+  $('#view').innerHTML = `${demoBanner()}<div class="thread-page">
+    <div class="row between"><button type="button" class="linkish" data-thback="1">‹ ${letter ? 'Us' : 'Threads'}</button>
+      <span class="row"><button type="button" class="linkish small" data-thfollow="1">${t.following ? '🔔 Following' : '🔕 Follow'}</button>${t.mine ? ` <button type="button" class="linkish small" data-thedit="1">Edit</button>` : ''}${t.mine || fam()?.members.find((x) => x.id === meId)?.role === 'owner' ? ` <button type="button" class="linkish small" data-thpin="1">${t.pinned ? 'Unpin' : '📌 Pin'}</button> <button type="button" class="linkish small danger" data-thdel="1">Delete</button>` : ''}</span></div>
+    ${body}
+    ${seen ? `<p class="tiny muted">${seen}</p>` : ''}
+    ${sorted.length ? `<div class="grp">${letter ? 'Notes' : `${sorted.length} repl${sorted.length === 1 ? 'y' : 'ies'}`}</div>${sorted.map(replyHtml).join('')}` : ''}
+    <form id="thReplyForm" class="stack reply-box">${th.quote ? `<div class="quote">❝ ${esc(th.quote.label)} ❞ <button type="button" class="linkish tiny" data-thquote="x">✕</button></div>` : ''}
+      <textarea name="text" rows="2" maxlength="4000" placeholder="${letter ? 'Write a note…' : t.cat === 'ask' ? 'Your answer…' : 'Reply…'}" required></textarea><div class="row end"><button>${letter ? 'Add note' : 'Reply'}</button></div></form>
+  </div>`;
+}
+// ✍️ Write it up: for just the two of you, the family, or friends' families. Drafts keep themselves.
+const draftKey = () => `fam.threadDraft.${state.fid}`;
+function writeupSheet(preset = {}) {
+  let d = {}; try { d = JSON.parse(LS.get(draftKey()) || '{}'); } catch { /* none */ }
+  if (preset.edit) {
+    const t = preset.edit;
+    openSheet(`<h2>✎ Edit</h2><form id="writeForm" class="stack" data-edit="${t.id}"><input name="title" maxlength="120" value="${esc(t.title)}" required><textarea name="body" rows="12" maxlength="12000">${esc(t.body)}</textarea>
+      <div class="toolbar"><button type="button" class="linkish small" data-wfmt="## ">H</button><button type="button" class="linkish small" data-wfmt="- ">• List</button><span class="grow"></span><button type="button" class="linkish small" data-act="tidy">✨ Tidy it up</button></div>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save</button></div></form>`);
+    return;
+  }
+  const p = partnerMember(), hasFriends = (fam().connections || []).length;
+  const aud = preset.aud || d.aud || (state.view === 'us' && p ? 'us' : 'family');
+  const v = { aud, board: d.board || 'family', cat: preset.cat || d.cat || (aud === 'us' ? 'learned' : 'talk'), title: d.title || '', body: d.body || '', opts: d.opts || ['', ''] };
+  const auds = [...(p ? [['us', `💞 Just ${p.name}`]] : []), ['family', '👨‍👩‍👧 Family'], ...(hasFriends ? [['connections', "🤝 Friends' families"]] : [])];
+  const boards = [['family', 'General'], ...((fam().modules || []).includes('dogs') ? [['dogs', '🐾 Dogs']] : []), ['house', '🏠 House & money']];
+  openSheet(`<div class="row between"><h2>✍️ Write it up</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <form id="writeForm" class="stack">
+      <div class="rchips radios chipradios">${auds.map(([k, l]) => `<label><input type="radio" name="aud" value="${k}" ${v.aud === k ? 'checked' : ''}><span class="chip">${esc(l)}</span></label>`).join('')}</div>
+      <div class="rchips radios chipradios wboards" ${v.aud === 'family' ? '' : 'hidden'}>${boards.map(([k, l]) => `<label><input type="radio" name="board" value="${k}" ${v.board === k ? 'checked' : ''}><span class="chip">${l}</span></label>`).join('')}</div>
+      <div class="rchips radios chipradios">${Object.entries(THREAD_CATS).filter(([k]) => v.aud !== 'us' || !['ask', 'poll'].includes(k)).map(([k, [i, l]]) => `<label><input type="radio" name="cat" value="${k}" ${v.cat === k ? 'checked' : ''}><span class="chip">${i} ${l}</span></label>`).join('')}</div>
+      <input name="title" maxlength="120" placeholder="Title" value="${esc(v.title)}" required>
+      <textarea name="body" rows="9" maxlength="12000" placeholder="${v.aud === 'us' ? 'Just type it while it\'s fresh — rough is fine. Paste links. Tap ✨ to tidy it up.' : 'What\'s it about? Paste links; “## ” makes a heading, “- ” a list.'}">${esc(v.body)}</textarea>
+      <div class="toolbar"><button type="button" class="linkish small" data-wfmt="## ">H</button><button type="button" class="linkish small" data-wfmt="- ">• List</button><span class="grow"></span><button type="button" class="linkish small" data-act="tidy">✨ Tidy it up</button></div>
+      <div class="wpoll stack" ${v.cat === 'poll' ? '' : 'hidden'}>${v.opts.map((o, i) => `<input name="opt" maxlength="80" placeholder="Choice ${i + 1}" value="${esc(o)}">`).join('')}<button type="button" class="linkish small" data-act="pollopt">＋ Another choice</button><label class="small">Closes (optional)<input type="date" name="closes" min="${isoLocal()}"></label></div>
+      ${p ? `<label class="switch-row wnudge" ${v.aud === 'us' ? '' : 'hidden'}><span>🔔 Let ${esc(p.name)} know now<small class="muted">Otherwise it waits quietly in Us › For you</small></span><input type="checkbox" name="nudge"><i class="switch"></i></label>` : ''}
+      <div class="row end"><button type="button" class="ghost" data-act="close">Later</button><button>Post</button></div>
+      <p class="tiny muted">🔒 End-to-end encrypted. Drafts stay on this phone. ✨ Tidy it up sends only this text to Claude, and only when you tap it.</p>
+    </form>`);
+}
+function saveDraft() {
+  const f = $('#writeForm'); if (!f) return;
+  const v = Object.fromEntries(new FormData(f));
+  try { LS.set(draftKey(), JSON.stringify({ aud: v.aud, board: v.board, cat: v.cat, title: v.title, body: v.body, opts: [...f.querySelectorAll('[name=opt]')].map((x) => x.value) })); } catch { /* full */ }
+}
+async function postThread(f) {
+  if (lockedHere()) return toast('🔒 This device needs the family key first — Me › 🔐 Encryption');
+  const v = Object.fromEntries(new FormData(f));
+  const opts = [...f.querySelectorAll('[name=opt]')].map((x) => x.value.trim()).filter(Boolean);
+  if (v.cat === 'poll' && opts.length < 2) return toast('A poll needs at least two choices');
+  let k = fk(), pk;
+  if (k && v.aud === 'connections') {
+    k = newKey();
+    const conns = {};
+    for (const [other, sealedCk] of Object.entries(fam().connkeys || {})) { const ck = await tryOpen(fk(), sealedCk, null); if (ck) conns[other] = await seal(ck, k); }
+    pk = { fam: await seal(fk(), k), conns };
+  }
+  const L = (x) => (k ? seal(k, x) : x);
+  const words = `${v.title} ${v.body}`.split(/\s+/).length;
+  const r = await api.post(`/families/${state.fid}/threads`, { aud: v.aud, board: v.board, cat: v.cat, title: await L(v.title.trim()), body: await L(v.body.trim()), mins: Math.max(1, Math.round(words / 200)), nudge: !!v.nudge, cid: f.dataset.cid || (f.dataset.cid = Math.random().toString(36).slice(2, 12)),
+    ...(v.cat === 'poll' ? { poll: { opts: await Promise.all(opts.map(L)), closes: v.closes || '' } } : {}), ...(pk ? { pk } : {}) });
+  LS.set(draftKey(), null);
+  closeSheet();
+  th.loaded = 0; th.board = v.aud === 'us' ? 'us' : 'new';
+  toast(v.aud === 'us' ? `📓 Saved for ${partnerName()} to read` : '📖 Posted');
+  if (v.aud === 'us' && state.view === 'us') { await loadThreads(); return renderUs(); }
+  state.famTab = 'threads'; LS.set('fam.famTab', 'threads');
+  show('feed');
+  return threadView(state.fid, r.thread.id);
+}
+async function saveThreadEdit(f) {
+  const k = th.cur._key, L = (x) => (k ? seal(k, x) : x);
+  const words = `${f.title.value} ${f.body.value}`.split(/\s+/).length;
+  const patch = { title: await L(f.title.value.trim()), body: await L(f.body.value.trim()), mins: Math.max(1, Math.round(words / 200)) };
+  closeSheet();
+  return threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}`, patch));
+}
+async function threadAct(fn) { const r = await fn(); if (r?.thread) { const k = th.cur._key; th.cur = await openThreadText(r.thread, k); th.cur._key = k; renderThread(); } return r; }
 
 // Bringing over the trackers' "Feeling like" plans, answers and notes (once per family, each
 // person their own, locked before they're sent).
@@ -2783,6 +2993,29 @@ document.addEventListener('click', (e) => {
   if (d.feelpick != null) { const x = feel.picks[+d.feelpick]; return x && feelFill(x); }
   if (d.feelcuisine != null) { feel.cuisine = d.feelcuisine; return renderFeelPicks(); }
   if (d.feelfind) return act(feelFind);
+  if (d.famtab) { if (d.board) th.board = d.board; state.famTab = d.famtab; LS.set('fam.famTab', d.famtab); if (state.view !== 'feed') return show('feed'); return feedView(); }
+  if (d.board) { th.board = d.board; return threadsView(); }
+  if (d.thread) { const [f, id] = d.thread.split(':'); th.quote = null; return act(() => threadView(f, id)); }
+  if (d.thback) { th.cur = null; th.quote = null; return show(state.view === 'us' ? 'us' : 'feed'); }
+  if (d.thfollow) return act(async () => { const r = await api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/follow`); th.cur.following = r.following; renderThread(); toast(r.following ? '🔔 You\'ll hear about new replies' : '🔕 No more replies from this one'); });
+  if (d.thpin) return act(() => threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}`, { pinned: !th.cur.pinned })));
+  if (d.thdel) { if (!confirm('Delete this thread and its replies?')) return; return act(async () => { await api.del(`/families/${th.cur.fid}/threads/${th.cur.id}`); th.loaded = 0; th.list = th.list.filter((x) => x.id !== th.cur.id); th.cur = null; toast('Deleted'); show('feed'); }); }
+  if (d.thedit) return writeupSheet({ edit: th.cur });
+  if (d.thup) return act(() => threadAct(() => api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/up/${d.thup}`)));
+  if (d.thbest) return act(() => threadAct(() => api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/best`, { reply: d.thbest })));
+  if (d.thvote != null) return act(() => threadAct(() => api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/vote`, { i: +d.thvote })));
+  if (d.thrdel) { if (!confirm('Delete your reply?')) return; return act(() => threadAct(() => api.del(`/families/${th.cur.fid}/threads/${th.cur.id}/replies/${d.thrdel}`))); }
+  if (d.thquote) {
+    if (d.thquote === 'x') th.quote = null;
+    else if (d.thquote.startsWith('p:')) { const i = +d.thquote.slice(2); th.quote = { para: i, label: blockText(mdBlocks(th.cur.body)[i] || { text: '' }).slice(0, 120) }; }
+    else { const r = th.cur.replies.find((x) => x.id === d.thquote.slice(2)); if (r) th.quote = { text: `${r.name}: ${r.text}`.slice(0, 280), label: `${r.name}: ${r.text}`.slice(0, 120) }; }
+    const keep = $('#thReplyForm textarea')?.value || '';
+    renderThread();
+    const ta = $('#thReplyForm textarea'); ta.value = keep; ta.focus(); return;
+  }
+  if (d.tonightlater) { LS.set(`fam.tonight.${d.tonightlater}`, '1'); toast('🌙 Saved for tonight'); return renderUs(); }
+  if (d.digestx) { LS.set('fam.digestSeen', d.digestx); $('#digest').innerHTML = ''; return; }
+  if (d.wfmt) { const ta = $('#writeForm [name=body]'); const at = ta.value.lastIndexOf('\n', ta.selectionStart - 1) + 1; ta.value = ta.value.slice(0, at) + d.wfmt + ta.value.slice(at); ta.focus(); return saveDraft(); }
   if (d.outplace) return outingAsk(d.outplace);
   if (d.outfill) { const i = $('#outForm [name=text]'); i.value = d.outfill; return i.focus(); }
   if (d.outsaved != null) { outing.cur = savedOutings()[+d.outsaved]; outing.tab = 'plan'; outing.plan = null; return outing.cur && outingView(); }
@@ -2866,6 +3099,17 @@ document.addEventListener('click', (e) => {
     case 'help': return helpView();
     case 'feel': return feelSheet();
     case 'outing': return outingAsk();
+    case 'writeup': return writeupSheet();
+    case 'pollopt': { const w = $('#writeForm .wpoll'); if (w.querySelectorAll('[name=opt]').length >= 8) return; w.querySelector('[data-act=pollopt]').insertAdjacentHTML('beforebegin', `<input name="opt" maxlength="80" placeholder="Choice ${w.querySelectorAll('[name=opt]').length + 1}">`); return; }
+    case 'tidy': {
+      const ta = $('#writeForm [name=body]');
+      if (ta.value.trim().length < 20) return toast('Write a little more first');
+      const before = ta.value;
+      t.disabled = true; t.textContent = '✨ Tidying…';
+      return api.post(`/families/${state.fid}/tidy`, { text: before }).then((r) => { ta.value = r.text; saveDraft(); t.textContent = '↩︎ Undo tidy'; t.dataset.act = 'untidy'; t.dataset.before = before; })
+        .catch((err) => { toast(err.message); t.textContent = '✨ Tidy it up'; }).finally(() => { t.disabled = false; });
+    }
+    case 'untidy': { const ta = $('#writeForm [name=body]'); ta.value = t.dataset.before || ta.value; saveDraft(); t.textContent = '✨ Tidy it up'; t.dataset.act = 'tidy'; return; }
     case 'outsave': return outingSave();
     case 'outsend': return act(outingSend);
     case 'ideaunpass': LS.set(passKey(), null); ideas.i = 0; return ideasSheet();
@@ -3090,6 +3334,15 @@ document.addEventListener('change', async (e) => {
     t.form.idea.value = '';
     return renderFeelPicks();
   }
+  if (t.form?.id === 'writeForm' && (t.name === 'aud' || t.name === 'cat')) {
+    const f = t.form;
+    f.querySelector('.wboards').hidden = f.aud.value !== 'family';
+    f.querySelector('.wnudge')?.toggleAttribute('hidden', f.aud.value !== 'us');
+    f.querySelector('.wpoll').hidden = f.cat.value !== 'poll';
+    saveDraft();
+    if (t.name === 'aud' && (t.value === 'us') !== !f.querySelector('input[name=cat][value=poll]')) { const keep = { aud: t.value }; return writeupSheet(keep); }
+    return;
+  }
   if (t.form?.id === 'outForm' && t.name === 'day') { const pd = t.form.querySelector('[name=pickday]'); pd.hidden = t.value !== 'pick'; if (!pd.hidden) pd.focus(); return; }
   if (t.form?.id === 'feelForm' && t.name === 'when') { t.form.querySelector('.kday').hidden = t.value !== 'date'; return renderFeelPicks(); }
   if (t.form?.id === 'feelForm' && (t.name === 'day' || t.name === 'time')) return renderFeelPicks();
@@ -3128,6 +3381,19 @@ document.addEventListener('submit', (e) => {
     e.preventDefault();
     f.text.value = ''; f.querySelector('button').disabled = true;
     return ask(v.text || '');
+  }
+  if (f.id === 'writeForm') { e.preventDefault(); return act(() => (f.dataset.edit ? saveThreadEdit(f) : postThread(f))); }
+  if (f.id === 'thReplyForm') {
+    e.preventDefault();
+    const text = f.text.value.trim();
+    if (!text) return;
+    return act(async () => {
+      const k = th.cur._key, L = (x) => (k ? seal(k, x) : x);
+      const quote = th.quote ? (th.quote.para != null ? th.quote.para : await L(th.quote.text)) : null;
+      const sealedText = await L(text);
+      await threadAct(() => api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/replies`, { text: sealedText, quote }));
+      th.quote = null; renderThread(); window.scrollTo(0, document.body.scrollHeight);
+    });
   }
   if (f.id === 'rateForm') { e.preventDefault(); return act(() => saveRating(f)); }
   if (f.id === 'outForm') { e.preventDefault(); return act(() => outingGo(f)); }
@@ -3481,4 +3747,4 @@ if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
 boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; });
 document.addEventListener('toggle', (e) => {
   if (e.target.matches?.('details[data-house]')) { LS.set(`fam.${e.target.dataset.house || 'house'}Open`, e.target.open ? '1' : '0'); const f = e.target.querySelector('.fold'); if (f) f.textContent = e.target.open ? 'Hide' : 'Show'; return; } const c = e.target.closest?.('[data-couple]'); if (c && e.target === c) bingo.open[c.dataset.couple] = c.open; }, true);
-document.addEventListener('input', (e) => { if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); });
+document.addEventListener('input', (e) => { if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); if (e.target.closest?.('#writeForm')) { clearTimeout(saveDraft.t); saveDraft.t = setTimeout(saveDraft, 400); } });

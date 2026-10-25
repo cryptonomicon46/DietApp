@@ -49,6 +49,8 @@ import { blobStore, okPhotoId, photoKey, SIZES, quotaBytes, familyUsage, noteUsa
 import { DEFAULT_AREA, areaKey, scoutArea } from './scout.js';
 import { planOuting, swapStop } from './outing.js';
 import { checkLinks } from './links.js';
+import { threadRoutes } from './threads.js';
+import { askClaude } from './scout.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
@@ -1423,6 +1425,24 @@ export async function familyApi(req, env, path, ctx = null) {
     }
   }
 
+  // ---- 📖 threads ----
+  { const r = await threadRoutes({ path, method, body, db, user, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url }); if (r) return r; }
+  // ✨ Tidy it up: rough notes into headings and bullets. Only the text you tap it on is sent.
+  m = path.match(/^\/families\/([a-z0-9]+)\/tidy$/);
+  if (m && method === 'POST') {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const raw = String(body.text || '').slice(0, 8000).trim();
+    if (raw.length < 20) return json({ error: 'write a little more first' }, 400);
+    if (env.DEMO && !env.__anthropic) return json({ text: `## Notes\n${raw.split(/(?<=[.!?])\s+|\n+/).filter(Boolean).map((x) => `- ${x.trim()}`).join('\n')}`, demo: true });
+    if (!(env.ANTHROPIC_API_KEY || env.__anthropic)) return json({ error: 'Tidy it up needs the Anthropic key on the connector (ANTHROPIC_API_KEY)' }, 400);
+    const month = new Date().toISOString().slice(0, 7), key = `tidyruns:${fam.fid}:${month}`;
+    const n = (await db.get(key)) || 0;
+    if (n >= Math.max(1, +env.TIDY_MAX_RUNS || 60)) return json({ error: "that's a lot of tidying this month — more next month" }, 400);
+    const { text } = await askClaude(env, `Tidy up these rough notes someone wrote to share with their family. Keep their words, facts, numbers and links exactly; don't add anything new or give advice. Fix typos, group related points under short "## " headings, and use "- " bullets. Plain text only (no bold, no tables). Answer with only the tidied notes.\n\n${raw}`, { search: false, maxTokens: 3000, model: env.TIDY_MODEL || 'claude-haiku-5-5' });
+    await db.put(key, n + 1, 62 * 86400);
+    return json({ text: String(text || '').trim().slice(0, 12000) });
+  }
   // ---- the feed ----
   if (path === '/feed' && method === 'GET') {
     const fams = await families();
