@@ -1707,7 +1707,7 @@ export async function runScout(env, { db = store(env.HOUSEHOLD), force = false, 
       const fam = await db.get(k.name.slice(3));
       if (!fam || !fam.members?.some((x) => x.relation === 'spouse' || x.relation === 'partner')) continue;
       const a = { ...DEFAULT_AREA, ...(fam.ideas || {}) };
-      if (!areas.has(areaKey(a))) areas.set(areaKey(a), a);
+      if (fam.ideas || !areas.has(areaKey(a))) areas.set(areaKey(a), a);
     }
     cursor = r.list_complete === false ? r.cursor : null;
   } while (cursor && areas.size < 10);

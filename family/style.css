@@ -536,3 +536,25 @@ button:disabled { opacity: .7; cursor: default; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .create3 .hot { background: linear-gradient(135deg, #3a1f2a, #3a2f1c); border-color: #5a2e3e; color: var(--ink); } :root:not([data-theme=light]) .tag.tw, :root:not([data-theme=light]) .rchip.due { background: #3a2f17; color: #f3cf86; } }
 :root[data-theme=dark] .create3 .hot { background: linear-gradient(135deg, #3a1f2a, #3a2f1c); border-color: #5a2e3e; color: var(--ink); } :root[data-theme=dark] .tag.tw, :root[data-theme=dark] .rchip.due { background: #3a2f17; color: #f3cf86; }
 .sharebar .av { flex: none; width: 30px !important; height: 30px !important; }
+
+/* 💡 Date ideas */
+.idealist { display: grid; gap: 6px; margin-top: 8px; }
+.idearow { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.idearow:first-child { border-top: 0; }
+.idearow b { display: block; font-size: .92rem; } .idearow small { display: block; }
+.ii { flex: none; width: 40px; height: 40px; border-radius: 10px; background: var(--bg); display: grid; place-items: center; font-size: 1.3rem; overflow: hidden; }
+.ii img { width: 100%; height: 100%; object-fit: cover; }
+.icon-btn.pick { font-size: 1.1rem; }
+.ideatabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; } .ideatabs .chip { flex: none; }
+.ideacard { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 16px; padding: 14px; background: var(--card); margin: 6px 0 10px; }
+.ideacard h3 { margin: 0; font-size: 1.15rem; text-transform: none; letter-spacing: 0; color: var(--ink); } .ideacard p { margin: 0; }
+.ideacard .poster { width: 100%; max-height: 320px; object-fit: cover; border-radius: 12px; background: var(--bg); }
+.ideacard .poster.sm { max-height: 160px; }
+.ideabig { font-size: 3rem; text-align: center; padding: 14px 0; background: var(--bg); border-radius: 12px; }
+.deckbtns { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 6px; margin-top: 4px; } .deckbtns button { padding: 10px 6px; font-size: .86rem; }
+.deckbtns .hot { background: var(--like); color: #fff; }
+.stack.tight { gap: 4px; }
+.radios.showtimes { display: grid; gap: 6px; } .radios.showtimes label { display: block; } .radios.showtimes input { position: absolute; opacity: 0; pointer-events: none; }
+.radios.showtimes span { display: block; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; font-weight: 600; font-size: .88rem; background: var(--card); cursor: pointer; }
+.radios.showtimes span small { display: block; font-weight: 400; color: var(--muted); }
+.radios.showtimes input:checked + span { border-color: var(--like); box-shadow: 0 0 0 2px color-mix(in srgb, var(--like) 30%, transparent); }
