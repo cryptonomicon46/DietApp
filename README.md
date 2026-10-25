@@ -101,6 +101,8 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
   - **The dogs:** 🍳 Breakfast, 🍲 Dinner, 🦮 Walk, 🌳 Dog park, 🦴 Treat, 💊 Meds, with ⭐ Golden day and a week strip.
   - **The dogs say thank you:** when a day turns ⭐ golden, the dogs post a note on the feed thanking whoever took them out ("Dear Dad, thank you for a walk and the dog park… P.S. Please disregard any sock incidents. Forever yours, …"). Each note is put together from a greeting, a line about the day, a quirky P.S. and a sign-off, and recent lines aren't reused, so they read differently every time. One post a day, family only. Set what the pets call you in **Me › What the pets call you** (Dad, Mom…), and the family's creator can turn the notes off in Family settings.
   - **The house:** 💩 Poop patrol, 🗑️ Garbage, 🧺 Laundry, 🛒 Groceries, 🧽 Cleaning, 🍽️ Dishes.
+  - **👩‍🍳 Kitchen:** who cooked 🍳 breakfast (+2), 🥪 lunch (+2) and 🍝 dinner (+3) for the family.
+  - **＋ Add a chore:** your own (emoji, name, House / Kitchen / Dogs, 0–5 points), for any grown-up in the family. Removing one keeps what was already logged and its points.
   - **Points by effort** (cleaning 4; laundry and groceries 3; walks, park and poop patrol 2; feeding, meds, garbage and dishes 1; treats are for love). Every tap gets a little burst of ✨ and says where you stand.
   - **The Gold Card:** the month's top scorer wins a gold card, with a prize the family's creator sets (e.g. "picks date night"). A tie shares it. The race shows points, chores and 🔥 streaks, the winner tops the feed in the first week of the next month, and past winners go in the **Hall of fame**.
   - Bringing over the current app also brings its feeding, walk, park and treat history into this log.

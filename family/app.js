@@ -15,9 +15,15 @@ const SPECIES = { dog: '🐶 Dog', cat: '🐱 Cat', other: '🐾 Other' };
 const HUES = [152, 18, 210, 280, 340, 45, 190];
 const MODULES = { dogs: '🐶 Dogs — feeding, walks, vet & meds', chores: '🧺 Chores — laundry, garbage, groceries, cleaning, with a monthly 🏆 Gold Card', feed: '📸 Family feed — photos and updates', health: '🥗 Diet & fitness — weight, meals, training', calendar: '📅 Family calendar' };
 const CARE = { breakfast: ['🍳', 'Breakfast'], dinner: ['🍲', 'Dinner'], walk: ['🦮', 'Walk'], park: ['🌳', 'Dog park'], treat: ['🦴', 'Treat'], meds: ['💊', 'Meds'],
-  poop: ['💩', 'Poop patrol'], trash: ['🗑️', 'Garbage'], laundry: ['🧺', 'Laundry'], groceries: ['🛒', 'Groceries'], cleaning: ['🧽', 'Cleaning'], dishes: ['🍽️', 'Dishes'] };
-const DOG_KINDS = ['breakfast', 'dinner', 'walk', 'park', 'treat', 'meds'], HOUSE_KINDS = ['poop', 'trash', 'laundry', 'groceries', 'cleaning', 'dishes'];
-const PTS = { breakfast: 1, dinner: 1, walk: 2, park: 2, treat: 0, meds: 1, poop: 2, trash: 1, laundry: 3, groceries: 3, cleaning: 4, dishes: 1 };
+  poop: ['💩', 'Poop patrol'], trash: ['🗑️', 'Garbage'], laundry: ['🧺', 'Laundry'], groceries: ['🛒', 'Groceries'], cleaning: ['🧽', 'Cleaning'], dishes: ['🍽️', 'Dishes'],
+  cook_b: ['🍳', 'Cooked breakfast'], cook_l: ['🥪', 'Cooked lunch'], cook_d: ['🍝', 'Cooked dinner'] };
+const DOG_KINDS = ['breakfast', 'dinner', 'walk', 'park', 'treat', 'meds'], HOUSE_KINDS = ['poop', 'trash', 'laundry', 'groceries', 'cleaning', 'dishes'], KITCHEN_KINDS = ['cook_b', 'cook_l', 'cook_d'];
+const PTS = { breakfast: 1, dinner: 1, walk: 2, park: 2, treat: 0, meds: 1, poop: 2, trash: 1, laundry: 3, groceries: 3, cleaning: 4, dishes: 1, cook_b: 2, cook_l: 2, cook_d: 3 };
+// The family's own chores (added with ＋ Add a chore) sit with the built-in ones: "x_<id>".
+const ownChores = () => (fam()?.chores || []);
+const careMeta = (k) => CARE[k] || (() => { const c = ownChores().find((x) => `x_${x.id}` === k); return c ? [c.icon, c.label] : ['✅', 'Chore']; })();
+const ptsOf = (k) => PTS[k] ?? ownChores().find((x) => `x_${x.id}` === k)?.pts ?? 0;
+const kindsIn = (section, base) => [...base, ...ownChores().filter((c) => !c.gone && c.section === section).map((c) => `x_${c.id}`)];
 const HELP = { petsit: ['🐾', 'Pet sitting'], babysit: ['🧸', 'Babysitting'], walk: ['🦮', 'Dog walk'], ride: ['🚗', 'A ride'], meal: ['🍲', 'A meal'], other: ['🙋', 'A hand'] };
 const dayRange = (a, b) => { const f = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); return !b || b === a ? f(a) : `${f(a)} – ${f(b)}`; };
 const monthName = (m) => new Date(`${m}-15T12:00:00`).toLocaleDateString(undefined, { month: 'long' });
@@ -821,21 +827,25 @@ async function renderCare() {
   const other = grownUp && adults.length > 1 ? adults.find((m) => m.id !== fam().me) : null;
   if (careWho !== 'me' && careWho !== 'both' && careWho !== other?.id) careWho = 'me';
   const mods = fam().modules || [];
-  const grid = (kinds) => `<div class="care-grid">${kinds.map((k) => { const [ico, label] = CARE[k]; return `<button type="button" class="care-btn ${count(k) ? 'done' : ''}" data-care="${k}"><span>${ico}</span>${label}<em class="pts">${PTS[k] ? `+${PTS[k]}` : '♡'}</em>${count(k) ? `<small>${count(k) > 1 ? `×${count(k)}` : '✓'}</small>` : ''}</button>`; }).join('')}</div>`;
+  const grid = (kinds) => `<div class="care-grid">${kinds.map((k) => { const [ico, label] = careMeta(k); return `<button type="button" class="care-btn ${count(k) ? 'done' : ''}" data-care="${k}"><span>${esc(ico)}</span>${esc(label)}<em class="pts">${ptsOf(k) ? `+${ptsOf(k)}` : '♡'}</em>${count(k) ? `<small>${count(k) > 1 ? `×${count(k)}` : '✓'}</small>` : ''}</button>`; }).join('')}</div>`;
   el.innerHTML = `<div class="row between"><b>Today</b><span class="small ${golden ? 'good' : 'muted'}">${mods.includes('dogs') ? (golden ? '⭐ Golden day' : `${outings} outing${outings === 1 ? '' : 's'}`) : ''}</span></div>
-    ${mods.includes('dogs') ? `<div class="care-sec">🐾 The dogs</div>${grid(DOG_KINDS)}` : ''}
+    ${mods.includes('dogs') ? `<div class="care-sec">🐾 The dogs</div>${grid(kindsIn('dogs', DOG_KINDS))}` : ''}
     ${mods.includes('chores') ? (() => {
       // The house folds away (remembered on this phone); its taps still count for the Gold Card.
-      const done = HOUSE_KINDS.reduce((n, k) => n + count(k), 0);
-      const open = LS.get('fam.houseOpen') !== '0';
-      return `<details class="house" data-house ${open ? 'open' : ''}><summary class="care-sec">🏠 The house <span class="muted">${done ? `· ${done} done today` : ''}</span><span class="fold">${open ? 'Hide' : 'Show'}</span></summary>${grid(HOUSE_KINDS)}</details>`;
+      const fold = (key, title, kinds) => {
+        const done = kinds.reduce((n, k) => n + count(k), 0);
+        const open = LS.get(`fam.${key}Open`) !== '0';
+        return `<details class="house" data-house="${key}" ${open ? 'open' : ''}><summary class="care-sec">${title} <span class="muted">${done ? `· ${done} done today` : ''}</span><span class="fold">${open ? 'Hide' : 'Show'}</span></summary>${grid(kinds)}</details>`;
+      };
+      return fold('house', '🏠 The house', kindsIn('house', HOUSE_KINDS)) + fold('kitchen', '👩‍🍳 Kitchen', kindsIn('kitchen', KITCHEN_KINDS))
+        + (grownUp ? '<button type="button" class="linkish small add-chore" data-act="chores">＋ Add a chore</button>' : '');
     })() : ''}
     ${other ? `<div class="whodid" role="radiogroup" aria-label="Who did it"><span class="small muted">Who did it?</span>${[['me', 'Me'], ['both', '👫 Both'], [other.id, esc(other.name)]].map(([v, l]) => `<button type="button" role="radio" aria-checked="${careWho === v}" class="${careWho === v ? 'on' : ''}" data-carewho="${v}">${l}</button>`).join('')}</div>` : ''}
     ${list.length ? `<ul class="care-log">${list.slice().reverse().map((e) => {
       const whoNow = e.by.length > 1 ? 'both' : e.by[0];
       const swaps = other && grownUp ? [[fam().me, 'Me'], ['both', '👫 Both'], [other.id, esc(other.name)]].filter(([v]) => v !== whoNow) : [];
       const undo = e.by.includes(fam().me) || e.loggedBy === fam().me || me().role === 'owner';
-      return `<li><span>${CARE[e.kind]?.[0] || ''} ${esc(CARE[e.kind]?.[1] || e.kind)} · <b>${esc(e.byName)}</b> <small class="muted">${new Date(e.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</small></span>${swaps.length || undo ? `<span class="care-acts">${swaps.map(([v, l]) => `<button type="button" class="linkish small" data-careset="${e.id}" data-who="${v}">${l}</button>`).join('')}${undo ? '<button type="button" class="linkish small" data-careundo="' + e.id + '">Undo</button>' : ''}</span>` : ''}</li>`;
+      return `<li><span>${esc(careMeta(e.kind)[0])} ${esc(careMeta(e.kind)[1])} · <b>${esc(e.byName)}</b> <small class="muted">${new Date(e.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</small></span>${swaps.length || undo ? `<span class="care-acts">${swaps.map(([v, l]) => `<button type="button" class="linkish small" data-careset="${e.id}" data-who="${v}">${l}</button>`).join('')}${undo ? '<button type="button" class="linkish small" data-careundo="' + e.id + '">Undo</button>' : ''}</span>` : ''}</li>`;
     }).join('')}</ul>`
       : '<p class="small muted">Nothing logged yet today.</p>'}
     ${mods.includes('dogs') ? `<div class="week" aria-label="This week">${week}</div>
@@ -861,11 +871,12 @@ async function renderRace() {
 }
 // A little burst of joy for every chore logged.
 function celebrate(kind, x, y) {
-  const pts = PTS[kind] || 0;
+  const pts = ptsOf(kind);
   const mine = race?.board.find((r) => r.id === fam().me), other = race?.board.find((r) => r.id !== fam().me);
   const after = (mine?.points || 0) + pts;
   const lead = other ? (after > other.points ? ` · ${after - other.points} ahead of ${other.name}` : after === other.points ? ` · tied with ${other.name}` : ` · ${other.points - after} behind ${other.name}`) : '';
-  toast(`${CARE[kind][0]} ${pts ? `+${pts} ✨` : '♡'} ${CARE[kind][1]}${lead}`);
+  const [ico, label] = careMeta(kind);
+  toast(`${ico} ${pts ? `+${pts} ✨` : '♡'} ${label}${lead}`);
   celebrateBurst(x, y);
 }
 function celebrateBurst(x, y) {
@@ -1883,6 +1894,25 @@ function refreshPush() {
 }
 if (pushOk()) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data?.open && state.family) show(e.data.open === 'dogs' ? 'pets' : e.data.open); });
 
+// ＋ Add a chore: your family's own, in the house, the kitchen or with the dogs.
+function choresSheet() {
+  const mine = ownChores().filter((c) => !c.gone);
+  const SECT = { house: '🏠 House', kitchen: '👩‍🍳 Kitchen', dogs: '🐾 Dogs' };
+  openSheet(`<h2>Your chores</h2>
+    ${mine.length ? `<ul class="list">${mine.map((c) => `<li class="row between"><span>${esc(c.icon)} <b>${esc(c.label)}</b> <small class="muted">${SECT[c.section]} · ${c.pts ? `+${c.pts}` : '♡'}</small></span><button type="button" class="linkish small danger" data-act="choredel" data-id="${c.id}">Remove</button></li>`).join('')}</ul>` : '<p class="small muted">Add anything your family shares: watering the plants, paying the bills, bath time for the dogs…</p>'}
+    <form id="choreForm" class="stack">
+      <div class="row"><label style="flex:0 0 74px">Emoji<input name="icon" maxlength="4" value="✅" autocomplete="off"></label><label class="grow">Chore<input name="label" maxlength="24" required placeholder="e.g. Water the plants"></label></div>
+      <div class="seg">${Object.entries(SECT).map(([k, l], i) => `<label class="segopt"><input type="radio" name="section" value="${k}" ${i === 0 ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+      <label>Points <select name="pts">${[0, 1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === 2 ? 'selected' : ''}>${n ? `+${n}` : '♡ just for love'}</option>`).join('')}</select></label>
+      <p class="tiny muted">Points by effort: dishes +1, walks +2, cooking dinner +3, cleaning +4. Removing a chore keeps what's already logged.</p>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Done</button><button>＋ Add</button></div>
+    </form>`);
+}
+async function saveChores(list) {
+  const r = await api.put(`/families/${state.fid}/chores/custom`, { chores: list.map(({ gone, ...c }) => c) });
+  state.family.chores = r.chores;
+}
+
 function e2eeCard() {
   const f = fam(), owner = me().role === 'owner';
   if (!f.e2ee) return `<p class="small">Posts, photos, notes, plans, diet &amp; fitness and the dogs' details are stored readable on your server today.</p>
@@ -2215,6 +2245,11 @@ document.addEventListener('click', (e) => {
     case 'bingonew': return bingoNew();
     case 'games': bingo.game = null; bingo.season = null; return show('bingo');
     case 'watchadd': return watchAddSheet();
+    case 'chores': return choresSheet();
+    case 'choredel': {
+      const id = t.dataset.id;
+      return act(async () => { await saveChores(ownChores().filter((c) => !c.gone && c.id !== id)); choresSheet(); renderCare(); toast('Removed — past entries keep their points'); });
+    }
     case 'lognew': return momentSheet(state.view === 'calendar' ? {} : { date: isoLocal() });
     case 'momentdel': {
       const id = $('#momentForm')?.dataset.id;
@@ -2472,6 +2507,13 @@ document.addEventListener('submit', (e) => {
       if (state.view === 'calendar') { calm.day = date; calm.month = date.slice(0, 7); rhythmLine(); renderCal(); }
     });
   }
+  if (f.id === 'choreForm') {
+    e.preventDefault();
+    return act(async () => {
+      await saveChores([...ownChores().filter((c) => !c.gone), { icon: v.icon || '✅', label: v.label.trim(), pts: +v.pts, section: v.section }]);
+      toast(`${v.icon || '✅'} ${v.label.trim()} added`); choresSheet(); renderCare();
+    });
+  }
   if (f.id === 'watchPgForm') {
     e.preventDefault();
     return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${f.dataset.id}`, { progress: { s: +v.s, e: +v.e } }); closeSheet(); await watchSaved(); });
@@ -2718,5 +2760,5 @@ const wantHelp = new URLSearchParams(location.search).has('help');
 if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
 boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; });
 document.addEventListener('toggle', (e) => {
-  if (e.target.matches?.('details[data-house]')) { LS.set('fam.houseOpen', e.target.open ? '1' : '0'); const f = e.target.querySelector('.fold'); if (f) f.textContent = e.target.open ? 'Hide' : 'Show'; return; } const c = e.target.closest?.('[data-couple]'); if (c && e.target === c) bingo.open[c.dataset.couple] = c.open; }, true);
+  if (e.target.matches?.('details[data-house]')) { LS.set(`fam.${e.target.dataset.house || 'house'}Open`, e.target.open ? '1' : '0'); const f = e.target.querySelector('.fold'); if (f) f.textContent = e.target.open ? 'Hide' : 'Show'; return; } const c = e.target.closest?.('[data-couple]'); if (c && e.target === c) bingo.open[c.dataset.couple] = c.open; }, true);
 document.addEventListener('input', (e) => { if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); });

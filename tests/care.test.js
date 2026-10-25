@@ -35,3 +35,25 @@ test('an entry becomes "both of us" after the fact', async () => {
   assert.equal((await call(`${C}/2026-10-24/${trash.id}`, pat, 'DELETE')).ok, true, 'who logged it can undo it');
   assert.equal((await call(C, sam, 'POST', { date: '2026-10-24', kind: 'trash', by: 'nobody' })).entry.byName, 'sam', 'unknown → you');
 });
+
+test('cooking counts, and a family can add (and retire) its own chores', async () => {
+  const m = new Map();
+  const env = { DEMO: true, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
+  const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path.split('?')[0]); return { status: r.status, ...r.data }; };
+  const { token } = await call('/auth/demo', null, 'POST', { email: 'sam@example.com' });
+  await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true });
+  const { family } = await call('/families', token, 'POST', { name: 'Fam' });
+  const C = `/families/${family.fid}/care`;
+  await call(C, token, 'POST', { date: '2026-10-24', kind: 'cook_d' });
+  assert.equal((await call(C, token, 'POST', { date: '2026-10-24', kind: 'x_nope' })).status, 400, 'not a chore yet');
+  const { chores } = await call(`/families/${family.fid}/chores/custom`, token, 'PUT', { chores: [{ icon: '🪴', label: 'Water the plants', pts: 2, section: 'house' }] });
+  const kind = `x_${chores[0].id}`;
+  await call(C, token, 'POST', { date: '2026-10-24', kind });
+  const board = async () => (await call(`/families/${family.fid}/chores?month=2026-10&today=2026-10-24`, token)).board[0].points;
+  assert.equal(await board(), 5, 'dinner 3 + plants 2');
+  // Removed: no new entries, but what was logged still counts.
+  await call(`/families/${family.fid}/chores/custom`, token, 'PUT', { chores: [] });
+  assert.equal((await call(C, token, 'POST', { date: '2026-10-24', kind })).status, 400);
+  assert.equal(await board(), 5);
+  assert.equal((await call(`/families/${family.fid}`, token)).family.chores[0].gone, true);
+});

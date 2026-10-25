@@ -55,8 +55,11 @@ const RELATIONS = ['spouse', 'partner', 'child', 'parent', 'sibling', 'grandpare
 const SPECIES = ['dog', 'cat', 'other'];
 export const TERMS_VERSION = '2026-10';
 // Dog care and house chores, with points by effort; the month's top scorer gets the Gold Card.
-export const POINTS = { breakfast: 1, dinner: 1, walk: 2, park: 2, treat: 0, meds: 1, poop: 2, trash: 1, laundry: 3, groceries: 3, cleaning: 4, dishes: 1 };
+export const POINTS = { breakfast: 1, dinner: 1, walk: 2, park: 2, treat: 0, meds: 1, poop: 2, trash: 1, laundry: 3, groceries: 3, cleaning: 4, dishes: 1, cook_b: 2, cook_l: 2, cook_d: 3 };
 const CARE = Object.keys(POINTS);
+// The family's own chores ("x_<id>"), added in the app: [{id, icon, label, pts, section, gone?}].
+export const customPoints = (fam) => Object.fromEntries((fam.chores || []).map((c) => [`x_${c.id}`, c.pts]));
+const isChore = (fam, kind) => CARE.includes(kind) || (fam.chores || []).some((c) => !c.gone && `x_${c.id}` === kind);
 const MAX_WRITES_PER_MIN = 120;
 
 const HELP_PER_MIN = 10, HELP_PER_DAY = 80;
@@ -442,7 +445,7 @@ export async function familyApi(req, env, path, ctx = null) {
     }
     if (method === 'POST' && !m[2]) {
       const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? body.date : null;
-      if (!date || !CARE.includes(body.kind)) return json({ error: 'what and which day?' }, 400);
+      if (!date || !isChore(fam, body.kind)) return json({ error: 'what and which day?' }, 400);
       const pets = (Array.isArray(body.pets) ? body.pets : []).filter((id) => fam.members.some((x) => x.id === id && x.kind === 'pet'));
       // Who did it: you, both of you, or the other one (either of you can log for the other).
       const adults = fam.members.filter((x) => x.kind === 'person' && x.uid && x.relation !== 'child').map((x) => x.id).slice(0, 2);
@@ -463,7 +466,7 @@ export async function familyApi(req, env, path, ctx = null) {
       const entries = (Array.isArray(body.entries) ? body.entries : []).slice(0, 5000);
       const byDay = {};
       for (const e of entries) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date || '') || !CARE.includes(e.kind)) continue;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date || '') || !isChore(fam, e.kind)) continue;
         const by = (Array.isArray(e.by) ? e.by : []).filter((id) => fam.members.some((x) => x.id === id && x.kind === 'person'));
         (byDay[e.date] ||= []).push({ id: randomId(6), kind: e.kind, pets: [], by, byName: by.map((id) => fam.members.find((x) => x.id === id).name).join(' & '), note: '', at: +e.at || Date.parse(`${e.date}T12:00:00Z`), src: 'import' });
       }
@@ -1067,6 +1070,25 @@ export async function familyApi(req, env, path, ctx = null) {
     return json({ error: 'not found' }, 404);
   }
 
+  // ---- 🧺 the family's own chores: added by any grown-up; removing one keeps its history ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/chores\/custom$/);
+  if (m && method === 'PUT') {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    if (meIn(fam).relation === 'child') return json({ error: 'ask a grown-up' }, 403);
+    const old = fam.chores || [];
+    const sent = (Array.isArray(body.chores) ? body.chores : []).slice(0, 30).map((c) => ({
+      id: /^[a-z0-9]{4,12}$/.test(c.id || '') ? c.id : randomId(6),
+      icon: [...String(c.icon || '✅').trim()].slice(0, 2).join('') || '✅',
+      label: clean(c.label, 24),
+      pts: Math.max(0, Math.min(5, Math.round(+c.pts || 0))),
+      section: ['house', 'kitchen', 'dogs'].includes(c.section) ? c.section : 'house',
+    })).filter((c) => c.label);
+    // A chore left out is marked gone (its entries keep their name and points), not deleted.
+    fam.chores = [...sent, ...old.filter((c) => !sent.some((x) => x.id === c.id)).map((c) => ({ ...c, gone: true }))].slice(-60);
+    await db.put(`family:${fam.fid}`, fam);
+    return json({ chores: fam.chores });
+  }
   m = path.match(/^\/families\/([a-z0-9]+)\/chores$/);
   if (m && method === 'GET') {
     const fam = await loadFamily(m[1]);
@@ -1081,7 +1103,7 @@ export async function familyApi(req, env, path, ctx = null) {
       if (date > today) break;
       logs[date] = (await db.get(`care:${fam.fid}:${date}`)) || [];
     }
-    const race = choresRace(logs, fam.members.filter((x) => x.kind === 'person'));
+    const race = choresRace(logs, fam.members.filter((x) => x.kind === 'person'), customPoints(fam));
     let gold = (await db.get(`gold:${fam.fid}`)) || [];
     // A finished month crowns its winner once (shared on a tie).
     const ended = today.slice(0, 7) > month;
@@ -1089,7 +1111,7 @@ export async function familyApi(req, env, path, ctx = null) {
       gold = [{ month, winners: race.leaders.map((id) => ({ id, name: fam.members.find((x) => x.id === id)?.name || '' })), points: race.top, prize: fam.goldPrize || '' }, ...gold].slice(0, 36);
       await db.put(`gold:${fam.fid}`, gold);
     }
-    return json({ month, ended, ...race, gold, prize: fam.goldPrize || '', points: POINTS });
+    return json({ month, ended, ...race, gold, prize: fam.goldPrize || '', points: { ...POINTS, ...customPoints(fam) } });
   }
 
   // ---- members ----
@@ -1505,7 +1527,7 @@ async function makeInvite(db, inv) {
 }
 function familyOut(fam, user) {
   const me = fam.members.find((m) => m.uid === user.uid);
-  return { fid: fam.fid, name: fam.name, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', goldenPosts: fam.goldenPosts !== false, e2ee: !!fam.e2ee, keyCheck: fam.keyCheck || '', connkeys: fam.connkeys || {}, share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
+  return { fid: fam.fid, name: fam.name, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', chores: fam.chores || [], goldenPosts: fam.goldenPosts !== false, e2ee: !!fam.e2ee, keyCheck: fam.keyCheck || '', connkeys: fam.connkeys || {}, share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
 }
 const url = (req) => new URL(req.url);
 // A post as one viewer sees it: no account ids (theirs or anyone else's), just "is it mine".
@@ -1537,13 +1559,13 @@ export function sharedWithFriends(fam, m) {
   return true;
 }
 // logs: {date: [care entries]}; people: family members. → per-person points and counts, the leaders.
-export function choresRace(logs, people) {
+export function choresRace(logs, people, extra = {}) {
   const by = Object.fromEntries(people.map((p) => [p.id, { id: p.id, name: p.name, points: 0, count: 0, kinds: {}, streak: 0 }]));
   const active = {};
   for (const [date, list] of Object.entries(logs)) for (const e of list) for (const id of e.by || []) {
     const r = by[id];
     if (!r) continue;
-    r.points += POINTS[e.kind] ?? 0; r.count += 1; r.kinds[e.kind] = (r.kinds[e.kind] || 0) + 1;
+    r.points += POINTS[e.kind] ?? extra[e.kind] ?? 0; r.count += 1; r.kinds[e.kind] = (r.kinds[e.kind] || 0) + 1;
     (active[id] ||= new Set()).add(date);
   }
   // Days in a row (ending on the last logged day of the month so far) each person did something.
