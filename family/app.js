@@ -2772,6 +2772,26 @@ const glitch = (message, where) => { if (glitches++ < 3) api.post('/help/glitch'
 window.addEventListener('error', (e) => glitch(e.message, `${e.filename}:${e.lineno}`));
 window.addEventListener('unhandledrejection', (e) => glitch(e.reason?.message || e.reason, 'promise'));
 
+// ✨ A newer version is out (a Home Screen app can keep the old one in memory for a while):
+// checked when the app opens or comes back, and offered as one tap.
+let updateCheckedAt = 0;
+async function checkForUpdate() {
+  if (VERSION === 'dev' || Date.now() - updateCheckedAt < 60000 || $('.update-bar')) return;
+  updateCheckedAt = Date.now();
+  try {
+    const html = await (await fetch('./index.html', { cache: 'no-store' })).text();
+    const latest = html.match(/app\.js\?v=(\d+)/)?.[1];
+    if (!latest || +latest <= +VERSION) return;
+    const bar = document.createElement('button');
+    bar.type = 'button'; bar.className = 'update-bar';
+    bar.innerHTML = '✨ A new version is ready — <b>tap to update</b>';
+    bar.onclick = () => { bar.textContent = 'Updating…'; navigator.serviceWorker?.getRegistration?.().then((r) => r?.update()).catch(() => {}).finally(() => location.reload()); };
+    document.body.append(bar);
+  } catch { /* offline: next time */ }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
+setTimeout(checkForUpdate, 3000);
+
 const wantHelp = new URLSearchParams(location.search).has('help');
 if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
 boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; });
