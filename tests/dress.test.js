@@ -53,3 +53,18 @@ test('hot all day, cold all day, and rain', () => {
   assert.ok(wet.extras.some((x) => x.startsWith('☔')));
   assert.equal(warmthLevel(59), 3);
 });
+
+test('a town from any address, and an event in a town we don\'t know still counts', async () => {
+  const { townOf, whereOn, PLACES } = await import('../js/dress.js');
+  assert.equal(townOf('31655 Chicoine Ave., Hayward CA, United States'), 'Hayward');
+  assert.equal(townOf('123 Main St, Hayward, CA 94544'), 'Hayward');
+  assert.equal(townOf('Bridgeway, Sausalito, CA'), 'Sausalito');
+  assert.equal(townOf('Dinner'), '');
+  assert.equal(townOf('Zoom'), '');
+  const ev = [{ title: 'Early Friendsgiving', place: '31655 Chicoine Ave., Hayward CA, United States', start: '14:00', end: '', allDay: false, who: 'a' }];
+  const unknown = whereOn(ev, 'a');
+  assert.deepEqual([unknown.fromCalendar, unknown.placeFound, unknown.place.id], [true, false, 'sj'], 'the event, with home weather');
+  const hayward = { id: 'g-hayward', name: 'Hayward', lat: 37.67, lon: -122.08, keys: ['hayward'] };
+  const known = whereOn(ev, 'a', [...PLACES, hayward]);
+  assert.deepEqual([known.fromCalendar, known.placeFound, known.place.id, known.event.title], [true, true, 'g-hayward', 'Early Friendsgiving']);
+});

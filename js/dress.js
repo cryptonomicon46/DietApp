@@ -26,6 +26,22 @@ export function matchPlace(text, places = PLACES) {
   return find((p) => [p.name.toLowerCase().split(',')[0]]) || find((p) => p.keys || []);
 }
 
+// The town in an address, for anywhere that isn't one of the places above: "31655 Chicoine Ave.,
+// Hayward CA, United States" → "Hayward"; "Hayward, CA 94544" → "Hayward". '' when there's no
+// address-looking text (a title like "Dinner" isn't a place).
+export function townOf(address) {
+  const parts = String(address || '').split(',').map((x) => x.trim()).filter(Boolean).filter((x) => !/^(united states|usa|us)$/i.test(x));
+  if (parts.length < 2) return '';
+  for (let i = parts.length - 1; i > 0; i--) {
+    const st = parts[i].match(/^(.*?)\s*\b([A-Z]{2})\b(\s+\d{5}(-\d{4})?)?$/);
+    if (!st) continue;
+    const town = (st[1] || parts[i - 1]).replace(/\d+/g, '').trim();
+    return /^[A-Za-z][A-Za-z .'-]{1,40}$/.test(town) ? town : '';
+  }
+  const last = parts[parts.length - 1].replace(/\d+/g, '').trim();
+  return /^[A-Za-z][A-Za-z .'-]{1,40}$/.test(last) && parts.length >= 2 ? last : '';
+}
+
 const toH = (hhmm) => { const [h, m] = String(hhmm).split(':').map(Number); return h + (m || 0) / 60; };
 const mine = (e, person) => e.who === person || e.who === 'both' || (!e.who && e.by === person);
 // Where `person` is on `date` and roughly when they leave and get home.
@@ -38,6 +54,8 @@ export function whereOn(events, person, places = PLACES, pick = null) {
     const p = matchPlace(`${e.place || ''} ${e.title || ''}`, places);
     if (p) { place = p; from = e; break; }
   }
+  // Something on the calendar, but somewhere we don't know: still the day's plan (home weather).
+  if (!from) from = timed.find((e) => String(e.place || "").trim()) || null;
   const byPick = pick && places.find((p) => p.id === pick);
   if (byPick) { place = byPick; from = null; }
   // Leave an hour before the first thing, home an hour after the last (8 AM–6 PM otherwise).
@@ -48,7 +66,7 @@ export function whereOn(events, person, places = PLACES, pick = null) {
   }
   leave = Math.round(Math.max(6, Math.min(leave, 10)));
   back = Math.round(Math.max(Math.max(leave + 6, 15), Math.min(back, 21)));
-  return { place: place || places.find((p) => p.id === HOME_PLACE) || places[0], event: from, picked: !!byPick, leave, back, fromCalendar: !!from };
+  return { place: place || places.find((p) => p.id === HOME_PLACE) || places[0], event: from, picked: !!byPick, leave, back, fromCalendar: !!from, placeFound: !!place };
 }
 
 // How much clothing a "feels like" temperature (°F) calls for, 0 (hot) to 5 (very cold).

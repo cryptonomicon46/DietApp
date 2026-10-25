@@ -2200,6 +2200,24 @@ async function dressHours(place, date) {
   }
   return B.parseWeather(c.forecast, null).filter((h) => isoLocal(h.time) === date);
 }
+// Towns from the day's event addresses (Hayward, Sausalito…), looked up once with Open-Meteo's
+// free place search and kept on this phone, so the weather is for where you'll actually be.
+async function eventPlaces(D, entries) {
+  let geo = {}; try { geo = JSON.parse(LS.get('fam.geo') || '{}'); } catch { /* none */ }
+  const out = [];
+  for (const town of [...new Set(entries.map((e) => D.townOf(e.place)).filter(Boolean))]) {
+    if (D.matchPlace(town)) continue;
+    const k = town.toLowerCase();
+    if (!(k in geo)) {
+      const j = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({ name: town, count: '5', language: 'en' })}`).then((r) => r.json()).catch(() => null);
+      const hit = (j?.results || []).find((x) => x.country_code === 'US' && x.admin1 === 'California') || (j?.results || []).find((x) => x.country_code === 'US') || j?.results?.[0];
+      geo[k] = hit ? { lat: hit.latitude, lon: hit.longitude, name: hit.name } : null;
+      try { LS.set('fam.geo', JSON.stringify(geo)); } catch { /* full */ }
+    }
+    if (geo[k]) out.push({ id: `g-${k.replace(/[^a-z0-9]+/g, '')}`, name: geo[k].name || town, lat: geo[k].lat, lon: geo[k].lon, keys: [k] });
+  }
+  return out;
+}
 async function renderCalDress(date) {
   const el = $('#calDress');
   if (!el) return;
@@ -2216,16 +2234,17 @@ async function renderCalDress(date) {
   try {
     // Where each of you will be; the same place for both of you is one box for both, dressed
     // for the longer day (the earlier start to the later finish).
+    const places = [...D.PLACES, ...(await eventPlaces(D, entries).catch(() => []))];
     const wheres = people.map((m) => {
       const evs = entries.map((e) => ({ title: e.title, place: e.place, start: e.time, end: e.end, allDay: e.allDay || !e.time, who: e.who === 'both' || e.who === m.id ? m.id : '-' }));
-      return { m, where: D.whereOn(evs, m.id, D.PLACES, picks[`${m.id}|${date}`] || null) };
+      return { m, where: D.whereOn(evs, m.id, places, picks[`${m.id}|${date}`] || null) };
     });
     const groups = [];
     for (const w of wheres) {
       const g = groups.find((x) => x.place.id === w.where.place.id);
       if (g) g.list.push(w); else groups.push({ place: w.where.place, list: [w] });
     }
-    const why = (where) => (where.picked ? 'picked by hand' : where.fromCalendar ? `📅 from “${esc(where.event.title)}”` : 'nothing on the calendar — home');
+    const why = (where) => (where.picked ? 'picked by hand' : where.fromCalendar ? `📅 from “${esc(where.event.title)}”${where.placeFound ? '' : ` (no town in it — ${esc(where.place.name)} weather)`}` : 'nothing on the calendar — home');
     const parts = await Promise.all(groups.map(async (g) => {
       const leave = Math.min(...g.list.map((w) => w.where.leave)), back = Math.max(...g.list.map((w) => w.where.back));
       const plan = D.dressFor(await dressHours(g.place, date), leave, back);
@@ -2236,7 +2255,7 @@ async function renderCalDress(date) {
       const picked = g.list.some((w) => w.where.picked);
       return `<div class="dress-person${g.list.length > 1 ? ' together' : ''}">
         <div class="row between dress-who"><b>${names}${g.list.length > 1 ? ' <span class="pill">together</span>' : ''}</b>
-          <select data-dresspick="${ids.join(',')}" data-dressdate="${date}" aria-label="Where ${g.list.map((w) => esc(w.m.name)).join(' and ')} will be">${D.PLACES.map((p) => `<option value="${p.id}" ${p.id === g.place.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}${picked ? '<option value="">↺ Use the calendar</option>' : ''}</select></div>
+          <select data-dresspick="${ids.join(',')}" data-dressdate="${date}" aria-label="Where ${g.list.map((w) => esc(w.m.name)).join(' and ')} will be">${places.map((p) => `<option value="${p.id}" ${p.id === g.place.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}${picked ? '<option value="">↺ Use the calendar</option>' : ''}</select></div>
         <small class="muted">${reason} · out ${D.hourLabel(leave)}–${D.hourLabel(back)}</small>
         ${plan ? `${temps(plan.temps)}<div class="dress-shape">${esc(plan.label)}</div>
           <ul class="dress-layers">${plan.layers.map((l) => `<li><span>${l.icon}</span><span>${esc(l.text)}${l.carry ? ' <em class="dress-carry">take off later</em>' : ''}</span></li>`).join('')}</ul>
