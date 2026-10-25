@@ -47,6 +47,7 @@ import { parseSquares, makeCard, bingoLines, bingoPrompt, NEED, FREE } from './b
 import { EVENTS as PICK_EVENTS, OUTCOMES, locked as pickLocked, score as pickScore, parseCouples } from './picks.js';
 import { blobStore, okPhotoId, photoKey, SIZES, quotaBytes, familyUsage, noteUsage, deletePhoto, deleteFamilyPhotos } from './photos.js';
 import { DEFAULT_AREA, areaKey, scoutArea } from './scout.js';
+import { planOuting, swapStop } from './outing.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
@@ -783,6 +784,16 @@ export async function familyApi(req, env, path, ctx = null) {
       return json({ ok: true });
     }
     return json({ error: 'not found' }, 404);
+  }
+
+  // ---- 🧭 plan an outing (Claude with web search; only the place, day, chips and home town go out) ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/outing(\/swap)?$/);
+  if (m && method === 'POST') {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    if (meIn(fam).relation === 'child') return json({ error: 'ask a grown-up' }, 403);
+    const r = await (m[2] ? swapStop : planOuting)(env, db, fam, body, (fam.ideas?.label || DEFAULT_AREA.label));
+    return json(r, r.error ? 400 : 200);
   }
 
   // ---- 💡 date ideas: this week's for the family's area, settings, and private 💗 picks ----

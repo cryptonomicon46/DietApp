@@ -1036,6 +1036,7 @@ const KINDS = {
   lunch: ['🥗', 'Lunch', 'Anything special? (optional)', 'Where?'], coffee: ['☕', 'Coffee', '', 'Where?'],
   walk: ['🚶', 'Walk / hike', '', 'Where?'], workout: ['🏋️', 'Work out together', 'What? e.g. a run', 'Where? (optional)'],
   date: ['🍷', 'Date night', 'Anything special? (optional)', 'Where? (optional)'],
+  outing: ['🧭', 'Outing', '', ''],
   other: ['✨', 'Something else', 'What are you feeling like?', 'Where? (optional)'],
 };
 const WHENS = { tonight: 'Tonight', today: 'Today', tomorrow: 'Tomorrow', weekend: 'This weekend', date: 'Pick a day' };
@@ -1075,7 +1076,7 @@ function feelSheet(kind = 'dinner') {
   const k = KINDS[kind] || KINDS.other;
   openSheet(`<h2>✨ Suggest a plan</h2><p class="small muted">to ${esc(partnerName())}</p>
     <form id="feelForm" class="stack">
-      <div class="kinds radios">${Object.entries(KINDS).map(([key, [ico, label]]) => `<label><input type="radio" name="kind" value="${key}" ${key === kind ? 'checked' : ''}><span><b>${ico}</b>${esc(label)}</span></label>`).join('')}</div>
+      <div class="kinds radios">${Object.entries(KINDS).filter(([key]) => key !== 'outing').map(([key, [ico, label]]) => `<label><input type="radio" name="kind" value="${key}" ${key === kind ? 'checked' : ''}><span><b>${ico}</b>${esc(label)}</span></label>`).join('')}</div>
       <label class="kwhat" ${k[2] ? '' : 'hidden'}><span>${esc(k[2] || 'What?')}</span><input name="what" maxlength="80"></label>
       <label class="kwhere" ${k[3] ? '' : 'hidden'}><span>${esc(k[3] || 'Where?')}</span><input name="where" maxlength="80"></label>
       <div class="seg2 radios whens">${Object.entries(WHENS).filter(([key]) => key !== 'today').map(([key, t]) => `<label><input type="radio" name="when" value="${key}" ${key === 'tonight' ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div>
@@ -1160,8 +1161,8 @@ function plusMenu() {
     ['askhelp', '🙋', 'Ask for help'],
   ];
   openSheet(`<div class="row between"><h2>Create</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
-    ${p ? `<div class="grp">💞 You &amp; ${esc(p.name)}</div><div class="create3">
-      <button type="button" class="hot" data-act="feel"><b>✨</b>Suggest a plan</button><button type="button" data-act="note"><b>💌</b>Note</button><button type="button" data-act="lognew"><b>❤️</b>Log a date</button></div>` : ''}
+    ${p ? `<div class="grp">💞 You &amp; ${esc(p.name)}</div><div class="create4">
+      <button type="button" class="hot" data-act="feel"><b>✨</b>Suggest</button><button type="button" data-act="outing"><b>🧭</b>Outing</button><button type="button" data-act="note"><b>💌</b>Note</button><button type="button" data-act="lognew"><b>❤️</b>Log date</button></div>` : ''}
     <div class="grp">👨‍👩‍👧 Family</div><div class="create4">${fam4.map(([a, i, l]) => `<button type="button" data-act="${a}"><b>${i}</b>${l}</button>`).join('')}</div>
     <button type="button" class="ghost wide" data-act="close" style="margin-top:12px">Cancel</button>`);
 }
@@ -1202,6 +1203,7 @@ async function usView() {
     <section class="card" id="usNotesC"><div class="skeleton line"></div></section>
     <section class="card" id="usPlansC"></section>
     <section class="card" id="usIdeasC" hidden></section>
+    <section class="card" id="usOutC"></section>
     <section class="card" id="usRhythmC"></section>
     <section id="usTonight"></section></div>`;
   importUs().catch(() => {});
@@ -1222,6 +1224,7 @@ function renderUs() {
     ${f.matches.map((m) => `<div class="fy"><span class="fy-i">💞</span><div><b>It's a match: ${esc(m.idea.title)}</b><small>You both 💗 it${m.idea.day ? ` · ${esc(dayText(m.idea.day, m.idea.time))}` : ''}</small>
       <div class="ans"><button type="button" class="small" data-match="${esc(m.t)}">📅 Make it a plan</button></div></div></div>`).join('')}
     ${f.ask.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>${esc(member(x.by)?.name || pName)} suggested ${esc(planTitle(x).toLowerCase().startsWith('date night') ? 'a date night' : planTitle(x))}</b><small>${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}${x.note ? ` · “${esc(x.note)}”` : ''}</small>
+      ${x.outing ? `<small class="muted">${x.outing.stops.map((st) => `${STOP_ICON[st.kind] || '📍'} ${esc(hm(st.time))}`).join(' → ')}</small><button type="button" class="linkish small" data-outplan="${x.id}">🧭 See the plan</button>` : ''}
       <div class="ans">${Object.entries(ANSWERS).map(([k, t], i) => `<button type="button" class="${i ? 'ghost' : ''} small" data-answer="${x.id}:${k}">${t}</button>`).join('')}</div></div></div>`).join('')}
     ${f.notes.map((n) => `<div class="fy"><span class="fy-i">💌</span><div><b>New note from ${esc(member(n.by)?.name || pName)}</b><small>“${esc(n.text)}”</small></div><button type="button" class="heart" data-noteheart="${n.id}" aria-label="Heart">${n.hearts?.includes(meId) ? '❤️' : '🤍'}</button></div>`).join('')}
     ${f.after.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>How was ${esc(planTitle(x))}?</b><small>${esc(planWhen(x))}</small>
@@ -1239,7 +1242,7 @@ function renderUs() {
     : x.by === meId ? (x.to.map((id) => x.replies?.[id]?.r).find(Boolean) ? `<span class="tag tw">${esc(pName)}: ${esc(ANSWERS[x.to.map((id) => x.replies?.[id]?.r).find(Boolean)].replace(/^\S+ /, '').toLowerCase())}</span>` : `<span class="tag">waiting for ${esc(pName)}</span>`)
       : `<span class="tag">you: ${esc((ANSWERS[x.replies?.[meId]?.r] || '').replace(/^\S+ /, '').toLowerCase())}</span>`);
   $('#usPlansC').innerHTML = `<div class="row between"><b class="us-h">✨ Plans</b><button type="button" class="linkish small" data-act="feel">＋ Suggest</button></div>
-    ${up.length ? up.map((x) => `<div class="planrow" data-plan="${x.id}"><span>${wn(x)[0]} <b>${esc(planTitle(x))}</b> <small class="muted">· ${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}</small></span>${status(x)}
+    ${up.length ? up.map((x) => `<div class="planrow" data-plan="${x.id}"><span>${wn(x)[0]} <b>${esc(planTitle(x))}</b> <small class="muted">· ${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}</small>${x.outing ? ` <button type="button" class="linkish small" data-outplan="${x.id}">See plan</button>` : ''}</span>${status(x)}
       ${x.by === meId && !x.agreed ? `<span class="planacts"><button type="button" class="linkish small" data-planmove="${x.id}">Another day</button> · <button type="button" class="linkish small" data-plandel="${x.id}">Cancel</button></span>` : ''}</div>`).join('')
       : `<p class="small muted">Nothing planned. <button type="button" class="linkish" data-act="feel">Suggest something for this weekend ✨</button></p>`}`;
   // 2-2-2-2
@@ -1253,7 +1256,7 @@ function renderUs() {
       ${dates.length ? `<details class="small"><summary>Last: ${R.momentIcon(dates[0])} ${esc(R.momentText(dates[0]))} · ${esc(new Date(`${dates[0].date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</summary><ul class="list">${dates.slice(0, 12).map((e) => `<li class="row between"><span>${R.momentIcon(e)} ${esc(R.momentText(e))}</span><span><small class="muted">${esc(new Date(`${e.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: e.date.slice(0, 4) !== isoLocal().slice(0, 4) ? 'numeric' : undefined }))}</small> <button type="button" class="linkish small" data-momentedit="${esc(e.id)}">✎</button></span></li>`).join('')}</ul></details>`
         : '<p class="small muted">Log your dates and it keeps the rhythm: a date every 2 weeks, us time twice a week, an overnight twice a year, a getaway every 2 years.</p>'}`;
   } else $('#usRhythmC').hidden = true;
-  renderIdeasCard();
+  renderIdeasCard(); renderOutingCard();
   // Tonight's show
   const on = (watch.shows || []).filter((x) => x.status === 'watching').sort((a, b) => (watch.S?.lastActive(b) || '').localeCompare(watch.S?.lastActive(a) || ''))[0];
   const tonightLogged = on?.nights.some((n) => n.date === isoLocal());
@@ -1265,7 +1268,7 @@ async function planToCalendar(p) {
   if (!p?.agreed || p.done) return;
   const k = KINDS[p.kind] || KINDS.other;
   await api.post(`/families/${state.fid}/events/import`, { events: [{ id: `plan${p.id}`, date: p.day, start: p.time || '', end: '', allDay: !p.time, who: [p.by, ...(p.to || [])], remind: p.time ? 60 : null, at: Date.now(), updatedAt: p.at || Date.now(),
-    body: await lock({ title: `${k[0]} ${planTitle(p)}`, place: p.where || '', notes: p.note ? `“${p.note}” — ✨ planned in Us` : '✨ planned in Us' }) }] }).catch(() => {});
+    body: await lock({ title: p.outing ? `🧭 ${p.outing.title}` : `${k[0]} ${planTitle(p)}`, place: p.where || '', notes: p.outing ? outingNotes(p.outing) : p.note ? `“${p.note}” — ✨ planned in Us` : '✨ planned in Us' }) }] }).catch(() => {});
 }
 
 // ---------- 💡 date ideas: the week's scouted ideas and a starter list, picked in private ----------
@@ -1396,6 +1399,136 @@ function ideaSettingsSheet() {
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save</button></div>
     </form>`);
 }
+
+// ---------- 🧭 plan an outing: a neighborhood or a town nearby, planned with Claude ----------
+const OUT_PLACES = {
+  'San Francisco': ['Hayes Valley', 'Mission', 'North Beach', 'Japantown', 'Inner Sunset', 'Marina & Presidio', 'Ferry Building', 'Dogpatch'],
+  'East Bay': ['Oakland · Temescal', 'Oakland · Rockridge', 'Jack London Square', 'Berkeley · Gourmet Ghetto', 'Alameda'],
+  'North Bay': ['San Rafael', 'Sausalito', 'Mill Valley', 'Tiburon'],
+  'South Bay & coast': ['Los Gatos', 'Palo Alto', 'Santana Row', 'Half Moon Bay', 'Santa Cruz'],
+};
+const CUISINES = [['sushi', '🍣 Sushi'], ['thai', '🍜 Thai'], ['indian', '🍛 Indian'], ['tapas', '🥘 Tapas'], ['italian', '🍝 Italian'], ['mexican', '🌮 Mexican'], ['american', '🍔 American'], ['chinese', '🥟 Chinese'], ['korean', '🍲 Korean'], ['vietnamese', '🍜 Vietnamese'], ['mediterranean', '🥙 Mediterranean'], ['seafood', '🦪 Seafood'], ['pizza', '🍕 Pizza'], ['french', '🥐 French'], ['vegetarian', '🥗 Vegetarian']];
+const OUT_CHIPS = { Food: CUISINES.slice(0, 8), 'What for': [['dinner', '🍽 Dinner'], ['drinks', '🍸 Drinks'], ['coffee', '☕ Coffee'], ['brunch', '🥞 Brunch'], ['walk', '🚶 Walk around'], ['shops', '🛍 Shops'], ['museum', '🖼 Museum'], ['music', '🎶 Live music'], ['views', '🌅 Views']],
+  How: [['caltrain', '🚆 Caltrain'], ['bart', '🚇 BART'], ['ferry', '⛴ Ferry'], ['drive', '🚗 Drive'], ['dogs', '🐕 Bring the dogs'], ['$$', '💲💲'], ['$$$', '💲💲💲'], ['no long waits', 'No long waits'], ['easy walking', 'Easy walking']] };
+const outing = { cur: null, tab: 'plan', plan: null };
+const outKey = () => `fam.outings.${state.fid}`;
+const savedOutings = () => { try { return JSON.parse(LS.get(outKey()) || '[]'); } catch { return []; } };
+const STOP_ICON = { coffee: '☕', brunch: '🥞', lunch: '🥗', dinner: '🍽', drinks: '🍸', dessert: '🍰', walk: '🚶', view: '🌅', do: '🎟', shop: '🛍', museum: '🖼', music: '🎶', park: '🌳' };
+const MODE_ICON = { train: '🚆', bart: '🚇', transit: '🚌', ferry: '⛴', drive: '🚗', walk: '🚶', bike: '🚲' };
+const hm = (t) => (t ? new Date(`2000-01-01T${t}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '');
+function outingCard() {
+  const saved = savedOutings().slice(0, 3);
+  return `<div class="row between"><b class="us-h">🧭 Where to?</b><span class="tiny muted">SF, Oakland, Marin…</span></div>
+    <button type="button" class="input-like" data-act="outing">Hayes Valley Saturday, Sausalito for lunch…</button>
+    <div class="rchips">${['Hayes Valley', 'Oakland · Temescal', 'San Rafael', 'Sausalito'].map((p) => `<button type="button" class="chip" data-outplace="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+    ${saved.length ? `<p class="tiny muted">Saved: ${saved.map((o, i) => `<button type="button" class="linkish tiny" data-outsaved="${i}">${esc(o.title)}</button>`).join(' · ')}</p>` : ''}`;
+}
+function outingAsk(place = '') {
+  const sat = shiftLocal(isoLocal(), (6 - new Date().getDay() + 7) % 7 || 7);
+  const days = [[isoLocal(), 'Today'], [shiftLocal(isoLocal(), 1), 'Tomorrow'], [sat, 'Sat'], [shiftLocal(sat, 1), 'Sun']].filter(([d], i, a) => a.findIndex(([e]) => e === d) === i);
+  openSheet(`<div class="row between"><h2>🧭 Plan an outing</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <form id="outForm" class="stack">
+      <input name="text" maxlength="120" required value="${esc(place)}" placeholder="Hayes Valley, afternoon into dinner" aria-label="Where to?" autocomplete="off">
+      <details class="small"><summary class="muted">Ideas around the Bay</summary>${Object.entries(OUT_PLACES).map(([g, l]) => `<div class="grp">${esc(g)}</div><div class="rchips">${l.map((p) => `<button type="button" class="chip" data-outfill="${esc(p)}">${esc(p)}</button>`).join('')}</div>`).join('')}</details>
+      <div class="grp">When</div><div class="rchips radios chipradios">${days.map(([d, l], i) => `<label><input type="radio" name="day" value="${d}" ${i === (days.length > 2 ? 2 : 0) ? 'checked' : ''}><span class="chip">${l}${l.length < 4 ? ` ${new Date(`${d}T12:00:00`).getDate()}` : ''}</span></label>`).join('')}<label><input type="radio" name="day" value="pick"><span class="chip">Pick…</span></label></div>
+      <input type="date" name="pickday" min="${isoLocal()}" hidden>
+      ${Object.entries(OUT_CHIPS).map(([g, l]) => `<div class="grp">${g}</div><div class="rchips radios chipradios">${l.map(([v, t]) => `<label><input type="checkbox" name="chip" value="${esc(v)}" ${['dinner', 'walk'].includes(v) ? 'checked' : ''}><span class="chip">${t}</span></label>`).join('')}</div>`).join('')}
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>🧭 Plan it</button></div>
+      <p class="tiny muted">🔒 Only the place, the day, these choices and your home town go out — never your names or anything else in the app. Takes about a minute.</p>
+    </form>`);
+}
+async function outingGo(f) {
+  const v = Object.fromEntries(new FormData(f));
+  const day = v.day === 'pick' ? v.pickday : v.day;
+  if (!day) return toast('Which day?');
+  const chips = [...f.querySelectorAll('[name=chip]:checked')].map((x) => x.value);
+  openSheet(`<h2>🧭 Planning ${esc(v.text)}…</h2><p class="small muted">Looking up places, what's open ${esc(dayText(day))} and how to get there. About a minute — you can keep this open.</p><div class="skeleton line"></div><div class="skeleton line"></div><div class="skeleton line"></div>`);
+  const r = await api.post(`/families/${state.fid}/outing`, { text: v.text, day, chips }).catch((err) => { openSheet(`<h2>🧭 Hmm</h2><p class="small">${esc(err.message)}</p><div class="row end"><button type="button" data-act="outing">Try again</button></div>`); return null; });
+  if (!r) return;
+  outing.cur = r.outing; outing.tab = 'plan'; outing.plan = null;
+  outingView();
+}
+const stopRow = (x, opt) => `<div class="pick"><span class="ph">${STOP_ICON[x.kind] || '📍'}</span><div class="grow"><b>${esc(x.name)}</b>${x.price ? ` <span class="tag">${esc(x.price)}</span>` : ''}${x.note ? ` <span class="tag tw">${esc(x.note)}</span>` : ''}<small class="muted">${esc(x.why)}${x.where ? ` · ${esc(x.where)}` : ''}</small>
+  <span class="links">${x.reserve ? `<a href="${esc(x.reserve)}" target="_blank" rel="noopener">OpenTable${x.time ? ` ${esc(hm(x.time))}` : ''}</a>` : ''}${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">Website</a>` : ''}<a href="${esc(x.map)}" target="_blank" rel="noopener">Map</a></span></div>
+  ${opt != null ? `<button type="button" class="ghost small" data-outswap="${opt}">Use this</button>` : ''}</div>`;
+function outingView() {
+  const o = outing.cur;
+  if (!o) return;
+  const mine = !outing.plan || outing.plan.by === fam().me;
+  const tabs = { plan: 'Plan', eat: 'Eat & drink', do: 'Do', go: 'Getting there' };
+  const go = `${o.getting.map((g) => `<div class="pick"><span class="ph">${MODE_ICON[g.mode] || '🚌'}</span><div class="grow">${g.depart ? `<b>${esc(hm(g.depart))}</b> ` : ''}${esc(g.text)}</div></div>`).join('')}
+    ${o.back ? `<div class="pick"><span class="ph">↩︎</span><div class="grow">${esc(o.back)}</div></div>` : ''}${o.parking ? `<div class="pick"><span class="ph">🅿️</span><div class="grow">${esc(o.parking)}</div></div>` : ''}
+    <a class="btn ghost small" href="${esc(o.directions)}" target="_blank" rel="noopener">🗺 Directions from ${esc(o.from)}</a>`;
+  const body = {
+    plan: `${o.getting[0] ? `<div class="card soft small">${MODE_ICON[o.getting[0].mode] || '🚌'} ${o.getting[0].depart ? `<b>Leave ${esc(hm(o.getting[0].depart))}</b> · ` : ''}${esc(o.getting[0].text)}${o.back ? `<br>↩︎ ${esc(o.back)}` : ''}</div>` : ''}
+      <div class="tl">${o.stops.map((x, i) => `<div class="st"><div class="t">${esc(hm(x.time))}</div>${stopRow(x)}${mine ? `<span class="tiny">${(o.options[EATK.includes(x.kind) ? 'eat' : 'do'] || []).length ? `<button type="button" class="linkish tiny" data-outtab="${EATK.includes(x.kind) ? 'eat' : 'do'}" data-outfor="${i}">⇄ Other options</button>` : ''}${EATK.includes(x.kind) && x.kind !== 'coffee' ? ` · <button type="button" class="linkish tiny" data-outcuisine="${i}">🍽 Something else…</button>` : ''}</span>` : ''}</div>`).join('')}</div>
+      ${o.tips.length ? `<ul class="small tips">${o.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}`,
+    eat: (o.options.eat || []).map((x, i) => stopRow(x, mine ? `eat:${i}` : null)).join('') || '<p class="small muted">No other picks this time.</p>',
+    do: (o.options.do || []).map((x, i) => stopRow(x, mine ? `do:${i}` : null)).join('') || '<p class="small muted">No other picks this time.</p>',
+    go,
+  }[outing.tab];
+  const p = outing.plan, meId = fam().me;
+  const foot = !p ? `<div class="row"><button type="button" class="ghost grow" data-act="outsave">💾 Save</button>${partnerMember() ? `<button type="button" class="hot grow" data-act="outsend">💞 Send to ${esc(partnerName())}</button>` : ''}</div>`
+    : p.by !== meId && !p.replies?.[meId] ? `<div class="ans">${Object.entries(ANSWERS).map(([k, t], i) => `<button type="button" class="${i ? 'ghost' : ''} small" data-answer="${p.id}:${k}">${t}</button>`).join('')}</div>` : '';
+  openSheet(`<div class="row between"><h2>🧭 ${esc(o.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <p class="small muted">${esc(o.area)} · ${esc(dayText(o.day))}</p>
+    <div class="seg-tabs">${Object.entries(tabs).map(([k, l]) => `<button type="button" class="${k === outing.tab ? 'on' : ''}" data-outtab="${k}">${l}</button>`).join('')}</div>
+    <div class="outbody">${body}</div>${foot}
+    <p class="tiny muted">Found with web search just now — check hours before you go.</p>`);
+}
+const EATK = ['coffee', 'brunch', 'lunch', 'dinner', 'drinks', 'dessert'];
+// "Use this": the option takes the place of the stop you came from (else the first of its kind).
+function outingSwap(ref) {
+  const o = outing.cur, [k, i] = ref.split(':');
+  const x = o.options[k]?.[+i];
+  if (!x) return;
+  let at = outing.swapFor ?? -1;
+  if (at < 0) at = o.stops.findIndex((s) => s.kind === x.kind);
+  if (at < 0) at = o.stops.findIndex((s) => (k === 'eat') === EATK.includes(s.kind));
+  if (at < 0) return toast('Nothing to swap it for');
+  const old = o.stops[at];
+  const time = old.time;
+  o.stops[at] = { ...x, time, reserve: x.reserve ? x.reserve.replace(/dateTime=[^&]+/, `dateTime=${o.day}T${encodeURIComponent(time)}`) : '' };
+  o.options[k][+i] = { ...old, time: undefined };
+  outing.swapFor = null; outing.tab = 'plan';
+  toast(`⇄ ${x.name} is in`);
+  outingView();
+}
+async function outingSend() {
+  const o = outing.cur;
+  // What goes to your partner (locked): the plan without the extra options, to keep it small.
+  const lean = { ...o, options: { eat: o.options.eat.slice(0, 3), do: o.options.do.slice(0, 2) } };
+  const first = o.getting.find((g) => g.depart)?.depart || o.stops[0]?.time || '';
+  const body = await lock({ kind: 'outing', what: o.title, where: o.area, when: 'date', time: first, note: '', outing: lean });
+  await api.post(`/families/${state.fid}/us/plans`, { body, day: o.day, audience: 'couple' });
+  closeSheet(); await usChanged();
+  toast(`💞 Sent — ${partnerName()} can say 🙌 I'm in`);
+}
+// 🍽 Something else: pick a cuisine for one stop and get 2-3 places nearby for the same time.
+function cuisineSheet(i) {
+  const x = outing.cur.stops[i];
+  openSheet(`<div class="row between"><h2>🍽 Instead of ${esc(x.name)}</h2><button type="button" class="icon-btn" data-outtab="plan" aria-label="Back">✕</button></div>
+    <p class="small muted">${esc(hm(x.time))} · near ${esc(outing.cur.area)}</p>
+    <div class="rchips">${CUISINES.map(([v, l]) => `<button type="button" class="chip" data-outcpick="${i}:${v}">${l}</button>`).join('')}<button type="button" class="chip" data-outcpick="${i}:">🎲 Surprise us</button></div>`);
+}
+async function cuisinePick(i, cuisine) {
+  const o = outing.cur, x = o.stops[i];
+  openSheet(`<h2>🍽 Finding ${esc(cuisine || 'something else')}…</h2><p class="small muted">Near ${esc(o.area)}, ${esc(hm(x.time))}. Takes 20–30 seconds.</p><div class="skeleton line"></div><div class="skeleton line"></div>`);
+  const r = await api.post(`/families/${state.fid}/outing/swap`, { area: o.area, day: o.day, time: x.time, kind: x.kind, cuisine, avoid: x.name }).catch((err) => { toast(err.message); return null; });
+  if (!r) return outingView();
+  o.options.eat = [...r.options.map((y) => ({ ...y, fresh: true })), ...(o.options.eat || []).filter((y) => !y.fresh)].slice(0, 10);
+  outing.tab = 'eat'; outing.swapFor = i;
+  outingView();
+}
+function outingSave() {
+  const l = [outing.cur, ...savedOutings().filter((x) => !(x.title === outing.cur.title && x.day === outing.cur.day))].slice(0, 8);
+  try { LS.set(outKey(), JSON.stringify(l)); toast('💾 Saved on this phone'); } catch { toast("Couldn't save — this phone is out of space"); }
+  renderOutingCard();
+}
+// The calendar event's notes: getting there, the timeline with links, and the way home.
+const outingNotes = (o) => [...o.getting.map((g) => `${MODE_ICON[g.mode] || '🚌'} ${g.depart ? `${hm(g.depart)} ` : ''}${g.text}`),
+  ...o.stops.map((x) => `${hm(x.time)} ${STOP_ICON[x.kind] || '📍'} ${x.name}${x.reserve ? ` — ${x.reserve}` : ''}`), o.back ? `↩︎ ${o.back}` : '', '🧭 planned in Us'].filter(Boolean).join('\n');
+function renderOutingCard() { const el = $('#usOutC'); if (el) el.innerHTML = outingCard(); }
 
 // Bringing over the trackers' "Feeling like" plans, answers and notes (once per family, each
 // person their own, locked before they're sent).
@@ -2372,11 +2505,19 @@ document.addEventListener('click', (e) => {
   if (d.feeddel) return act(async () => { await saveFeeds(calm.feeds.filter((f) => f.by === fam().me && f.id !== d.feeddel)); await loadCal(); renderCal(); });
   if (d.feel) return feelSheet(d.feel);
   if (d.trackers) { location.href = '../'; return; }
+  if (d.outplace) return outingAsk(d.outplace);
+  if (d.outfill) { const i = $('#outForm [name=text]'); i.value = d.outfill; return i.focus(); }
+  if (d.outsaved != null) { outing.cur = savedOutings()[+d.outsaved]; outing.tab = 'plan'; outing.plan = null; return outing.cur && outingView(); }
+  if (d.outtab) { outing.tab = d.outtab; outing.swapFor = d.outfor != null ? +d.outfor : null; return outingView(); }
+  if (d.outswap) return outingSwap(d.outswap);
+  if (d.outcuisine != null) return cuisineSheet(+d.outcuisine);
+  if (d.outcpick) { const [i, c] = d.outcpick.split(':'); return act(() => cuisinePick(+i, c)); }
+  if (d.outplan) { const p = us.plans.find((x) => x.id === d.outplan); if (!p?.outing) return; outing.cur = structuredClone(p.outing); outing.plan = p; outing.tab = 'plan'; return outingView(); }
   if (d.idea) { const i = d.idea.lastIndexOf(':'); return act(() => ideaAct(d.idea.slice(0, i), d.idea.slice(i + 1))); }
   if (d.ideatab) { ideas.tab = d.ideatab; ideas.i = 0; return ideasSheet(); }
   if (d.match) return matchSheet(d.match);
   if (d.matchskip) return act(async () => { await api.patch(`/families/${state.fid}/ideas/matches/${d.matchskip}`, { done: true }); await loadIdeas(); closeSheet(); renderUs(); usBadge(); });
-  if (d.answer) { const [id, r] = d.answer.split(':'); return act(async () => { const res = await api.post(`/families/${state.fid}/us/plans/${id}/reply`, { r }); const p = us.plans.find((x) => x.id === id); if (res.plan?.agreed && p) await planToCalendar({ ...p, agreed: true, replies: res.plan.replies }); await usChanged(); if (res.plan?.agreed) toast("🎉 It's a plan — it's on the calendar"); else if (r === 'in') toast('🙌 Sent'); }); }
+  if (d.answer) { const [id, r] = d.answer.split(':'); if ($('#sheetBody .outbody')) closeSheet(); return act(async () => { const res = await api.post(`/families/${state.fid}/us/plans/${id}/reply`, { r }); const p = us.plans.find((x) => x.id === id); if (res.plan?.agreed && p) await planToCalendar({ ...p, agreed: true, replies: res.plan.replies }); await usChanged(); if (res.plan?.agreed) toast("🎉 It's a plan — it's on the calendar"); else if (r === 'in') toast('🙌 Sent'); }); }
   if (d.planlog) { const p = us.plans.find((x) => x.id === d.planlog); return p ? act(async () => { await saveRhythm((r) => { const at = Date.now(); r.entries.push({ id: at.toString(36) + Math.random().toString(36).slice(2, 5), kind: 'date', date: p.day, at, what: planTitle(p).replace(/^Date night: ?/, '') || 'Date night', ...(p.where ? { place: p.where } : {}) }); }); await api.patch(`/families/${state.fid}/us/plans/${p.id}`, { done: true }); calm.rhythm = await loadRhythm().catch(() => calm.rhythm); await usChanged(); toast('❤️ Logged — it counts for your 2-2-2-2'); }) : null; }
   if (d.plandone) return act(async () => { await api.patch(`/families/${state.fid}/us/plans/${d.plandone}`, { done: true }); await usChanged(); toast('✓ Nice — added to your recap'); });
   if (d.plandel) { if (!confirm('Cancel this plan?')) return; return act(async () => { await api.del(`/families/${state.fid}/us/plans/${d.plandel}`); await usChanged(); }); }
@@ -2446,6 +2587,9 @@ document.addEventListener('click', (e) => {
     case 'demo': return demoSignIn();
     case 'help': return helpView();
     case 'feel': return feelSheet();
+    case 'outing': return outingAsk();
+    case 'outsave': return outingSave();
+    case 'outsend': return act(outingSend);
     case 'ideas': return act(async () => { if (!ideas.loaded) await loadIdeas(); ideas.i = 0; ideasSheet(); });
     case 'ideaset': return act(async () => { if (!ideas.loaded) await loadIdeas(); ideaSettingsSheet(); });
     case 'scoutrun': t.disabled = true; t.textContent = 'Scouting… (a minute or two)'; return act(async () => { const r = await api.post('/admin/scout/run'); toast(`💡 ${r.areas?.map((a) => `${a.ideas ?? 0} ideas`).join(', ') || 'Done'}`); adminView(); });
@@ -2660,6 +2804,7 @@ document.addEventListener('change', async (e) => {
     h.hidden = !k[3]; h.querySelector('span').textContent = k[3] || 'Where?';
     return;
   }
+  if (t.form?.id === 'outForm' && t.name === 'day') { const pd = t.form.querySelector('[name=pickday]'); pd.hidden = t.value !== 'pick'; if (!pd.hidden) pd.focus(); return; }
   if (t.form?.id === 'feelForm' && t.name === 'when') { t.form.querySelector('.kday').hidden = t.value !== 'date'; return; }
   if (t.name === 'type' && t.form?.id === 'apptForm') { t.form.querySelector('.vaxonly').hidden = t.value !== 'vaccine'; return; }
   if (t.name === 'bingofile' && t.files?.[0]) {
@@ -2697,6 +2842,7 @@ document.addEventListener('submit', (e) => {
     f.text.value = ''; f.querySelector('button').disabled = true;
     return ask(v.text || '');
   }
+  if (f.id === 'outForm') { e.preventDefault(); return act(() => outingGo(f)); }
   if (f.id === 'matchForm') { e.preventDefault(); return act(() => matchToPlan(f.dataset.t, v)); }
   if (f.id === 'ideaSetForm') {
     e.preventDefault();

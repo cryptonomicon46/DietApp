@@ -94,34 +94,38 @@ export function parseScout(text) {
   if (s < 0 || e < s) return null;
   try { return JSON.parse(text.slice(s, e + 1)); } catch { return null; }
 }
-export async function claudeScout(env, area, win, goodMovies) {
-  if (!(env.ANTHROPIC_API_KEY || env.__anthropic)) return { data: null, usage: null };
+// One Claude turn with web search (resumed if a long search turn pauses); the text it wrote,
+// and what it cost.
+export async function askClaude(env, prompt, { city = '', maxUses = 6, maxTokens = 8000 } = {}) {
   let client = env.__anthropic;
   if (!client) { const { default: Anthropic } = await import('@anthropic-ai/sdk'); client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }); }
   const model = env.SCOUT_MODEL || 'claude-sonnet-5-5';
   // Haiku gets the plain search tool; the filtering version is for Sonnet and Opus.
-  const tools = [{ type: /haiku/.test(model) ? 'web_search_20250305' : 'web_search_20260209', name: 'web_search', max_uses: 6, user_location: { type: 'approximate', city: area.label || undefined, region: 'California', country: 'US' } }];
-  const messages = [{ role: 'user', content: scoutPrompt(area, win, goodMovies) }];
+  const tools = [{ type: /haiku/.test(model) ? 'web_search_20250305' : 'web_search_20260209', name: 'web_search', max_uses: maxUses, user_location: { type: 'approximate', city: city || undefined, region: 'California', country: 'US' } }];
+  const messages = [{ role: 'user', content: prompt }];
   const usage = { input: 0, output: 0, searches: 0, model };
   let res;
-  // Web search runs on Anthropic's side; a long turn can pause and is resumed as is.
   for (let i = 0; i < 4; i++) {
-    res = await client.messages.create({ model, max_tokens: 8000, thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, tools, messages });
+    res = await client.messages.create({ model, max_tokens: maxTokens, thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, tools, messages });
     usage.input += res.usage?.input_tokens || 0;
     usage.output += res.usage?.output_tokens || 0;
     usage.searches += res.usage?.server_tool_use?.web_search_requests || 0;
     if (res.stop_reason !== 'pause_turn') break;
     messages.push({ role: 'assistant', content: res.content });
   }
-  const text = (res?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+  return { text: (res?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n'), usage };
+}
+export async function claudeScout(env, area, win, goodMovies) {
+  if (!(env.ANTHROPIC_API_KEY || env.__anthropic)) return { data: null, usage: null };
+  const { text, usage } = await askClaude(env, scoutPrompt(area, win, goodMovies), { city: area.label });
   return { data: parseScout(text), usage };
 }
 
 // ---------- one week's ideas for an area ----------
-const clean = (s, n = 120) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
-const okUrl = (u) => (/^https:\/\/[^\s"'<>]+$/.test(u || '') ? u : '');
-const okDay = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '');
-const okTime = (t) => (/^\d{2}:\d{2}$/.test(t || '') ? t : '');
+export const clean = (s, n = 120) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+export const okUrl = (u) => (/^https:\/\/[^\s"'<>]+$/.test(u || '') ? u : '');
+export const okDay = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '');
+export const okTime = (t) => (/^\d{2}:\d{2}$/.test(t || '') ? t : '');
 // OpenTable with the evening filled in (Saturday 7:30 PM for two by default): the couple finishes booking there.
 export const openTableUrl = (name, day, time = '19:30', covers = 2) => `https://www.opentable.com/s?${new URLSearchParams({ term: name, covers: String(covers), dateTime: `${day}T${time}` })}`;
 

@@ -558,3 +558,22 @@ button:disabled { opacity: .7; cursor: default; }
 .radios.showtimes span { display: block; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; font-weight: 600; font-size: .88rem; background: var(--card); cursor: pointer; }
 .radios.showtimes span small { display: block; font-weight: 400; color: var(--muted); }
 .radios.showtimes input:checked + span { border-color: var(--like); box-shadow: 0 0 0 2px color-mix(in srgb, var(--like) 30%, transparent); }
+
+/* 🧭 Plan an outing */
+.input-like { display: block; width: 100%; text-align: left; background: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-weight: 400; margin: 8px 0 0; }
+.chipradios label { display: inline-block; } .chipradios input { position: absolute; opacity: 0; pointer-events: none; }
+.chipradios input:checked + .chip { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+.chipradios .chip { display: inline-block; cursor: pointer; }
+.seg-tabs { display: flex; gap: 4px; margin: 8px 0 10px; } .seg-tabs button { flex: 1; padding: 7px 2px; font-size: .78rem; border-radius: 10px; background: var(--bg); color: var(--ink); }
+.seg-tabs button.on { background: var(--ink); color: var(--bg); }
+.outbody .pick { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-top: 1px solid var(--line); }
+.outbody .pick:first-child, .tl .pick { border-top: 0; padding-top: 2px; }
+.outbody .ph { flex: none; width: 36px; height: 36px; border-radius: 10px; background: var(--bg); display: grid; place-items: center; font-size: 1.15rem; }
+.outbody .pick small { display: block; } .outbody .grow { min-width: 0; }
+.links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 3px; font-size: .78rem; font-weight: 600; } .links a { color: var(--brand); }
+.tl { border-left: 2px solid var(--brand-soft); margin-left: 6px; padding-left: 12px; }
+.tl .st { position: relative; margin-bottom: 8px; } .tl .st::before { content: ''; position: absolute; left: -19px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+.tl .t { font-size: .74rem; font-weight: 800; color: var(--brand); }
+.card.soft { background: var(--brand-soft); border: 0; padding: 10px 12px; margin-bottom: 10px; }
+.tips { margin: 6px 0 10px; padding-left: 18px; } .tips li { margin: 2px 0; }
+button.hot.grow { background: var(--like); color: #fff; }
