@@ -45,3 +45,26 @@ test('the on-phone demo plans a made-up example without Claude', async () => {
   assert.ok(r.demo && r.outing.stops.length >= 3);
   assert.match(r.outing.title, /example/);
 });
+
+test('a plan is a job: kept a day under its name, a repeat is instant and free, and a phone that left can pick it up', async () => {
+  const { familyApi, TERMS_VERSION } = await import('../server/family.js');
+  const m = new Map();
+  let calls = 0;
+  const env = { DEMO: true, __fetch: async () => ({ status: 200 }), __anthropic: { messages: { create: async () => { calls++; return { stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(answer) }], usage: {} }; } } },
+    HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
+  const waits = [];
+  const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path, { waitUntil: (p) => waits.push(p) }); return { status: r.status, ...r.data }; };
+  const { token } = await call('/auth/demo', null, 'POST', { email: 'sam@example.com' });
+  await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true });
+  const { family } = await call('/families', token, 'POST', { name: 'Fam' });
+  const O = `/families/${family.fid}/outing`;
+  assert.equal((await call(`${O}/job/abcdef123456`, token)).status, 404, 'not done yet');
+  await call(`${O}/job/abcdef123456/notify`, token, 'POST');
+  const r = await call(O, token, 'POST', { text: 'Hayes Valley', day: '2026-11-01', job: 'abcdef123456' });
+  assert.equal(r.outing.title, 'Hayes Valley afternoon');
+  assert.ok(waits.length >= 1, 'the work carries on if the phone goes away');
+  const again = await call(O, token, 'POST', { text: 'Hayes Valley', day: '2026-11-01', job: 'abcdef123456' });
+  assert.ok(again.cached);
+  assert.equal(calls, 1, 'no second Claude call');
+  assert.equal((await call(`${O}/job/abcdef123456`, token)).outing.title, 'Hayes Valley afternoon', 'picked up later');
+});

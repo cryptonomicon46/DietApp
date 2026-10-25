@@ -99,10 +99,10 @@ export function parseScout(text) {
 }
 // One Claude turn with web search (resumed if a long search turn pauses); the text it wrote,
 // and what it cost.
-export async function askClaude(env, prompt, { city = '', maxUses = 6, maxTokens = 8000 } = {}) {
+export async function askClaude(env, prompt, { city = '', maxUses = 6, maxTokens = 8000, model: pick = '' } = {}) {
   let client = env.__anthropic;
   if (!client) { const { default: Anthropic } = await import('@anthropic-ai/sdk'); client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }); }
-  const model = env.SCOUT_MODEL || 'claude-sonnet-5-5';
+  const model = pick || env.SCOUT_MODEL || 'claude-sonnet-5-5';
   // Haiku gets the plain search tool; the filtering version is for Sonnet and Opus.
   const tools = [{ type: /haiku/.test(model) ? 'web_search_20250305' : 'web_search_20260209', name: 'web_search', max_uses: maxUses, user_location: { type: 'approximate', city: city || undefined, region: 'California', country: 'US' } }];
   const messages = [{ role: 'user', content: prompt }];

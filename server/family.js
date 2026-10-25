@@ -797,12 +797,33 @@ export async function familyApi(req, env, path, ctx = null) {
   }
 
   // ---- 🧭 plan an outing (Claude with web search; only the place, day, chips and home town go out) ----
-  m = path.match(/^\/families\/([a-z0-9]+)\/outing(\/swap)?$/);
-  if (m && method === 'POST') {
+  // A plan runs as a job: the phone names it (a hash of what was asked), the result is kept a day
+  // under that name — so a repeat is instant and free, and a phone that left can pick it up — and
+  // the work carries on (ctx.waitUntil) if the phone goes away. If it did go away (it says so with
+  // /notify), a notification says when it's ready.
+  m = path.match(/^\/families\/([a-z0-9]+)\/outing(?:\/(swap)|\/job\/([a-z0-9]{8,40})(\/notify)?)?$/);
+  if (m) {
     const fam = await loadFamily(m[1]);
     if (!fam) return json({ error: 'not found' }, 404);
     if (meIn(fam).relation === 'child') return json({ error: 'ask a grown-up' }, 403);
-    const r = await (m[2] ? swapStop : planOuting)(env, db, fam, body, (fam.ideas?.label || DEFAULT_AREA.label));
+    const [, , swap, jobId, notify] = m;
+    const jkey = (id) => `job:${fam.fid}:${id}`;
+    if (jobId && notify && method === 'POST') { await db.put(`jobnotify:${fam.fid}:${jobId}`, { uid: user.uid }, 3600); return json({ ok: true }); }
+    if (jobId && method === 'GET') { const r = await db.get(jkey(jobId)); return r ? json(r) : json({ pending: true }, 404); }
+    if (method !== 'POST' || jobId) return json({ error: 'not found' }, 404);
+    const job = /^[a-z0-9]{8,40}$/.test(body.job || '') ? body.job : null;
+    if (job) { const done = await db.get(jkey(job)); if (done) return json({ ...done, cached: true }); }
+    const work = (async () => {
+      const r = await (swap ? swapStop : planOuting)(env, db, fam, body, (fam.ideas?.label || DEFAULT_AREA.label));
+      if (job && !r.error && !r.demo) {
+        await db.put(jkey(job), { ...r, at: Date.now() }, 86400);
+        const n = await db.get(`jobnotify:${fam.fid}:${job}`);
+        if (n) await sendTo(db, env, [n.uid], 'us', { title: swap ? '🍽 Your picks are ready' : `🧭 Your ${r.outing?.title || 'outing'} plan is ready`, body: 'Tap to open it', url: 'family/#us', tag: `job-${job.slice(0, 12)}` }).catch(() => 0);
+      }
+      return r;
+    })();
+    ctx?.waitUntil?.(work.catch(() => {}));
+    const r = await work;
     return json(r, r.error ? 400 : 200);
   }
 

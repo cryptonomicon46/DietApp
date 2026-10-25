@@ -117,6 +117,8 @@ const isoLocal = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset(
 const inviteLink = (code) => `${location.origin}${location.pathname}#invite=${code}`;
 function openSheet(html) { $('#sheetBody').innerHTML = html; if (!$('#sheet').open) $('#sheet').showModal(); }
 const closeSheet = () => $('#sheet').open && $('#sheet').close();
+// Something in the sheet that's open now (a closed sheet keeps its last content).
+const open$ = (sel) => ($('#sheet').open ? $(`#sheetBody ${sel}`) : null);
 async function act(fn) { try { return await fn(); } catch (err) { if (err.status === 401 || err.data?.consent) return boot(); toast(err.message); return null; } }
 
 // ---------- start ----------
@@ -153,6 +155,7 @@ async function loadFamily() {
   const r = await api.get(`/families/${state.fid}`);
   state.family = r.family; state.connected = r.connected;
   LS.set('fam.fid', state.fid);
+  jobs.list = null; setTimeout(() => resumeJobs().catch(() => {}), 0);
   await loadKeys();
   if (state.keyAdded) { state.keyAdded = false; setTimeout(() => toast(fk() ? '🔐 This device can now read your family' : "That link's key doesn't match this family"), 400); }
   lockMyData().catch(() => {});
@@ -1452,7 +1455,7 @@ function outingCard() {
   return `<div class="row between"><b class="us-h">🧭 Where to?</b><span class="tiny muted">SF, Oakland, Marin…</span></div>
     <button type="button" class="input-like" data-act="outing">Hayes Valley Saturday, Sausalito for lunch…</button>
     <div class="rchips">${['Hayes Valley', 'Oakland · Temescal', 'San Rafael', 'Sausalito'].map((p) => `<button type="button" class="chip" data-outplace="${esc(p)}">${esc(p)}</button>`).join('')}</div>
-    ${saved.length ? `<p class="tiny muted">Saved: ${saved.map((o, i) => `<button type="button" class="linkish tiny" data-outsaved="${i}">${esc(o.title)}</button>`).join(' · ')}</p>` : ''}`;
+    ${saved.length ? `<p class="tiny muted">Recent: ${saved.map((o, i) => `<button type="button" class="linkish tiny" data-outsaved="${i}">${esc(o.title)}</button>`).join(' · ')}</p>` : ''}`;
 }
 function outingAsk(place = '') {
   const sat = shiftLocal(isoLocal(), (6 - new Date().getDay() + 7) % 7 || 7);
@@ -1474,13 +1477,12 @@ async function outingGo(f) {
   const day = v.day === 'pick' ? v.pickday : v.day;
   if (!day) return toast('Which day?');
   const chips = [...f.querySelectorAll('[name=chip]:checked')].map((x) => x.value);
-  openSheet(`<h2>🧭 Planning ${esc(v.text)}…</h2><p class="small muted">Looking up places, what's open ${esc(dayText(day))} and how to get there. About a minute — you can keep this open.</p><div class="skeleton line"></div><div class="skeleton line"></div><div class="skeleton line"></div>`);
   LS.set('fam.useTaste', v.usetaste ? '1' : f.querySelector('[name=usetaste]') ? '0' : LS.get('fam.useTaste'));
   outing.taste = v.usetaste ? tasteLineNow() : '';
-  const r = await api.post(`/families/${state.fid}/outing`, { text: v.text, day, chips, taste: outing.taste }).catch((err) => { openSheet(`<h2>🧭 Hmm</h2><p class="small">${esc(err.message)}</p><div class="row end"><button type="button" data-act="outing">Try again</button></div>`); return null; });
-  if (!r) return;
-  outing.cur = r.outing; outing.tab = 'plan'; outing.plan = null;
-  outingView();
+  const body = { text: v.text.trim(), day, chips, taste: outing.taste };
+  const id = await jobId('outing', body);
+  jobWait(id, `🧭 Planning ${v.text.trim()}…`);
+  runJob('outing', body, `🧭 ${v.text.trim()}`);
 }
 const stopRow = (x, opt) => `<div class="pick"><span class="ph">${STOP_ICON[x.kind] || '📍'}</span><div class="grow"><b>${esc(x.name)}</b>${x.price ? ` <span class="tag">${esc(x.price)}</span>` : ''}${x.note ? ` <span class="tag tw">${esc(x.note)}</span>` : ''}<small class="muted">${esc(x.why)}${x.where ? ` · ${esc(x.where)}` : ''}</small>
   <span class="links">${x.reserve ? `<a href="${esc(x.reserve)}" target="_blank" rel="noopener">OpenTable${x.time ? ` ${esc(hm(x.time))}` : ''}</a>` : ''}${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">Website</a>` : ''}<a href="${esc(x.map)}" target="_blank" rel="noopener">Map</a></span></div>
@@ -1547,12 +1549,10 @@ function cuisineSheet(i) {
 }
 async function cuisinePick(i, cuisine) {
   const o = outing.cur, x = o.stops[i];
-  openSheet(`<h2>🍽 Finding ${esc(cuisine || 'something else')}…</h2><p class="small muted">Near ${esc(o.area)}, ${esc(hm(x.time))}. Takes 20–30 seconds.</p><div class="skeleton line"></div><div class="skeleton line"></div>`);
-  const r = await api.post(`/families/${state.fid}/outing/swap`, { area: o.area, day: o.day, time: x.time, kind: x.kind, cuisine, avoid: x.name, taste: outing.taste || '' }).catch((err) => { toast(err.message); return null; });
-  if (!r) return outingView();
-  o.options.eat = [...r.options.map((y) => ({ ...y, fresh: true })), ...(o.options.eat || []).filter((y) => !y.fresh)].slice(0, 10);
-  outing.tab = 'eat'; outing.swapFor = i;
-  outingView();
+  const body = { area: o.area, day: o.day, time: x.time, kind: x.kind, cuisine, avoid: x.name, taste: outing.taste || '' };
+  const id = await jobId('swap', body);
+  jobWait(id, `🍽 Finding ${cuisine || 'something else'} near ${o.area.split(',')[0]}…`);
+  runJob('swap', body, `🍽 ${cuisine ? cuisine[0].toUpperCase() + cuisine.slice(1) : 'Other'} picks`, { outing: `${o.title}|${o.day}`, stop: i });
 }
 function outingSave() {
   const l = [outing.cur, ...savedOutings().filter((x) => !(x.title === outing.cur.title && x.day === outing.cur.day))].slice(0, 8);
@@ -1633,10 +1633,10 @@ function feelFill(x, show) {
 async function feelFind() {
   const f = $('#feelForm'), days = feelDays(f), time = f.time.value || '19:00';
   const key = `${feel.cuisine}|${days[0]}|${f.time.value}`;
-  const b = $('[data-feelfind]'); if (b) { b.disabled = true; b.textContent = '🔎 Looking… (about 20 seconds)'; }
-  const r = await api.post(`/families/${state.fid}/outing/swap`, { area: ideas.settings?.label || 'San Jose', day: days[0], time, kind: f.kind.value === 'drinks' ? 'drinks' : 'dinner', cuisine: feel.cuisine, taste: LS.get('fam.useTaste') === '0' ? '' : tasteLineNow() }).catch((err) => { toast(err.message); return null; });
-  if (r) feel.found[key] = r.options.map((x) => ({ ...x, title: x.name, opened: '' }));
-  renderFeelPicks();
+  const b = $('[data-feelfind]'); if (b) { b.disabled = true; b.textContent = '🔎 Looking… you can keep going, it shows below when ready'; }
+  const body = { area: ideas.settings?.label || 'San Jose', day: days[0], time, kind: f.kind.value === 'drinks' ? 'drinks' : 'dinner', cuisine: feel.cuisine, taste: LS.get('fam.useTaste') === '0' ? '' : tasteLineNow() };
+  await runJob('find', body, `🍽 ${feel.cuisine ? feel.cuisine[0].toUpperCase() + feel.cuisine.slice(1) : 'Dinner'} places`, { key });
+  if (open$('#feelPicks')) renderFeelPicks();
 }
 
 // ---------- ⭐ How was it? Ratings kept in your own (encrypted) trackers; they shape the picks ----------
@@ -1681,6 +1681,116 @@ async function skipRating(id) {
   calm.myRatings = [...(calm.myRatings || []), { plan: id, skip: true }];
   closeSheet(); renderUs(); usBadge();
 }
+
+// ---------- ⏳ planning jobs: they run in the background, show in a pill, and are never lost ----------
+// Each job is named by a hash of what was asked, so asking again reuses it (and the connector's
+// saved copy); results stay on this phone, and a job cut off by closing the app is picked up later.
+const jobsKey = () => `fam.jobs.${state.fid}`;
+const jobs = { list: null, running: new Map(), tick: null, told: new Set() };
+const jobList = () => (jobs.list ||= (() => { try { return JSON.parse(LS.get(jobsKey()) || '[]'); } catch { return []; } })());
+const saveJobs = () => { jobs.list = jobList().filter((j) => Date.now() - j.at < 864e5).slice(-12); try { LS.set(jobsKey(), JSON.stringify(jobs.list)); } catch { /* full */ } };
+const jobResult = (id) => { try { return JSON.parse(LS.get(`fam.jobres.${id}`) || 'null'); } catch { return null; } };
+const JOB_STEPS = { outing: ['Finding places', 'Checking hours', 'Planning the route', 'Checking the links'], swap: ['Searching nearby', 'Checking the links'], find: ['Searching nearby', 'Checking the links'] };
+async function jobId(kind, body) {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([state.fid, kind, body])));
+  return [...new Uint8Array(h)].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function runJob(kind, body, label, ctx = {}) {
+  const id = await jobId(kind, body);
+  if (jobs.running.has(id)) return jobs.running.get(id);
+  const prior = jobList().find((j) => j.id === id);
+  if (prior?.status === 'done' && jobResult(id)) { jobDone(prior, jobResult(id), true); return jobResult(id); }
+  const job = { id, kind, label, body, ctx, at: Date.now(), status: 'running' };
+  jobs.list = [...jobList().filter((j) => j.id !== id), job]; saveJobs();
+  const path = `/families/${state.fid}/outing${kind === 'outing' ? '' : '/swap'}`;
+  const p = api.post(path, { ...body, job: id }).then((r) => { jobDone(job, r); return r; }, (err) => {
+    if (err.status) { Object.assign(job, { status: 'failed', error: err.message }); saveJobs(); renderPill(); }
+    // No answer at all (the phone lost the connection): the connector carries on; check back later.
+    return null;
+  }).finally(() => { jobs.running.delete(id); renderPill(); });
+  jobs.running.set(id, p);
+  renderPill();
+  return p;
+}
+function jobDone(job, r, quiet = false) {
+  try { LS.set(`fam.jobres.${job.id}`, JSON.stringify(r)); } catch { /* full */ }
+  Object.assign(job, { status: 'done', seen: false, doneAt: Date.now() });
+  jobs.list = [...jobList().filter((j) => j.id !== job.id), job]; saveJobs();
+  if (job.kind === 'outing' && r.outing) {
+    const l = [r.outing, ...savedOutings().filter((x) => !(x.title === r.outing.title && x.day === r.outing.day))].slice(0, 8);
+    try { LS.set(outKey(), JSON.stringify(l)); } catch { /* full */ }
+    renderOutingCard();
+  }
+  if (job.kind === 'find') feel.found[job.ctx.key] = r.options.map((x) => ({ ...x, title: x.name, opened: '' }));
+  if (job.kind === 'swap' && outing.cur && `${outing.cur.title}|${outing.cur.day}` === job.ctx.outing) mergeSwap(r.options);
+  // Show it only where you're already looking at it; anywhere else, the pill says it's ready.
+  const here = (job.kind !== 'find' && open$(`#jobWait[data-job="${job.id}"]`)) || (job.kind === 'find' && open$('#feelPicks'));
+  if (here) { job.seen = true; saveJobs(); openJob(job); } else if (!quiet) toast(`✅ ${job.label} — ready`);
+  renderPill();
+}
+function mergeSwap(options) {
+  const o = outing.cur;
+  o.options.eat = [...options.map((y) => ({ ...y, fresh: true })), ...(o.options.eat || []).filter((y) => !y.fresh)].slice(0, 10);
+}
+function openJob(job) {
+  const r = jobResult(job.id);
+  job.seen = true; saveJobs(); renderPill();
+  if (!r) return;
+  if (job.kind === 'outing') { outing.cur = r.outing; outing.tab = 'plan'; outing.plan = null; outing.taste = job.body.taste || ''; return outingView(); }
+  if (job.kind === 'swap') {
+    if (!outing.cur || `${outing.cur.title}|${outing.cur.day}` !== job.ctx.outing) { const o = savedOutings().find((x) => `${x.title}|${x.day}` === job.ctx.outing); if (!o) return toast('That outing is gone'); outing.cur = structuredClone(o); outing.plan = null; mergeSwap(r.options); }
+    outing.tab = 'eat'; outing.swapFor = job.ctx.stop; return outingView();
+  }
+  if (job.kind === 'find') {
+    if (open$('#feelPicks')) return renderFeelPicks();
+    feel.picks = r.options.map((x) => ({ ...x, title: x.name }));
+    return openSheet(`<div class="row between"><h2>${esc(job.label)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+      ${feel.picks.map((x, i) => `<div class="fpick"><span class="fp-i">🍽</span><div class="grow"><b>${esc(x.name)}</b><small class="muted">${esc([x.price, x.where, x.why].filter(Boolean).join(' · '))}</small>${x.reserve ? `<a class="tiny" href="${esc(x.reserve)}" target="_blank" rel="noopener">OpenTable</a>` : ''}</div><button type="button" class="ghost small" data-jobsuggest="${i}">Suggest</button></div>`).join('')}`);
+  }
+}
+// The wait screen (only if you stay): what it's doing, and that you can leave.
+function jobWait(id, title) {
+  openSheet(`<div id="jobWait" data-job="${id}"><h2>${esc(title)}</h2><p class="small muted" id="jobStep">Starting…</p><div class="skeleton line"></div><div class="skeleton line"></div>
+    <p class="tiny muted">You can close this and keep using the app — it carries on, and the bar at the bottom says when it's ready. You'll get a notification if you leave the app.</p>
+    <div class="row end"><button type="button" class="ghost" data-act="close">Keep using the app</button></div></div>`);
+  renderPill();
+}
+function renderPill() {
+  let el = $('#jobPill');
+  if (!el) { el = document.createElement('div'); el.id = 'jobPill'; el.className = 'jobpill'; document.body.appendChild(el); }
+  const list = state.fid ? jobList() : [];
+  const run = list.filter((j) => j.status === 'running'), ready = list.filter((j) => j.status === 'done' && j.seen === false), bad = list.filter((j) => j.status === 'failed' && !j.dismissed);
+  const secs = (j) => Math.round((Date.now() - j.at) / 1000);
+  const step = (j) => { const s = JOB_STEPS[j.kind]; return s[Math.min(s.length - 1, Math.floor(secs(j) / 7))]; };
+  const rows = [
+    ...run.map((j) => `<button type="button" class="jp run" data-jobopen="${j.id}"><span class="spin"></span><b>${esc(j.label)}</b> <small>${esc(step(j))}… ${Math.floor(secs(j) / 60)}:${String(secs(j) % 60).padStart(2, '0')}</small></button>`),
+    ...ready.map((j) => `<span class="jp done"><button type="button" data-jobopen="${j.id}">✅ <b>${esc(j.label)}</b> ready · <u>Open</u></button><button type="button" class="x" data-jobx="${j.id}" aria-label="Dismiss">✕</button></span>`),
+    ...bad.map((j) => `<span class="jp bad"><button type="button" data-jobretry="${j.id}">⚠️ <b>${esc(j.label)}</b> ${esc(j.error || "didn't finish")} · <u>Try again</u></button><button type="button" class="x" data-jobx="${j.id}" aria-label="Dismiss">✕</button></span>`),
+  ];
+  el.innerHTML = rows.slice(-3).join('');
+  el.hidden = !rows.length;
+  const w = open$('#jobWait'), wj = w && list.find((j) => j.id === w.dataset.job);
+  if (wj && wj.status === 'running') $('#jobStep').textContent = `${step(wj)}… ${secs(wj)}s`;
+  if (wj && wj.status === 'failed') $('#jobStep').innerHTML = `⚠️ ${esc(wj.error || "Didn't finish")}`;
+  clearInterval(jobs.tick);
+  if (run.length) jobs.tick = setInterval(renderPill, 1000);
+}
+// Back in the app: pick up jobs that finished (or gave up) while the phone was away.
+async function resumeJobs() {
+  for (const j of jobList().filter((x) => x.status === 'running' && !jobs.running.has(x.id))) {
+    const r = await api.get(`/families/${state.fid}/outing/job/${j.id}`).catch(() => null);
+    if (r && !r.pending) jobDone(j, r);
+    else if (Date.now() - j.at > 4 * 60000) { Object.assign(j, { status: 'failed', error: "didn't finish" }); saveJobs(); }
+  }
+  renderPill();
+}
+document.addEventListener('visibilitychange', () => {
+  if (!state.fid) return;
+  if (document.hidden) {
+    // Leaving with a plan still cooking: ask for a notification when it's done.
+    for (const j of jobList().filter((x) => x.status === 'running' && !jobs.told.has(x.id))) { jobs.told.add(j.id); api.post(`/families/${state.fid}/outing/job/${j.id}/notify`).catch(() => {}); }
+  } else resumeJobs();
+});
 
 // Bringing over the trackers' "Feeling like" plans, answers and notes (once per family, each
 // person their own, locked before they're sent).
@@ -2661,6 +2771,10 @@ document.addEventListener('click', (e) => {
   if (d.feeddel) return act(async () => { await saveFeeds(calm.feeds.filter((f) => f.by === fam().me && f.id !== d.feeddel)); await loadCal(); renderCal(); });
   if (d.feel) return feelSheet(d.feel);
   if (d.trackers) { location.href = '../'; return; }
+  if (d.jobopen) { const j = jobList().find((x) => x.id === d.jobopen); if (!j) return; if (j.status === 'running') return jobWait(j.id, j.label); return openJob(j); }
+  if (d.jobx) { const j = jobList().find((x) => x.id === d.jobx); if (j) { j.seen = true; j.dismissed = true; saveJobs(); } return renderPill(); }
+  if (d.jobretry) { const j = jobList().find((x) => x.id === d.jobretry); if (!j) return; jobs.list = jobList().filter((x) => x.id !== j.id); saveJobs(); if (j.kind !== 'find') jobWait(j.id, j.label); return runJob(j.kind, j.body, j.label, j.ctx); }
+  if (d.jobsuggest != null) { const x = feel.picks[+d.jobsuggest]; return x && feelSheet('dinner', { idea: { ...x, kind: 'food', title: x.name } }); }
   if (d.rate) { const p = us.plans.find((x) => x.id === d.rate); if (!p) return; return act(async () => { ideas.I ||= await import('./ideas.js'); rateSheet(p); }); }
   if (d.rateskip) return act(() => skipRating(d.rateskip));
   if (d.tonight) { const t = tonightPick(); return t && feelSheet(t.kind, { idea: t.idea, show: t.show }); }

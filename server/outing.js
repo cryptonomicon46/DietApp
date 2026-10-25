@@ -67,13 +67,16 @@ export async function planOuting(env, db, fam, body, from, now = new Date()) {
   const day = okDay(body.day);
   if (!day) return { error: 'which day?' };
   const chips = (Array.isArray(body.chips) ? body.chips : []).map((c) => clean(c, 20).toLowerCase()).filter((c) => CHIPS.includes(c)).slice(0, 12);
-  if (env.DEMO && !env.__anthropic) return { outing: shapeOuting(DEMO_ANSWER(text), { day, from, text }), demo: true };
+  if (env.DEMO && !env.__anthropic) {
+    if (typeof window !== 'undefined') await new Promise((r) => setTimeout(r, 4000)); // the demo takes a moment, like the real thing
+    return { outing: shapeOuting(DEMO_ANSWER(text), { day, from, text }), demo: true };
+  }
   if (!(env.ANTHROPIC_API_KEY || env.__anthropic)) return { error: 'outings need the Anthropic key on the connector (ANTHROPIC_API_KEY)' };
   const month = now.toISOString().slice(0, 7), key = `outingruns:${fam.fid}:${month}`;
   const runs = (await db.get(key)) || [];
   const cap = Math.max(1, +env.OUTING_MAX_RUNS || 20);
   if (runs.filter((x) => !x.swap).length >= cap) return { error: `that's ${cap} outings planned this month — more next month` };
-  const { text: answer, usage } = await askClaude(env, outingPrompt({ text, day, chips, from, taste: clean(body.taste, 300) }), { city: from, maxUses: 8 });
+  const { text: answer, usage } = await askClaude(env, outingPrompt({ text, day, chips, from, taste: clean(body.taste, 300) }), { city: from, maxUses: 5 });
   await db.put(key, [...runs, { at: Date.now(), ...usage }], 62 * 86400);
   const outing = shapeOuting(parseScout(answer), { day, from, text });
   if (!outing) return { error: "Claude couldn't put that one together — try saying it another way" };
@@ -96,13 +99,13 @@ export async function swapStop(env, db, fam, body, from, now = new Date()) {
   if (!area || !day) return { error: 'which outing?' };
   const avoid = clean(body.avoid, 60);
   const shape = (j) => shapeOuting({ area, stops: [{ time, kind, name: '_' }], options: { eat: (j?.options || []).map((x) => ({ ...x, kind })) } }, { day, from, text: area })?.options.eat.map((x) => ({ ...x, reserve: x.opentable ? openTableUrl(`${x.name} ${area.split(',').pop().trim()}`, day, time) : '' })) || [];
-  if (env.DEMO && !env.__anthropic) return { options: shape({ options: [{ name: `${cuisine ? cuisine[0].toUpperCase() + cuisine.slice(1) : 'Another'} spot (example)`, why: 'A made-up example', price: '$$', note: 'walk-in' }, { name: `${cuisine ? cuisine[0].toUpperCase() + cuisine.slice(1) : 'Second'} kitchen (example)`, why: 'Another example', price: '$$$', note: 'book ahead', opentable: true }] }) };
+  if (env.DEMO && !env.__anthropic) { if (typeof window !== 'undefined') await new Promise((r) => setTimeout(r, 3000)); } if (env.DEMO && !env.__anthropic) return { options: shape({ options: [{ name: `${cuisine ? cuisine[0].toUpperCase() + cuisine.slice(1) : 'Another'} spot (example)`, why: 'A made-up example', price: '$$', note: 'walk-in' }, { name: `${cuisine ? cuisine[0].toUpperCase() + cuisine.slice(1) : 'Second'} kitchen (example)`, why: 'Another example', price: '$$$', note: 'book ahead', opentable: true }] }) };
   if (!(env.ANTHROPIC_API_KEY || env.__anthropic)) return { error: 'outings need the Anthropic key on the connector (ANTHROPIC_API_KEY)' };
   const month = now.toISOString().slice(0, 7), key = `outingruns:${fam.fid}:${month}`;
   const runs = (await db.get(key)) || [];
   const cap = Math.max(1, +env.OUTING_MAX_RUNS || 20) * 3; // swaps are small: three per outing on average
   if (runs.length >= cap) return { error: 'that\'s a lot of planning this month — more next month' };
-  const { text, usage } = await askClaude(env, swapPrompt({ area, day, time, kind, cuisine, avoid, taste: clean(body.taste, 300) }), { city: from, maxUses: 3, maxTokens: 3000 });
+  const { text, usage } = await askClaude(env, swapPrompt({ area, day, time, kind, cuisine, avoid, taste: clean(body.taste, 300) }), { city: from, maxUses: 3, maxTokens: 3000, model: env.SWAP_MODEL || 'claude-haiku-5-5' });
   await db.put(key, [...runs, { at: Date.now(), swap: true, ...usage }], 62 * 86400);
   const options = await checked(env, shape(parseScout(text)), area, 3);
   return options.length ? { options } : { error: "Couldn't find any — try another cuisine" };
