@@ -613,7 +613,7 @@ export async function familyApi(req, env, path, ctx = null) {
       if (!to.length) return json({ error: 'add your partner to the family first' }, 400);
       const plan = { id: randomId(8), by: me.id, to, audience: body.audience === 'family' ? 'family' : 'couple', day: body.day, weekend: !!body.weekend, body: b, replies: {}, done: false, at: Date.now() };
       us.plans.push(plan); await save();
-      await tell(uidsOf(fam, to, user.uid), 'us', { title: `💞 ${me.name} is feeling like something`, body: `For ${plan.weekend ? 'this weekend' : dayWords(plan.day, today)} — tap to answer`, url: 'family/#feed', tag: `plan-${plan.id}` });
+      await tell(uidsOf(fam, to, user.uid), 'us', { title: `💞 ${me.name} is feeling like something`, body: `For ${plan.weekend ? 'this weekend' : dayWords(plan.day, today)} — tap to answer`, url: 'family/#us', tag: `plan-${plan.id}` });
       return json({ plan });
     }
     if (what === 'notes' && !id && method === 'POST') {
@@ -624,7 +624,7 @@ export async function familyApi(req, env, path, ctx = null) {
       us.notes.push(note);
       us.noteDays = { ...(us.noteDays || {}), [me.id]: [...new Set([...(us.noteDays?.[me.id] || []), today])].slice(-400) };
       await save();
-      await tell(uidsOf(fam, to, user.uid), 'us', { title: `💌 ${me.name} left you a note`, body: 'Tap to read it', url: 'family/#feed', tag: `note-${note.id}` });
+      await tell(uidsOf(fam, to, user.uid), 'us', { title: `💌 ${me.name} left you a note`, body: 'Tap to read it', url: 'family/#us', tag: `note-${note.id}` });
       return json({ note });
     }
     // Bringing over the trackers' "Feeling like" plans, replies and notes (each person their own).
@@ -664,7 +664,7 @@ export async function familyApi(req, env, path, ctx = null) {
       await save();
       if (item.replies[me.id]) {
         const said = { in: "🙌 is in", maybe: '🤔 says maybe', later: '⏰ says another time' }[body.r];
-        await tell(uidsOf(fam, [item.by], user.uid), 'us', agreed(item) ? { title: "🎉 It's a plan!", body: `${me.name} is in`, url: 'family/#feed', tag: `plan-${item.id}` } : { title: `${me.name} ${said}`, body: 'About your plan', url: 'family/#feed', tag: `plan-${item.id}` });
+        await tell(uidsOf(fam, [item.by], user.uid), 'us', agreed(item) ? { title: "🎉 It's a plan!", body: `${me.name} is in`, url: 'family/#us', tag: `plan-${item.id}` } : { title: `${me.name} ${said}`, body: 'About your plan', url: 'family/#us', tag: `plan-${item.id}` });
       }
       return json({ plan: { ...item, agreed: agreed(item) } });
     }
@@ -698,11 +698,19 @@ export async function familyApi(req, env, path, ctx = null) {
     const bodyOf = (v) => sealed(v, 4000) ?? (fam.e2ee ? null : (typeof v === 'object' && v ? JSON.stringify(v).slice(0, 2000) : null));
     const day = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '');
     const STATUSES = ['watching', 'finished', 'dropped'];
-    if (!what && method === 'GET') return json(w);
+    // 🔒 A show is the couple's own unless it's shared with the family ("aud": "family"). Older
+    // shows (no aud) stay as they were: the family's.
+    const couple = [me.id, partnerOf(fam, me)?.id].filter(Boolean);
+    const sees = (x) => !x.aud || x.aud === 'family' || (x.to || []).includes(me.id);
+    if (!what && method === 'GET') {
+      const ids = new Set(w.shows.filter(sees).map((x) => x.id));
+      const only = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => ids.has(k)));
+      return json({ shows: w.shows.filter(sees), nights: w.nights.filter((n) => ids.has(n.show)), status: only(w.status), ratings: only(w.ratings), progress: only(w.progress) });
+    }
     if (what === 'shows' && !id && method === 'POST') {
       const b = bodyOf(body.body);
       if (!b) return json({ error: 'this family is end-to-end encrypted — update the app and try again' }, 400);
-      const show = { id: randomId(8), by: me.id, body: b, at: Date.now() };
+      const show = { id: randomId(8), by: me.id, body: b, at: Date.now(), aud: body.aud === 'family' ? 'family' : 'us', to: body.aud === 'family' ? [] : couple };
       w.shows.push(show); await save();
       return json({ show });
     }
@@ -713,7 +721,7 @@ export async function familyApi(req, env, path, ctx = null) {
       for (const sh of (Array.isArray(body.shows) ? body.shows : []).slice(0, 500)) {
         const b = bodyOf(sh.body), sid = tid(sh.id);
         if (!b || sid === 't' || w.shows.some((x) => x.id === sid)) continue;
-        w.shows.push({ id: sid, by: me.id, body: b, at: +sh.at || Date.now(), src: 'import' }); n++;
+        w.shows.push({ id: sid, by: me.id, body: b, at: +sh.at || Date.now(), src: 'import', aud: 'us', to: couple }); n++;
       }
       for (const nt of (Array.isArray(body.nights) ? body.nights : []).slice(0, 3000)) {
         const sid = tid(nt.show), d = day(nt.date);
@@ -730,7 +738,7 @@ export async function familyApi(req, env, path, ctx = null) {
       return json({ imported: n });
     }
     const show = w.shows.find((x) => x.id === id);
-    if (!show) return json({ error: 'that show is gone' }, 404);
+    if (!show || !sees(show)) return json({ error: 'that show is gone' }, 404);
     if (act === '/night' && method === 'POST') {
       const d = day(body.date);
       if (!d) return json({ error: 'which night?' }, 400);
@@ -742,6 +750,9 @@ export async function familyApi(req, env, path, ctx = null) {
     }
     if (!act && method === 'PATCH') {
       if (body.body) { const b = bodyOf(body.body); if (b) show.body = b; }
+      // Share with the family, or keep it just the two of you (either of you can change it).
+      if (body.aud === 'family') { show.aud = 'family'; show.to = []; }
+      if (body.aud === 'us') { show.aud = 'us'; show.to = couple; }
       if (STATUSES.includes(body.status)) w.status[id] = { s: body.status, at: Date.now(), date: day(body.date) || new Date().toISOString().slice(0, 10), by: me.id };
       if (body.rating !== undefined) {
         const r = { ...(w.ratings[id] || {}) };

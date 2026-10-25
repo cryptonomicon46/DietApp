@@ -51,3 +51,25 @@ test('a show, watched together, rated and recapped', async () => {
   await call(`${W}/shows/${show.id}`, sam, 'DELETE');
   assert.equal((await call(W, sam)).nights.filter((n) => n.show === show.id).length, 0);
 });
+
+test('a show is just the couple\'s by default, and can be shared with the family', async () => {
+  const m = new Map();
+  const env = { DEMO: true, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
+  const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path.split('?')[0]); return { status: r.status, ...r.data }; };
+  const signIn = async (email) => { const { token } = await call('/auth/demo', null, 'POST', { email }); await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true }); return token; };
+  const sam = await signIn('sam@example.com'), pat = await signIn('pat@example.com'), kid = await signIn('kid@example.com');
+  const { family } = await call('/families', sam, 'POST', { name: 'Fam' });
+  for (const [token, email, name, relation] of [[pat, 'pat@example.com', 'Pat', 'spouse'], [kid, 'kid@example.com', 'Kid', 'child']]) {
+    const add = await call(`/families/${family.fid}/members`, sam, 'POST', { kind: 'person', name, relation, email });
+    const inv = await call(`/families/${family.fid}/invites`, sam, 'POST', { kind: 'member', memberId: add.member.id });
+    await call(`/invites/${inv.invite.code}/accept`, token, 'POST');
+  }
+  const W = `/families/${family.fid}/watch`;
+  const { show } = await call(`${W}/shows`, sam, 'POST', { body: { title: 'Love Is Blind' } });
+  assert.equal(show.aud, 'us');
+  assert.equal((await call(W, pat)).shows.length, 1, 'Pat sees it');
+  assert.equal((await call(W, kid)).shows.length, 0, 'the kid does not');
+  assert.equal((await call(`${W}/shows/${show.id}`, kid, 'PATCH', { rating: 5 })).status, 404);
+  await call(`${W}/shows/${show.id}`, pat, 'PATCH', { aud: 'family' });
+  assert.equal((await call(W, kid)).shows.length, 1, 'shared with the family');
+});

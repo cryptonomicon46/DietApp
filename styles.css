@@ -15,8 +15,23 @@
   --radius: 14px;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) {
+    --bg: #121513;
+    --card: #1b201d;
+    --ink: #e9ece9;
+    --muted: #99a29c;
+    --line: #2b322e;
+    --brand: #4fae84;
+    --brand-ink: #0d1410;
+    --p: #e07a63;
+    --f: #e6b54a;
+    --c: #6c9be0;
+    --good: #4fae84;
+    --warn: #e2845b;
+    --alert: #ff6b5e;
+    color-scheme: dark;
+  } }
+:root[data-theme=dark] {
     --bg: #121513;
     --card: #1b201d;
     --ink: #e9ece9;
@@ -32,7 +47,6 @@
     --alert: #ff6b5e;
     color-scheme: dark;
   }
-}
 
 * { box-sizing: border-box; }
 body {
@@ -141,6 +155,9 @@ label > input, label > select { margin-top: 4px; }
   font-size: .68rem; font-weight: 500; display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
 .tabs button span { font-size: 1.2rem; line-height: 1; }
+/* Line icons in the text colour, so the tabs read the same in light and dark mode. */
+.tabs button svg { width: 23px; height: 23px; display: block; margin: 0 auto 2px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tabs button svg .dot { fill: currentColor; stroke: none; } .tabs button.active svg { stroke-width: 2.1; }
 .tabs button.active { color: var(--brand); font-weight: 700; }
 /* 🐕 tab: red until the dogs are fed for this meal, green once fed, bright green once fed and walked */
 .tabs button.dogs-hungry { background: color-mix(in srgb, var(--alert) 18%, transparent); color: var(--alert); font-weight: 800; }
@@ -299,7 +316,8 @@ body.readonly main .tab:not(#tab-notes) input, body.readonly main .tab:not(#tab-
 
 /* weight chart */
 :root { --chart-avg: #14875a; --chart-raw: #4a7fd0; }
-@media (prefers-color-scheme: dark) { :root { --chart-avg: #3a9e72; --chart-raw: #5f8fd8; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --chart-avg: #3a9e72; --chart-raw: #5f8fd8; } }
+:root[data-theme=dark] { --chart-avg: #3a9e72; --chart-raw: #5f8fd8; }
 .chart-wrap { position: relative; margin-top: 8px; }
 #chart { overflow: visible; touch-action: pan-y; }
 #chart .raw-line { fill: none; stroke: var(--chart-raw); stroke-width: 1.5; stroke-opacity: .45; stroke-linejoin: round; }
@@ -544,7 +562,8 @@ select[data-quicksnack] { width: 100%; margin-top: 6px; }
 .duty-table .p0 { color: #3a6cc0; } .duty-table .p1 { color: #c0457a; }
 .duty-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--bg); gap: 2px; }
 .duty-bar .p0 { background: #3a6cc0; } .duty-bar .p1 { background: #c0457a; }
-@media (prefers-color-scheme: dark) { .duty-table .p0 { color: #7fa9ec; } .duty-table .p1 { color: #ec7fb0; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .duty-table .p0 { color: #7fa9ec; } :root:not([data-theme=light]) .duty-table .p1 { color: #ec7fb0; } }
+:root[data-theme=dark] .duty-table .p0 { color: #7fa9ec; } :root[data-theme=dark] .duty-table .p1 { color: #ec7fb0; }
 .coins { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, #e6b422 14%, var(--card)); border: 1px solid color-mix(in srgb, #e6b422 45%, transparent); }
 .coins p { margin: 6px 0 0; }
 .coin-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; font-weight: 700; }
@@ -889,14 +908,13 @@ a.btn.small { font-size: .82rem; padding: 6px 10px; }
 .r-log ul { list-style: none; padding: 0; margin: 6px 0 0; }
 .r-log li { display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: .85rem; padding: 3px 0; }
 .r-log li span { flex: 1; }
-@media (prefers-color-scheme: dark) {
-  .rhythm-card { background: linear-gradient(160deg, #3a2430, var(--card) 60%); }
-  .r-chip.soon { background: #4a2233; color: #f6b8d0; }
-}
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .rhythm-card { background: linear-gradient(160deg, #3a2430, var(--card) 60%); } :root:not([data-theme=light]) .r-chip.soon { background: #4a2233; color: #f6b8d0; } }
+:root[data-theme=dark] .rhythm-card { background: linear-gradient(160deg, #3a2430, var(--card) 60%); } :root[data-theme=dark] .r-chip.soon { background: #4a2233; color: #f6b8d0; }
 
 /* 🩻 DEXA / body composition — fat orange, lean blue (validated pair, light + dark) */
 :root { --dx-fat: #eb6834; --dx-lean: #2a78d6; }
-@media (prefers-color-scheme: dark) { :root { --dx-fat: #d95926; --dx-lean: #3987e5; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --dx-fat: #d95926; --dx-lean: #3987e5; } }
+:root[data-theme=dark] { --dx-fat: #d95926; --dx-lean: #3987e5; }
 .dexa-card { position: relative; }
 .dx-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
 .dx-tile { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: grid; gap: 2px; min-width: 0; }

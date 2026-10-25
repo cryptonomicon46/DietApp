@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#2f7d5b">
   <title>OurPawmily</title>
+  <script src="theme.js"></script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg?v=2" type="image/svg+xml">
   <link rel="icon" href="favicon-32.png?v=2" sizes="32x32" type="image/png">
@@ -18,7 +19,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawmily">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=232">
+  <link rel="stylesheet" href="styles.css?v=233">
 </head>
 <body>
   <header class="top">
@@ -225,13 +226,13 @@
   </main>
 
   <nav class="tabs">
-    <button data-tab="home" class="active"><span>🏠</span>Home</button>
-    <button data-tab="brief"><span>🐕</span>Dogs</button>
-    <button data-tab="today"><span>🍽<b class="tab-badge" id="foodBadge" hidden></b></span>Food</button>
-    <button data-tab="lift"><span>🏋︎</span>Train</button>
-    <button data-tab="calendar"><span>📅<b class="tab-badge" id="calBadge" hidden></b></span>Calendar</button>
-    <button data-tab="notes"><span>💞<b class="tab-badge" id="notesBadge" hidden></b></span>Us</button>
-    <button data-tab="privacy"><span>🔐</span>Privacy</button>
+    <button data-tab="home" class="active"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 10.5 12 3.5l8.5 7V19.5a1 1 0 0 1-1 1H15v-6H9v6H4.5a1 1 0 0 1-1-1z"/></svg></span>Home</button>
+    <button data-tab="brief"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.6 5.2C5.3 4.6 3.4 6 3.1 8.8c-.2 1.9.5 3.2 1.6 3.6"/><path d="M16.4 5.2c2.3-.6 4.2.8 4.5 3.6.2 1.9-.5 3.2-1.6 3.6"/><path d="M6.8 8c1.4-1.4 3.2-2.1 5.2-2.1s3.8.7 5.2 2.1c.9 1 1.4 2.6 1.4 4.6 0 4.4-2.9 7.4-6.6 7.4s-6.6-3-6.6-7.4c0-2 .5-3.6 1.4-4.6z"/><circle cx="9.5" cy="11.8" r=".95" class="dot"/><circle cx="14.5" cy="11.8" r=".95" class="dot"/><path d="M11.1 14.3h1.8l-.9 1z" class="dot"/></svg></span>Dogs</button>
+    <button data-tab="today"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v8a2 2 0 0 1-2 2 M3 3v8a2 2 0 0 0 2 2v8"/><path d="M5 3v8"/><path d="M17 21V3c-2.2 1.2-3.5 3.6-3.5 7v3.5H17"/></svg><b class="tab-badge" id="foodBadge" hidden></b></span>Food</button>
+    <button data-tab="lift"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 7v10M3.5 9.5v5M17.5 7v10M20.5 9.5v5M6.5 12h11"/></svg></span>Train</button>
+    <button data-tab="calendar"><span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg><b class="tab-badge" id="calBadge" hidden></b></span>Calendar</button>
+    <button data-tab="notes"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.2S4 15.4 4 9.6a4.2 4.2 0 0 1 8-1.9 4.2 4.2 0 0 1 8 1.9c0 5.8-8 10.6-8 10.6z"/></svg><b class="tab-badge" id="notesBadge" hidden></b></span>Us</button>
+    <button data-tab="privacy"><span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.2"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/><circle cx="12" cy="15.5" r="1.2" class="dot"/></svg></span>Privacy</button>
   </nav>
 
   <!-- PROFILE -->
@@ -422,49 +423,49 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/account.js": "./js/account.js?v=232",
-    "./js/accountBoot.js": "./js/accountBoot.js?v=232",
-    "./js/activity.js": "./js/activity.js?v=232",
-    "./js/adopt.js": "./js/adopt.js?v=232",
-    "./js/analytics.js": "./js/analytics.js?v=232",
-    "./js/app.js": "./js/app.js?v=232",
-    "./js/bodycomp.js": "./js/bodycomp.js?v=232",
-    "./js/brief.js": "./js/brief.js?v=232",
-    "./js/briefTab.js": "./js/briefTab.js?v=232",
-    "./js/calTab.js": "./js/calTab.js?v=232",
-    "./js/calendar.js": "./js/calendar.js?v=232",
-    "./js/cheer.js": "./js/cheer.js?v=232",
-    "./js/climb.js": "./js/climb.js?v=232",
-    "./js/commands.js": "./js/commands.js?v=232",
-    "./js/devices.js": "./js/devices.js?v=232",
-    "./js/dexa.js": "./js/dexa.js?v=232",
-    "./js/dogs.js": "./js/dogs.js?v=232",
-    "./js/dress.js": "./js/dress.js?v=232",
-    "./js/dressTab.js": "./js/dressTab.js?v=232",
-    "./js/foods.js": "./js/foods.js?v=232",
-    "./js/household.js": "./js/household.js?v=232",
-    "./js/lift.js": "./js/lift.js?v=232",
-    "./js/lifting.js": "./js/lifting.js?v=232",
-    "./js/notes.js": "./js/notes.js?v=232",
-    "./js/photos.js": "./js/photos.js?v=232",
-    "./js/plan.js": "./js/plan.js?v=232",
-    "./js/plans.js": "./js/plans.js?v=232",
-    "./js/poster.js": "./js/poster.js?v=232",
-    "./js/progress.js": "./js/progress.js?v=232",
-    "./js/recover.js": "./js/recover.js?v=232",
-    "./js/research.js": "./js/research.js?v=232",
-    "./js/review.js": "./js/review.js?v=232",
-    "./js/rewards.js": "./js/rewards.js?v=232",
-    "./js/rhythm.js": "./js/rhythm.js?v=232",
-    "./js/share.js": "./js/share.js?v=232",
-    "./js/shows.js": "./js/shows.js?v=232",
-    "./js/showsCore.js": "./js/showsCore.js?v=232",
-    "./js/storage.js": "./js/storage.js?v=232",
-    "./js/sync.js": "./js/sync.js?v=232",
-    "./js/zip.js": "./js/zip.js?v=232"
+    "./js/account.js": "./js/account.js?v=233",
+    "./js/accountBoot.js": "./js/accountBoot.js?v=233",
+    "./js/activity.js": "./js/activity.js?v=233",
+    "./js/adopt.js": "./js/adopt.js?v=233",
+    "./js/analytics.js": "./js/analytics.js?v=233",
+    "./js/app.js": "./js/app.js?v=233",
+    "./js/bodycomp.js": "./js/bodycomp.js?v=233",
+    "./js/brief.js": "./js/brief.js?v=233",
+    "./js/briefTab.js": "./js/briefTab.js?v=233",
+    "./js/calTab.js": "./js/calTab.js?v=233",
+    "./js/calendar.js": "./js/calendar.js?v=233",
+    "./js/cheer.js": "./js/cheer.js?v=233",
+    "./js/climb.js": "./js/climb.js?v=233",
+    "./js/commands.js": "./js/commands.js?v=233",
+    "./js/devices.js": "./js/devices.js?v=233",
+    "./js/dexa.js": "./js/dexa.js?v=233",
+    "./js/dogs.js": "./js/dogs.js?v=233",
+    "./js/dress.js": "./js/dress.js?v=233",
+    "./js/dressTab.js": "./js/dressTab.js?v=233",
+    "./js/foods.js": "./js/foods.js?v=233",
+    "./js/household.js": "./js/household.js?v=233",
+    "./js/lift.js": "./js/lift.js?v=233",
+    "./js/lifting.js": "./js/lifting.js?v=233",
+    "./js/notes.js": "./js/notes.js?v=233",
+    "./js/photos.js": "./js/photos.js?v=233",
+    "./js/plan.js": "./js/plan.js?v=233",
+    "./js/plans.js": "./js/plans.js?v=233",
+    "./js/poster.js": "./js/poster.js?v=233",
+    "./js/progress.js": "./js/progress.js?v=233",
+    "./js/recover.js": "./js/recover.js?v=233",
+    "./js/research.js": "./js/research.js?v=233",
+    "./js/review.js": "./js/review.js?v=233",
+    "./js/rewards.js": "./js/rewards.js?v=233",
+    "./js/rhythm.js": "./js/rhythm.js?v=233",
+    "./js/share.js": "./js/share.js?v=233",
+    "./js/shows.js": "./js/shows.js?v=233",
+    "./js/showsCore.js": "./js/showsCore.js?v=233",
+    "./js/storage.js": "./js/storage.js?v=233",
+    "./js/sync.js": "./js/sync.js?v=233",
+    "./js/zip.js": "./js/zip.js?v=233"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=232"></script>
+  <script type="module" src="js/app.js?v=233"></script>
 </body>
 </html>

@@ -143,10 +143,11 @@ async function boot() {
   if (!state.families.length) return onboard();
   if (!state.families.some((f) => f.fid === state.fid)) state.fid = state.families[0].fid;
   await loadFamily();
-  const hv = location.hash.match(/^#(feed|dogs|calendar|me)$/)?.[1];
+  const hv = location.hash.match(/^#(feed|dogs|calendar|me|us)$/)?.[1];
   if (hv) { state.view = hv === 'dogs' ? 'pets' : hv; history.replaceState(null, '', location.pathname + location.search); }
-  show(state.view === 'member' && !member(state.memberId) ? 'feed' : state.view);
+  show(state.view === 'member' && !member(state.memberId) ? 'feed' : state.view === 'us' && !partnerMember() ? 'feed' : state.view);
   refreshPush();
+  if (partnerMember() && state.view !== 'us') loadUs().then(usBadge).catch(() => {});
 }
 async function loadFamily() {
   const r = await api.get(`/families/${state.fid}`);
@@ -175,6 +176,12 @@ function chrome(on) {
   document.body.classList.toggle('with-nav', on);
   if (on) document.querySelector('#nav [data-view=pets]').hidden = !(fam().modules || []).some((x) => x === 'dogs' || x === 'chores');
   if (on) $('#navTrackers').hidden = !(fam().modules || []).includes('health');
+  if (on) {
+    $('#navMe').hidden = !$('#navTrackers').hidden;
+    document.querySelector('#nav [data-view=us]').hidden = !partnerMember();
+    const m = me(), pic = m?.avatar?.startsWith('data:') || m?.avatar?.startsWith('http') ? m.avatar : state.user?.picture;
+    $('#meTop').innerHTML = pic ? `<img src="${esc(pic)}" alt="">` : esc((m?.name || '?')[0]);
+  }
   if (on) $('#famSwitch').innerHTML = `<b>${esc(fam().name)}</b><span class="caret">▾</span>${api.mode() === 'demo' ? '<span class="pill demo">Demo</span>' : ''}`;
 }
 
@@ -294,19 +301,19 @@ function show(view, extra) {
   if (view === 'member') state.memberId = extra;
   if (view === 'compose') { state.view = state.prevView || 'feed'; return plusMenu(); }
   chrome(true);
-  document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === (view === 'member' || view === 'family' ? 'me' : view)));
+  const lit = view === 'member' || view === 'family' ? 'me' : view === 'watch' || view === 'bingo' ? 'us' : view;
+  document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === lit));
   window.scrollTo(0, 0);
   if (view !== 'bingo') clearInterval(bingo.timer);
-  ({ feed: feedView, family: familyView, pets: petsView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView })[view]?.();
+  ({ feed: feedView, family: familyView, pets: petsView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, us: usView })[view]?.();
 }
 const demoBanner = () => (api.mode() === 'demo' ? '<div class="banner">Demo — everything stays on this phone.</div>' : '');
 
 async function feedView() {
   $('#view').innerHTML = `${demoBanner()}
+    <button type="button" class="sharebar" data-act="post">${avatar(me(), 30)}<span>Share with the family…</span><b>📷 Photo</b></button>
     <section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>
     <section class="card today" id="today"><div class="skeleton line"></div></section>
-    <section class="feelhero" id="feel"><div class="skeleton line"></div></section>
-    <div id="usNotes"></div>
     <div id="comingLine"></div>
     <div id="goldNews"></div>
     <div id="posts"><div class="skeleton card"></div><div class="skeleton card"></div></div>`;
@@ -314,7 +321,7 @@ async function feedView() {
   renderYourDay();
   importUs().catch(() => {});
   const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts(), loadUs()]);
-  renderFeel(); renderNotes(); renderToday(); renderComingLine();
+  renderToday(); renderComingLine(); usBadge();
   if (!r) return;
   state.feed = await Promise.all(r.posts.map(openPost));
   renderPosts();
@@ -991,6 +998,9 @@ function meView() {
     <section class="card stack"><button type="button" class="ghost" data-act="help">💬 Help &amp; questions</button>
       <p class="tiny muted">How families, invites, chores and the diet app work — and it can check your account, resend an invite, or pass a problem to the app's maintainer.</p></section>
     ${state.user.isAdmin ? '<h3>Maintainer</h3><section class="card"><button type="button" class="ghost wide" data-act="admin">🛠 Problems, glitches &amp; the nightly check</button></section>' : ''}
+    <h3>🌗 Appearance</h3>
+    <section class="card stack"><div class="seg theme-seg">${[['auto', '📱 Automatic'], ['light', '☀️ Light'], ['dark', '🌙 Dark']].map(([k, l]) => `<label class="segopt"><input type="radio" name="theme" value="${k}" ${(LS.get('pawmily.theme') || 'auto') === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+      <p class="tiny muted">Automatic follows your phone — on iPhone, Settings › Display &amp; Brightness › Automatic switches to dark at sunset. Applies to OurPawmily and your trackers on this device.</p></section>
     <h3>🔔 Notifications</h3>
     <section class="card stack" id="notifyCard"><div class="skeleton line"></div></section>
     <h3>🔐 Encryption</h3>
@@ -1025,6 +1035,7 @@ const KINDS = {
   show: ['📺', 'Watch a show', 'Which show?', ''], brunch: ['🥞', 'Brunch', 'Anything special? (optional)', 'Where?'],
   lunch: ['🥗', 'Lunch', 'Anything special? (optional)', 'Where?'], coffee: ['☕', 'Coffee', '', 'Where?'],
   walk: ['🚶', 'Walk / hike', '', 'Where?'], workout: ['🏋️', 'Work out together', 'What? e.g. a run', 'Where? (optional)'],
+  date: ['🍷', 'Date night', 'Anything special? (optional)', 'Where? (optional)'],
   other: ['✨', 'Something else', 'What are you feeling like?', 'Where? (optional)'],
 };
 const WHENS = { tonight: 'Tonight', today: 'Today', tomorrow: 'Tomorrow', weekend: 'This weekend', date: 'Pick a day' };
@@ -1060,59 +1071,20 @@ function planWhen(p) {
   return `${new Date(`${p.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}${t}`;
 }
 const planTitle = (p) => `${(KINDS[p.kind] || KINDS.other)[1]}${p.what ? `: ${p.what}` : ''}`;
-// The ✨ card: one-tap kinds, what's waiting for your answer, what you sent, what's agreed, recaps.
-function renderFeel() {
-  const el = $('#feel');
-  if (!el) return;
-  if (!us.partner && !us.plans.length) { el.hidden = true; return; }
-  el.hidden = false;
-  const up = us.plans.filter(isUpcoming).sort((a, b) => a.day.localeCompare(b.day) || (a.time || '').localeCompare(b.time || ''));
-  const toMe = up.filter((p) => p.by !== fam().me && !p.replies?.[fam().me]);
-  const agreed = up.filter((p) => p.agreed);
-  const mineWaiting = up.filter((p) => p.by === fam().me && !p.agreed);
-  const past = us.plans.filter((p) => !isUpcoming(p)).sort((a, b) => b.day.localeCompare(a.day)).slice(0, 6);
-  const map = (p) => (p.where ? ` · 📍 ${esc(p.where)} · <a href="https://maps.apple.com/?q=${encodeURIComponent(p.where)}" target="_blank" rel="noopener">map</a>` : '');
-  const card = (p, cls, inner) => `<div class="fh-in ${cls}" data-plan="${p.id}">${cls === 'incoming' ? '<span class="newdot">NEW</span>' : ''}<div class="fic big">${(KINDS[p.kind] || KINDS.other)[0]}</div>
-    <div><div class="small">${p.by === fam().me ? "You're" : `${esc(member(p.by)?.name || partnerName())} is`} feeling like</div><b class="fh-what">${esc(planTitle(p))}</b>
-    <div class="small">${esc(planWhen(p))}${map(p)}</div>${p.note ? `<div class="small fnote">“${esc(p.note)}”</div>` : ''}${inner}</div></div>`;
-  const answers = (p) => `<div class="rsvp full">${Object.entries(ANSWERS).map(([k, t]) => `<button type="button" class="${p.replies?.[fam().me]?.r === k ? '' : 'ghost'}" data-answer="${p.id}:${k}">${t}</button>`).join('')}</div>`;
-  const them = (p) => p.to.map((id) => { const r = p.replies?.[id]?.r; return r ? `${esc(member(id)?.name || '')}: <b>${ANSWERS[r]}</b>` : ''; }).filter(Boolean).join(' · ');
-  el.innerHTML = `<div class="row between"><b class="fh-title">✨ What are you feeling like?</b><span class="fh-sub">${esc(us.partner ? `you & ${us.partner.name}` : 'just you two')}</span></div>
-    <div class="fh-kinds">${Object.entries(KINDS).map(([k, [ico, label]]) => `<button type="button" data-feel="${k}"><b>${ico}</b>${esc(label.split(' / ')[0].replace('Watch a show', 'Show').replace('Work out together', 'Work out').replace('Something else', 'Other'))}</button>`).join('')}</div>
-    ${toMe.map((p) => card(p, 'incoming', answers(p))).join('')}
-    ${agreed.map((p) => `<div class="itsaplan" data-plan="${p.id}"><div class="big">🎉 It's a plan!</div><div class="small">${(KINDS[p.kind] || KINDS.other)[0]} ${esc(planTitle(p))} · ${esc(planWhen(p))}${p.where ? ` · ${esc(p.where)}` : ''}</div>
-      <div class="chips center">${p.where ? `<a class="chip" href="https://maps.apple.com/?q=${encodeURIComponent(p.where)}" target="_blank" rel="noopener">🗺 Directions</a>` : ''}${p.kind === 'movie' && p.what ? `<a class="chip" href="https://www.fandango.com/search?q=${encodeURIComponent(p.what)}" target="_blank" rel="noopener">🎟 Get tickets</a>` : ''}${p.by === fam().me ? `<button type="button" class="chip" data-plandone="${p.id}">✓ We did it</button>` : ''}</div></div>`).join('')}
-    ${mineWaiting.map((p) => card(p, 'waiting', `<div class="small muted" style="margin-top:4px">${them(p) || `⏳ Waiting for ${esc(partnerName())}…`} · <button type="button" class="linkish small" data-planmove="${p.id}">Another day</button> · <button type="button" class="linkish small" data-plandel="${p.id}">Cancel</button></div>`)).join('')}
-    ${!toMe.length && !agreed.length && !mineWaiting.length ? '<p class="small fh-empty">Nothing waiting on an answer · tap above to suggest something 💡</p>' : ''}
-    ${past.length ? `<div class="fh-past">${past.map((p) => `<span>${p.done || p.agreed ? '✓' : '·'} ${esc((KINDS[p.kind] || KINDS.other)[1].split(' ')[0])} ${new Date(`${p.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' })}${p.agreed ? ' · 🙌' : ''}</span>`).join('')}</div>` : ''}`;
-}
 function feelSheet(kind = 'dinner') {
   const k = KINDS[kind] || KINDS.other;
-  openSheet(`<h2>✨ I'm feeling like…</h2>
+  openSheet(`<h2>✨ Suggest a plan</h2><p class="small muted">to ${esc(partnerName())}</p>
     <form id="feelForm" class="stack">
       <div class="kinds radios">${Object.entries(KINDS).map(([key, [ico, label]]) => `<label><input type="radio" name="kind" value="${key}" ${key === kind ? 'checked' : ''}><span><b>${ico}</b>${esc(label)}</span></label>`).join('')}</div>
       <label class="kwhat" ${k[2] ? '' : 'hidden'}><span>${esc(k[2] || 'What?')}</span><input name="what" maxlength="80"></label>
       <label class="kwhere" ${k[3] ? '' : 'hidden'}><span>${esc(k[3] || 'Where?')}</span><input name="where" maxlength="80"></label>
-      <div class="seg2 radios whens">${Object.entries(WHENS).map(([key, t]) => `<label><input type="radio" name="when" value="${key}" ${key === 'tonight' ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div>
+      <div class="seg2 radios whens">${Object.entries(WHENS).filter(([key]) => key !== 'today').map(([key, t]) => `<label><input type="radio" name="when" value="${key}" ${key === 'tonight' ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div>
       <label class="kday" hidden>Day<input type="date" name="day" min="${isoLocal()}" value="${isoLocal()}"></label>
       <div class="two"><label>Time (optional)<input type="time" name="time"></label><label>Who<select name="audience"><option value="couple">Just us two</option><option value="family">The whole family</option></select></label></div>
       <label>Note (optional)<input name="note" maxlength="140" placeholder="😊"></label>
-      <p class="tiny muted">${esc(partnerName())} gets it on their feed with 🙌 I'm in · 🤔 Maybe · ⏰ Another time. 🔐 Only the people it's for can read it.</p>
-      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Send to ${esc(partnerName())} 💌</button></div>
+      <p class="tiny muted">${esc(partnerName())} answers 🙌 I'm in · 🤔 Maybe · ⏰ Another time in 💞 Us. When you're both in, it goes on the 📅 calendar for both of you. 🔐 Only the people it's for can read it.</p>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Send to ${esc(partnerName())} 💞</button></div>
     </form>`);
-}
-// 💞 Just us: post-its only the two of you see.
-function renderNotes() {
-  const el = $('#usNotes');
-  if (!el) return;
-  if (!us.partner && !us.notes.length) { el.innerHTML = ''; return; }
-  const mine = (n) => n.by === fam().me;
-  const fresh = us.notes.filter((n) => !mine(n) && Date.now() - n.at < 864e5).length;
-  el.innerHTML = `<h3 class="row between"><span>💞 Just us ${fresh ? `<span class="newpill">${fresh} NEW</span>` : ''}</span></h3>
-    <div class="postits">${us.notes.slice().sort((a, b) => b.at - a.at).map((n) => `<div class="postit ${esc(n.color || 'yellow')}" data-note="${n.id}">${esc(n.text)}
-      <small>${esc(mine(n) ? 'You' : member(n.by)?.name || '')} · ${ago(n.at)} <button type="button" class="heart" data-noteheart="${n.id}" aria-label="Heart">${n.hearts?.length ? '❤️'.repeat(Math.min(2, n.hearts.length)) : '🤍'}</button>${mine(n) ? ` <button type="button" class="heart" data-notedel="${n.id}" aria-label="Remove">✕</button>` : ''}</small></div>`).join('')}
-      <button type="button" class="postit add" data-act="note">＋ Note</button></div>
-    <p class="tiny muted pad">${us.streak > 1 ? `🔥 ${us.streak}-day note streak · ` : ''}only you two see these · they clear after a week unless you ❤️ them</p>`;
 }
 function noteSheet() {
   openSheet(`<h2>💌 Leave a note</h2><p class="small muted">A post-it only you and ${esc(partnerName())} see.</p>
@@ -1145,7 +1117,7 @@ async function renderToday() {
   }
   if (weather?.pick) tiles.push(tile('🦮', 'Next walk', `${weather.hr(weather.pick.index)}–${weather.hr(weather.pick.index + 1)}`, weather.hot && weather.hot.asphalt >= 125 ? `🔥 pavement hot ~${weather.hr(weather.hot.index)}` : 'pavement cool ✓', 'data-view="pets"'));
   const tonight = us.plans.filter((p) => isUpcoming(p) && p.day === today).sort((a, b) => (b.agreed ? 1 : 0) - (a.agreed ? 1 : 0))[0];
-  tiles.push(tonight ? tile((KINDS[tonight.kind] || KINDS.other)[0], 'Tonight', esc(planTitle(tonight)), tonight.agreed ? 'it\'s a plan 🙌' : 'waiting for an answer') : tile('✨', 'Tonight', 'Nothing yet', 'suggest something', 'data-feel="dinner"'));
+  tiles.push(tonight ? tile((KINDS[tonight.kind] || KINDS.other)[0], 'Tonight', esc(planTitle(tonight)), tonight.agreed ? 'it\'s a plan 🙌' : 'waiting for an answer', 'data-view="us"') : tile('✨', 'Tonight', 'Nothing yet', 'suggest something', 'data-feel="dinner"'));
   const day = mine?.days?.[today];
   tiles.push(day?.left ? tile('🥗', 'Macros left', `${day.left.p}P · ${day.left.c}C · ${day.left.f}F`, `${Math.max(0, day.left.kcal).toLocaleString()} kcal`, 'data-trackers="1"') : tile('🥗', 'Trackers', 'Today\'s plan', 'open your trackers', 'data-trackers="1"'));
   el.innerHTML = `<div class="row between"><b>☀️ Today · ${new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</b>${weather ? `<span class="small muted">${Math.round(weather.hourly[weather.from].temp)}°</span>` : ''}</div>
@@ -1170,9 +1142,7 @@ function renderComingLine() {
   const el = $('#comingLine');
   if (!el) return;
   const a = dogsHub.appts.find((x) => x.status !== 'done');
-  const p = us.plans.filter((x) => x.agreed && isUpcoming(x) && x.day !== isoLocal()).sort((x, y) => x.day.localeCompare(y.day))[0];
   const bits = [];
-  if (p) bits.push(`${(KINDS[p.kind] || KINDS.other)[0]} ${esc(planTitle(p))} · ${esc(planWhen(p))}`);
   if (a) {
     const pets = a.pets.map((id) => member(id)?.name).filter(Boolean).join(' & ');
     const open = (a.dropAt && !a.dropBy) || (a.pickAt && !a.pickBy);
@@ -1180,21 +1150,119 @@ function renderComingLine() {
   }
   el.innerHTML = bits.length ? `<button type="button" class="card coming-line" data-view="pets"><span class="small">📅 <b>Coming up:</b> ${bits.join(' · ')}</span></button>` : '';
 }
-// The center ＋: everything you can add, feeling-like first.
+// ＋ Create: three things for the two of you first, then the family.
 function plusMenu() {
-  const items = [
-    ['feel', '✨', "I'm feeling like…", `dinner, a movie, a walk — send it to ${partnerName()}`, 'hot'],
-    ['note', '💌', 'Leave a note', 'a post-it just for you two'],
-    ['post', '📸', 'Post', 'a photo or update for the family'],
-    ...((fam().modules || []).includes('dogs') ? [['apptnew', '🐾', 'Dog appointment', 'grooming, vet, vaccine']] : []),
-    ['eventnew', '📅', 'Calendar event', 'family only'],
-    ['lognew', '❤️', 'Log a date', 'date night, us time, a trip — for your 2-2-2-2'],
-    ['watchadd', '🍿', 'Add to Watch', 'a show or movie you two are watching'],
-    ['askhelp', '🙋', 'Ask for help', 'pet sitting, babysitting, a ride'],
+  const p = partnerMember();
+  const fam4 = [
+    ['eventnew', '📅', 'Event'],
+    ...((fam().modules || []).includes('dogs') ? [['apptnew', '🐾', 'Dog appt']] : []),
+    ['post', '📸', 'Post'],
+    ['askhelp', '🙋', 'Ask for help'],
   ];
-  openSheet(`<div class="row between"><h2>What would you like to do?</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div><div class="pluslist">${items.map(([act, ico, title, sub, hot]) => `<button type="button" class="pl ${hot || ''}" data-act="${act}"><b>${ico}</b><span><strong>${esc(title)}</strong><small>${esc(sub)}</small></span></button>`).join('')}</div>
-    <button type="button" class="ghost wide" data-act="close">Cancel</button>`);
+  openSheet(`<div class="row between"><h2>Create</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    ${p ? `<div class="grp">💞 You &amp; ${esc(p.name)}</div><div class="create3">
+      <button type="button" class="hot" data-act="feel"><b>✨</b>Suggest a plan</button><button type="button" data-act="note"><b>💌</b>Note</button><button type="button" data-act="lognew"><b>❤️</b>Log a date</button></div>` : ''}
+    <div class="grp">👨‍👩‍👧 Family</div><div class="create4">${fam4.map(([a, i, l]) => `<button type="button" data-act="${a}"><b>${i}</b>${l}</button>`).join('')}</div>
+    <button type="button" class="ghost wide" data-act="close" style="margin-top:12px">Cancel</button>`);
 }
+
+// ---------- 💞 Us: everything private between the two of you ----------
+// The other grown-up of a couple: a spouse or partner for the family's creator, the creator for them.
+function partnerMember() {
+  const f = fam(), m = me();
+  if (!f || !m || m.kind !== 'person') return null;
+  const couple = ['spouse', 'partner'];
+  if (m.relation === 'self') return f.members.find((x) => x.kind === 'person' && couple.includes(x.relation)) || null;
+  if (couple.includes(m.relation)) return f.members.find((x) => x.kind === 'person' && x.relation === 'self') || null;
+  return null;
+}
+const usSeenKey = () => `fam.usSeen.${state.fid}`;
+// What's waiting on you: plans to answer, notes you haven't seen, and "did it happen?" after a plan.
+function forYou() {
+  const meId = fam().me, seen = +(LS.get(usSeenKey()) || 0);
+  const ask = us.plans.filter((p) => isUpcoming(p) && p.by !== meId && p.to?.includes(meId) && !p.replies?.[meId]);
+  const notes = us.notes.filter((n) => n.by !== meId && n.at > seen);
+  const after = us.plans.filter((p) => p.agreed && !p.done && !isUpcoming(p) && p.day >= shiftLocal(isoLocal(), -7));
+  return { ask, notes, after, count: ask.length + notes.length };
+}
+function usBadge() {
+  const b = $('#usBadge');
+  if (!b) return;
+  const n = partnerMember() ? forYou().count : 0;
+  b.hidden = !n || state.view === 'us';
+  b.textContent = n > 9 ? '9+' : String(n);
+}
+async function usView() {
+  const p = partnerMember();
+  if (!p) { $('#view').innerHTML = `${demoBanner()}<section class="card stack"><h2>💞 Us</h2><p class="small">A private space for you and your partner: love notes, plans, date nights and what you're watching. Add your spouse or partner to the family (Me › ＋ Person) to start.</p></section>`; return; }
+  $('#view').innerHTML = `${demoBanner()}<div class="us-page">
+    <div class="us-title"><h2>💞 ${esc(me().name)} &amp; ${esc(p.name)}</h2><span class="small muted" id="usSub">🔒 Just you two</span></div>
+    <section id="usFor"></section>
+    <section class="card" id="usNotesC"><div class="skeleton line"></div></section>
+    <section class="card" id="usPlansC"></section>
+    <section class="card" id="usRhythmC"></section>
+    <section id="usTonight"></section></div>`;
+  importUs().catch(() => {});
+  await Promise.all([loadUs(), loadRhythm().then((r) => { calm.rhythm = r; }).catch(() => {}), loadWatch().catch(() => {})]);
+  if (state.view !== 'us') return;
+  renderUs();
+  // Opening Us counts its new notes as seen (after this visit's "new" marks are drawn).
+  LS.set(usSeenKey(), String(Date.now()));
+  usBadge();
+}
+function renderUs() {
+  if (!$('#usNotesC')) return;
+  const meId = fam().me, f = forYou(), pName = partnerName();
+  const wn = (p) => (KINDS[p.kind] || KINDS.other);
+  $('#usSub').textContent = `🔒 Just you two${us.streak > 1 ? ` · 💌 ${us.streak}-day note streak` : ''}`;
+  // For you
+  $('#usFor').innerHTML = f.ask.length || f.notes.length || f.after.length ? `<div class="foryou"><div class="row between"><b class="small up">For you</b>${f.count ? `<span class="small" style="color:var(--like);font-weight:800">${f.count}</span>` : ''}</div>
+    ${f.ask.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>${esc(member(x.by)?.name || pName)} suggested ${esc(planTitle(x).toLowerCase().startsWith('date night') ? 'a date night' : planTitle(x))}</b><small>${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}${x.note ? ` · “${esc(x.note)}”` : ''}</small>
+      <div class="ans">${Object.entries(ANSWERS).map(([k, t], i) => `<button type="button" class="${i ? 'ghost' : ''} small" data-answer="${x.id}:${k}">${t}</button>`).join('')}</div></div></div>`).join('')}
+    ${f.notes.map((n) => `<div class="fy"><span class="fy-i">💌</span><div><b>New note from ${esc(member(n.by)?.name || pName)}</b><small>“${esc(n.text)}”</small></div><button type="button" class="heart" data-noteheart="${n.id}" aria-label="Heart">${n.hearts?.includes(meId) ? '❤️' : '🤍'}</button></div>`).join('')}
+    ${f.after.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>How was ${esc(planTitle(x))}?</b><small>${esc(planWhen(x))}</small>
+      <div class="ans"><button type="button" class="small" data-planlog="${x.id}">❤️ Log it as a date</button><button type="button" class="ghost small" data-plandone="${x.id}">✓ Done</button></div></div></div>`).join('')}</div>` : '';
+  // Notes
+  const mine = (n) => n.by === meId;
+  $('#usNotesC').innerHTML = `<div class="row between"><b class="us-h">💌 Notes</b><span class="tiny muted">🔒 just you two</span></div>
+    <form id="usNoteForm" class="notebar"><input name="text" maxlength="280" placeholder="Write ${esc(pName)} a note…" autocomplete="off" aria-label="A note"><button>Post</button></form>
+    <div class="postits">${us.notes.slice().sort((a, b) => b.at - a.at).map((n) => `<div class="postit ${esc(n.color || 'yellow')}" data-note="${n.id}">${esc(n.text)}
+      <small>${esc(mine(n) ? 'You' : member(n.by)?.name || '')} · ${ago(n.at)} <button type="button" class="heart" data-noteheart="${n.id}" aria-label="Heart">${n.hearts?.length ? '❤️'.repeat(Math.min(2, n.hearts.length)) : '🤍'}</button>${mine(n) ? ` <button type="button" class="heart" data-notedel="${n.id}" aria-label="Remove">✕</button>` : ''}</small></div>`).join('') || `<p class="small muted">Leave ${esc(pName)} the first note 💌</p>`}</div>
+    <p class="tiny muted">Notes clear after a week unless one of you ❤️ it.</p>`;
+  // Plans
+  const up = us.plans.filter(isUpcoming).filter((x) => !f.ask.includes(x)).sort((a, b) => a.day.localeCompare(b.day) || (a.time || '').localeCompare(b.time || ''));
+  const status = (x) => (x.agreed ? '<span class="tag tg">You\'re both in 🎉</span>'
+    : x.by === meId ? (x.to.map((id) => x.replies?.[id]?.r).find(Boolean) ? `<span class="tag tw">${esc(pName)}: ${esc(ANSWERS[x.to.map((id) => x.replies?.[id]?.r).find(Boolean)].replace(/^\S+ /, '').toLowerCase())}</span>` : `<span class="tag">waiting for ${esc(pName)}</span>`)
+      : `<span class="tag">you: ${esc((ANSWERS[x.replies?.[meId]?.r] || '').replace(/^\S+ /, '').toLowerCase())}</span>`);
+  $('#usPlansC').innerHTML = `<div class="row between"><b class="us-h">✨ Plans</b><button type="button" class="linkish small" data-act="feel">＋ Suggest</button></div>
+    ${up.length ? up.map((x) => `<div class="planrow" data-plan="${x.id}"><span>${wn(x)[0]} <b>${esc(planTitle(x))}</b> <small class="muted">· ${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}</small></span>${status(x)}
+      ${x.by === meId && !x.agreed ? `<span class="planacts"><button type="button" class="linkish small" data-planmove="${x.id}">Another day</button> · <button type="button" class="linkish small" data-plandel="${x.id}">Cancel</button></span>` : ''}</div>`).join('')
+      : `<p class="small muted">Nothing planned. <button type="button" class="linkish" data-act="feel">Suggest something for this weekend ✨</button></p>`}`;
+  // 2-2-2-2
+  const R = calm.R, list = calm.rhythm || [];
+  if (R) {
+    const st = R.rhythmStatus(list, isoLocal());
+    const chip = (k) => { const x = st[k]; const r = R.RHYTHMS[k]; if (k === 'close') return `<span class="rchip">${r.icon} ${x.count} of 2 this week</span>`; const name = r.label.replace('Multi-night ', '').toLowerCase(); return `<span class="rchip ${x.last && x.level === 'due' ? 'due' : ''}">${r.icon} ${!x.last ? `${name} · not yet` : x.level === 'due' ? `${name} due` : x.level === 'soon' ? `${name} soon` : `${name} ✓`}</span>`; };
+    const dates = list.filter((e) => e.kind !== 'close').slice().reverse();
+    $('#usRhythmC').innerHTML = `<div class="row between"><b class="us-h">💞 2-2-2-2</b><button type="button" class="linkish small" data-act="lognew">❤️ Log a date</button></div>
+      <div class="rchips">${['date', 'close', 'overnight', 'getaway'].map(chip).join('')}</div>
+      ${dates.length ? `<details class="small"><summary>Last: ${R.momentIcon(dates[0])} ${esc(R.momentText(dates[0]))} · ${esc(new Date(`${dates[0].date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</summary><ul class="list">${dates.slice(0, 12).map((e) => `<li class="row between"><span>${R.momentIcon(e)} ${esc(R.momentText(e))}</span><span><small class="muted">${esc(new Date(`${e.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: e.date.slice(0, 4) !== isoLocal().slice(0, 4) ? 'numeric' : undefined }))}</small> <button type="button" class="linkish small" data-momentedit="${esc(e.id)}">✎</button></span></li>`).join('')}</ul></details>`
+        : '<p class="small muted">Log your dates and it keeps the rhythm: a date every 2 weeks, us time twice a week, an overnight twice a year, a getaway every 2 years.</p>'}`;
+  } else $('#usRhythmC').hidden = true;
+  // Tonight's show
+  const on = (watch.shows || []).filter((x) => x.status === 'watching').sort((a, b) => (watch.S?.lastActive(b) || '').localeCompare(watch.S?.lastActive(a) || ''))[0];
+  const tonightLogged = on?.nights.some((n) => n.date === isoLocal());
+  $('#usTonight').innerHTML = `<section class="card tonightc"><span class="big">🍿</span><div class="grow">${on ? `<b>${esc(on.title)}</b>${on.progress ? ` <small class="muted">S${on.progress.s || 1} · E${on.progress.e}</small>` : ''}<br><small class="muted">${on.aud === 'family' ? '👨‍👩‍👧 shared with the family' : '🔒 just you two'}</small>` : '<b>Watching together</b><br><small class="muted">Add what you two are watching</small>'}</div>
+    ${on ? `<button type="button" class="${tonightLogged ? '' : 'ghost'} small" data-watchnight="${on.id}">${tonightLogged ? '✓ Tonight' : '📺 Tonight'}</button>` : ''}<button type="button" class="linkish small" data-view="watch">All ›</button></section>`;
+}
+// When you both say yes, the plan goes on the calendar for both of you (once).
+async function planToCalendar(p) {
+  if (!p?.agreed || p.done) return;
+  const k = KINDS[p.kind] || KINDS.other;
+  await api.post(`/families/${state.fid}/events/import`, { events: [{ id: `plan${p.id}`, date: p.day, start: p.time || '', end: '', allDay: !p.time, who: [p.by, ...(p.to || [])], remind: p.time ? 60 : null, at: Date.now(), updatedAt: p.at || Date.now(),
+    body: await lock({ title: `${k[0]} ${planTitle(p)}`, place: p.where || '', notes: p.note ? `“${p.note}” — ✨ planned in Us` : '✨ planned in Us' }) }] }).catch(() => {});
+}
+
 // Bringing over the trackers' "Feeling like" plans, answers and notes (once per family, each
 // person their own, locked before they're sent).
 async function importUs() {
@@ -1209,12 +1277,14 @@ async function importUs() {
   const notes = await Promise.all((data.notes || []).filter((n) => n?.id && n.at > Date.now() - 7 * 864e5).map(async (n) => ({ id: n.id, at: n.at, body: await lock({ text: `${n.text || ''}${n.emoji ? ` ${n.emoji}` : ''}`.trim(), color: NOTE_COLORS.includes(n.color) ? n.color : 'yellow' }) })));
   if (plans.length || notes.length || Object.keys(data.planReplies || {}).length) {
     await api.post(`/families/${state.fid}/us/import`, { plans, notes, replies: data.planReplies || {}, noteDays: data.noteDays || [] });
-    await loadUs(); renderFeel(); renderNotes(); renderToday();
+    await usChanged();
   }
   LS.set(flag, '1');
 }
 async function usChanged(r) {
-  await loadUs(); renderFeel(); renderNotes(); renderToday(); renderComingLine();
+  await loadUs(); renderToday(); renderComingLine();
+  if (state.view === 'us') renderUs();
+  usBadge();
   return r;
 }
 
@@ -1292,7 +1362,8 @@ async function dayEntries(day) {
       out.push({ time: at.slice(11, 16), icon: k === 'drop' ? ico : '🏁', title: `${verb} ${pets} · ${label.toLowerCase()}`, sub: by ? who(by) : '<span class="tone-warn">nobody yet — tap to take it</span>', who: by || 'nobody', cls: 'dog', open: `data-apptopen="${a.id}"` });
     }
   }
-  for (const p of us.plans.filter((x) => !x.done && x.day === day)) out.push({ time: p.time || '', icon: (KINDS[p.kind] || KINDS.other)[0], title: planTitle(p), sub: p.agreed ? "it's a plan 🙌" : 'waiting for an answer', who: 'both', cls: 'plan' });
+  // An agreed plan that's already on the calendar (planToCalendar) shows once, as that event.
+  for (const p of us.plans.filter((x) => !x.done && x.day === day && !calm.events.some((e) => e.id === `tplan${x.id}`))) out.push({ time: p.time || '', icon: (KINDS[p.kind] || KINDS.other)[0], title: planTitle(p), sub: p.agreed ? "it's a plan 🙌" : 'waiting for an answer', who: 'both', cls: 'plan' });
   return out.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 }
 const timeLabel = (t) => (t ? new Date(`2000-01-01T${t}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(':00', '').replace(' ', '').toLowerCase() : 'all day');
@@ -1566,7 +1637,7 @@ async function loadWatch() {
   const orphans = bodies.filter((x) => !people.some((m) => m.id === x.by));
   if (orphans.length) records.push({ person: 'gone', shows: orphans.map((x) => ({ id: x.id, title: x.title || '🔒 Locked', service: x.service || 'other', kind: x.kind || 'show', date: x.date || isoLocal(new Date(x.at)), at: x.at })), nights: [], status: {}, ratings: {} });
   watch.data = w;
-  watch.shows = watch.S.mergeShows(records).map((x) => ({ ...x, progress: w.progress[x.id] || null }));
+  watch.shows = watch.S.mergeShows(records).map((x) => ({ ...x, progress: w.progress[x.id] || null, aud: w.shows.find((y) => y.id === x.id)?.aud || 'family' }));
 }
 async function watchView() {
   $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div>`;
@@ -1596,6 +1667,7 @@ function watchCard(x, opts = {}) {
     <div class="show-actions">
       ${x.kind !== 'movie' ? Object.entries(S.STATUS).filter(([k]) => k !== x.status).map(([k, label]) => `<button type="button" class="linkish small" data-watchstatus="${x.id}:${k}">${label}</button>`).join('') : ''}
       ${x.locked ? '' : `<button type="button" class="linkish small" data-watchbingo="${x.id}">🎲 Bingo</button>`}
+      <button type="button" class="linkish small muted" data-watchaud="${x.id}:${x.aud === 'family' ? 'us' : 'family'}">${x.aud === 'family' ? '👨‍👩‍👧 family · make it just us' : '🔒 just us · share with family'}</button>
       ${x.by === fam().me || me().role === 'owner' ? `<button type="button" class="linkish small muted" data-watchdel="${x.id}">Delete</button>` : ''}
     </div>
   </div>`;
@@ -1632,7 +1704,7 @@ function renderWatch() {
       : '<p class="small muted">Nothing logged this year yet.</p>';
   }
   $('#view').innerHTML = `${demoBanner()}
-    <section class="watch-head"><h2>🍿 Watch</h2><button type="button" class="ghost small" data-act="games">🎲 Bingo &amp; 💑 picks ›</button></section>
+    <section class="watch-head"><h2><button type="button" class="linkish" data-view="us" aria-label="Back to Us">‹</button> 🍿 Watching</h2><button type="button" class="ghost small" data-act="games">🎲 Bingo &amp; 💑 picks ›</button></section>
     <div class="seg">${tabs.map(([k, l]) => `<button type="button" class="${watch.tab === k ? 'on' : ''}" data-watchtab="${k}">${l}</button>`).join('')}</div>
     ${body}`;
 }
@@ -1644,6 +1716,7 @@ function watchAddSheet() {
       <label>Title<input name="title" maxlength="80" required placeholder="e.g. The Bear" autocomplete="off"></label>
       <fieldset class="svc-pick"><legend class="small">Where</legend>${Object.entries(S.SERVICES).map(([k, v]) => `<label class="svc-opt-l"><input type="radio" name="service" value="${k}" ${a.service === k ? 'checked' : ''}><span class="svc-opt" style="--svc:${v.bg}">${esc(v.name)}</span></label>`).join('')}</fieldset>
       <label class="small">Started / watched on<input type="date" name="date" value="${isoLocal()}"></label>
+      <label class="check"><input type="checkbox" name="family"><span>👨‍👩‍👧 Share with the family (otherwise it's just you two)</span></label>
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Add</button></div>
     </form>`);
 }
@@ -2157,7 +2230,8 @@ document.addEventListener('click', (e) => {
   if (d.feeddel) return act(async () => { await saveFeeds(calm.feeds.filter((f) => f.by === fam().me && f.id !== d.feeddel)); await loadCal(); renderCal(); });
   if (d.feel) return feelSheet(d.feel);
   if (d.trackers) { location.href = '../'; return; }
-  if (d.answer) { const [id, r] = d.answer.split(':'); return act(async () => { await api.post(`/families/${state.fid}/us/plans/${id}/reply`, { r }); await usChanged(); if (r === 'in') toast("🎉 It's a plan!"); }); }
+  if (d.answer) { const [id, r] = d.answer.split(':'); return act(async () => { const res = await api.post(`/families/${state.fid}/us/plans/${id}/reply`, { r }); const p = us.plans.find((x) => x.id === id); if (res.plan?.agreed && p) await planToCalendar({ ...p, agreed: true, replies: res.plan.replies }); await usChanged(); if (res.plan?.agreed) toast("🎉 It's a plan — it's on the calendar"); else if (r === 'in') toast('🙌 Sent'); }); }
+  if (d.planlog) { const p = us.plans.find((x) => x.id === d.planlog); return p ? act(async () => { await saveRhythm((r) => { const at = Date.now(); r.entries.push({ id: at.toString(36) + Math.random().toString(36).slice(2, 5), kind: 'date', date: p.day, at, what: planTitle(p).replace(/^Date night: ?/, '') || 'Date night', ...(p.where ? { place: p.where } : {}) }); }); await api.patch(`/families/${state.fid}/us/plans/${p.id}`, { done: true }); calm.rhythm = await loadRhythm().catch(() => calm.rhythm); await usChanged(); toast('❤️ Logged — it counts for your 2-2-2-2'); }) : null; }
   if (d.plandone) return act(async () => { await api.patch(`/families/${state.fid}/us/plans/${d.plandone}`, { done: true }); await usChanged(); toast('✓ Nice — added to your recap'); });
   if (d.plandel) { if (!confirm('Cancel this plan?')) return; return act(async () => { await api.del(`/families/${state.fid}/us/plans/${d.plandel}`); await usChanged(); }); }
   if (d.planmove) { const day = prompt('Which day instead? (YYYY-MM-DD)', shiftLocal(isoLocal(), 1)); if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '')) return; return act(async () => { await api.patch(`/families/${state.fid}/us/plans/${d.planmove}`, { day }); await usChanged(); }); }
@@ -2187,6 +2261,7 @@ document.addEventListener('click', (e) => {
   if (d.bingogame) { bingo.game = d.bingogame; return bingoGame(); }
   if (d.photoid && t.classList.contains('ph')) return photoViewer(d.pfid, d.photoid);
   if (d.momentedit) return momentSheet({ id: d.momentedit });
+  if (d.watchaud) { const [id, aud] = d.watchaud.split(':'); return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { aud }); await watchSaved(); toast(aud === 'family' ? '👨‍👩‍👧 Shared with the family' : '🔒 Just you two now'); }); }
   if (d.watchtab) { watch.tab = d.watchtab; return renderWatch(); }
   if (d.watchnight) return act(async () => { await api.post(`/families/${state.fid}/watch/shows/${d.watchnight}/night`, { date: isoLocal() }); await watchSaved(); });
   if (d.watchrate) { const [id, n] = d.watchrate.split(':'); const cur = watch.shows.find((x) => x.id === id)?.ratings[fam().me]; return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { rating: cur === +n ? null : +n }); await watchSaved(); }); }
@@ -2398,7 +2473,6 @@ document.addEventListener('click', (e) => {
   }
   if (t.id === 'famSwitch') return show('me');
   if (t.id === 'newPostTop') return plusMenu();
-  if (t.id === 'bingoTop') { bingo.game = null; return show('watch'); }
 });
 
 document.addEventListener('change', async (e) => {
@@ -2416,6 +2490,13 @@ document.addEventListener('change', async (e) => {
     for (const id of t.dataset.dresspick.split(',')) { const k = `${id}|${t.dataset.dressdate}`; if (t.value) picks[k] = t.value; else delete picks[k]; }
     LS.set('fam.dressPicks', JSON.stringify(picks));
     return renderCalDress(t.dataset.dressdate);
+  }
+  if (t.name === 'theme') {
+    LS.set('pawmily.theme', t.value === 'auto' ? null : t.value);
+    if (t.value === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t.value;
+    const dark = t.value === 'dark' || (t.value === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#111513' : '#2f7d5b');
+    return;
   }
   if (t.dataset.notifypref) {
     const prefs = Object.fromEntries([...document.querySelectorAll('[data-notifypref]')].map((x) => [x.dataset.notifypref, x.checked]));
@@ -2502,7 +2583,7 @@ document.addEventListener('submit', (e) => {
     if (lockedHere()) return toast('🔒 This device needs the family key first — Me › 🔐 Encryption');
     watch.adding = { kind: v.kind, service: v.service };
     return act(async () => {
-      await api.post(`/families/${state.fid}/watch/shows`, { body: await lock({ title: v.title.trim(), service: v.service || 'other', kind: v.kind === 'movie' ? 'movie' : 'show', date: v.date || isoLocal() }) });
+      await api.post(`/families/${state.fid}/watch/shows`, { aud: v.family ? 'family' : 'us', body: await lock({ title: v.title.trim(), service: v.service || 'other', kind: v.kind === 'movie' ? 'movie' : 'show', date: v.date || isoLocal() }) });
       closeSheet(); watch.tab = 'now';
       if (state.view === 'watch') await watchSaved(); else show('watch');
       toast(`🍿 ${v.title.trim()} added`);
@@ -2566,6 +2647,13 @@ document.addEventListener('submit', (e) => {
       await api.post(`/families/${state.fid}/us/plans`, { day, weekend: v.when === 'weekend', audience: v.audience, body });
       closeSheet(); await usChanged(); toast(`💌 Sent to ${v.audience === 'family' ? 'the family' : partnerName()}`);
     });
+  }
+  if (f.id === 'usNoteForm') {
+    e.preventDefault();
+    if (!v.text?.trim()) return;
+    if (lockedHere()) return toast('🔒 This device needs the family key first — Me › 🔐 Encryption');
+    const color = NOTE_COLORS[us.notes.filter((n) => n.by === fam().me).length % NOTE_COLORS.length];
+    return act(async () => { await api.post(`/families/${state.fid}/us/notes`, { body: await lock({ text: v.text.trim(), color }) }); f.reset(); await usChanged(); toast('📌 Stuck'); });
   }
   if (f.id === 'noteForm') {
     e.preventDefault();
@@ -2789,7 +2877,11 @@ async function checkForUpdate() {
     document.body.append(bar);
   } catch { /* offline: next time */ }
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  checkForUpdate();
+  if (state.family && partnerMember()) loadUs().then(() => { usBadge(); if (state.view === 'us') renderUs(); }).catch(() => {});
+});
 setTimeout(checkForUpdate, 3000);
 
 const wantHelp = new URLSearchParams(location.search).has('help');
