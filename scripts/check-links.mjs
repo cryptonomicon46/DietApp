@@ -1,7 +1,8 @@
 // 🔗 Before a deploy: open one sample of every kind of link the app builds (OpenTable, Google Maps,
 // directions, Fandango, Ticketmaster, TMDB) in a real browser, plus the app's own pages.
 // Fails on a page that's gone (404/410/5xx) or doesn't load; sites that turn away robots (401/403/429)
-// are listed as "check by hand". Screenshots go to link-report/.
+// are listed as "check by hand" — so are OpenTable and Ticketmaster, whose bot protection refuses
+// robots outright (tap one of their links in the app once by hand). Screenshots go to link-report/.
 //   node scripts/check-links.mjs            (needs Playwright: npm i --no-save playwright)
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -12,6 +13,7 @@ import { searchUrl } from '../server/links.js';
 const day = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
 const o = shapeOuting({ area: 'Hayes Valley, San Francisco', stops: [{ time: '19:30', kind: 'dinner', name: 'Rich Table', opentable: true }] }, { day, from: 'San Jose', text: 'Hayes Valley' });
 const APP = process.env.APP_URL || 'http://localhost:8080';
+const SHY = ['opentable.com', 'ticketmaster.com']; // refuse headless browsers on GitHub's machines
 const links = [
   ['OpenTable search (scout + outings)', openTableUrl('Rich Table San Francisco', day, '19:30')],
   ['Google Maps place (outings)', o.stops[0].map],
@@ -42,7 +44,8 @@ for (const [i, [name, url]] of links.entries()) {
     await p.waitForTimeout(1500);
     await p.screenshot({ path: `link-report/${String(i + 1).padStart(2, '0')}.png` });
   } catch (e) { note = e.message.split('\n')[0]; }
-  const verdict = errs.length ? 'BROKEN' : !status || status === 404 || status === 410 || status >= 500 ? 'BROKEN' : status >= 400 ? 'CHECK BY HAND' : 'OK';
+  const shy = SHY.some((h) => new URL(url).hostname.endsWith(h));
+  const verdict = errs.length ? 'BROKEN' : status === 404 || status === 410 ? 'BROKEN' : shy && (!status || status >= 400) ? 'CHECK BY HAND' : !status || status >= 500 ? 'BROKEN' : status >= 400 ? 'CHECK BY HAND' : 'OK';
   if (verdict === 'BROKEN') bad++;
   rows.push(`${verdict.padEnd(13)} ${String(status || '-').padEnd(4)} ${name} — ${url}${note ? ` (${note})` : ''}${errs.length ? ` (page errors: ${errs.join('; ')})` : ''}`);
   await p.close();
