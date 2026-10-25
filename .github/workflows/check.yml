@@ -1,0 +1,32 @@
+# Before you deploy: the tests, then every kind of link the app builds opened in a real browser.
+# A green ✓ on the latest commit means it's safe to run pawdeploy.
+name: Check
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+  links:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm i --no-save playwright@1.56.1 && npx playwright install --with-deps chromium
+      - name: Serve the app
+        run: (python3 -m http.server 8080 >/dev/null 2>&1 &) && sleep 2
+      - run: node scripts/check-links.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: link-report
+          path: link-report/

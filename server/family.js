@@ -48,6 +48,7 @@ import { EVENTS as PICK_EVENTS, OUTCOMES, locked as pickLocked, score as pickSco
 import { blobStore, okPhotoId, photoKey, SIZES, quotaBytes, familyUsage, noteUsage, deletePhoto, deleteFamilyPhotos } from './photos.js';
 import { DEFAULT_AREA, areaKey, scoutArea } from './scout.js';
 import { planOuting, swapStop } from './outing.js';
+import { checkLinks } from './links.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
@@ -302,6 +303,15 @@ export async function familyApi(req, env, path, ctx = null) {
     if (path === '/admin/scout' && method === 'GET') {
       const month = new Date().toISOString().slice(0, 7), key = areaKey(DEFAULT_AREA);
       return json({ runs: (await db.get(`scoutruns:${key}:${month}`)) || [], week: await db.get(`ideas:${key}`), keys: { ticketmaster: !!env.TICKETMASTER_KEY, seatgeek: !!env.SEATGEEK_CLIENT_ID, tmdb: !!env.TMDB_KEY, omdb: !!env.OMDB_KEY, claude: !!env.ANTHROPIC_API_KEY }, model: env.SCOUT_MODEL || 'claude-sonnet-5-5' });
+    }
+    // 🔗 Every link in this week's ideas, opened now (up to 40 — the free plan allows 50 a run).
+    if (path === '/admin/links' && method === 'POST') {
+      const week = await db.get(`ideas:${areaKey(DEFAULT_AREA)}`);
+      if (!week) return json({ error: 'the scout hasn\'t run yet' }, 400);
+      const links = week.ideas.flatMap((x) => [[x.url, x.title], [x.reserve, `${x.title} (OpenTable)`], ...(x.theatres || []).map((t) => [t.url, `${t.name} showtimes`])]).filter(([u]) => u);
+      const r = await checkLinks(links.map(([u]) => u), env.__fetch || fetch, { max: 40 });
+      const named = Object.values(r).map((x) => ({ ...x, title: links.find(([u]) => u === x.url)?.[1] || '' }));
+      return json({ checked: named.length, total: new Set(links.map(([u]) => u)).size, broken: named.filter((x) => !x.ok), shy: named.filter((x) => x.ok && x.status >= 400) });
     }
     if (path === '/admin/scout/run' && method === 'POST') {
       if (env.DEMO && !env.__anthropic) return json({ error: 'the scout runs on the live connector' }, 400);

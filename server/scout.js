@@ -124,6 +124,8 @@ export async function claudeScout(env, area, win, goodMovies) {
   return { data: parseScout(text), usage };
 }
 
+import { checkLinks, applyChecks } from './links.js';
+
 // ---------- one week's ideas for an area ----------
 export const clean = (s, n = 120) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 export const okUrl = (u) => (/^https:\/\/[^\s"'<>]+$/.test(u || '') ? u : '');
@@ -175,6 +177,11 @@ export async function scoutArea(env, db, area, { now = new Date(), fetcher = fet
     try { ({ data: claude, usage } = await claudeScout(env, area, win, films)); } catch (e) { problems.push(`Claude: ${e.message}`); }
   } else problems.push(`Claude skipped: ${cap} runs this month already`);
   const week = assemble({ events: [...tm, ...sg], films, claude, win, area });
+  // 🔗 The links Claude found (places, extras, theatre pages), opened once; Thursday reuses Wednesday's checks.
+  const found = week.ideas.flatMap((x) => [x.src !== 'Ticketmaster' && x.src !== 'SeatGeek' && x.kind !== 'movie' ? x.url : '', ...(x.theatres || []).map((t) => t.url)]).filter(Boolean);
+  const checks = refresh ? prev?.links || {} : await checkLinks(found, fetcher, { max: 20 }).catch(() => ({}));
+  week.ideas = week.ideas.map((x) => ({ ...applyChecks(x, checks, `${x.title} ${x.where || area.label}`), ...(x.theatres ? { theatres: x.theatres.map((t) => applyChecks(t, checks, `${t.name} showtimes`)) } : {}) }));
+  week.links = checks;
   Object.assign(week, { problems, claude, refreshed: refresh ? Date.now() : null, at: refresh && prev?.at ? prev.at : week.at });
   await db.put(`ideas:${key}`, week, 30 * 86400);
   if (usage) await db.put(`scoutruns:${key}:${month}`, [...runs, { at: Date.now(), ...usage, ideas: week.ideas.length }], 62 * 86400);

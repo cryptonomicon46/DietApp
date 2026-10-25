@@ -4,6 +4,13 @@
 // day, the chips and the family's home town — never names or anything else in the app.
 
 import { askClaude, parseScout, clean, okUrl, okDay, okTime, openTableUrl } from './scout.js';
+import { checkLinks, applyChecks } from './links.js';
+
+// 🔗 Open each website link once; a dead one becomes a search for the place.
+async function checked(env, items, area, max) {
+  const res = await checkLinks(items.map((x) => x.url), env.__fetch || fetch, { max }).catch(() => ({}));
+  return items.map((x) => applyChecks(x, res, `${x.name} ${area}`));
+}
 
 export const STOP_KINDS = { coffee: '☕', brunch: '🥞', lunch: '🥗', dinner: '🍽', drinks: '🍸', dessert: '🍰', walk: '🚶', view: '🌅', do: '🎟', shop: '🛍', museum: '🖼', music: '🎶', park: '🌳' };
 export const MODES = { train: '🚆', bart: '🚇', transit: '🚌', ferry: '⛴', drive: '🚗', walk: '🚶', bike: '🚲' };
@@ -70,6 +77,9 @@ export async function planOuting(env, db, fam, body, from, now = new Date()) {
   await db.put(key, [...runs, { at: Date.now(), ...usage }], 62 * 86400);
   const outing = shapeOuting(parseScout(answer), { day, from, text });
   if (!outing) return { error: "Claude couldn't put that one together — try saying it another way" };
+  const all = await checked(env, [...outing.stops, ...outing.options.eat, ...outing.options.do], outing.area, 14);
+  outing.stops = all.slice(0, outing.stops.length);
+  outing.options = { eat: all.slice(outing.stops.length, outing.stops.length + outing.options.eat.length), do: all.slice(outing.stops.length + outing.options.eat.length) };
   return { outing, left: cap - runs.filter((x) => !x.swap).length - 1 };
 }
 
@@ -94,7 +104,7 @@ export async function swapStop(env, db, fam, body, from, now = new Date()) {
   if (runs.length >= cap) return { error: 'that\'s a lot of planning this month — more next month' };
   const { text, usage } = await askClaude(env, swapPrompt({ area, day, time, kind, cuisine, avoid, taste: clean(body.taste, 300) }), { city: from, maxUses: 3, maxTokens: 3000 });
   await db.put(key, [...runs, { at: Date.now(), swap: true, ...usage }], 62 * 86400);
-  const options = shape(parseScout(text));
+  const options = await checked(env, shape(parseScout(text)), area, 3);
   return options.length ? { options } : { error: "Couldn't find any — try another cuisine" };
 }
 

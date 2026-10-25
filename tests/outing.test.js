@@ -25,12 +25,13 @@ test('the plan comes back in time order, https links only, OpenTable for the mea
 });
 
 test('planning: the request is checked, Claude is asked once, and the month has a cap', async () => {
-  const db = kv(), env = { __anthropic: claude(JSON.stringify(answer)), OUTING_MAX_RUNS: 1 };
+  const db = kv(), env = { __anthropic: claude(JSON.stringify(answer)), OUTING_MAX_RUNS: 1, __fetch: async (u) => ({ status: u.includes('b.example') ? 404 : 200 }) };
   assert.ok((await planOuting(env, db, fam, { text: 'x', day: '2026-11-01' }, 'San Jose')).error);
   assert.ok((await planOuting(env, db, fam, { text: 'Hayes Valley', day: 'soon' }, 'San Jose')).error);
   const r = await planOuting(env, db, fam, { text: 'Hayes Valley', day: '2026-11-01', chips: ['thai', 'dinner', '<script>'] }, 'San Jose');
   assert.equal(r.outing.title, 'Hayes Valley afternoon');
   assert.equal(r.left, 0);
+  assert.match(r.outing.stops.find((x) => x.name === 'Bistro').url, /google\.com\/search\?q=Bistro/, 'a dead website becomes a search');
   assert.match((await planOuting(env, db, fam, { text: 'Mission', day: '2026-11-01' }, 'San Jose')).error, /1 outings/);
   // A swap still works after the plans run out (it has its own, bigger allowance).
   const env2 = { ...env, __anthropic: claude('{"options":[{"name":"Sushi spot","price":"$$$","opentable":true},{"name":""}]}') };

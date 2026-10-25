@@ -2334,7 +2334,7 @@ async function adminView() {
       <p class="small muted">${esc(sc.model)} · ${runs.length} Claude run${runs.length === 1 ? '' : 's'} this month · ${runs.reduce((n, x) => n + (x.searches || 0), 0)} searches · ${Math.round(runs.reduce((n, x) => n + (x.input || 0) + (x.output || 0), 0) / 1000)}k tokens</p>
       ${wk ? `<p class="small">${wk.ideas.length} ideas for ${esc(wk.area?.label || '')} · ${ago(wk.at)}: ${['movie', 'event', 'food'].map((k) => `${wk.ideas.filter((x) => x.kind === k).length} ${k === 'food' ? 'places' : `${k}s`}`).join(', ')}</p>` : '<p class="small muted">Hasn\'t run yet — it runs Wednesday mornings.</p>'}
       ${wk?.problems?.length ? `<ul class="small danger">${wk.problems.map((x) => `<li>⚠️ ${esc(x)}</li>`).join('')}</ul>` : ''}
-      <button type="button" class="ghost" data-act="scoutrun">Run the scout now</button></section>` : '';
+      <div class="row wrap"><button type="button" class="ghost" data-act="scoutrun">Run the scout now</button>${wk ? '<button type="button" class="ghost" data-act="linkcheck">🔗 Check links</button>' : ''}</div><div id="linkReport"></div></section>` : '';
   const rep = r.report;
   const open = r.tickets.filter((t) => t.status === 'open');
   openSheet(`<div class="row between"><h2>🛠 Maintainer</h2><button type="button" class="linkish small" data-act="close">Done</button></div>
@@ -2757,6 +2757,12 @@ document.addEventListener('click', (e) => {
     case 'ideaunpass': LS.set(passKey(), null); ideas.i = 0; return ideasSheet();
     case 'ideas': return act(async () => { if (!ideas.loaded) await loadIdeas(); ideas.i = 0; ideasSheet(); });
     case 'ideaset': return act(async () => { if (!ideas.loaded) await loadIdeas(); ideaSettingsSheet(); });
+    case 'linkcheck': t.disabled = true; t.textContent = '🔗 Checking…'; return act(async () => {
+      const r = await api.post('/admin/links');
+      $('#linkReport').innerHTML = `<p class="small">${r.broken.length ? '⚠️' : '✅'} ${r.checked} of ${r.total} links opened · <b>${r.broken.length} broken</b>${r.shy.length ? ` · ${r.shy.length} sites turn away robots (fine in a browser)` : ''}</p>
+        ${r.broken.length ? `<ul class="small">${r.broken.map((x) => `<li>${esc(x.title)} — ${esc(String(x.status || x.error))} <a href="${esc(x.url)}" target="_blank" rel="noopener">open</a></li>`).join('')}</ul>` : ''}`;
+      t.disabled = false; t.textContent = '🔗 Check again';
+    });
     case 'scoutrun': t.disabled = true; t.textContent = 'Scouting… (a minute or two)'; return act(async () => { const r = await api.post('/admin/scout/run'); toast(`💡 ${r.areas?.map((a) => `${a.ideas ?? 0} ideas`).join(', ') || 'Done'}`); adminView(); });
     case 'eventnew': return calModule().then((C) => { calm.C = C; eventSheet(); });
     case 'feedsrefresh': return act(async () => { await refreshFeeds(true); renderCal(); });
