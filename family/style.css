@@ -678,3 +678,9 @@ i.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; back
 .habit-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; } .habit-row select { width: auto; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .habit.due { background: #2e1d24; border-color: #5a2e3e; } :root:not([data-theme=light]) .habit.due small { color: #ff8fb1; } }
 :root[data-theme=dark] .habit.due { background: #2e1d24; border-color: #5a2e3e; } :root[data-theme=dark] .habit.due small { color: #ff8fb1; }
+
+/* 🐾 Dogs & chores: grouped */
+.grp-h { margin: 18px 4px 8px; }
+.dogcal { display: flex; gap: 10px; border: 1px dashed #c9c3b3; border-radius: 12px; padding: 9px 11px; margin-top: 8px; background: var(--bg); }
+.dogcal b, .dogcal small { display: block; } .dogcal .row { gap: 6px; margin-top: 6px; }
+.dogcal .row { display: flex; flex-wrap: wrap; } .dogcal .row button { padding: 6px 12px; font-size: .8rem; }

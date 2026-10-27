@@ -608,18 +608,21 @@ async function loadAppts() {
 async function petsView() {
   const mods = fam().modules || [];
   const dogs = mods.includes('dogs');
+  const chores = mods.includes('chores');
+  // 🏆 The scores first, then the house, then everything about the dogs together, news last.
   $('#view').innerHTML = `${demoBanner()}
-    ${dogs ? `<section class="card" id="coming"><div class="skeleton line"></div></section>
-    <section class="card" id="vax" hidden></section>
-    <section class="card walkcard" id="walk"><div class="skeleton line"></div></section>` : ''}
-    <section class="card care" id="care"><div class="skeleton line"></div></section>
-    ${dogs ? `<h3>The dogs</h3><div class="dogcards" id="dogcards">${dogsOf().map((p) => dogCard(p)).join('')}</div>
-    <button type="button" class="ghost wide" data-act="addpet">＋ Add a pet</button>
-    <h3>How happy are the dogs</h3><section class="card" id="happy"><div class="skeleton line"></div></section>
-    <section class="card" id="spend" hidden></section>` : ''}
     <section class="card gold" id="race"><div class="skeleton line"></div></section>
+    ${chores ? `<h3 class="grp-h">🏠 The house</h3><section class="card care" id="careHouse"><div class="skeleton line"></div></section>` : ''}
+    ${dogs ? `<h3 class="grp-h">🐾 The dogs</h3><section class="card care" id="careDogs"><div class="skeleton line"></div></section>
+    <section class="card walkcard" id="walk"><div class="skeleton line"></div></section>
+    <section class="card" id="coming"><div class="skeleton line"></div></section>
+    <section class="card" id="vax" hidden></section>
+    <section class="card"><b class="small">😊 How happy are the dogs</b><div id="happy"><div class="skeleton line"></div></div></section>
+    <div class="dogcards" id="dogcards">${dogsOf().map((p) => dogCard(p)).join('')}</div>
+    <button type="button" class="ghost wide" data-act="addpet">＋ Add a pet</button>
+    <section class="card" id="spend" hidden></section>` : ''}
     <section id="fame"></section>
-    ${dogs ? '<section class="card small"><a href="../#adopt">🐾 Adoption board ›</a></section>' : ''}`;
+    ${dogs ? '<section class="card" id="rescue"><div class="row between"><b class="small">🐶 Rescue news</b><span class="tiny muted">coming soon</span></div><a class="small" href="../#adopt">🐾 Adoption board ›</a></section>' : ''}`;
   renderCare(); renderRace();
   if (!dogs) return;
   renderWalk();
@@ -666,8 +669,39 @@ function renderComing() {
   const el = $('#coming');
   if (!el) return;
   const up = dogsHub.appts.filter((a) => a.status !== 'done');
-  el.innerHTML = `<div class="row between"><b>📅 Coming up</b><button type="button" class="linkish small" data-act="apptnew">＋ Appointment</button></div>
-    ${up.length ? up.slice(0, 6).map((a) => apptRow(a)).join('') : '<p class="small muted">No appointments. Add grooming, the vet or a vaccination — with who drops off and who picks up.</p>'}`;
+  el.innerHTML = `<div class="row between"><b>📅 Appointments</b><button type="button" class="linkish small" data-act="apptnew">＋ Appointment</button></div>
+    ${up.length ? up.slice(0, 6).map((a) => apptRow(a)).join('') : '<p class="small muted">No appointments. Add grooming, the vet or a vaccination — with who drops off and who picks up.</p>'}
+    <div id="dogCal"></div>`;
+  dogCalSuggestions().catch(() => {});
+}
+// 📲 Dog things in your linked calendars (an iPhone calendar's "Grooming – Layla"), offered as
+// dog appointments. Your answer is kept on this phone; a made one hides the calendar copy.
+const dogCalKey = () => `fam.dogCal.${state.fid}`;
+const dogCalMarks = () => { try { return JSON.parse(LS.get(dogCalKey()) || '{}'); } catch { return {}; } };
+const dogCal = { list: [] };
+async function dogCalSuggestions() {
+  const el = $('#dogCal');
+  if (!el) return;
+  if (!calm.feeds.length && !dogCal.loaded) { dogCal.loaded = true; await loadCal().catch(() => {}); }
+  const { dogEvent } = await import('../js/dogcal.js');
+  const cache = feedCache(), marks = dogCalMarks(), today = isoLocal(), until = shiftLocal(today, 45);
+  const dogs = dogsOf().map((p) => ({ id: p.id, name: p.name }));
+  const places = Object.values(dogsHub.profiles).flatMap((d) => [d.vet?.name || d.vet, d.groomer?.name || d.groomer]).filter((x) => typeof x === 'string');
+  dogCal.list = [];
+  for (const f of calm.feeds) for (const e of cache[f.id]?.events || []) {
+    const key = `${f.id}:${String(e.id || '').replace(/-\d+$/, '')}:${e.date}`;
+    if (!e.date || e.date < today || e.date > until || marks[key]) continue;
+    const m = dogEvent(e, dogs, places);
+    if (!m) continue;
+    // Already an appointment that day for those dogs: nothing to offer.
+    if (dogsHub.appts.some((a) => (a.dropAt || a.pickAt || '').slice(0, 10) === e.date && (!m.pets.length || m.pets.some((id) => a.pets.includes(id))))) continue;
+    dogCal.list.push({ key, e, m, feed: f.name });
+  }
+  dogCal.list.sort((a, b) => `${a.e.date}${a.e.start || ''}`.localeCompare(`${b.e.date}${b.e.start || ''}`));
+  if (!$('#dogCal')) return;
+  $('#dogCal').innerHTML = dogCal.list.slice(0, 4).map((x, i) => `<div class="dogcal"><div class="grow"><small class="muted">📲 From ${esc(x.feed || 'a linked calendar')}</small>
+      <b>${(APPT[x.m.type] || APPT.other)[0]} ${esc(x.e.title)}</b><small class="muted">${esc(dayText(x.e.date, x.e.allDay ? '' : x.e.start))}${x.e.place ? ` · ${esc(x.e.place)}` : ''}</small>
+      <div class="row wrap"><button type="button" class="small" data-dogcal="${i}">Make it a dog appointment</button><button type="button" class="ghost small" data-dogcalno="${i}">Not a dog thing</button></div></div></div>`).join('');
 }
 function renderVax() {
   const el = $('#vax');
@@ -793,11 +827,11 @@ async function renderWalk() {
 }
 // ＋ Dog appointment (new, or editing one).
 function apptSheet(a = null, pre = {}) {
-  const v = a || { type: pre.type || 'groom', pets: pre.pets || dogsOf().filter((p) => p.species === 'dog').map((p) => p.id), vaccine: pre.vaccine || '', dropBy: fam().me, pickBy: '', repeatWeeks: 0, remind: ['day'] };
+  const v = a || { type: pre.type || 'groom', pets: pre.pets || dogsOf().filter((p) => p.species === 'dog').map((p) => p.id), vaccine: pre.vaccine || '', place: pre.place || '', dropAt: pre.dropAt || '', notes: pre.notes || '', dropBy: fam().me, pickBy: '', repeatWeeks: 0, remind: ['day'] };
   const people = fam().members.filter((m) => m.kind === 'person' && m.status !== 'managed');
   const drivers = (sel) => `<option value="">Anyone</option>${people.map((p) => `<option value="${p.id}" ${sel === p.id ? 'selected' : ''}>${esc(p.id === fam().me ? 'You' : p.name)}</option>`).join('')}`;
   openSheet(`<h2>${a ? 'Edit appointment' : '＋ Dog appointment'}</h2>
-    <form id="apptForm" class="stack" data-id="${a?.id || ''}">
+    <form id="apptForm" class="stack" data-id="${a?.id || ''}" data-calkey="${esc(pre.calKey || '')}">
       <div class="seg2 radios">${Object.entries(APPT).map(([k, [ico, label]]) => `<label><input type="radio" name="type" value="${k}" ${v.type === k ? 'checked' : ''}><span>${ico} ${label}</span></label>`).join('')}</div>
       <fieldset class="chips plain"><legend>Who's going</legend>${dogsOf().map((p) => `<label class="chipcheck"><input type="checkbox" name="pets" value="${p.id}" ${v.pets.includes(p.id) ? 'checked' : ''}><span>🐾 ${esc(p.name)}</span></label>`).join('')}</fieldset>
       <label class="vaxonly" ${v.type === 'vaccine' ? '' : 'hidden'}>Which vaccine<input name="vaccine" list="vaxlist" value="${esc(v.vaccine)}"><datalist id="vaxlist">${VACCINES.map((x) => `<option value="${x}">`).join('')}</datalist></label>
@@ -829,11 +863,12 @@ function apptDetail(a) {
 }
 // 🐾 Today's dog care, shared by the whole family: tap what you did; 👫 logs it for both of you.
 let careWho = 'me', careToday = []; // who did it: 'me', 'both', or the other grown-up's member id
+// A dog chore (built in, or one you added to the dogs' row)?
+const isDogKind = (k) => DOG_KINDS.includes(k) || ownChores().some((c) => `x_${c.id}` === k && sectionOf(c) === 'dogs');
 async function renderCare() {
-  const el = $('#care');
-  if (!el) return;
+  if (!$('#careHouse') && !$('#careDogs')) return;
   const today = isoLocal();
-  const r = await act(() => api.get(`/families/${state.fid}/care?to=${today}&days=7`));
+  const r = await act(() => api.get(`/families/${state.fid}/care?to=${today}&days=1`));
   if (!r) return;
   const list = r.days[today] || [];
   careToday = list;
@@ -841,38 +876,28 @@ async function renderCare() {
   const fedBoth = count('breakfast') && count('dinner');
   const outings = count('walk') + count('park');
   const golden = outings >= 2 || (outings >= 1 && count('treat'));
-  const week = Object.entries(r.days).sort().map(([d, l]) => {
-    const o = l.filter((e) => e.kind === 'walk' || e.kind === 'park').length;
-    return `<span class="wk ${o >= 2 || (o && l.some((e) => e.kind === 'treat')) ? 'gold' : o ? 'some' : ''}" title="${d}">${new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}</span>`;
-  }).join('');
   const adults = fam().members.filter((m) => m.kind === 'person' && m.status === 'active' && m.relation !== 'child');
   const grownUp = adults.some((m) => m.id === fam().me);
   const other = grownUp && adults.length > 1 ? adults.find((m) => m.id !== fam().me) : null;
   if (careWho !== 'me' && careWho !== 'both' && careWho !== other?.id) careWho = 'me';
   const mods = fam().modules || [];
   const grid = (kinds) => `<div class="care-grid">${kinds.map((k) => { const [ico, label] = careMeta(k); return `<button type="button" class="care-btn ${count(k) ? 'done' : ''}" data-care="${k}"><span>${esc(ico)}</span>${esc(label)}<em class="pts">${ptsOf(k) ? `+${ptsOf(k)}` : '♡'}</em>${count(k) ? `<small>${count(k) > 1 ? `×${count(k)}` : '✓'}</small>` : ''}</button>`; }).join('')}</div>`;
-  el.innerHTML = `<div class="row between"><b>Today</b><span class="small ${golden ? 'good' : 'muted'}">${mods.includes('dogs') ? (golden ? '⭐ Golden day' : `${outings} outing${outings === 1 ? '' : 's'}`) : ''}</span></div>
-    ${mods.includes('dogs') ? `<div class="care-sec">🐾 The dogs</div>${grid(kindsIn('dogs', DOG_KINDS))}` : ''}
-    ${mods.includes('chores') ? (() => {
-      // The house folds away (remembered on this phone); its taps still count for the Gold Card.
-      const fold = (key, title, kinds) => {
-        const done = kinds.reduce((n, k) => n + count(k), 0);
-        const open = LS.get(`fam.${key}Open`) !== '0';
-        return `<details class="house" data-house="${key}" ${open ? 'open' : ''}><summary class="care-sec">${title} <span class="muted">${done ? `· ${done} done today` : ''}</span><span class="fold">${open ? 'Hide' : 'Show'}</span></summary>${grid(kinds)}</details>`;
-      };
-      return fold('house', '🏠 The house', kindsIn('house', HOUSE_KINDS));
-    })() : ''}
-    ${other ? `<div class="whodid" role="radiogroup" aria-label="Who did it"><span class="small muted">Who did it?</span>${[['me', 'Me'], ['both', '👫 Both'], [other.id, esc(other.name)]].map(([v, l]) => `<button type="button" role="radio" aria-checked="${careWho === v}" class="${careWho === v ? 'on' : ''}" data-carewho="${v}">${l}</button>`).join('')}</div>` : ''}
-    ${grownUp && (mods.includes('chores') || mods.includes('dogs')) ? '<button type="button" class="linkish small add-chore" data-act="chores">✎ Edit chores — add or remove</button>' : ''}
-    ${list.length ? `<ul class="care-log">${list.slice().reverse().map((e) => {
-      const whoNow = e.by.length > 1 ? 'both' : e.by[0];
-      const swaps = other && grownUp ? [[fam().me, 'Me'], ['both', '👫 Both'], [other.id, esc(other.name)]].filter(([v]) => v !== whoNow) : [];
-      const undo = e.by.includes(fam().me) || e.loggedBy === fam().me || me().role === 'owner';
-      return `<li><span>${esc(careMeta(e.kind)[0])} ${esc(careMeta(e.kind)[1])} · <b>${esc(e.byName)}</b> <small class="muted">${new Date(e.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</small></span>${swaps.length || undo ? `<span class="care-acts">${swaps.map(([v, l]) => `<button type="button" class="linkish small" data-careset="${e.id}" data-who="${v}">${l}</button>`).join('')}${undo ? '<button type="button" class="linkish small" data-careundo="' + e.id + '">Undo</button>' : ''}</span>` : ''}</li>`;
-    }).join('')}</ul>`
-      : '<p class="small muted">Nothing logged yet today.</p>'}
-    ${mods.includes('dogs') ? `<div class="week" aria-label="This week">${week}</div>
-    <p class="tiny muted">${fedBoth ? '✓ Fed twice today. ' : ''}⭐ = two outings, or one plus a treat.</p>` : ''}`;
+  // Who did it, and today's log, under each card (the house and the dogs each their own).
+  const whoHtml = other ? `<div class="whodid" role="radiogroup" aria-label="Who did it"><span class="small muted">Who did it?</span>${[['me', 'Me'], ['both', '👫 Both'], [other.id, esc(other.name)]].map(([v, l]) => `<button type="button" role="radio" aria-checked="${careWho === v}" class="${careWho === v ? 'on' : ''}" data-carewho="${v}">${l}</button>`).join('')}</div>` : '';
+  const logHtml = (entries) => (entries.length ? `<ul class="care-log">${entries.slice().reverse().map((e) => {
+    const whoNow = e.by.length > 1 ? 'both' : e.by[0];
+    const swaps = other && grownUp ? [[fam().me, 'Me'], ['both', '👫 Both'], [other.id, esc(other.name)]].filter(([v]) => v !== whoNow) : [];
+    const undo = e.by.includes(fam().me) || e.loggedBy === fam().me || me().role === 'owner';
+    return `<li><span>${esc(careMeta(e.kind)[0])} ${esc(careMeta(e.kind)[1])} · <b>${esc(e.byName)}</b> <small class="muted">${new Date(e.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</small></span>${swaps.length || undo ? `<span class="care-acts">${swaps.map(([v, l]) => `<button type="button" class="linkish small" data-careset="${e.id}" data-who="${v}">${l}</button>`).join('')}${undo ? '<button type="button" class="linkish small" data-careundo="' + e.id + '">Undo</button>' : ''}</span>` : ''}</li>`;
+  }).join('')}</ul>` : '');
+  const edit = grownUp ? '<button type="button" class="linkish small" data-act="chores">✎ Edit</button>' : '';
+  const dogList = list.filter((e) => isDogKind(e.kind)), houseList = list.filter((e) => !isDogKind(e.kind));
+  const house = $('#careHouse'), dogsEl = $('#careDogs');
+  if (house) house.innerHTML = `<div class="row between"><span class="small muted">${houseList.length ? `${houseList.length} done today` : 'Nothing yet today'}</span>${edit}</div>
+    ${grid(kindsIn('house', HOUSE_KINDS))}${whoHtml}${logHtml(houseList)}`;
+  if (dogsEl) dogsEl.innerHTML = `<div class="row between"><span class="small ${golden ? 'good' : 'muted'}">${golden ? '⭐ Golden day' : `${outings} outing${outings === 1 ? '' : 's'} today`}${fedBoth ? ' · ✓ fed twice' : ''}</span>${edit}</div>
+    ${grid(kindsIn('dogs', DOG_KINDS))}${whoHtml}${logHtml(dogList)}
+    <p class="tiny muted">⭐ A golden day = two outings, or one plus a treat.</p>`;
 }
 // 🏆 This month's race for the Gold Card, and the hall of fame.
 let race = null;
@@ -887,7 +912,7 @@ async function renderRace() {
   const lead = !a?.points ? 'Log something to get on the board' : b && a.points === b.points ? "It's a tie!" : b ? `${a.id === fam().me ? 'You lead' : `${esc(a.name)} leads`} by ${a.points - b.points}` : `${a.id === fam().me ? "You're" : `${esc(a.name)} is`} in the lead`;
   el.innerHTML = `<div class="gold-shine"></div>
     <div class="row between"><div><div class="lbl gold-lbl">🏆 ${monthName(month)} Gold Card</div><div class="gold-title">${lead}</div></div><div class="gold-days">${left}<small>day${left === 1 ? '' : 's'} left</small></div></div>
-    <ul class="race">${race.board.map((r, i) => `<li><span class="rank">${i === 0 && r.points ? '👑' : i + 1}</span>${avatar(member(r.id), 34)}<span class="rname"><b>${esc(r.id === fam().me ? 'You' : r.name)}</b><small>${r.count} chore${r.count === 1 ? '' : 's'}${r.streak > 1 ? ` · 🔥 ${r.streak}-day streak` : ''}</small><i class="rbar"><i style="width:${race.top ? Math.round((r.points / race.top) * 100) : 0}%"></i></i></span><span class="rpts">${r.points}<small>pts</small></span></li>`).join('')}</ul>
+    <ul class="race">${race.board.map((r, i) => `<li><span class="rank">${i === 0 && r.points ? '👑' : i + 1}</span>${avatar(member(r.id), 34)}<span class="rname"><b>${esc(r.id === fam().me ? 'You' : r.name)}</b><small>${r.count} chore${r.count === 1 ? '' : 's'}${(() => { const k = Object.entries(r.kinds || {}), d = k.filter(([x]) => isDogKind(x)).reduce((n, [, c]) => n + c, 0), h = k.filter(([x]) => !isDogKind(x)).reduce((n, [, c]) => n + c, 0); return d && h ? ` · 🐾 ${d} · 🏠 ${h}` : ''; })()}${r.streak > 1 ? ` · 🔥 ${r.streak}-day streak` : ''}</small><i class="rbar"><i style="width:${race.top ? Math.round((r.points / race.top) * 100) : 0}%"></i></i></span><span class="rpts">${r.points}<small>pts</small></span></li>`).join('')}</ul>
     <div class="row between prize"><span>🎁 Prize: <b>${esc(race.prize || 'set a prize!')}</b></span>${me().role === 'owner' ? '<button type="button" class="linkish small" data-act="prize">✎</button>' : ''}</div>`;
   const fame = $('#fame');
   if (fame) fame.innerHTML = race.gold.length ? `<h3>Hall of fame</h3><div class="fame">${race.gold.map((g) => `<div class="mini-gold"><b>${esc(monthName(g.month))}</b><span>${g.winners.map((w) => esc(w.name)).join(' & ')}</span><small>${g.points} pts${g.prize ? ` · ${esc(g.prize)}` : ''}</small></div>`).join('')}</div>` : '';
@@ -2150,7 +2175,8 @@ function calItems(day) {
   const C = calm.C, out = [];
   for (const e of C.eventsOn(calm.events, day)) out.push({ uid: '', time: e.allDay ? '' : e.start, end: e.allDay ? '' : e.end, allDay: !!e.allDay, icon: '📅', title: e.title, place: e.place || '', rpt: C.repeatText?.(e) || '', who: calWho(e.who), sub: e.place || '', cls: 'fam', open: `data-event="${e.id}"` });
   const cache = feedCache();
-  for (const f of calm.feeds) for (const e of C.eventsOn(cache[f.id]?.events || [], day)) out.push({ uid: String(e.id || '').replace(/-\d+$/, ''), time: e.allDay ? '' : e.start, end: e.allDay ? '' : e.end, allDay: !!e.allDay, icon: '📲', title: e.title, place: e.place || '', feed: f.name, who: f.who === 'both' ? 'both' : f.who || f.by, cls: 'fam' });
+  const made = dogCalMarks();
+  for (const f of calm.feeds) for (const e of C.eventsOn(cache[f.id]?.events || [], day)) if (made[`${f.id}:${String(e.id || '').replace(/-\d+$/, '')}:${e.date || day}`] !== 'appt') out.push({ uid: String(e.id || '').replace(/-\d+$/, ''), time: e.allDay ? '' : e.start, end: e.allDay ? '' : e.end, allDay: !!e.allDay, icon: '📲', title: e.title, place: e.place || '', feed: f.name, who: f.who === 'both' ? 'both' : f.who || f.by, cls: 'fam' });
   return mergeSame(out);
 }
 const sameKey = (e) => `${e.allDay ? 'all' : e.time}|${String(e.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '')}`;
@@ -3096,6 +3122,8 @@ document.addEventListener('click', (e) => {
   if (d.feelpick != null) { const x = feel.picks[+d.feelpick]; return x && feelFill(x); }
   if (d.feelcuisine != null) { feel.cuisine = d.feelcuisine; return renderFeelPicks(); }
   if (d.feelfind) return act(feelFind);
+  if (d.dogcal != null) { const x = dogCal.list[+d.dogcal]; if (!x) return; return apptSheet(null, { type: x.m.type, pets: x.m.pets.length ? x.m.pets : undefined, place: x.e.place || '', dropAt: `${x.e.date}T${x.e.allDay || !x.e.start ? '09:00' : x.e.start}`, notes: `From ${x.feed || 'a linked calendar'}: ${x.e.title}`, calKey: x.key }); }
+  if (d.dogcalno != null) { const x = dogCal.list[+d.dogcalno]; if (!x) return; const mk = dogCalMarks(); mk[x.key] = 'no'; LS.set(dogCalKey(), JSON.stringify(mk)); return dogCalSuggestions(); }
   if (d.nudgeundo) return act(async () => { setNudges(await api.post(`/account/nudges/${d.nudgeundo}/undo?today=${isoLocal()}`)); renderYourDay(); });
   if (d.callnudge && d.callnudge !== 'done') return act(() => callNudgeAct(d.callnudge, t));
   if (d.famtab) { if (d.board) th.board = d.board; state.famTab = d.famtab; LS.set('fam.famTab', d.famtab); if (state.view !== 'feed') return show('feed'); return feedView(); }
@@ -3660,6 +3688,7 @@ document.addEventListener('submit', (e) => {
       await sealIt();
       if (f.dataset.id) await api.patch(`/families/${state.fid}/appts/${f.dataset.id}`, { edit: body });
       else await api.post(`/families/${state.fid}/appts`, body);
+      if (f.dataset.calkey) { const mk = dogCalMarks(); mk[f.dataset.calkey] = 'appt'; LS.set(dogCalKey(), JSON.stringify(mk)); }
       closeSheet(); await apptChanged(); toast(f.dataset.id ? 'Saved' : '🐾 Added — it\'s on the feed and the calendar');
     });
   }
