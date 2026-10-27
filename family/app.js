@@ -312,6 +312,14 @@ function show(view, extra) {
   ({ feed: feedView, family: familyView, pets: petsView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, us: usView })[view]?.();
 }
 const demoBanner = () => (api.mode() === 'demo' ? '<div class="banner">Demo — everything stays on this phone.</div>' : '');
+// 🖥 A wide window (a Mac, a big iPad in landscape): side-by-side layouts. Crossing the line
+// (resizing the window, turning the iPad) redraws the screen you're on.
+const WIDE = typeof matchMedia === 'function' ? matchMedia('(min-width: 1100px)') : null;
+const wide = () => !!WIDE?.matches;
+WIDE?.addEventListener?.('change', () => {
+  if (!state.family || $('#sheet').open) return;
+  ({ feed: feedView, pets: petsView, calendar: calendarView })[state.view]?.();
+});
 
 async function feedView() {
   state.famTab ||= LS.get('fam.famTab') || 'moments';
@@ -319,16 +327,20 @@ async function feedView() {
     <div id="famBody"></div>`;
   if (th.list.length) $('#thDot').hidden = !unreadThreads().length;
   if (state.famTab === 'threads') { threadsView(); loadUs().then(() => usBadge()); return; }
-  $('#famBody').innerHTML = `<section class="nextup" id="nextUp" hidden></section><div id="digest"></div>
-    <button type="button" class="sharebar" data-act="post">${avatar(me(), 30)}<span>Share with the family…</span><b>📷 Photo</b></button>
-    <section class="card albums" id="albums" hidden></section>
-    <section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>
-    <section class="card today" id="today"><div class="skeleton line"></div></section>
-    <section class="card news" id="newsCard" hidden></section>
-    <section class="card movies" id="moviesCard" hidden></section>
-    <div id="comingLine"></div>
-    <div id="goldNews"></div>
-    <div id="posts"><div class="skeleton card"></div><div class="skeleton card"></div></div>`;
+  const m = {
+    nextUp: '<section class="nextup" id="nextUp" hidden></section>', digest: '<div id="digest"></div>',
+    share: `<button type="button" class="sharebar" data-act="post">${avatar(me(), 30)}<span>Share with the family…</span><b>📷 Photo</b></button>`,
+    albums: '<section class="card albums" id="albums" hidden></section>',
+    yourDay: '<section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>',
+    today: '<section class="card today" id="today"><div class="skeleton line"></div></section>',
+    news: '<section class="card news" id="newsCard" hidden></section>', movies: '<section class="card movies" id="moviesCard" hidden></section>',
+    coming: '<div id="comingLine"></div>', gold: '<div id="goldNews"></div>',
+    posts: '<div id="posts"><div class="skeleton card"></div><div class="skeleton card"></div></div>',
+  };
+  // 🖥 A wide window: the feed in the middle, everything about today beside it. Phones: one column.
+  $('#famBody').innerHTML = wide()
+    ? `<div class="wide2 moments"><div class="col-main">${[m.share, m.digest, m.coming, m.gold, m.posts].join('')}</div><aside class="col-side">${[m.nextUp, m.yourDay, m.today, m.albums, m.news, m.movies].join('')}</aside></div>`
+    : [m.nextUp, m.digest, m.share, m.albums, m.yourDay, m.today, m.news, m.movies, m.coming, m.gold, m.posts].join('\n    ');
   goldNews();
   renderYourDay();
   renderMovies().catch(() => {});
@@ -618,19 +630,21 @@ async function petsView() {
   const dogs = mods.includes('dogs');
   const chores = mods.includes('chores');
   // 🏆 The scores first, then the house, then everything about the dogs together, news last.
-  $('#view').innerHTML = `${demoBanner()}
-    <section class="card gold" id="race"><div class="skeleton line"></div></section>
-    ${chores ? `<h3 class="grp-h">🏠 The house</h3><section class="card care" id="careHouse"><div class="skeleton line"></div></section>` : ''}
-    ${dogs ? `<h3 class="grp-h">🐾 The dogs</h3><section class="card care" id="careDogs"><div class="skeleton line"></div></section>
+  const house = `<section class="card gold" id="race"><div class="skeleton line"></div></section>
+    ${chores ? `<h3 class="grp-h">🏠 The house</h3><section class="card care" id="careHouse"><div class="skeleton line"></div></section>` : ''}`;
+  const dogPart = `${dogs ? `<h3 class="grp-h">🐾 The dogs</h3><section class="card care" id="careDogs"><div class="skeleton line"></div></section>
     <section class="card walkcard" id="walk"><div class="skeleton line"></div></section>
     <section class="card" id="coming"><div class="skeleton line"></div></section>
     <section class="card" id="vax" hidden></section>
     <section class="card"><b class="small">😊 How happy are the dogs</b><div id="happy"><div class="skeleton line"></div></div></section>
     <div class="dogcards" id="dogcards">${dogsOf().map((p) => dogCard(p)).join('')}</div>
     <button type="button" class="ghost wide" data-act="addpet">＋ Add a pet</button>
-    <section class="card" id="spend" hidden></section>` : ''}
-    <section id="fame"></section>
-    ${dogs ? '<section class="card rescue" id="rescue"><div class="skeleton line"></div></section>' : ''}`;
+    <section class="card" id="spend" hidden></section>` : ''}`;
+  const fame = '<section id="fame"></section>', rescue = dogs ? '<section class="card rescue" id="rescue"><div class="skeleton line"></div></section>' : '';
+  // 🖥 Wide: the house and the scores on one side, the dogs on the other.
+  $('#view').innerHTML = `${demoBanner()}${wide() && dogs
+    ? `<div class="wide2 pets"><div class="col-main">${house}${fame}${rescue}</div><div class="col-main">${dogPart}</div></div>`
+    : `${house}${dogPart}${fame}${rescue}`}`;
   renderCare(); renderRace();
   if (dogs) renderRescue().catch(() => {});
   if (!dogs) return;
@@ -2352,7 +2366,10 @@ async function dayEntries(day) {
 const timeLabel = (t) => (t ? new Date(`2000-01-01T${t}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(':00', '').replace(' ', '').toLowerCase() : 'all day');
 async function calendarView() {
   calm.month ||= isoLocal().slice(0, 7); calm.day ||= isoLocal();
-  $('#view').innerHTML = `${demoBanner()}<div class="tcal"><button type="button" class="ghost wide add-ev" data-act="eventnew">＋ Add an event</button><section class="card" id="calMonth"><div class="skeleton line"></div></section><div id="calRhythm"></div><div id="calDay"></div><div id="calNext"></div><div id="calFeeds"></div></div>
+  // 🖥 Wide: the month and the day side by side.
+  $('#view').innerHTML = `${demoBanner()}<div class="tcal${wide() ? ' wide2' : ''}">${wide()
+    ? '<div class="col-main"><button type="button" class="ghost wide add-ev" data-act="eventnew">＋ Add an event</button><section class="card" id="calMonth"><div class="skeleton line"></div></section><div id="calRhythm"></div><div id="calFeeds"></div></div><div class="col-main"><div id="calDay"></div><div id="calNext"></div></div>'
+    : '<button type="button" class="ghost wide add-ev" data-act="eventnew">＋ Add an event</button><section class="card" id="calMonth"><div class="skeleton line"></div></section><div id="calRhythm"></div><div id="calDay"></div><div id="calNext"></div><div id="calFeeds"></div>'}</div>
     <p class="tiny muted center pad">🔒 Only your family sees this calendar — friends' families see nothing. Titles, places and notes are end-to-end encrypted.</p>`;
   await loadCal();
   importCal().catch(() => {});
