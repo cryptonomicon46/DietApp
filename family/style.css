@@ -685,3 +685,7 @@ i.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; back
 .dogcal b, .dogcal small { display: block; } .dogcal .row { gap: 6px; margin-top: 6px; }
 .dogcal .row { display: flex; flex-wrap: wrap; } .dogcal .row button { padding: 6px 12px; font-size: .8rem; }
 .ep-line { margin: 2px 0 4px; } .ep-new { color: var(--like); }
+
+/* 🎬 Movies */
+.movies .rchips { margin: 0; } .mrow { width: 100%; text-align: left; background: none; color: var(--ink); border-radius: 0; font-weight: 400; }
+.moviehead { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 8px; } .moviehead img { width: 92px; border-radius: 10px; flex: none; }

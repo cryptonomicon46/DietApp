@@ -6,6 +6,7 @@
 
 import { occursOn } from '../js/calendar.js';
 import { nudgesDue } from './nudges.js';
+import { movieAlertsDue } from './movies.js';
 
 const enc = new TextEncoder();
 const b64u = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -20,7 +21,7 @@ export const NOTIFY_KINDS = {
   events: '📅 Calendar reminders',
   feed: '💬 Comments and help on your posts',
   fun: '⭐ Golden days and games',
-  nudges: '📞 Check-in reminders (like calling Mom)',
+  nudges: '📞 Reminders: calling Mom, workouts, movie releases',
 };
 export const wants = (user, kind) => user?.notify?.[kind] !== false;
 
@@ -189,6 +190,7 @@ export async function runReminders(env, at = Date.now(), { db }) {
     return famCache.get(fid);
   };
   let sent = 0;
+  const movieSeen = new Map(), movieBudget = { left: 12 };
   for (const uid of uids) {
     const user = await db.get(`user:${uid}`);
     if (!user) continue;
@@ -206,6 +208,20 @@ export async function runReminders(env, at = Date.now(), { db }) {
         for (const id of d.ids) nudges[id] = { ...nudges[id], notified: today };
       }
       if (due.length) await db.put(`nudges:${uid}`, nudges);
+    }
+    // 🎬 Movie alerts, checked at 9 AM your time: in theaters, or now streaming.
+    const mv = env.TMDB_KEY ? await db.get(`moviealerts:${uid}`) : null;
+    if (mv?.on && mv.list?.length) {
+      const tz = user.tz || 'America/Los_Angeles';
+      const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date(from)).map((x) => [x.type, x.value]));
+      if (+parts.hour === 9 && +parts.minute < 15) {
+        const due = await movieAlertsDue(env, mv, localDay(from, tz), movieSeen, movieBudget);
+        for (const d of due) {
+          sent += await sendTo(db, env, [uid], 'nudges', d.msg, 12 * 3600);
+          const a = mv.list.find((x) => x.id === d.id); a.told = { ...(a.told || {}), [d.what]: true };
+        }
+        if (due.length) await db.put(`moviealerts:${uid}`, mv);
+      }
     }
     for (const fid of user.families || []) {
       const f = await famData(fid);

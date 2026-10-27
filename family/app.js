@@ -323,11 +323,13 @@ async function feedView() {
     <button type="button" class="sharebar" data-act="post">${avatar(me(), 30)}<span>Share with the family…</span><b>📷 Photo</b></button>
     <section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>
     <section class="card today" id="today"><div class="skeleton line"></div></section>
+    <section class="card movies" id="moviesCard" hidden></section>
     <div id="comingLine"></div>
     <div id="goldNews"></div>
     <div id="posts"><div class="skeleton card"></div><div class="skeleton card"></div></div>`;
   goldNews();
   renderYourDay();
+  renderMovies().catch(() => {});
   importUs().catch(() => {});
   const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts(), loadUs(), loadThreads().catch(() => {})]);
   renderToday(); renderComingLine(); usBadge();
@@ -1038,6 +1040,8 @@ function meView() {
     <h3>🌗 Appearance</h3>
     <section class="card stack"><div class="seg theme-seg">${[['auto', '📱 Automatic'], ['light', '☀️ Light'], ['dark', '🌙 Dark']].map(([k, l]) => `<label class="segopt"><input type="radio" name="theme" value="${k}" ${(LS.get('pawmily.theme') || 'auto') === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
       <p class="tiny muted">Automatic follows your phone — on iPhone, Settings › Display &amp; Brightness › Automatic switches to dark at sunset. Applies to OurPawmily and your trackers on this device.</p></section>
+    <h3>🎬 Movies</h3>
+    <section class="card stack" id="moviePrefs"><label class="switch-row"><span>🎬 Movie releases &amp; reviews<small class="muted">A card in Moments: what's in theaters with critic and audience scores, what's coming, where it's streaming, and 🔔 alerts for the ones you're waiting for. Just for you.</small></span><input type="checkbox" data-moviesonoff="1" ${mv.prefs?.on ? 'checked' : ''}><i class="switch"></i></label></section>
     <h3>🔔 Notifications</h3>
     <section class="card stack" id="notifyCard"><div class="skeleton line"></div></section>
     <h3>🔐 Encryption</h3>
@@ -1060,6 +1064,7 @@ function meView() {
     if (el) el.innerHTML = r.backup ? `🔑 Recovery backup saved ${new Date(r.backup.at).toLocaleDateString()}. Made a new family or joined one since? Make a new phrase so it's included.` : '<span class="tone-warn">⚠️ No recovery phrase yet — if you lose all your devices, nobody can unlock your family. Tap 🔑 Recovery phrase.</span>';
   }).catch(() => {});
   renderNotify();
+  moviePrefs().then((x) => { const c = $('[data-moviesonoff]'); if (c) c.checked = !!x.on; }).catch(() => {});
   api.get('/account/sessions').then((r) => {
     const el = $('#sessions');
     if (el) el.innerHTML = `<b>Signed in on</b><ul class="list">${r.sessions.slice().reverse().map((x) => `<li class="row between"><span>${esc(x.device || 'A device')}${x.current ? ' <span class="pill">This one</span>' : ''}</span><small>${ago(x.at)}</small></li>`).join('')}</ul>`;
@@ -2569,6 +2574,51 @@ async function tvFixSheet(id) {
     ${r.results.map((s) => `<button type="button" class="fpick" data-tvpick="${id}:${s.id}"><span class="fp-i">${s.poster ? `<img src="${esc(s.poster)}" alt="">` : '📺'}</span><span class="grow"><b>${esc(s.name)}</b><small class="muted">${esc(s.year || '')}</small></span>${tvMap()[id] === s.id ? '✓' : ''}</button>`).join('') || '<p class="small muted">No match on TMDB.</p>'}
     <button type="button" class="linkish small" data-tvpick="${id}:0">It isn't on TMDB — stop looking</button>`);
 }
+// ---------- 🎬 movies: in theaters, coming soon, streaming, and alerts (opt-in, per person) ----------
+const mv = { prefs: null, lists: null, tab: 'now' };
+async function moviePrefs() { mv.prefs ||= await api.get('/account/movies').then((r) => r.movies).catch(() => ({ on: false, list: [] })); return mv.prefs; }
+async function movieLists() {
+  let c = null; try { c = JSON.parse(LS.get('fam.movies') || 'null'); } catch { /* none */ }
+  if (c && Date.now() - c.at < 6 * 3600e3) return (mv.lists = c.data);
+  const r = await api.get('/movies').catch(() => null);
+  if (r) { mv.lists = r; try { LS.set('fam.movies', JSON.stringify({ at: Date.now(), data: r })); } catch { /* full */ } }
+  return mv.lists || c?.data || null;
+}
+const alerting = (id) => (mv.prefs?.list || []).some((x) => x.id === id);
+async function renderMovies() {
+  const el = $('#moviesCard');
+  if (!el || !(await moviePrefs()).on) return;
+  const l = await movieLists();
+  if (!$('#moviesCard') || !l) return;
+  const list = (mv.tab === 'now' ? l.now : l.soon) || [];
+  el.hidden = false;
+  el.innerHTML = `<div class="row between"><b>🎬 Movies</b><span class="rchips">${[['now', 'In theaters'], ['soon', 'Coming soon']].map(([k, t]) => `<button type="button" class="chip ${mv.tab === k ? 'on' : ''}" data-movietab="${k}">${t}</button>`).join('')}</span></div>
+    ${list.slice(0, 4).map((m) => `<button type="button" class="fpick mrow" data-movie="${m.id}"><span class="fp-i">${m.img ? `<img src="${esc(m.img)}" alt="" loading="lazy">` : '🎬'}</span><span class="grow"><b>${esc(m.title)}</b>${m.pick ? ' <span class="tag pk">Critics\' pick</span>' : ''}${alerting(m.id) ? ' 🔔' : ''}
+      <small class="muted">${mv.tab === 'now' ? [scoreLine(m), esc(m.why || '')].filter(Boolean).join(' · ') : `${esc(shortDay(m.released))}${m.why ? ` · ${esc(m.why.slice(0, 70))}…` : ''}`}</small></span></button>`).join('') || '<p class="small muted">Nothing here right now.</p>'}
+    ${list.length > 4 ? `<button type="button" class="linkish small" data-movieall="${mv.tab}">All ${list.length} ›</button>` : ''}`;
+}
+function movieAllSheet(tab) {
+  const list = (tab === 'now' ? mv.lists?.now : mv.lists?.soon) || [];
+  openSheet(`<div class="row between"><h2>🎬 ${tab === 'now' ? 'In theaters' : 'Coming soon'}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    ${list.map((m) => `<button type="button" class="fpick mrow" data-movie="${m.id}"><span class="fp-i">${m.img ? `<img src="${esc(m.img)}" alt="" loading="lazy">` : '🎬'}</span><span class="grow"><b>${esc(m.title)}</b>${m.pick ? ' <span class="tag pk">Critics\' pick</span>' : ''}${alerting(m.id) ? ' 🔔' : ''}<small class="muted">${tab === 'now' ? scoreLine(m) || esc(m.why || '') : esc(shortDay(m.released))}</small></span></button>`).join('')}`);
+}
+async function movieSheet(id) {
+  openSheet('<h2>🎬</h2><div class="skeleton line"></div>');
+  const r = await api.get(`/movies/${id}`);
+  const d = r.movie, fromList = [...(mv.lists?.now || []), ...(mv.lists?.soon || [])].find((x) => x.id === +id) || {};
+  const out = d.theaters && d.theaters <= isoLocal();
+  openSheet(`<div class="row between"><h2>🎬 ${esc(d.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <div class="moviehead">${d.img ? `<img src="${esc(d.img)}" alt="">` : ''}<div class="stack tight small">
+      ${fromList.scores ? `<b>${scoreLine(fromList)}</b>${fromList.pick ? ' <span class="tag pk">Critics\' pick</span>' : ''}` : ''}
+      <span class="muted">${esc([d.genres.join(', '), d.runtime ? `${d.runtime} min` : ''].filter(Boolean).join(' · '))}</span>
+      <span>🎟 Theaters: <b>${d.theaters ? esc(out ? `since ${shortDay(d.theaters)}` : shortDay(d.theaters)) : 'no date yet'}</b></span>
+      <span>🏠 At home: <b>${d.stream.length ? esc(d.stream.join(', ')) : d.digital ? `from ${esc(shortDay(d.digital))}` : 'not yet'}</b>${!d.stream.length && d.rent.length ? ` <span class="muted">(rent: ${esc(d.rent.slice(0, 2).join(', '))})</span>` : ''}</span></div></div>
+    ${d.overview ? `<p class="small">${esc(d.overview)}</p>` : ''}
+    <div class="row wrap">${alerting(d.id) ? `<button type="button" class="ghost small" data-moviealert="${d.id}:off">🔔 Alert set · remove</button>` : `<button type="button" class="small" data-moviealert="${d.id}:on" data-movietitle="${esc(d.title)}" data-movieout="${out ? 1 : ''}">🔔 Alert me ${out ? 'when it streams' : 'when it\'s out'}</button>`}
+      ${partnerMember() ? `<button type="button" class="ghost small" data-moviesuggest="${d.id}">✨ Suggest to ${esc(partnerName())}</button>` : ''}
+      ${out ? `<a class="btn ghost small" href="https://www.fandango.com/search?q=${encodeURIComponent(d.title)}" target="_blank" rel="noopener">🎟 Showtimes</a>` : ''}</div>
+    <p class="tiny muted">Movie data from TMDB; where to watch from JustWatch. Scores: Rotten Tomatoes and IMDb via OMDb.</p>`);
+}
 async function watchView() {
   $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div>`;
   importWatch().catch(() => {});
@@ -3183,6 +3233,17 @@ document.addEventListener('click', (e) => {
   if (d.feelpick != null) { const x = feel.picks[+d.feelpick]; return x && feelFill(x); }
   if (d.feelcuisine != null) { feel.cuisine = d.feelcuisine; return renderFeelPicks(); }
   if (d.feelfind) return act(feelFind);
+  if (d.movietab) { mv.tab = d.movietab; return renderMovies(); }
+  if (d.movieall) return movieAllSheet(d.movieall);
+  if (d.movie) return act(() => movieSheet(d.movie));
+  if (d.moviealert) {
+    const [id, how] = d.moviealert.split(':');
+    return act(async () => {
+      mv.prefs = (how === 'on' ? await api.put(`/account/movies/alerts/${id}`, { title: t.dataset.movietitle || '', inTheaters: !!t.dataset.movieout }) : await api.del(`/account/movies/alerts/${id}`)).movies;
+      toast(how === 'on' ? '🔔 We\'ll let you know' : 'Alert removed'); renderMovies(); movieSheet(id);
+    });
+  }
+  if (d.moviesuggest) { const m = [...(mv.lists?.now || []), ...(mv.lists?.soon || [])].find((x) => x.id === +d.moviesuggest); return feelSheet('movie', { idea: { ...(m || {}), id: `mv${d.moviesuggest}`, kind: 'movie', title: m?.title || '' } }); }
   if (d.tvfix) return act(() => tvFixSheet(d.tvfix));
   if (d.tvpick) { const [id, tid] = d.tvpick.split(':'); const m = tvMap(); m[id] = +tid; LS.set(tvMapKey(), JSON.stringify(m)); closeSheet(); const x = watch.shows.find((y) => y.id === id); if (x) { delete x.tv; delete x.ep; } return act(async () => { await loadTv(); if (state.view === 'watch') renderWatch(); else if (state.view === 'us') renderUs(); }); }
   if (d.epseen) { const i = d.epseen.indexOf(':'); LS.set(`fam.epSeen.${d.epseen.slice(0, i)}`, d.epseen.slice(i + 1)); renderUs(); return usBadge(); }
@@ -3532,6 +3593,7 @@ document.addEventListener('change', async (e) => {
     t.form.idea.value = '';
     return renderFeelPicks();
   }
+  if (t.dataset.moviesonoff) return act(async () => { mv.prefs = (await api.put('/account/movies', { on: t.checked })).movies; toast(t.checked ? '🎬 Movies are on — see Family › Moments' : 'Movies are off'); });
   if (t.dataset.nudgedone && t.checked) {
     const k = t.dataset.nudgedone; t.disabled = true; t.closest('.habit')?.classList.add('done');
     return act(async () => { await new Promise((r) => setTimeout(r, 400)); setNudges(await api.post(`/account/nudges/${k}/done?today=${isoLocal()}`, { date: isoLocal() })); toast(`✓ ${MOVE_NUDGES[k][1]} done — next ${new Date(`${callNudge.all[k].next}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })}`); renderYourDay(); });

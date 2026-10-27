@@ -52,6 +52,7 @@ import { checkLinks } from './links.js';
 import { threadRoutes } from './threads.js';
 import { nudgeRoutes } from './nudges.js';
 import { tvRoutes } from './tv.js';
+import { movieRoutes } from './movies.js';
 import { askClaude } from './scout.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
@@ -338,6 +339,8 @@ export async function familyApi(req, env, path, ctx = null) {
   }
 
   // ---- your account: devices, a copy of your data, deleting it ----
+  // 🎬 Movies (for whoever switches them on) and release alerts.
+  { const r = await movieRoutes({ path, method, body, req, env, db, user, json }); if (r) return r; }
   // 📺 Episode dates (TMDB) for the shows you're watching.
   { const r = await tvRoutes({ path, method, req, env, json, url }); if (r) return r; }
   // 📞 Check-in reminders ("call Mom every two weeks").
