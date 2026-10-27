@@ -42,7 +42,7 @@ export const SLIDES = [
     ['🍿', 'Watch', 'Where you’re up to, 🆕 new episodes, 🕐 up next, bingo and couples picks.'],
   ] },
   { id: 'me', eyebrow: 'Trackers and Me', title: 'Each person’s own', go: 'me', cards: [
-    ['🥗', 'Trackers', 'Food (meal plans, logging, groceries) and Train (lifting, runs, rides). Private until you share.'],
+    ['🥗', 'Trackers', 'Food (meal plans, logging, groceries, ⚔️ the check-in fight) and Train (lifting, runs, rides). Private until you share.'],
     ['👤', 'Me', 'Your family, people and pets, notifications, light or dark, and your account.'],
     ['🔑', 'Recovery phrase', 'Write it down: it unlocks your family on a new phone if you lose this one.'],
   ] },
@@ -60,17 +60,16 @@ export const SLIDES = [
 
 // After an update with new features: one card on Moments for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-10b',
-  title: 'New: screenshots, PDFs and tags in Threads',
-  text: 'Plus Albums, News, Movies and ❓ Help',
+  id: '2026-10c',
+  title: 'New: the check-in fight, and Threads upgrades',
+  text: 'Plus screenshots, PDFs, tags, Albums and News',
   slides: ['new', 'help'],
 };
 SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'New this month', cards: [
   ['🏷️', 'Threads: screenshots, PDFs and tags', 'Add screenshots and PDFs, tag people with @, and see what’s for you in ✨ For you.'],
   ['📷', 'Albums', 'Family › Moments: link Google Photos albums or copy photos in.'],
   ['📰', 'News', 'Politics, Tech and Bay Area headlines on Moments, and 🐶 rescue news on Dogs.'],
-  ['🎬', 'Movies and 🆕 episodes', 'Turn Movies on in Me; Watch shows new episodes and what’s up next.'],
-  ['🖥️', 'Bigger screens', 'On a Mac or iPad, a sidebar and two columns.'],
+  ['⚔️', 'The check-in fight', 'Trackers › Food › Weight: a health bar that fills with weigh-ins and logged meals.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);

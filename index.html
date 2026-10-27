@@ -19,7 +19,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawmily">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=257">
+  <link rel="stylesheet" href="styles.css?v=258">
 </head>
 <body>
   <header class="top">
@@ -102,6 +102,7 @@
         </div>
         <div class="legend small"><span><i class="key key-avg"></i>7-day average</span><span><i class="key key-raw"></i>Daily weigh-in</span><span><i class="key key-goal"></i>Goal</span><span><i class="key key-plan"></i>Plan</span></div>
       </div>
+      <div class="fightcard" id="fightCard"></div>
       <div class="card dexa-card" id="dexaCard"></div>
       <div class="card photos-card" id="photosCard"></div>
       <div class="card">
@@ -423,52 +424,53 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/account.js": "./js/account.js?v=257",
-    "./js/accountBoot.js": "./js/accountBoot.js?v=257",
-    "./js/activity.js": "./js/activity.js?v=257",
-    "./js/adopt.js": "./js/adopt.js?v=257",
-    "./js/analytics.js": "./js/analytics.js?v=257",
-    "./js/app.js": "./js/app.js?v=257",
-    "./js/bodycomp.js": "./js/bodycomp.js?v=257",
-    "./js/brief.js": "./js/brief.js?v=257",
-    "./js/briefTab.js": "./js/briefTab.js?v=257",
-    "./js/calTab.js": "./js/calTab.js?v=257",
-    "./js/calendar.js": "./js/calendar.js?v=257",
-    "./js/cheer.js": "./js/cheer.js?v=257",
-    "./js/climb.js": "./js/climb.js?v=257",
-    "./js/commands.js": "./js/commands.js?v=257",
-    "./js/devices.js": "./js/devices.js?v=257",
-    "./js/dexa.js": "./js/dexa.js?v=257",
-    "./js/dogcal.js": "./js/dogcal.js?v=257",
-    "./js/dogs.js": "./js/dogs.js?v=257",
-    "./js/dress.js": "./js/dress.js?v=257",
-    "./js/dressTab.js": "./js/dressTab.js?v=257",
-    "./js/foods.js": "./js/foods.js?v=257",
-    "./js/household.js": "./js/household.js?v=257",
-    "./js/lift.js": "./js/lift.js?v=257",
-    "./js/lifting.js": "./js/lifting.js?v=257",
-    "./js/marketMatch.js": "./js/marketMatch.js?v=257",
-    "./js/nextup.js": "./js/nextup.js?v=257",
-    "./js/notes.js": "./js/notes.js?v=257",
-    "./js/photos.js": "./js/photos.js?v=257",
-    "./js/plan.js": "./js/plan.js?v=257",
-    "./js/plans.js": "./js/plans.js?v=257",
-    "./js/poster.js": "./js/poster.js?v=257",
-    "./js/progress.js": "./js/progress.js?v=257",
-    "./js/recover.js": "./js/recover.js?v=257",
-    "./js/research.js": "./js/research.js?v=257",
-    "./js/review.js": "./js/review.js?v=257",
-    "./js/rewards.js": "./js/rewards.js?v=257",
-    "./js/rhythm.js": "./js/rhythm.js?v=257",
-    "./js/share.js": "./js/share.js?v=257",
-    "./js/shows.js": "./js/shows.js?v=257",
-    "./js/showsCore.js": "./js/showsCore.js?v=257",
-    "./js/storage.js": "./js/storage.js?v=257",
-    "./js/sync.js": "./js/sync.js?v=257",
-    "./js/zip.js": "./js/zip.js?v=257"
+    "./js/account.js": "./js/account.js?v=258",
+    "./js/accountBoot.js": "./js/accountBoot.js?v=258",
+    "./js/activity.js": "./js/activity.js?v=258",
+    "./js/adopt.js": "./js/adopt.js?v=258",
+    "./js/analytics.js": "./js/analytics.js?v=258",
+    "./js/app.js": "./js/app.js?v=258",
+    "./js/bodycomp.js": "./js/bodycomp.js?v=258",
+    "./js/brief.js": "./js/brief.js?v=258",
+    "./js/briefTab.js": "./js/briefTab.js?v=258",
+    "./js/calTab.js": "./js/calTab.js?v=258",
+    "./js/calendar.js": "./js/calendar.js?v=258",
+    "./js/cheer.js": "./js/cheer.js?v=258",
+    "./js/climb.js": "./js/climb.js?v=258",
+    "./js/commands.js": "./js/commands.js?v=258",
+    "./js/devices.js": "./js/devices.js?v=258",
+    "./js/dexa.js": "./js/dexa.js?v=258",
+    "./js/dogcal.js": "./js/dogcal.js?v=258",
+    "./js/dogs.js": "./js/dogs.js?v=258",
+    "./js/dress.js": "./js/dress.js?v=258",
+    "./js/dressTab.js": "./js/dressTab.js?v=258",
+    "./js/fight.js": "./js/fight.js?v=258",
+    "./js/foods.js": "./js/foods.js?v=258",
+    "./js/household.js": "./js/household.js?v=258",
+    "./js/lift.js": "./js/lift.js?v=258",
+    "./js/lifting.js": "./js/lifting.js?v=258",
+    "./js/marketMatch.js": "./js/marketMatch.js?v=258",
+    "./js/nextup.js": "./js/nextup.js?v=258",
+    "./js/notes.js": "./js/notes.js?v=258",
+    "./js/photos.js": "./js/photos.js?v=258",
+    "./js/plan.js": "./js/plan.js?v=258",
+    "./js/plans.js": "./js/plans.js?v=258",
+    "./js/poster.js": "./js/poster.js?v=258",
+    "./js/progress.js": "./js/progress.js?v=258",
+    "./js/recover.js": "./js/recover.js?v=258",
+    "./js/research.js": "./js/research.js?v=258",
+    "./js/review.js": "./js/review.js?v=258",
+    "./js/rewards.js": "./js/rewards.js?v=258",
+    "./js/rhythm.js": "./js/rhythm.js?v=258",
+    "./js/share.js": "./js/share.js?v=258",
+    "./js/shows.js": "./js/shows.js?v=258",
+    "./js/showsCore.js": "./js/showsCore.js?v=258",
+    "./js/storage.js": "./js/storage.js?v=258",
+    "./js/sync.js": "./js/sync.js?v=258",
+    "./js/zip.js": "./js/zip.js?v=258"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=257"></script>
+  <script type="module" src="js/app.js?v=258"></script>
 </body>
 </html>

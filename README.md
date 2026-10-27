@@ -40,7 +40,7 @@ A shared month view with everyone's events, ⭐ golden days, ❤️ dates, 🐾 
 What you're watching together, where you're up to, ratings, **🆕 new episodes** and **🕐 Up next** (episode dates from TMDB), the year recap, 🎲 show bingo and 💑 couples picks.
 
 ### 🥗 Trackers
-Each person's **🍽 Food** (meal plans with exact portions, logging, weekly check-ins, groceries, barcode scan) and **🏋︎ Train** (lifting program, runs, rides, climbing, WHOOP / Garmin). Private until you share with someone in Me. Details in *The trackers, in detail* below.
+Each person's **🍽 Food** (meal plans with exact portions, logging, weekly check-ins, groceries, barcode scan, and **⚔️ the check-in fight**, a fighting-game health bar for who checks in most) and **🏋︎ Train** (lifting program, runs, rides, climbing, WHOOP / Garmin). Private until you share with someone in Me. Details in *The trackers, in detail* below.
 
 ### ❓ Help and the tour
 The **❓** at the top of every screen (and **Help** at the foot of the sidebar on a Mac) opens Help: **📖 Take the tour** (one page per area, with *Show me* to jump there), **✨ What's new**, **🧭 This screen**, and the help chat. Someone who's just created or joined a family sees a welcome and the tour once, then a *New here?* card for a week; after an update with new features, everyone else gets one *What's new* card. Empty screens link to the page that explains them.
@@ -271,6 +271,11 @@ The trackers are the food, training, dogs and calendar screens that came before 
 **Weight.**
 - A graph of weigh-ins, the 7-day average, your goal and the planned path, with tap-to-read values.
 - **Stats:** meals on target, deficit and protein days, and workouts over 7/30/90/365 days.
+- **⚔️ Check-in fight** (under the weight graph): a fighting-game health bar that fills with regular check-ins — **+5** for the morning weigh-in and **+3** for each of breakfast, lunch and dinner logged (14 a day). Health is your last 7 days out of 100, so a day with nothing drains it; a red strip shows what you just lost, and it turns red with ⚠️ *Danger* below 35. It counts showing up, never the scale.
+  - **Head-to-head** when your partner shares diet & fitness with you: your bars face off around a *WEEK n* badge. Each Monday–Sunday week is a round, and whoever checks in more gets a ★ (shown as pips). 🔥 *n-day combo* counts full check-in days in a row, and the line below says what's still open today ("dinner +3").
+  - **Just you** until then: one long bar and seven daily blocks (a full block = weigh-in + 3 meals).
+  - **Tap the bar** for the rules, the last four rounds and an optional 🎁 prize for the month (synced to both of you). A week with 7 of 7 full check-in days flashes **PERFECT!** once.
+  - Worked out on the phone from your own trackers; your partner's bar uses only what they already share with you.
 - **Export data:** a zip of CSVs (meals, days, activities, lifting sessions and sets, weigh-ins, check-ins).
 - **Backup / Restore:** everything as one file.
 - **📤 Share…:** the day's meals, your combos or your progress, as text, a poster image or CSV. Progress can be shared **📸 with photos** (your first, middle and latest progress photos side by side — under the poster, or as one image alongside the text) or **without photos**.
