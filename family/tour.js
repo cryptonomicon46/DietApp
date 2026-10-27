@@ -31,7 +31,7 @@ export const SLIDES = [
     ['🧒', 'Grown-ups only', 'Never pets or kids: only people with their own account who are 18 or over.'],
   ] },
   { id: 'dogs', eyebrow: 'Dogs & chores', title: 'The house and the dogs, top to bottom', go: 'pets', cards: [
-    ['🏆', 'Gold Card and ⚔️ the fight', 'The month’s chore race, and under it your check-in health bars, head to head.'],
+    ['🏆', 'Gold Card and ❤️ the health meter', 'The month’s chore race, and under it a weekly check-in face-off with a month champion.'],
     ['🏠', 'The house', 'Cooking, dishes, laundry: log it for you, your partner or both.'],
     ['🐾', 'The dogs', 'Fed, walked, park, treats, meds. A ⭐ golden day is two outings, or one and a treat.'],
     ['📅', 'Appointments', 'Groomer, vet, vaccines, who drives. Ones in your calendars are suggested.'],
@@ -67,16 +67,16 @@ export const SLIDES = [
 
 // After an update with new features: one card on Moments for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-10d',
-  title: 'New: 💬 Chats for the grown-ups',
-  text: 'Plus who’s seen your threads, and the check-in fight',
+  id: '2026-10e',
+  title: 'New: the ❤️ health meter, and 💬 Chats',
+  text: 'Weekly rounds and a month champion, plus Chats and who’s seen your threads',
   slides: ['new', 'help'],
 };
 SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'New this month', cards: [
   ['💬', 'Chats', 'Tap 💬 at the top: message any grown-up in the family, or everyone at once.'],
   ['👀', 'Threads: Seen by and 🗂 boards', 'See who’s opened a write-up, and move it to the right board — or one of your own.'],
   ['🏷️', 'Threads: screenshots, PDFs and tags', 'Add screenshots and PDFs, tag people with @, and see what’s for you in ✨ For you.'],
-  ['⚔️', 'The check-in fight', 'Dogs & chores, under the Gold Card: health bars that fill with weigh-ins and logged meals.'],
+  ['❤️', 'The health meter', 'Dogs & chores: Round 1, FIGHT! Weigh in and log meals; each week is a round, each month has a champion.'],
   ['📷', 'Albums and 📰 News', 'On Moments: Google Photos albums, and headlines twice a day.'],
 ] });
 

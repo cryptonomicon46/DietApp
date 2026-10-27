@@ -968,10 +968,13 @@ async function renderRace() {
   const fame = $('#fame');
   if (fame) fame.innerHTML = race.gold.length ? `<h3>Hall of fame</h3><div class="fame">${race.gold.map((g) => `<div class="mini-gold"><b>${esc(monthName(g.month))}</b><span>${g.winners.map((w) => esc(w.name)).join(' & ')}</span><small>${g.points} pts${g.prize ? ` · ${esc(g.prize)}` : ''}</small></div>`).join('')}</div>` : '';
 }
-// ⚔️ The check-in fight (js/fight.js), under the Gold Card: who checked in more — the morning
-// weigh-in and each meal logged — over the last 7 days, never the scale. From your own trackers
-// and, head to head, your partner's when they share diet & fitness with you. Worked out here.
-const fight = { open: false, data: null };
+// ❤️ The health meter (js/fight.js), under the Gold Card: a Street Fighter-style face-off for
+// checking in — the morning weigh-in and each meal logged — never the scale. Each week is a round,
+// each month has a champion. From your own trackers and, head to head, your partner's when they
+// share diet & fitness with you. Fighters and the month's prize live in each person's own
+// trackers (locked like the rest); which moments you've seen stays on this phone.
+const fight = { open: false, data: null, pick: null };
+const meterSeen = () => { try { return JSON.parse(LS.get(`fam.meter.${state.fid}`) || '{}'); } catch { return {}; } };
 async function renderFight(fresh = true) {
   const el = $('#fight');
   if (!el || !(fam().modules || []).includes('health') || me()?.relation === 'child') return;
@@ -982,9 +985,15 @@ async function renderFight(fresh = true) {
     fight.data = { F, mine: mine && !mine.locked ? mine : {}, theirs: has(theirs) ? theirs : null, partner };
   }
   const { F, mine, theirs, partner } = fight.data, today = isoLocal();
-  const prize = [mine.fightPrize, theirs?.fightPrize].filter((x) => x?.month === today.slice(0, 7)).sort((a, b) => b.at - a.at)[0]?.text || '';
+  const cur = F.currentRound(today);
+  const prize = [mine.fightPrize, theirs?.fightPrize].filter((x) => x?.month === cur.month).sort((a, b) => b.at - a.at)[0]?.text || '';
+  const person = (name, d) => ({ name, data: d, face: d.fighter?.face, kit: d.fighter?.kit });
+  const me_ = person('You', mine), rival = theirs ? person(partner.name, theirs) : null;
+  // Last 3 finished months, for the hall of fame.
+  const fame = [];
+  if (rival) for (let i = 1; i <= 3; i++) { const d = new Date(`${cur.month}-15T12:00:00`); d.setMonth(d.getMonth() - i); const r = F.monthResult(mine, theirs, d.toISOString().slice(0, 7), today); if (r.champion && (r.mePts || r.rivalPts)) fame.push(r); }
   el.hidden = false;
-  el.innerHTML = F.fightHtml({ me: { name: 'You', data: mine }, rival: theirs ? { name: partner.name, data: theirs } : null, today, open: fight.open, prize })
+  el.innerHTML = F.meterHtml({ me: me_, rival, today, open: fight.open, prize, moment: F.momentFor(mine, theirs, today, meterSeen()), fame })
     .replace('When your partner shares diet &amp; fitness with you', partner ? `When ${esc(partner.name)} shares diet &amp; fitness with you (their Me › Who can see my diet &amp; fitness)` : 'When your partner shares diet &amp; fitness with you');
   // A perfect week (7 of 7 check-in days) just finished: PERFECT!, once.
   const won = F.perfectWeek(mine, today);
@@ -997,15 +1006,33 @@ async function renderFight(fresh = true) {
     document.body.append(fx);
   }
 }
-// This month's prize: kept in your own trackers (locked like the rest), so it follows you.
-async function saveFightPrize(text) {
+// A moment (ROUND n · FIGHT!, K.O.!, the champion) is shown once on this phone.
+function seeMoment(v) {
+  const [kind, key] = v.split(':');
+  LS.set(`fam.meter.${state.fid}`, JSON.stringify({ ...meterSeen(), [kind]: key }));
+  renderFight(false);
+}
+// Saving to your own trackers: read, change, lock and write back.
+async function saveMine(patch, done) {
   const data = await openData(await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null));
   if (data.locked) return toast('This device needs the family key first');
-  const fightPrize = { text: text.trim().slice(0, 60), month: isoLocal().slice(0, 7), at: Date.now() };
-  await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData({ ...data, fightPrize }) });
+  await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData({ ...data, ...patch }) });
   mineCache = null;
-  if (fight.data) fight.data.mine = { ...fight.data.mine, fightPrize };
-  toast('🎁 Prize saved');
+  if (fight.data) fight.data.mine = { ...fight.data.mine, ...patch };
+  toast(done);
+}
+const saveFightPrize = (text) => saveMine({ fightPrize: { text: text.trim().slice(0, 60), month: fight.data?.F.currentRound(isoLocal()).month || isoLocal().slice(0, 7), at: Date.now() } }, '🎁 Prize saved');
+// 🥋 Choose your fighter: a face and something to fight in. Just a look.
+function fighterSheet() {
+  const F = fight.data?.F;
+  if (!F) return;
+  fight.pick ||= { face: '🧑', kit: 'gi', ...(fight.data.mine.fighter || {}) };
+  const p = fight.pick;
+  openSheet(`<h2>🥋 Choose your fighter</h2><p class="small muted">How you look on the health meter. It changes nothing else.</p>
+    <div class="hm-pick" role="radiogroup" aria-label="Face">${F.FACES.map((f) => `<button type="button" class="${p.face === f ? 'on' : ''}" data-pickface="${f}" role="radio" aria-checked="${p.face === f}">${f}</button>`).join('')}</div>
+    <div class="row wrap hm-kits" role="radiogroup" aria-label="Fighting in">${Object.entries(F.KITS).map(([k, e]) => `<button type="button" class="chip ${p.kit === k ? 'on' : ''}" data-pickkit="${k}" role="radio" aria-checked="${p.kit === k}">${e ? `${e} ` : ''}${({ gi: 'Gi', gloves: 'Gloves', kicks: 'Kicks', none: 'Nothing' })[k]}</button>`).join('')}</div>
+    <div class="hm-preview">${esc(p.face)}${F.KITS[p.kit] ? `<i>${F.KITS[p.kit]}</i>` : ''}</div>
+    <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button type="button" data-fightersave="1">Ready!</button></div>`);
 }
 // A little burst of joy for every chore logged.
 function celebrate(kind, x, y) {
@@ -3968,6 +3995,11 @@ document.addEventListener('click', (e) => {
   if (d.thfollow) return act(async () => { const r = await api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/follow`); th.cur.following = r.following; renderThread(); toast(r.following ? '🔔 You\'ll hear about new replies' : '🔕 No more replies from this one'); });
   if (d.thpin) return act(() => threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}`, { pinned: !th.cur.pinned })));
   if (d.thdel) { if (!confirm('Delete this thread and its replies?')) return; return act(async () => { await api.del(`/families/${th.cur.fid}/threads/${th.cur.id}`); th.loaded = 0; th.list = th.list.filter((x) => x.id !== th.cur.id); th.cur = null; toast('Deleted'); show('feed'); }); }
+  if (d.moment) return seeMoment(d.moment);
+  if (d.fighter) { fight.pick = null; return fighterSheet(); }
+  if (d.pickface) { fight.pick.face = d.pickface; return fighterSheet(); }
+  if (d.pickkit) { fight.pick.kit = d.pickkit; return fighterSheet(); }
+  if (d.fightersave) return act(async () => { const f = { face: fight.pick.face, kit: fight.pick.kit }; closeSheet(); await saveMine({ fighter: f }, `${f.face} Ready to fight!`); renderFight(false); });
   if (d.fight) { fight.open = !fight.open; return renderFight(false); }
   if (d.thedit) return writeupSheet({ edit: th.cur });
   if (d.thmove) return moveSheet();
