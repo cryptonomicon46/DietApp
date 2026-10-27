@@ -19,7 +19,7 @@ export const SLIDES = [
   ] },
   { id: 'threads', eyebrow: 'Family › Threads', title: 'Longer conversations, in your own time', go: 'threads', cards: [
     ['📚', 'Write it up', 'Learned, Talk, How-to, ❓ Ask or 📊 Poll — for just you two, the family, or friends’ families.'],
-    ['📷', 'Screenshots', 'Add plan comparisons or tables: pick, paste or drag them in, with a caption each.'],
+    ['📷', 'Screenshots and 📎 PDFs', 'Add plan comparisons, tables or a whole deck as a PDF: pick, paste or drag them in.'],
     ['🏷️', 'Tag people', 'Tap a face or type @. They get a notification; new things land in ✨ For you.'],
     ['✨', 'Tidy it up', 'Turns rough notes into headings and bullets, only when you tap it.'],
   ] },
@@ -61,12 +61,12 @@ export const SLIDES = [
 // After an update with new features: one card on Moments for people who aren't new.
 export const WHATS_NEW = {
   id: '2026-10b',
-  title: 'New: screenshots and tags in Threads',
+  title: 'New: screenshots, PDFs and tags in Threads',
   text: 'Plus Albums, News, Movies and ❓ Help',
   slides: ['new', 'help'],
 };
 SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'New this month', cards: [
-  ['🏷️', 'Threads: screenshots and tags', 'Add screenshots with captions, tag people with @, and see what’s for you in ✨ For you.'],
+  ['🏷️', 'Threads: screenshots, PDFs and tags', 'Add screenshots and PDFs, tag people with @, and see what’s for you in ✨ For you.'],
   ['📷', 'Albums', 'Family › Moments: link Google Photos albums or copy photos in.'],
   ['📰', 'News', 'Politics, Tech and Bay Area headlines on Moments, and 🐶 rescue news on Dogs.'],
   ['🎬', 'Movies and 🆕 episodes', 'Turn Movies on in Me; Watch shows new episodes and what’s up next.'],

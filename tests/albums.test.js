@@ -48,11 +48,11 @@ test('photos: added (kids too), cover, removed with their files, album deleted w
   const blobs = { del: async (keys) => blobs.deleted.push(...keys), deleted: [] };
   r = await albumRoutes(ctx(db, plain, adult, p, 'PATCH', { remove: ['photo0002'] }, blobs));
   assert.equal(r.data.album.cover, 'photo0001', 'falls back to the first photo');
-  assert.deepEqual(blobs.deleted, ['f/f1/photo0002-full', 'f/f1/photo0002-thumb']);
+  assert.deepEqual(blobs.deleted, ['f/f1/photo0002-full', 'f/f1/photo0002-thumb', 'f/f1/photo0002-doc']);
   assert.deepEqual(await albumPhotoIds(db, 'f1'), ['photo0001']);
   assert.equal((await albumRoutes(ctx(db, plain, kid, p, 'DELETE'))).status, 403);
   const b2 = { del: async (keys) => b2.deleted.push(...keys), deleted: [] };
   assert.equal((await albumRoutes(ctx(db, plain, adult, p, 'DELETE', {}, b2))).data.ok, true);
-  assert.equal(b2.deleted.length, 2);
+  assert.equal(b2.deleted.length, 3);
   assert.deepEqual((await albumRoutes(ctx(db, plain, adult, '/families/f1/albums'))).data.albums, []);
 });

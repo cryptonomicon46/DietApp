@@ -1962,7 +1962,8 @@ async function openThreadText(t, k) {
   return { ...t, title: await o(t.title), body: await o(t.body),
     replies: Array.isArray(t.replies) ? await Promise.all(t.replies.map(async (r) => ({ ...r, text: await o(r.text), quote: typeof r.quote === "string" ? await o(r.quote) : r.quote }))) : t.replies,
     poll: t.poll?.opts ? { ...t.poll, opts: await Promise.all(t.poll.opts.map(o)) } : t.poll,
-    shots: Array.isArray(t.shots) ? await Promise.all(t.shots.map(async (x) => ({ ...x, cap: await o(x.cap) }))) : [] };
+    shots: Array.isArray(t.shots) ? await Promise.all(t.shots.map(async (x) => ({ ...x, cap: await o(x.cap) }))) : [],
+    docs: Array.isArray(t.docs) ? await Promise.all(t.docs.map(async (x) => { let m = isSealed(x.meta) ? await tryOpen(k, x.meta, null) : x.meta; if (typeof m === 'string') { try { m = JSON.parse(m); } catch { m = null; } } return { ...x, name: m?.name || '🔒 PDF', pages: m?.pages || 0 }; })) : [] };
 }
 async function loadThreads() {
   const r = await api.get('/threads').catch(() => null);
@@ -2023,7 +2024,7 @@ const blockText = (b) => (b.type === 'ul' ? b.items.join(' · ') : b.text);
 
 function threadRow(t) {
   const [ico, cat] = THREAD_CATS[t.cat] || THREAD_CATS.talk;
-  const last = `${t.shotCount ? `📷 ${t.shotCount} · ` : ''}${t.replies ? `${t.replies} repl${t.replies === 1 ? 'y' : 'ies'}${t.lastByName && t.lastAt > t.at ? ` · ${esc(t.lastByName)} ${ago(t.lastAt)}` : ''}` : `${t.mins} min read`}`;
+  const last = `${t.docCount ? `📎 ${t.docCount} · ` : ''}${t.shotCount ? `📷 ${t.shotCount} · ` : ''}${t.replies ? `${t.replies} repl${t.replies === 1 ? 'y' : 'ies'}${t.lastByName && t.lastAt > t.at ? ` · ${esc(t.lastByName)} ${ago(t.lastAt)}` : ''}` : `${t.mins} min read`}`;
   return `<button type="button" class="th ${t.unread ? 'unread' : ''}" data-thread="${t.fid}:${t.id}"><span class="cat">${ico} ${cat} · <span class="aud a-${t.board}">${THREAD_BOARDS[t.board] || ''}</span>${t.pinned ? ' · 📌' : ''}${t.best ? ' · ✓ answered' : ''}${t.poll ? ` · ${t.poll.n} voted` : ''}</span>
     <b>${t.unread ? '<i class="dot"></i>' : ''}${esc(t.title)}</b><small class="muted">${esc(t.mine ? 'You' : t.byName)}${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · ${last}</small>${t.unread && !t.mine ? `<span class="thbadge ${t.tagged ? 'tag' : ''}">${t.tagged ? '🏷️ You’re tagged' : 'New'}</span>` : ''}</button>`;
 }
@@ -2093,12 +2094,14 @@ function renderThread() {
        <div class="post first"><span class="av a1">${esc((t.byName || '?')[0])}</span><div class="grow"><div class="h"><b>${esc(t.mine ? 'You' : t.byName)}</b>${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · #1${t.editedAt ? ' · edited' : ''}</div><div class="t thbody">${mention(blocks.map(blockHtml).join(''))}</div>${tagLine}</div></div>${pollHtml}`;
   for (const x of t.shots || []) photoKeys.set(x.id, t._key || null);
   const shotsHtml = t.shots?.length ? `<div class="thshots">${t.shots.map((x) => `<figure><button type="button" class="ph grid" data-photoid="${x.id}" data-pfid="${t.fid}" aria-label="Open screenshot${x.cap ? `: ${esc(x.cap)}` : ''}"><img alt=""></button>${x.cap ? `<figcaption>${esc(x.cap)}</figcaption>` : ''}</figure>`).join('')}</div>` : '';
+  const docsHtml = t.docs?.length ? `<div class="thdocs">${t.docs.map((x) => `<button type="button" class="doccard" data-docopen="${x.id}"><span class="dc-i">📄</span><span class="grow"><b>${esc(x.name)}</b><small>${[x.pages ? `${x.pages} page${x.pages === 1 ? '' : 's'}` : '', x.size ? fileSize(x.size) : ''].filter(Boolean).join(' · ')}</small></span><span class="muted">›</span></button>`).join('')}</div>` : '';
   const replies = letter ? t.replies.filter((r) => r.quote == null || typeof r.quote !== 'number') : t.replies;
   const sorted = t.cat === 'ask' ? [...replies].sort((a, b) => (b.id === t.bestId) - (a.id === t.bestId) || b.ups - a.ups || a.at - b.at) : replies;
   $('#view').innerHTML = `${demoBanner()}<div class="thread-page">
     <div class="row between"><button type="button" class="linkish" data-thback="1">‹ ${letter ? 'Us' : 'Threads'}</button>
       <span class="row"><button type="button" class="linkish small" data-thfollow="1">${t.following ? '🔔 Following' : '🔕 Follow'}</button>${t.mine ? ` <button type="button" class="linkish small" data-thedit="1">Edit</button>` : ''}${t.mine || fam()?.members.find((x) => x.id === meId)?.role === 'owner' ? ` <button type="button" class="linkish small" data-thpin="1">${t.pinned ? 'Unpin' : '📌 Pin'}</button> <button type="button" class="linkish small danger" data-thdel="1">Delete</button>` : ''}</span></div>
     ${body}
+    ${docsHtml}
     ${shotsHtml}
     ${seen ? `<p class="tiny muted">${seen}</p>` : ''}
     ${sorted.length ? `<div class="grp">${letter ? 'Notes' : `${sorted.length} repl${sorted.length === 1 ? 'y' : 'ies'}`}</div>${sorted.map(replyHtml).join('')}` : ''}
@@ -2114,13 +2117,14 @@ function writeupSheet(preset = {}) {
     const t = preset.edit;
     ws.shots = (t.shots || []).map((x) => ({ id: x.id, aspect: x.aspect, cap: x.cap || '' }));
     ws.tags = new Set(t.tags || []);
+    ws.docs = (t.docs || []).map((x) => ({ id: x.id, name: x.name, size: x.size, pages: x.pages }));
     openSheet(`<h2>✎ Edit</h2><form id="writeForm" class="stack" data-edit="${t.id}"><input name="title" maxlength="120" value="${esc(t.title)}" required><textarea name="body" rows="12" maxlength="12000">${esc(t.body)}</textarea>
       <div class="toolbar"><button type="button" class="linkish small" data-wfmt="## ">H</button><button type="button" class="linkish small" data-wfmt="- ">• List</button><span class="grow"></span><button type="button" class="linkish small" data-act="tidy">✨ Tidy it up</button></div>
       <div class="tagrow" id="tagRow"></div><div class="atpop" id="atPop" hidden></div>
-      <div class="shotarea"><div class="row between"><b class="small">📷 Screenshots</b><label class="btn ghost small">＋ Add<input type="file" accept="image/*" multiple hidden data-wshots="1"></label></div><div id="shotBox" class="shotbox"></div><p class="tiny muted">Plan comparisons, coverage tables… Pick from Photos, or paste (⌘V) or drag them in. Locked like your photos.</p></div>
+      <div class="shotarea"><div class="row between"><b class="small">📷 Screenshots &amp; 📎 PDFs</b><span class="row" style="gap:6px"><label class="btn ghost small">＋ Screenshot<input type="file" accept="image/*" multiple hidden data-wshots="1"></label><label class="btn ghost small">📎 PDF<input type="file" accept="application/pdf,.pdf" multiple hidden data-wdocs="1"></label></span></div><div id="shotBox" class="shotbox"></div><div id="docBox" class="docbox"></div><p class="tiny muted">Plan comparisons, coverage tables, the benefits deck as a PDF (up to 20 MB)… Pick them, or paste (⌘V) or drag them in. Locked like your photos.</p></div>
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save</button></div></form>`);
     $('#writeForm').dataset.aud = t.aud;
-    renderShotBox(); renderTagRow();
+    renderShotBox(); renderTagRow(); renderDocBox();
     return;
   }
   const p = partnerMember(), hasFriends = (fam().connections || []).length;
@@ -2137,17 +2141,75 @@ function writeupSheet(preset = {}) {
       <textarea name="body" rows="9" maxlength="12000" placeholder="${v.aud === 'us' ? 'Just type it while it\'s fresh — rough is fine. Paste links. Tap ✨ to tidy it up.' : 'What\'s it about? Paste links; “## ” makes a heading, “- ” a list.'}">${esc(v.body)}</textarea>
       <div class="toolbar"><button type="button" class="linkish small" data-wfmt="## ">H</button><button type="button" class="linkish small" data-wfmt="- ">• List</button><span class="grow"></span><button type="button" class="linkish small" data-act="tidy">✨ Tidy it up</button></div>
       <div class="tagrow" id="tagRow"></div><div class="atpop" id="atPop" hidden></div>
-      <div class="shotarea"><div class="row between"><b class="small">📷 Screenshots</b><label class="btn ghost small">＋ Add<input type="file" accept="image/*" multiple hidden data-wshots="1"></label></div><div id="shotBox" class="shotbox"></div><p class="tiny muted">Plan comparisons, coverage tables… Pick from Photos, or paste (⌘V) or drag them in. Locked like your photos.</p></div>
+      <div class="shotarea"><div class="row between"><b class="small">📷 Screenshots &amp; 📎 PDFs</b><span class="row" style="gap:6px"><label class="btn ghost small">＋ Screenshot<input type="file" accept="image/*" multiple hidden data-wshots="1"></label><label class="btn ghost small">📎 PDF<input type="file" accept="application/pdf,.pdf" multiple hidden data-wdocs="1"></label></span></div><div id="shotBox" class="shotbox"></div><div id="docBox" class="docbox"></div><p class="tiny muted">Plan comparisons, coverage tables, the benefits deck as a PDF (up to 20 MB)… Pick them, or paste (⌘V) or drag them in. Locked like your photos.</p></div>
       <div class="wpoll stack" ${v.cat === 'poll' ? '' : 'hidden'}>${v.opts.map((o, i) => `<input name="opt" maxlength="80" placeholder="Choice ${i + 1}" value="${esc(o)}">`).join('')}<button type="button" class="linkish small" data-act="pollopt">＋ Another choice</button><label class="small">Closes (optional)<input type="date" name="closes" min="${isoLocal()}"></label></div>
       ${p ? `<label class="switch-row wnudge" ${v.aud === 'us' ? '' : 'hidden'}><span>🔔 Let ${esc(p.name)} know now<small class="muted">Otherwise it waits quietly in Us › For you</small></span><input type="checkbox" name="nudge"><i class="switch"></i></label>` : ''}
       <div class="row end"><button type="button" class="ghost" data-act="close">Later</button><button>Post</button></div>
       <p class="tiny muted">🔒 End-to-end encrypted. Drafts stay on this phone (screenshots until you post). ✨ Tidy it up sends only this text to Claude, and only when you tap it.</p>
     </form>`);
-  if (!preset.keepShots) { ws.shots = []; ws.tags = new Set(preset.tags || []); }
-  renderShotBox(); renderTagRow();
+  if (!preset.keepShots) { ws.shots = []; ws.docs = []; ws.tags = new Set(preset.tags || []); }
+  renderShotBox(); renderTagRow(); renderDocBox();
 }
 // 📷 Screenshots on a write-up: picked, pasted or dropped; captioned; uploaded (locked) when you post.
-const ws = { shots: [], tags: new Set() };
+const ws = { shots: [], tags: new Set(), docs: [] };
+const MAX_DOCS = 5, DOC_MAX = 20 * 1024 * 1024;
+const fileSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(n >= 10485760 ? 0 : 1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+// 📎 PDFs on a write-up: listed here, locked and uploaded when you post.
+function renderDocBox() {
+  const el = $('#docBox');
+  if (!el) return;
+  el.innerHTML = ws.docs.map((x, i) => `<div class="doccard"><span class="dc-i">📄</span><span class="grow"><b>${esc(x.name)}</b><small>${[x.pages ? `${x.pages} page${x.pages === 1 ? '' : 's'}` : '', x.size ? fileSize(x.size) : ''].filter(Boolean).join(' · ')}</small></span><button type="button" class="icon-btn" data-wdocrm="${i}" aria-label="Remove PDF">✕</button></div>`).join('');
+}
+// Pages, counted from the file itself (no PDF library): each page object says /Type /Page.
+const pdfPages = (bytes) => (new TextDecoder('latin1').decode(bytes).match(/\/Type\s*\/Page(?![s\w])/g) || []).length;
+async function addDocs(files) {
+  const pdfs = [...files].filter((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || ''));
+  if (!pdfs.length) return false;
+  for (const f of pdfs) {
+    if (ws.docs.length >= MAX_DOCS) { toast(`Up to ${MAX_DOCS} PDFs`); break; }
+    if (f.size > DOC_MAX) { toast(`${f.name} is over 20 MB`); continue; }
+    ws.docs.push({ file: f, name: f.name || 'Document.pdf', size: f.size, pages: pdfPages(new Uint8Array(await f.arrayBuffer())) });
+  }
+  renderDocBox();
+  return true;
+}
+async function uploadDocs(k) {
+  if (!ws.docs.length) return [];
+  if (!(await photosReady())) { toast('PDFs need file storage on the connector'); return ws.docs.filter((x) => x.id).map(({ id, size, meta }) => ({ id, size, meta })); }
+  const out = [];
+  for (const [i, x] of ws.docs.entries()) {
+    const meta = k ? await seal(k, { name: x.name, pages: x.pages || 0 }) : { name: x.name, pages: x.pages || 0 };
+    if (x.id) { out.push({ id: x.id, size: x.size, meta }); continue; }
+    toast(`📎 Sending ${x.name}${ws.docs.length > 1 ? ` (${i + 1} of ${ws.docs.length})` : ''}…`);
+    const bytes = new Uint8Array(await x.file.arrayBuffer());
+    const id = randomToken();
+    await api.bytes('PUT', `/families/${state.fid}/photos/${id}?size=doc`, k ? await sealBytes(k, bytes) : bytes);
+    Object.assign(x, { id, file: null });
+    out.push({ id, size: x.size, meta });
+  }
+  return out;
+}
+// Opening one: fetched, unlocked on this phone, then shown by the phone's (or Mac's) own PDF viewer.
+const docUrls = new Map();
+async function docOpen(id) {
+  const t = th.cur, d = t?.docs?.find((x) => x.id === id);
+  if (!d) return;
+  openSheet(`<div class="row between"><h2>📄 ${esc(d.name)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div><p class="small muted" id="docNote">Opening…</p>`);
+  try {
+    if (!docUrls.has(id)) {
+      const locked = await api.bytes('GET', `/families/${t.fid}/photos/${id}?size=doc`);
+      const bytes = t._key ? await openBytes(t._key, locked) : locked;
+      docUrls.set(id, URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })));
+    }
+    const u = docUrls.get(id);
+    if (!$('#docNote')) return;
+    openSheet(`<div class="row between"><h2>📄 ${esc(d.name)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+      <p class="small muted">${[d.pages ? `${d.pages} pages` : '', d.size ? fileSize(d.size) : ''].filter(Boolean).join(' · ')}</p>
+      ${matchMedia('(min-width: 700px)').matches ? `<iframe class="docframe" src="${u}" title="${esc(d.name)}"></iframe>` : ''}
+      <div class="row wrap"><a class="btn" href="${u}" target="_blank" rel="noopener">Open</a><a class="btn ghost" href="${u}" download="${esc(d.name)}">⬇︎ Save a copy</a></div>
+      <p class="tiny muted">Unlocked on this device only.</p>`);
+  } catch { if ($('#docNote')) $('#docNote').textContent = "Couldn't open this PDF."; }
+}
 const MAX_SHOTS = 12;
 // 🏷️ Who you can tag: people with an account in this family who'll see the thread.
 const taggable = (aud) => (fam()?.members || []).filter((m) => m.kind === 'person' && m.status === 'active' && m.id !== fam().me && (aud !== 'us' || m.id === partnerMember()?.id));
@@ -2225,6 +2287,8 @@ async function uploadShots(k) {
 document.addEventListener('paste', (e) => {
   if (!$('#writeForm') || !$('#sheet').open) return;
   const files = [...(e.clipboardData?.items || [])].filter((it) => it.kind === 'file').map((it) => it.getAsFile()).filter(Boolean);
+  const pdfs = files.filter((f) => f.type === 'application/pdf');
+  if (pdfs.length) { e.preventDefault(); addDocs(pdfs); }
   if (addShots(files)) e.preventDefault();
 });
 document.addEventListener('dragover', (e) => { if ($('#writeForm') && $('#sheet').open) { e.preventDefault(); $('#writeForm').classList.add('dropping'); } });
@@ -2232,7 +2296,8 @@ document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) $('#writeF
 document.addEventListener('drop', (e) => {
   if (!$('#writeForm') || !$('#sheet').open) return;
   e.preventDefault(); $('#writeForm').classList.remove('dropping');
-  addShots(e.dataTransfer?.files || []);
+  const files = [...(e.dataTransfer?.files || [])];
+  addShots(files); addDocs(files);
 });
 function saveDraft() {
   const f = $('#writeForm'); if (!f) return;
@@ -2255,9 +2320,10 @@ async function postThread(f) {
   const words = `${v.title} ${v.body}`.split(/\s+/).length;
   const shots = await uploadShots(k);
   const tags = [...ws.tags].filter((id) => taggable(v.aud).some((m) => m.id === id));
-  const r = await api.post(`/families/${state.fid}/threads`, { shots, tags, aud: v.aud, board: v.board, cat: v.cat, title: await L(v.title.trim()), body: await L(v.body.trim()), mins: Math.max(1, Math.round(words / 200)), nudge: !!v.nudge, cid: f.dataset.cid || (f.dataset.cid = Math.random().toString(36).slice(2, 12)),
+  const docs = await uploadDocs(k);
+  const r = await api.post(`/families/${state.fid}/threads`, { shots, docs, tags, aud: v.aud, board: v.board, cat: v.cat, title: await L(v.title.trim()), body: await L(v.body.trim()), mins: Math.max(1, Math.round(words / 200)), nudge: !!v.nudge, cid: f.dataset.cid || (f.dataset.cid = Math.random().toString(36).slice(2, 12)),
     ...(v.cat === 'poll' ? { poll: { opts: await Promise.all(opts.map(L)), closes: v.closes || '' } } : {}), ...(pk ? { pk } : {}) });
-  LS.set(draftKey(), null); ws.shots = []; ws.tags = new Set();
+  LS.set(draftKey(), null); ws.shots = []; ws.docs = []; ws.tags = new Set();
   closeSheet();
   th.loaded = 0; th.board = v.aud === 'us' ? 'us' : 'new';
   toast(v.aud === 'us' ? `📓 Saved for ${partnerName()} to read` : '📖 Posted');
@@ -2269,11 +2335,11 @@ async function postThread(f) {
 async function saveThreadEdit(f) {
   const k = th.cur._key, L = (x) => (k ? seal(k, x) : x);
   const words = `${f.title.value} ${f.body.value}`.split(/\s+/).length;
-  const patch = { title: await L(f.title.value.trim()), body: await L(f.body.value.trim()), mins: Math.max(1, Math.round(words / 200)), shots: await uploadShots(k), tags: [...ws.tags] };
+  const patch = { title: await L(f.title.value.trim()), body: await L(f.body.value.trim()), mins: Math.max(1, Math.round(words / 200)), shots: await uploadShots(k), docs: await uploadDocs(k), tags: [...ws.tags] };
   closeSheet();
   return threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}`, patch));
 }
-async function threadAct(fn) { const r = await fn(); if (r?.thread) { const k = th.cur._key; th.cur = await openThreadText(r.thread, k); th.cur._key = k; const s = th.list.find((x) => x.id === r.thread.id); if (s) s.shotCount = (r.thread.shots || []).length; renderThread(); } return r; }
+async function threadAct(fn) { const r = await fn(); if (r?.thread) { const k = th.cur._key; th.cur = await openThreadText(r.thread, k); th.cur._key = k; const s = th.list.find((x) => x.id === r.thread.id); if (s) s.shotCount = (r.thread.shots || []).length; s.docCount = (r.thread.docs || []).length; renderThread(); } return r; }
 
 // ---------- ✨ Next up: what to do next, and when (worked out on this phone) ----------
 const nu = { res: null, ctx: null, watchKick: false };
@@ -3744,6 +3810,8 @@ document.addEventListener('click', (e) => {
   if (d.feelfind) return act(feelFind);
   if (d.nu) { const [w, i] = d.nu.split(':'); return act(() => nuAct(w, +i)); }
   if (d.newstab) { nw.tab = d.newstab; return renderNews(); }
+  if (d.wdocrm) { ws.docs.splice(+d.wdocrm, 1); return renderDocBox(); }
+  if (d.docopen) return docOpen(d.docopen);
   if (d.wtag) { ws.tags.has(d.wtag) ? ws.tags.delete(d.wtag) : ws.tags.add(d.wtag); return renderTagRow(); }
   if (d.atpick) return atPick(d.atpick);
   if (d.wshotrm) { const [x] = ws.shots.splice(+d.wshotrm, 1); if (x?.url) URL.revokeObjectURL(x.url); return renderShotBox(); }
@@ -4128,6 +4196,7 @@ document.addEventListener('change', async (e) => {
     return renderFeelPicks();
   }
   if (t.dataset.wshots) { addShots(t.files); t.value = ''; return; }
+  if (t.dataset.wdocs) { addDocs([...t.files]); t.value = ''; return; }
   if (t.dataset.albumfiles) {
     const files = [...t.files].filter((x) => x.type.startsWith('image/')).slice(0, 50);
     if (!files.length) return;

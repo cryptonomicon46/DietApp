@@ -136,3 +136,26 @@ test('threads: tagging people who can see it, with a nudge for the newly tagged 
   const us = (await call(T, sam, 'POST', { aud: 'us', title: 'Just us', body: 'x', tags: [ids.Pat, ids.Mom] })).thread;
   assert.deepEqual(us.tags, [ids.Pat], 'a just-us thread can only tag your partner');
 });
+
+test('threads: PDFs attached (up to 20 MB, 5 per thread), named, removed with the thread', async () => {
+  const m = new Map();
+  const env = { DEMO: true, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
+  const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path.split('?')[0]); return { status: r.status, ...r.data }; };
+  const put = async (path, token, n) => (await familyApi(new Request(`https://x.test${path}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: new Uint8Array(n) }), env, path.split('?')[0])).status;
+  const signIn = async (email) => { const { token } = await call('/auth/demo', null, 'POST', { email }); await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true }); return token; };
+  const sam = await signIn('sam@example.com');
+  const { family } = await call('/families', sam, 'POST', { name: 'Fam' });
+  const F = `/families/${family.fid}`;
+  assert.equal(await put(`${F}/photos/docaaaa1?size=doc`, sam, 6_000_000), 200, 'a PDF can be bigger than a photo');
+  assert.equal(await put(`${F}/photos/photoaaa1?size=full`, sam, 6_000_000), 413, 'a photo still can\'t');
+  assert.equal(await put(`${F}/photos/docbbbb2?size=doc`, sam, 21_000_000), 413, '20 MB at most');
+  assert.ok([...m.keys()].some((k) => k.endsWith('docaaaa1-doc')));
+  const t = (await call(`${F}/threads`, sam, 'POST', { aud: 'family', title: 'Benefits', body: 'See the deck', docs: [{ id: 'docaaaa1', size: 6_000_000, meta: { name: '2027 Benefits overview.pdf', pages: 24 } }, { id: 'no!' }] })).thread;
+  assert.equal(t.docs.length, 1);
+  assert.deepEqual(JSON.parse(t.docs[0].meta), { name: '2027 Benefits overview.pdf', pages: 24 });
+  assert.equal((await call('/threads', sam)).threads[0].docCount, 1);
+  const got = await familyApi(new Request(`https://x.test${F}/photos/docaaaa1?size=doc`, { headers: { Authorization: `Bearer ${sam}` } }), env, `${F}/photos/docaaaa1`);
+  assert.equal(got.raw.length, 6_000_000, 'the file comes back as it was');
+  await call(`${F}/threads/${t.id}`, sam, 'DELETE');
+  assert.ok(![...m.keys()].some((k) => k.includes('docaaaa1')), 'deleted with the thread');
+});

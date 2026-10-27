@@ -144,7 +144,7 @@ export async function familyApi(req, env, path, ctx = null) {
   // 📸 A photo file (already locked on the phone): raw bytes, not JSON.
   if (method === 'PUT' && /^\/families\/[a-z0-9]+\/photos\/[a-z0-9]+$/.test(path)) {
     bytes = new Uint8Array(await req.arrayBuffer());
-    if (bytes.length > SIZES.full) return json({ error: 'that photo is too large' }, 413);
+    if (bytes.length > (/[?&]size=doc\b/.test(req.url) ? SIZES.doc : SIZES.full)) return json({ error: /[?&]size=doc\b/.test(req.url) ? 'that PDF is too large (20 MB at most)' : 'that photo is too large' }, 413);
   } else if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
     const text = await req.text();
     if (text.length > 6_000_000) return json({ error: 'too large' }, 413);
@@ -1495,7 +1495,7 @@ export async function familyApi(req, env, path, ctx = null) {
   if (m) {
     const blobs = blobStore(env);
     if (!blobs) return json({ error: 'photo storage is not set up on the connector yet — see server/README.md' }, 501);
-    const size = url(req).searchParams.get('size') === 'thumb' ? 'thumb' : 'full';
+    const size = ({ thumb: 'thumb', doc: 'doc' })[url(req).searchParams.get('size')] || 'full';
     let fam = await loadFamily(m[1]);
     // Friends' families can see the photos on posts shared with them (still locked to them).
     const viaConnection = !fam && method === 'GET' && m[2] && (await families()).some((f) => (f.connections || []).includes(m[1]));
@@ -1509,7 +1509,7 @@ export async function familyApi(req, env, path, ctx = null) {
     }
     if (meIn(fam).relation === 'child' && method === 'DELETE') return json({ error: 'ask a grown-up' }, 403);
     if (method === 'PUT') {
-      if (!bytes?.length || bytes.length > SIZES[size]) return json({ error: 'that photo is too large' }, 413);
+      if (!bytes?.length || bytes.length > SIZES[size]) return json({ error: size === 'doc' ? 'that PDF is too large (20 MB at most)' : 'that photo is too large' }, 413);
       if ((await familyUsage(blobs, fam.fid)) + bytes.length > quotaBytes(env)) return json({ error: `${fam.name}'s photo space is full (${Math.round(quotaBytes(env) / 1048576 / 1024 * 10) / 10} GB). Delete some older photo posts to make room.` }, 413);
       await blobs.put(key, bytes);
       noteUsage(fam.fid, bytes.length);

@@ -4,14 +4,14 @@
 // and poll options are end-to-end encrypted in an encrypted family; the connector keeps who wrote
 // what and when, the board, who's read it, and the votes.
 
-import { okPhotoId, deletePhoto } from './photos.js';
+import { okPhotoId, deletePhoto, SIZES } from './photos.js';
 
 export const BOARDS = { family: '👨‍👩‍👧 Family', dogs: '🐾 Dogs', house: '🏠 House & money' };
 export const CATS = { learned: '📚 Learned', talk: '💬 Talk', howto: '📌 How-to', ask: '❓ Ask', poll: '📊 Poll' };
 
 // 📷 Screenshots on a thread (plan comparisons, tables…): photo files locked with the thread's key,
 // with an optional sealed caption each. At most 12.
-const MAX_SHOTS = 12;
+const MAX_SHOTS = 12, MAX_DOCS = 5;
 
 export async function threadRoutes(c) {
   const { path, method, body, db, user, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url, blobs } = c;
@@ -23,6 +23,9 @@ export async function threadRoutes(c) {
     return { tags: pick.map((x) => x.id), uids: pick.map((x) => x.uid) };
   };
   const tellTagged = (uids, me, t) => uids.length && tell(uids, t.aud === 'us' ? 'us' : 'feed', { title: `🏷️ ${me.name} tagged you in a thread`, body: `${BOARDS[t.board] || (t.aud === 'us' ? '💞 Just us' : 'Threads')} · tap to read`, url: 'family/#threads', tag: `thread-${t.id}` });
+  // 📎 PDFs: a file each (locked like screenshots); its name and page count in one sealed `meta`.
+  const docsOf = (fam, v) => (Array.isArray(v) ? v : []).filter((x) => okPhotoId(x?.id)).slice(0, MAX_DOCS)
+    .map((x) => ({ id: x.id, size: Math.max(0, Math.min(SIZES.doc, Math.round(+x.size || 0))), meta: sealed(x.meta, 600) ?? (fam.e2ee ? '' : JSON.stringify({ name: clean(x.meta?.name ?? x.meta, 120) || 'Document.pdf', pages: Math.max(0, Math.min(5000, Math.round(+x.meta?.pages || 0))) })) }));
   const shotsOf = (fam, v) => (Array.isArray(v) ? v : []).filter((x) => okPhotoId(x?.id)).slice(0, MAX_SHOTS)
     .map((x) => ({ id: x.id, aspect: Math.min(4, Math.max(0.2, +x.aspect || 1)), cap: (x.cap && text(fam, x.cap, 80)) || '' }));
   const text = (fam, v, max) => sealed(v, max * 3 + 200) ?? (fam.e2ee ? null : typeof v === 'string' ? String(v).replace(/[\u0000-\u0009\u000b-\u001f]/g, ' ').trim().slice(0, max) : null);
@@ -38,12 +41,12 @@ export async function threadRoutes(c) {
   };
   const summary = (t, own, famName) => ({
     id: t.id, fid: t.fid, aud: t.aud, board: t.board, cat: t.cat, title: t.title, by: t.by, byName: t.byName, byAvatar: t.byAvatar, mine: t.byUid === user.uid,
-    at: t.at, lastAt: t.lastAt, lastByName: t.lastByName, replies: t.replies.filter((r) => !blocked.has(r.uid)).length, mins: t.mins || 1, pinned: !!t.pinned, shotCount: (t.shots || []).length, tagged: (t.tagUids || []).includes(user.uid),
+    at: t.at, lastAt: t.lastAt, lastByName: t.lastByName, replies: t.replies.filter((r) => !blocked.has(r.uid)).length, mins: t.mins || 1, pinned: !!t.pinned, shotCount: (t.shots || []).length, docCount: (t.docs || []).length, tagged: (t.tagUids || []).includes(user.uid),
     unread: (t.reads?.[user.uid] || 0) < t.lastAt && t.lastByUid !== user.uid, following: (t.followers || []).includes(user.uid), own, familyName: famName,
     best: !!t.best, poll: t.poll ? { closes: t.poll.closes, voted: t.poll.votes?.[user.uid] != null, n: Object.keys(t.poll.votes || {}).length } : null, ...(t.pk ? { pk: t.pk } : {}),
   });
   const full = (t, own, fam) => ({
-    ...summary(t, own, fam?.name || ''), body: t.body, editedAt: t.editedAt || null, shots: t.shots || [], tags: t.tags || [],
+    ...summary(t, own, fam?.name || ''), body: t.body, editedAt: t.editedAt || null, shots: t.shots || [], docs: t.docs || [], tags: t.tags || [],
     replies: t.replies.filter((r) => !blocked.has(r.uid)).map((r) => ({ id: r.id, name: r.name, text: r.text, quote: r.quote ?? null, at: r.at, mine: r.uid === user.uid, ups: (r.ups || []).length, upped: (r.ups || []).includes(user.uid) })),
     bestId: t.best || null,
     poll: t.poll ? { opts: t.poll.opts, closes: t.poll.closes, counts: t.poll.opts.map((_, i) => Object.values(t.poll.votes || {}).filter((v) => v === i).length), mine: t.poll.votes?.[user.uid] ?? null } : null,
@@ -101,6 +104,8 @@ export async function threadRoutes(c) {
       at: now, lastAt: now, lastByUid: user.uid, lastByName: me.name, replies: [], reads: { [user.uid]: now }, followers: [user.uid], ...(poll ? { poll } : {}), ...(pk ? { pk } : {}) };
     const shots = blobs ? shotsOf(fam, body.shots) : [];
     if (shots.length) t.shots = shots;
+    const docs = blobs ? docsOf(fam, body.docs) : [];
+    if (docs.length) t.docs = docs;
     const tg = tagsOf(fam, me, aud, body.tags);
     if (tg.tags.length) { t.tags = tg.tags; t.tagUids = tg.uids; }
     await db.put(`thread:${fam.fid}:${t.id}`, t);
@@ -143,13 +148,18 @@ export async function threadRoutes(c) {
       for (const x of t.shots || []) if (!next.some((y) => y.id === x.id)) await deletePhoto(blobs, fid, x.id).catch(() => {});
       t.shots = next; t.editedAt = Date.now();
     }
+    if (body.docs != null && blobs) {
+      const next = docsOf(a.fam, body.docs);
+      for (const x of t.docs || []) if (!next.some((y) => y.id === x.id)) await deletePhoto(blobs, fid, x.id).catch(() => {});
+      t.docs = next; t.editedAt = Date.now();
+    }
     await save();
     return json({ thread: full(t, a.own, a.fam) });
   }
   if (!action && method === 'DELETE') {
     const owner = a.own && meIn(a.fam).role === 'owner';
     if (t.byUid !== user.uid && !owner) return json({ error: 'only who wrote it can delete it' }, 403);
-    for (const x of t.shots || []) await deletePhoto(blobs, fid, x.id).catch(() => {});
+    for (const x of [...(t.shots || []), ...(t.docs || [])]) await deletePhoto(blobs, fid, x.id).catch(() => {});
     await db.del(key);
     await db.put(`threads:${fid}`, ((await db.get(`threads:${fid}`)) || []).filter((x) => x !== id));
     return json({ ok: true });

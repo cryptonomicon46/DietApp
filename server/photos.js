@@ -4,9 +4,10 @@
 // file before it's sent, so R2 holds bytes nobody else can read. The on-phone demo keeps them in
 // its own storage instead. Each family has a fair-use limit (PHOTO_QUOTA_MB, 2 GB by default).
 
-export const SIZES = { full: 4_000_000, thumb: 400_000 }; // bytes, after locking
+// bytes, after locking; `doc` is a 📎 PDF attached to a thread (same storage, same quota)
+export const SIZES = { full: 4_000_000, thumb: 400_000, doc: 20_100_000 };
 export const okPhotoId = (id) => /^[a-z0-9]{8,24}$/.test(id || '');
-export const photoKey = (fid, pid, size) => `f/${fid}/${pid}-${size === 'thumb' ? 'thumb' : 'full'}`;
+export const photoKey = (fid, pid, size) => `f/${fid}/${pid}-${size === 'thumb' ? 'thumb' : size === 'doc' ? 'doc' : 'full'}`;
 export const quotaBytes = (env) => Math.max(50, +env.PHOTO_QUOTA_MB || 2048) * 1024 * 1024;
 
 const b64 = (u) => { let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
@@ -61,7 +62,7 @@ export function noteUsage(fid, delta) {
 // A post's photo files, both sizes.
 export async function deletePhoto(blobs, fid, pid) {
   if (!blobs || !okPhotoId(pid)) return;
-  await blobs.del([photoKey(fid, pid, 'full'), photoKey(fid, pid, 'thumb')]);
+  await blobs.del([photoKey(fid, pid, 'full'), photoKey(fid, pid, 'thumb'), photoKey(fid, pid, 'doc')]);
   usageCache.delete(fid);
 }
 // Everything a family has (when the family is deleted).

@@ -816,3 +816,10 @@ i.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; back
 .dropban .db-x { background: none; color: #c9d6cf; padding: 10px 14px; }
 @keyframes dropin { from { opacity: 0; transform: translate(-50%, -24px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @media (prefers-reduced-motion: reduce) { .dropban { animation: none; } }
+
+/* 📎 PDFs on a thread */
+.docbox, .thdocs { display: grid; gap: 6px; } .docbox:empty { display: none; }
+.thdocs { margin: 4px 0 10px; }
+.doccard { display: flex; gap: 10px; align-items: center; width: 100%; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; text-align: left; font-weight: 400; }
+.doccard .dc-i { font-size: 1.6rem; } .doccard b { display: block; font-size: .92rem; overflow-wrap: anywhere; } .doccard small { color: var(--muted); font-size: .78rem; }
+.docframe { width: 100%; height: 62vh; border: 1px solid var(--line); border-radius: 12px; background: #fff; margin: 6px 0 10px; }
