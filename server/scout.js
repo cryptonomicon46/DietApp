@@ -118,13 +118,15 @@ export async function askClaude(env, prompt, { city = '', maxUses = 6, maxTokens
   }
   return { text: (res?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n'), usage };
 }
-export async function claudeScout(env, area, win, goodMovies) {
-  if (!(env.ANTHROPIC_API_KEY || env.__anthropic)) return { data: null, usage: null };
-  const { text, usage } = await askClaude(env, scoutPrompt(area, win, goodMovies), { city: area.label });
+// The weekly search: Gemini with Google Search when GEMINI_API_KEY is set (free), else Claude.
+export async function claudeScout(env, area, win, goodMovies, db = null) {
+  if (!searchReady(env)) return { data: null, usage: null };
+  const { text, usage } = await askSearch(env, scoutPrompt(area, win, goodMovies), { city: area.label, db });
   return { data: parseScout(text), usage };
 }
 
 import { checkLinks, applyChecks } from './links.js';
+import { askSearch, searchReady } from './search.js';
 
 // ---------- one week's ideas for an area ----------
 export const clean = (s, n = 120) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
@@ -172,10 +174,10 @@ export async function scoutArea(env, db, area, { now = new Date(), fetcher = fet
   // Thursday's refresh: new films, scores and events (all free), keeping Wednesday's showtimes and places.
   const prev = refresh ? await db.get(`ideas:${key}`) : null;
   if (refresh) claude = prev?.claude || null;
-  else if (!(env.ANTHROPIC_API_KEY || env.__anthropic)) problems.push('Claude skipped: no ANTHROPIC_API_KEY');
+  else if (!searchReady(env)) problems.push('Search skipped: no GEMINI_API_KEY or ANTHROPIC_API_KEY');
   else if (runs.length < cap || force) {
-    try { ({ data: claude, usage } = await claudeScout(env, area, win, films)); } catch (e) { problems.push(`Claude: ${e.message}`); }
-  } else problems.push(`Claude skipped: ${cap} runs this month already`);
+    try { ({ data: claude, usage } = await claudeScout(env, area, win, films, db)); } catch (e) { problems.push(`Search: ${e.message}`); }
+  } else problems.push(`Search skipped: ${cap} runs this month already`);
   const week = assemble({ events: [...tm, ...sg], films, claude, win, area });
   // 🔗 The links Claude found (places, extras, theatre pages), opened once; Thursday reuses Wednesday's checks.
   const found = week.ideas.flatMap((x) => [x.src !== 'Ticketmaster' && x.src !== 'SeatGeek' && x.kind !== 'movie' ? x.url : '', ...(x.theatres || []).map((t) => t.url)]).filter(Boolean);

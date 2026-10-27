@@ -307,7 +307,7 @@ export async function familyApi(req, env, path, ctx = null) {
     }
     if (path === '/admin/scout' && method === 'GET') {
       const month = new Date().toISOString().slice(0, 7), key = areaKey(DEFAULT_AREA);
-      return json({ runs: (await db.get(`scoutruns:${key}:${month}`)) || [], week: await db.get(`ideas:${key}`), keys: { ticketmaster: !!env.TICKETMASTER_KEY, seatgeek: !!env.SEATGEEK_CLIENT_ID, tmdb: !!env.TMDB_KEY, omdb: !!env.OMDB_KEY, claude: !!env.ANTHROPIC_API_KEY }, model: env.SCOUT_MODEL || 'claude-sonnet-5-5' });
+      return json({ runs: (await db.get(`scoutruns:${key}:${month}`)) || [], week: await db.get(`ideas:${key}`), keys: { ticketmaster: !!env.TICKETMASTER_KEY, seatgeek: !!env.SEATGEEK_CLIENT_ID, tmdb: !!env.TMDB_KEY, omdb: !!env.OMDB_KEY, gemini: !!env.GEMINI_API_KEY, claude: !!env.ANTHROPIC_API_KEY }, model: env.GEMINI_API_KEY ? `${env.GEMINI_MODEL || 'gemini-2.5-flash'} (Claude as backup)` : env.SCOUT_MODEL || 'claude-sonnet-5-5', searches: (await db.get(`searchruns:${month}`)) || {} });
     }
     // 🔗 Every link in this week's ideas, opened now (up to 40 — the free plan allows 50 a run).
     if (path === '/admin/links' && method === 'POST') {

@@ -3010,7 +3010,8 @@ async function adminView() {
   const runs = sc?.runs || [], wk = sc?.week;
   const scoutCard = sc ? `<section class="card stack"><b>💡 Date scout</b>
       <p class="small">${Object.entries(sc.keys).map(([k, on]) => `${on ? '✅' : '⚪️'} ${esc(k)}`).join(' · ')}</p>
-      <p class="small muted">${esc(sc.model)} · ${runs.length} Claude run${runs.length === 1 ? '' : 's'} this month · ${runs.reduce((n, x) => n + (x.searches || 0), 0)} searches · ${Math.round(runs.reduce((n, x) => n + (x.input || 0) + (x.output || 0), 0) / 1000)}k tokens</p>
+      <p class="small muted">${esc(sc.model)} · ${runs.length} scout run${runs.length === 1 ? '' : 's'} this month · ${runs.reduce((n, x) => n + (x.searches || 0), 0)} searches · ${Math.round(runs.reduce((n, x) => n + (x.input || 0) + (x.output || 0), 0) / 1000)}k tokens</p>
+      ${(() => { const days = Object.values(sc.searches || {}), g = days.reduce((n, d) => n + (d.gemini || 0), 0), c = days.reduce((n, d) => n + (d.claude || 0), 0); return g + c ? `<p class="small muted">🔎 Searches this month (scout, outings, news): ${g} Gemini (free) · ${c} Claude</p>` : ''; })()}
       ${wk ? `<p class="small">${wk.ideas.length} ideas for ${esc(wk.area?.label || '')} · ${ago(wk.at)}: ${['movie', 'event', 'food'].map((k) => `${wk.ideas.filter((x) => x.kind === k).length} ${k === 'food' ? 'places' : `${k}s`}`).join(', ')}</p>` : '<p class="small muted">Hasn\'t run yet — it runs Wednesday mornings.</p>'}
       ${wk?.problems?.length ? `<ul class="small danger">${wk.problems.map((x) => `<li>⚠️ ${esc(x)}</li>`).join('')}</ul>` : ''}
       <div class="row wrap"><button type="button" class="ghost" data-act="scoutrun">Run the scout now</button>${wk ? '<button type="button" class="ghost" data-act="linkcheck">🔗 Check links</button>' : ''}</div><div id="linkReport"></div></section>` : '';

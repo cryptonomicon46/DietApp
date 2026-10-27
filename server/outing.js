@@ -3,7 +3,8 @@
 // timeline of stops, other options for each, and tips. The connector only sends the place, the
 // day, the chips and the family's home town — never names or anything else in the app.
 
-import { askClaude, parseScout, clean, okUrl, okDay, okTime, openTableUrl } from './scout.js';
+import { askSearch, searchReady } from './search.js';
+import { parseScout, clean, okUrl, okDay, okTime, openTableUrl } from './scout.js';
 import { checkLinks, applyChecks } from './links.js';
 
 // 🔗 Open each website link once; a dead one becomes a search for the place.
@@ -71,12 +72,14 @@ export async function planOuting(env, db, fam, body, from, now = new Date()) {
     if (typeof window !== 'undefined') await new Promise((r) => setTimeout(r, 4000)); // the demo takes a moment, like the real thing
     return { outing: shapeOuting(DEMO_ANSWER(text), { day, from, text }), demo: true };
   }
-  if (!(env.ANTHROPIC_API_KEY || env.__anthropic)) return { error: 'outings need the Anthropic key on the connector (ANTHROPIC_API_KEY)' };
+  if (!searchReady(env)) return { error: 'outings need a search key on the connector (GEMINI_API_KEY or ANTHROPIC_API_KEY)' };
   const month = now.toISOString().slice(0, 7), key = `outingruns:${fam.fid}:${month}`;
   const runs = (await db.get(key)) || [];
   const cap = Math.max(1, +env.OUTING_MAX_RUNS || 20);
   if (runs.filter((x) => !x.swap).length >= cap) return { error: `that's ${cap} outings planned this month — more next month` };
-  const { text: answer, usage } = await askClaude(env, outingPrompt({ text, day, chips, from, taste: clean(body.taste, 300) }), { city: from, maxUses: 5 });
+  // What you've rated stays with Claude; a plain place-and-day question can go to Gemini.
+  const taste = clean(body.taste, 300);
+  const { text: answer, usage } = await askSearch(env, outingPrompt({ text, day, chips, from, taste }), { city: from, maxUses: 5, db, claudeOnly: !!taste });
   await db.put(key, [...runs, { at: Date.now(), ...usage }], 62 * 86400);
   const outing = shapeOuting(parseScout(answer), { day, from, text });
   if (!outing) return { error: "Claude couldn't put that one together — try saying it another way" };
@@ -100,12 +103,13 @@ export async function swapStop(env, db, fam, body, from, now = new Date()) {
   const avoid = clean(body.avoid, 60);
   const shape = (j) => shapeOuting({ area, stops: [{ time, kind, name: '_' }], options: { eat: (j?.options || []).map((x) => ({ ...x, kind })) } }, { day, from, text: area })?.options.eat.map((x) => ({ ...x, reserve: x.opentable ? openTableUrl(`${x.name} ${area.split(',').pop().trim()}`, day, time) : '' })) || [];
   if (env.DEMO && !env.__anthropic) { if (typeof window !== 'undefined') await new Promise((r) => setTimeout(r, 3000)); } if (env.DEMO && !env.__anthropic) return { options: shape({ options: [{ name: `${cuisine ? cuisine[0].toUpperCase() + cuisine.slice(1) : 'Another'} spot (example)`, why: 'A made-up example', price: '$$', note: 'walk-in' }, { name: `${cuisine ? cuisine[0].toUpperCase() + cuisine.slice(1) : 'Second'} kitchen (example)`, why: 'Another example', price: '$$$', note: 'book ahead', opentable: true }] }) };
-  if (!(env.ANTHROPIC_API_KEY || env.__anthropic)) return { error: 'outings need the Anthropic key on the connector (ANTHROPIC_API_KEY)' };
+  if (!searchReady(env)) return { error: 'outings need a search key on the connector (GEMINI_API_KEY or ANTHROPIC_API_KEY)' };
   const month = now.toISOString().slice(0, 7), key = `outingruns:${fam.fid}:${month}`;
   const runs = (await db.get(key)) || [];
   const cap = Math.max(1, +env.OUTING_MAX_RUNS || 20) * 3; // swaps are small: three per outing on average
   if (runs.length >= cap) return { error: 'that\'s a lot of planning this month — more next month' };
-  const { text, usage } = await askClaude(env, swapPrompt({ area, day, time, kind, cuisine, avoid, taste: clean(body.taste, 300) }), { city: from, maxUses: 3, maxTokens: 3000, model: env.SWAP_MODEL || 'claude-haiku-5-5' });
+  const taste = clean(body.taste, 300);
+  const { text, usage } = await askSearch(env, swapPrompt({ area, day, time, kind, cuisine, avoid, taste }), { city: from, maxUses: 3, maxTokens: 3000, model: env.SWAP_MODEL || 'claude-haiku-5-5', db, claudeOnly: !!taste });
   await db.put(key, [...runs, { at: Date.now(), swap: true, ...usage }], 62 * 86400);
   const options = await checked(env, shape(parseScout(text)), area, 3);
   return options.length ? { options } : { error: "Couldn't find any — try another cuisine" };
