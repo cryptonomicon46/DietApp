@@ -12,6 +12,9 @@ export const CATS = { learned: '📚 Learned', talk: '💬 Talk', howto: '📌 H
 // 📷 Screenshots on a thread (plan comparisons, tables…): photo files locked with the thread's key,
 // with an optional sealed caption each. At most 12.
 const MAX_SHOTS = 12, MAX_DOCS = 5;
+// 🗂 A family's own boards ("🎓 School", "✈️ Trips"…), next to the built-in ones: [{id, label}].
+export const MAX_BOARDS = 12;
+const boardOk = (fam, b) => !!BOARDS[b] || (fam.boards || []).some((x) => x.id === b);
 
 export async function threadRoutes(c) {
   const { path, method, body, db, user, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url, blobs } = c;
@@ -40,7 +43,7 @@ export async function threadRoutes(c) {
     return null;
   };
   const summary = (t, own, famName) => ({
-    id: t.id, fid: t.fid, aud: t.aud, board: t.board, cat: t.cat, title: t.title, by: t.by, byName: t.byName, byAvatar: t.byAvatar, mine: t.byUid === user.uid,
+    id: t.id, fid: t.fid, aud: t.aud, board: t.board, movedBy: t.movedBy || '', cat: t.cat, title: t.title, by: t.by, byName: t.byName, byAvatar: t.byAvatar, mine: t.byUid === user.uid,
     at: t.at, lastAt: t.lastAt, lastByName: t.lastByName, replies: t.replies.filter((r) => !blocked.has(r.uid)).length, mins: t.mins || 1, pinned: !!t.pinned, shotCount: (t.shots || []).length, docCount: (t.docs || []).length, tagged: (t.tagUids || []).includes(user.uid),
     unread: (t.reads?.[user.uid] || 0) < t.lastAt && t.lastByUid !== user.uid, following: (t.followers || []).includes(user.uid), own, familyName: famName,
     best: !!t.best, poll: t.poll ? { closes: t.poll.closes, voted: t.poll.votes?.[user.uid] != null, n: Object.keys(t.poll.votes || {}).length } : null, ...(t.pk ? { pk: t.pk } : {}),
@@ -76,7 +79,35 @@ export async function threadRoutes(c) {
     return json({ threads: out.slice(0, 120), boards: BOARDS, cats: CATS });
   }
 
-  let m = path.match(/^\/families\/([a-z0-9]+)\/threads(?:\/([a-z0-9]+)(?:\/(replies|vote|best|follow|up)(?:\/([a-z0-9]+))?)?)?$/);
+  // 🗂 Adding or removing one of the family's own boards (grown-ups; its threads go back to Family).
+  const bm = path.match(/^\/families\/([a-z0-9]+)\/boards(?:\/(b[a-z0-9]{4,12}))?$/);
+  if (bm) {
+    const fam = await loadFamily(bm[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    if (meIn(fam).relation === 'child') return json({ error: 'ask a grown-up' }, 403);
+    if (!bm[2] && method === 'POST') {
+      const label = clean(body.label, 30);
+      if (!label) return json({ error: 'name the board' }, 400);
+      if ((fam.boards || []).length >= MAX_BOARDS) return json({ error: `up to ${MAX_BOARDS} boards of your own` }, 400);
+      if ([...Object.values(BOARDS), ...(fam.boards || []).map((x) => x.label)].some((x) => x.toLowerCase() === label.toLowerCase())) return json({ error: 'there’s a board with that name' }, 400);
+      const board = { id: `b${randomId(5)}`, label };
+      fam.boards = [...(fam.boards || []), board];
+      await db.put(`family:${fam.fid}`, fam);
+      return json({ board, boards: fam.boards });
+    }
+    if (bm[2] && method === 'DELETE') {
+      fam.boards = (fam.boards || []).filter((x) => x.id !== bm[2]);
+      await db.put(`family:${fam.fid}`, fam);
+      for (const id of ((await db.get(`threads:${fam.fid}`)) || [])) {
+        const t = await db.get(`thread:${fam.fid}:${id}`);
+        if (t?.board === bm[2]) { t.board = 'family'; await db.put(`thread:${fam.fid}:${id}`, t); }
+      }
+      return json({ boards: fam.boards });
+    }
+    return json({ error: 'not found' }, 404);
+  }
+
+  let m = path.match(/^\/families\/([a-z0-9]+)\/threads(?:\/([a-z0-9]+)(?:\/(replies|vote|best|follow|up|move)(?:\/([a-z0-9]+))?)?)?$/);
   if (!m) return null;
   const [, fid, id, action, sub] = m;
   if (!id && method === 'POST') {
@@ -102,7 +133,7 @@ export async function threadRoutes(c) {
     if (cid) { const had = await db.get(`threadcid:${user.uid}:${cid}`); const t = had && await db.get(`thread:${fam.fid}:${had}`); if (t) return json({ thread: full(t, true, fam), dup: true }); }
     const now = Date.now();
     const t = { id: `${(1e13 - now).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '', aud, to: aud === 'us' ? [user.uid, partner.uid] : [],
-      board: aud === 'us' ? 'us' : aud === 'connections' ? 'friends' : BOARDS[body.board] ? body.board : 'family', cat, title, body: b, mins: Math.max(1, Math.min(60, Math.round(+body.mins || 1))),
+      board: aud === 'us' ? 'us' : aud === 'connections' ? 'friends' : boardOk(fam, body.board) ? body.board : 'family', cat, title, body: b, mins: Math.max(1, Math.min(60, Math.round(+body.mins || 1))),
       at: now, lastAt: now, lastByUid: user.uid, lastByName: me.name, replies: [], reads: { [user.uid]: now }, followers: [user.uid], ...(poll ? { poll } : {}), ...(pk ? { pk } : {}) };
     const shots = blobs ? shotsOf(fam, body.shots) : [];
     if (shots.length) t.shots = shots;
@@ -207,6 +238,27 @@ export async function threadRoutes(c) {
     const i = +body.i;
     if (!Number.isInteger(i) || i < 0 || i >= t.poll.opts.length) return json({ error: 'which one?' }, 400);
     t.poll.votes = { ...(t.poll.votes || {}), [user.uid]: i };
+    await save();
+    return json({ thread: full(t, a.own, a.fam) });
+  }
+  // 🗂 Moving a thread to another board, by anyone in the family. Out of 💞 Just us (the whole
+  // family will see it) only by the two of you; into it only a thread one of you wrote.
+  if (action === 'move' && method === 'POST') {
+    if (!a.own || t.aud === 'connections') return json({ error: 'threads shared with friends’ families stay on Friends’' }, 400);
+    const me = meIn(a.fam), to = body.board;
+    if (to === 'us') {
+      const partner = partnerOf(a.fam, me);
+      const coupled = (x) => ['self', 'spouse', 'partner'].includes(x?.relation);
+      if (!partner?.uid || !coupled(me) || !coupled(partner)) return json({ error: 'just-us is for a couple in the family' }, 400);
+      if (![user.uid, partner.uid].includes(t.byUid)) return json({ error: 'only a thread one of you wrote can move to Just us' }, 403);
+      const tg = tagsOf(a.fam, me, 'us', t.tags || []);
+      Object.assign(t, { aud: 'us', board: 'us', to: [user.uid, partner.uid], tags: tg.tags, tagUids: tg.uids });
+    } else {
+      if (!boardOk(a.fam, to)) return json({ error: 'which board?' }, 400);
+      if (t.aud === 'us' && body.share !== true) return json({ error: 'moving it out of Just us shows it to the whole family', confirm: true }, 400);
+      Object.assign(t, { aud: 'family', board: to, to: [] });
+    }
+    t.movedBy = me.name;
     await save();
     return json({ thread: full(t, a.own, a.fam) });
   }

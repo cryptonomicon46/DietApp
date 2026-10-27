@@ -165,3 +165,42 @@ test('threads: PDFs attached (up to 20 MB, 5 per thread), named, removed with th
   await call(`${F}/threads/${t.id}`, sam, 'DELETE');
   assert.ok(![...m.keys()].some((k) => k.includes('docaaaa1')), 'deleted with the thread');
 });
+
+test('threads: moving between boards, and the family’s own boards', async () => {
+  const m = new Map();
+  const env = { DEMO: true, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
+  const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path.split('?')[0]); return { status: r.status, ...r.data }; };
+  const signIn = async (email) => { const { token } = await call('/auth/demo', null, 'POST', { email }); await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true }); return token; };
+  const sam = await signIn('sam@example.com'), pat = await signIn('pat@example.com'), mom = await signIn('mom@example.com'), kid = await signIn('kid@example.com');
+  const { family } = await call('/families', sam, 'POST', { name: 'Fam' });
+  for (const [token, email, name, relation] of [[pat, 'pat@example.com', 'Pat', 'spouse'], [mom, 'mom@example.com', 'Mom', 'parent'], [kid, 'kid@example.com', 'Kid', 'child']]) {
+    const add = await call(`/families/${family.fid}/members`, sam, 'POST', { kind: 'person', name, relation, email });
+    const inv = await call(`/families/${family.fid}/invites`, sam, 'POST', { kind: 'member', memberId: add.member.id });
+    await call(`/invites/${inv.invite.code}/accept`, token, 'POST');
+  }
+  const T = `/families/${family.fid}/threads`, B = `/families/${family.fid}/boards`;
+  // Boards of your own: grown-ups add them; names are unique.
+  assert.equal((await call(B, kid, 'POST', { label: '🎓 School' })).status, 403);
+  const school = (await call(B, mom, 'POST', { label: '🎓 School' })).board;
+  assert.equal((await call(B, sam, 'POST', { label: '🎓 school' })).status, 400, 'no two with the same name');
+  assert.deepEqual((await call(`/families/${family.fid}`, pat)).family.boards, [school]);
+  const t = (await call(T, sam, 'POST', { aud: 'family', board: school.id, title: 'Open house', body: 'Thursday' })).thread;
+  assert.equal(t.board, school.id);
+  // Anyone in the family can move it, the kid too.
+  assert.equal((await call(`${T}/${t.id}/move`, kid, 'POST', { board: 'house' })).thread.board, 'house');
+  assert.equal((await call(`${T}/${t.id}/move`, mom, 'POST', { board: 'nope' })).status, 400);
+  // Into Just us: only the couple, and only a thread one of them wrote.
+  assert.equal((await call(`${T}/${t.id}/move`, mom, 'POST', { board: 'us' })).status, 400, 'Mom has no partner here');
+  const momT = (await call(T, mom, 'POST', { aud: 'family', title: 'Recipe', body: 'Biryani' })).thread;
+  assert.equal((await call(`${T}/${momT.id}/move`, sam, 'POST', { board: 'us' })).status, 403, "not someone else's thread");
+  const us = (await call(`${T}/${t.id}/move`, pat, 'POST', { board: 'us' })).thread;
+  assert.deepEqual([us.aud, us.board, us.movedBy], ['us', 'us', 'Pat']);
+  assert.equal((await call(`${T}/${t.id}`, mom)).status, 404, 'now just the two of them');
+  // Out of Just us: only after saying yes to showing the family.
+  assert.equal((await call(`${T}/${t.id}/move`, pat, 'POST', { board: 'family' })).confirm, true);
+  assert.equal((await call(`${T}/${t.id}/move`, pat, 'POST', { board: school.id, share: true })).thread.aud, 'family');
+  assert.equal((await call(`${T}/${t.id}`, mom)).thread.board, school.id);
+  // Removing a board sends its threads back to Family.
+  await call(`${B}/${school.id}`, sam, 'DELETE');
+  assert.equal((await call(`${T}/${t.id}`, mom)).thread.board, 'family');
+});

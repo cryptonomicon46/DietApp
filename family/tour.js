@@ -21,6 +21,7 @@ export const SLIDES = [
     ['📚', 'Write it up', 'Learned, Talk, How-to, ❓ Ask or 📊 Poll — for just you two, the family, or friends’ families.'],
     ['📷', 'Screenshots and 📎 PDFs', 'Add plan comparisons, tables or a whole deck as a PDF: pick, paste or drag them in.'],
     ['🏷️', 'Tag people', 'Tap a face or type @. They get a notification, and you see when they’ve seen it.'],
+    ['🗂', 'Boards', 'Move a thread to another board any time, or add your own, like 🎓 School.'],
     ['✨', 'Tidy it up', 'Turns rough notes into headings and bullets, only when you tap it.'],
   ] },
   { id: 'chats', eyebrow: '💬 Chats', title: 'Message the grown-ups', go: 'chats', cards: [
@@ -73,7 +74,7 @@ export const WHATS_NEW = {
 };
 SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'New this month', cards: [
   ['💬', 'Chats', 'Tap 💬 at the top: message any grown-up in the family, or everyone at once.'],
-  ['👀', 'Seen by, in Threads', 'See who’s opened your write-up, the people you tagged first.'],
+  ['👀', 'Threads: Seen by and 🗂 boards', 'See who’s opened a write-up, and move it to the right board — or one of your own.'],
   ['🏷️', 'Threads: screenshots, PDFs and tags', 'Add screenshots and PDFs, tag people with @, and see what’s for you in ✨ For you.'],
   ['⚔️', 'The check-in fight', 'Trackers › Food › Weight: a health bar that fills with weigh-ins and logged meals.'],
   ['📷', 'Albums and 📰 News', 'On Moments: Google Photos albums, and headlines twice a day.'],

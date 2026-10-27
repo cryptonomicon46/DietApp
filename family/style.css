@@ -919,3 +919,10 @@ body.in-chat main { padding-bottom: 0; }
 .seenp { display: inline-flex; align-items: center; gap: 6px; } .seenp small { font-size: .78rem; color: var(--muted); }
 .seenp .av + .av { margin-left: -10px; box-shadow: 0 0 0 2px var(--bg); }
 .seenp.yes small { color: var(--brand); } .seenp.no .av { opacity: .45; filter: grayscale(1); }
+
+/* 🗂 moving threads between boards */
+.chip.addboard { border-style: dashed; color: var(--brand); }
+.moveboards .row button.grow { text-align: left; }
+.thread-page > .row.between { flex-wrap: wrap; row-gap: 2px; }
+.thread-page > .row.between .linkish { white-space: nowrap; }
+.thread-page > .row.between > .row { flex-wrap: wrap; gap: 4px 12px; }

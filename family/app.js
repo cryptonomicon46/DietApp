@@ -1980,6 +1980,9 @@ document.addEventListener('visibilitychange', () => {
 // ---------- 📖 threads: write-ups read in your own time, with replies, polls and best answers ----------
 const THREAD_CATS = { learned: ['📚', 'Learned'], talk: ['💬', 'Talk'], howto: ['📌', 'How-to'], ask: ['❓', 'Ask'], poll: ['📊', 'Poll'] };
 const THREAD_BOARDS = { us: '💞 Just us', family: '👨‍👩‍👧 Family', dogs: '🐾 Dogs', house: '🏠 House & money', friends: "🤝 Friends'" };
+// 🗂 The built-in boards and the family's own ("🎓 School"…).
+const ownBoards = () => fam()?.boards || [];
+const boardName = (b) => THREAD_BOARDS[b] || ownBoards().find((x) => x.id === b)?.label || THREAD_BOARDS.family;
 const th = { list: [], board: 'new', cur: null, quote: null, loaded: 0 };
 const threadKey = (t) => (t.pk ? postKey(t) : Promise.resolve(fk(t.fid)));
 async function openThreadText(t, k) {
@@ -2050,7 +2053,7 @@ const blockText = (b) => (b.type === 'ul' ? b.items.join(' · ') : b.text);
 function threadRow(t) {
   const [ico, cat] = THREAD_CATS[t.cat] || THREAD_CATS.talk;
   const last = `${t.docCount ? `📎 ${t.docCount} · ` : ''}${t.shotCount ? `📷 ${t.shotCount} · ` : ''}${t.replies ? `${t.replies} repl${t.replies === 1 ? 'y' : 'ies'}${t.lastByName && t.lastAt > t.at ? ` · ${esc(t.lastByName)} ${ago(t.lastAt)}` : ''}` : `${t.mins} min read`}`;
-  return `<button type="button" class="th ${t.unread ? 'unread' : ''}" data-thread="${t.fid}:${t.id}"><span class="cat">${ico} ${cat} · <span class="aud a-${t.board}">${THREAD_BOARDS[t.board] || ''}</span>${t.pinned ? ' · 📌' : ''}${t.best ? ' · ✓ answered' : ''}${t.poll ? ` · ${t.poll.n} voted` : ''}</span>
+  return `<button type="button" class="th ${t.unread ? 'unread' : ''}" data-thread="${t.fid}:${t.id}"><span class="cat">${ico} ${cat} · <span class="aud a-${THREAD_BOARDS[t.board] ? t.board : 'own'}">${esc(boardName(t.board))}</span>${t.pinned ? ' · 📌' : ''}${t.best ? ' · ✓ answered' : ''}${t.poll ? ` · ${t.poll.n} voted` : ''}</span>
     <b>${t.unread ? '<i class="dot"></i>' : ''}${esc(t.title)}</b><small class="muted">${esc(t.mine ? 'You' : t.byName)}${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · ${last}</small>${t.unread && !t.mine ? `<span class="thbadge ${t.tagged ? 'tag' : ''}">${t.tagged ? '🏷️ You’re tagged' : 'New'}</span>` : ''}</button>`;
 }
 // The Sunday digest: one calm summary of the week, on Sundays and Mondays until you close it.
@@ -2075,13 +2078,13 @@ async function threadsView() {
   if (!el) return;
   if (!th.loaded || Date.now() - th.loaded > 20000) { el.innerHTML = '<div class="skeleton card"></div>'; await loadThreads(); if (!$('#famBody') || state.famTab !== 'threads') return; }
   const hasFriends = (fam().connections || []).length || th.list.some((t) => !t.own);
-  const boards = ['new', ...(partnerMember() ? ['us'] : []), 'family', ...((fam().modules || []).includes('dogs') ? ['dogs'] : []), 'house', ...(hasFriends ? ['friends'] : [])];
+  const boards = ['new', ...(partnerMember() ? ['us'] : []), 'family', ...((fam().modules || []).includes('dogs') ? ['dogs'] : []), 'house', ...ownBoards().map((b) => b.id), ...(hasFriends ? ['friends'] : [])];
   // ✨ For you: tags and anything new first (tags on top), then everything else under Earlier.
   const forYou = th.list.filter((t) => t.unread && !t.mine).sort((a, b) => b.tagged - a.tagged || b.lastAt - a.lastAt);
   const list = th.board === 'new' ? [...forYou, ...th.list.filter((t) => !forYou.includes(t))] : th.list.filter((t) => t.board === th.board);
   const rows = th.board === 'new' && forYou.length && forYou.length < list.length
     ? `${forYou.map(threadRow).join('')}<div class="grp">Earlier</div>${list.slice(forYou.length).map(threadRow).join('')}` : list.map(threadRow).join('');
-  el.innerHTML = `<div class="row between"><div class="rchips boards">${boards.map((b) => `<button type="button" class="chip ${th.board === b ? 'on' : ''}" data-board="${b}">${b === 'new' ? `✨ For you${forYou.length ? ` <span class="cnt">${forYou.length}</span>` : ''}` : THREAD_BOARDS[b]}${b !== 'new' && th.list.some((t) => t.board === b && t.unread) ? ' <i class="dot"></i>' : ''}</button>`).join('')}</div></div>
+  el.innerHTML = `<div class="row between"><div class="rchips boards">${boards.map((b) => `<button type="button" class="chip ${th.board === b ? 'on' : ''}" data-board="${b}">${b === 'new' ? `✨ For you${forYou.length ? ` <span class="cnt">${forYou.length}</span>` : ''}` : esc(boardName(b))}${b !== 'new' && th.list.some((t) => t.board === b && t.unread) ? ' <i class="dot"></i>' : ''}</button>`).join('')}${me()?.relation === 'child' ? '' : '<button type="button" class="chip addboard" data-boardadd="1" aria-label="Add a board">＋ Board</button>'}</div></div>
     <button type="button" class="input-like" data-act="writeup">✍️ Write something up…</button>
     <div class="thlist">${rows || `<div class="card center"><p class="small">${th.board === 'us' ? `Write ${esc(partnerName())} something to read later — what you read about, a plan, an idea.` : 'Start a thread: something you learned, a question, a decision to talk through, or a how-to.'}</p><button type="button" data-act="writeup">✍️ Write it up</button></div>`}</div>`;
 }
@@ -2093,6 +2096,53 @@ async function threadView(fid, id) {
   th.cur._key = k;
   const s = th.list.find((x) => x.id === id); if (s) { s.unread = false; famBadge(); usBadge(); }
   renderThread();
+}
+// 🗂 Move a thread to another board (anyone in the family). Into 💞 Just us only a thread one of
+// you two wrote; out of it, after a yes, since the whole family will then see it.
+function moveSheet() {
+  const t = th.cur, meId = fam()?.me, p = partnerMember();
+  const couple = (x) => ['self', 'spouse', 'partner'].includes(x?.relation);
+  const usOk = p && couple(me()) && couple(p) && (t.by === meId || t.by === p.id);
+  const list = [...(usOk || t.aud === 'us' ? ['us'] : []), 'family', ...((fam().modules || []).includes('dogs') ? ['dogs'] : []), 'house', ...ownBoards().map((b) => b.id)];
+  openSheet(`<h2>🗂 Move to a board</h2><p class="small muted">${esc(t.title)}</p>
+    <div class="stack moveboards">${list.map((b) => `<span class="row"><button type="button" class="${t.board === b ? '' : 'ghost'} grow" data-thmoveto="${b}" ${t.board === b ? 'disabled' : ''}>${esc(boardName(b))}${t.board === b ? ' · here now' : ''}</button>${ownBoards().some((x) => x.id === b) && me()?.relation !== 'child' ? `<button type="button" class="icon-btn" data-boardrm="${b}" aria-label="Remove the board ${esc(boardName(b))}">✕</button>` : ''}</span>`).join('')}</div>
+    ${me()?.relation === 'child' ? '' : '<button type="button" class="linkish small" data-boardadd="1">＋ Add a board</button>'}
+    ${t.aud === 'us' ? `<p class="tiny muted">Moving it out of 💞 Just us shows it to everyone in ${esc(fam().name)}.</p>` : ''}
+    <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button></div>`);
+}
+async function moveThread(board) {
+  const t = th.cur;
+  if (t.aud === 'us' && board !== 'us' && !confirm(`Move it to ${boardName(board)}? Everyone in ${fam().name} will be able to read it.`)) return;
+  return act(async () => {
+    const r = await api.post(`/families/${t.fid}/threads/${t.id}/move`, { board, share: t.aud === 'us' });
+    const k = t._key;
+    th.cur = await openThreadText(r.thread, k); th.cur._key = k;
+    const i = th.list.findIndex((x) => x.id === t.id);
+    if (i >= 0) th.list[i] = { ...th.list[i], board: r.thread.board, aud: r.thread.aud, movedBy: r.thread.movedBy };
+    closeSheet(); renderThread(); toast(`🗂 Moved to ${boardName(board)}`);
+  });
+}
+async function addBoard() {
+  const label = (prompt('Name the new board — an emoji first looks nice (e.g. 🎓 School, ✈️ Trips)') || '').trim();
+  if (!label) return;
+  return act(async () => {
+    const r = await api.post(`/families/${state.fid}/boards`, { label });
+    fam().boards = r.boards;
+    toast(`Added ${r.board.label}`);
+    if ($('#sheet').open && $('.moveboards')) return moveSheet();
+    th.board = r.board.id; threadsView();
+  });
+}
+async function removeBoard(id) {
+  if (!confirm(`Remove the board ${boardName(id)}? Its threads move to 👨‍👩‍👧 Family.`)) return;
+  return act(async () => {
+    const r = await api.del(`/families/${state.fid}/boards/${id}`);
+    fam().boards = r.boards;
+    for (const x of th.list) if (x.board === id) x.board = 'family';
+    if (th.cur?.board === id) th.cur.board = 'family';
+    if (th.board === id) th.board = 'family';
+    moveSheet();
+  });
 }
 function renderThread() {
   const t = th.cur, meId = fam()?.me;
@@ -2123,7 +2173,7 @@ function renderThread() {
   const body = letter
     ? `<article class="letter"><div class="lmeta">${esc(t.mine ? 'You' : t.byName)} · ${esc(new Date(t.at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }))} · ${t.mins} min</div><h3>${esc(t.title)}</h3>
         ${blocks.map((b, i) => `<div class="para" data-para="${i}">${blockHtml(b)}${atPara(i).map((r) => `<div class="margin">✍️ <b>${esc(r.mine ? 'You' : r.name)}:</b> ${linkify(r.text)}</div>`).join('')}${b.type === 'h' ? '' : `<button type="button" class="linkish tiny note-btn" data-thquote="p:${i}">✍️ Note</button>`}</div>`).join('')}</article>`
-    : `<div class="cat">${ico} ${cat} · ${THREAD_BOARDS[t.board] || ''}</div><h2 class="thtitle">${esc(t.title)}</h2>
+    : `<div class="cat">${ico} ${cat} · ${esc(boardName(t.board))}${t.movedBy ? ` <small class="muted">· moved by ${esc(t.movedBy)}</small>` : ''}</div><h2 class="thtitle">${esc(t.title)}</h2>
        <div class="post first"><span class="av a1">${esc((t.byName || '?')[0])}</span><div class="grow"><div class="h"><b>${esc(t.mine ? 'You' : t.byName)}</b>${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · #1${t.editedAt ? ' · edited' : ''}</div><div class="t thbody">${mention(blocks.map(blockHtml).join(''))}</div>${tagLine}</div></div>${pollHtml}`;
   for (const x of t.shots || []) photoKeys.set(x.id, t._key || null);
   const shotsHtml = t.shots?.length ? `<div class="thshots">${t.shots.map((x) => `<figure><button type="button" class="ph grid" data-photoid="${x.id}" data-pfid="${t.fid}" aria-label="Open screenshot${x.cap ? `: ${esc(x.cap)}` : ''}"><img alt=""></button>${x.cap ? `<figcaption>${esc(x.cap)}</figcaption>` : ''}</figure>`).join('')}</div>` : '';
@@ -2132,7 +2182,7 @@ function renderThread() {
   const sorted = t.cat === 'ask' ? [...replies].sort((a, b) => (b.id === t.bestId) - (a.id === t.bestId) || b.ups - a.ups || a.at - b.at) : replies;
   $('#view').innerHTML = `${demoBanner()}<div class="thread-page">
     <div class="row between"><button type="button" class="linkish" data-thback="1">‹ ${letter ? 'Us' : 'Threads'}</button>
-      <span class="row"><button type="button" class="linkish small" data-thfollow="1">${t.following ? '🔔 Following' : '🔕 Follow'}</button>${t.mine ? ` <button type="button" class="linkish small" data-thedit="1">Edit</button>` : ''}${t.mine || fam()?.members.find((x) => x.id === meId)?.role === 'owner' ? ` <button type="button" class="linkish small" data-thpin="1">${t.pinned ? 'Unpin' : '📌 Pin'}</button> <button type="button" class="linkish small danger" data-thdel="1">Delete</button>` : ''}</span></div>
+      <span class="row">${t.own && t.aud !== 'connections' ? '<button type="button" class="linkish small" data-thmove="1">🗂 Move</button>' : ''}<button type="button" class="linkish small" data-thfollow="1">${t.following ? '🔔 Following' : '🔕 Follow'}</button>${t.mine ? ` <button type="button" class="linkish small" data-thedit="1">Edit</button>` : ''}${t.mine || fam()?.members.find((x) => x.id === meId)?.role === 'owner' ? ` <button type="button" class="linkish small" data-thpin="1">${t.pinned ? 'Unpin' : '📌 Pin'}</button> <button type="button" class="linkish small danger" data-thdel="1">Delete</button>` : ''}</span></div>
     ${body}
     ${docsHtml}
     ${shotsHtml}
@@ -2165,7 +2215,7 @@ function writeupSheet(preset = {}) {
   const aud = preset.aud || d.aud || (state.view === 'us' && p ? 'us' : 'family');
   const v = { aud, board: d.board || 'family', cat: preset.cat || d.cat || (aud === 'us' ? 'learned' : 'talk'), title: d.title || '', body: d.body || '', opts: d.opts || ['', ''] };
   const auds = [...(p ? [['us', `💞 Just ${p.name}`]] : []), ['family', '👨‍👩‍👧 Family'], ...(hasFriends ? [['connections', "🤝 Friends' families"]] : [])];
-  const boards = [['family', 'General'], ...((fam().modules || []).includes('dogs') ? [['dogs', '🐾 Dogs']] : []), ['house', '🏠 House & money']];
+  const boards = [['family', 'General'], ...((fam().modules || []).includes('dogs') ? [['dogs', '🐾 Dogs']] : []), ['house', '🏠 House & money'], ...ownBoards().map((b) => [b.id, b.label])];
   openSheet(`<div class="row between"><h2>✍️ Write it up</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     <form id="writeForm" class="stack">
       <div class="rchips radios chipradios">${auds.map(([k, l]) => `<label><input type="radio" name="aud" value="${k}" ${v.aud === k ? 'checked' : ''}><span class="chip">${esc(l)}</span></label>`).join('')}</div>
@@ -3879,6 +3929,10 @@ document.addEventListener('click', (e) => {
   if (d.thpin) return act(() => threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}`, { pinned: !th.cur.pinned })));
   if (d.thdel) { if (!confirm('Delete this thread and its replies?')) return; return act(async () => { await api.del(`/families/${th.cur.fid}/threads/${th.cur.id}`); th.loaded = 0; th.list = th.list.filter((x) => x.id !== th.cur.id); th.cur = null; toast('Deleted'); show('feed'); }); }
   if (d.thedit) return writeupSheet({ edit: th.cur });
+  if (d.thmove) return moveSheet();
+  if (d.thmoveto) return moveThread(d.thmoveto);
+  if (d.boardadd) return addBoard();
+  if (d.boardrm) return removeBoard(d.boardrm);
   if (d.thup) return act(() => threadAct(() => api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/up/${d.thup}`)));
   if (d.thbest) return act(() => threadAct(() => api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/best`, { reply: d.thbest })));
   if (d.thvote != null) return act(() => threadAct(() => api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/vote`, { i: +d.thvote })));
