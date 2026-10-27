@@ -1,69 +1,88 @@
 # OurPawmily
 
-**One shared app for a couple and their dogs.** OurPawmily keeps the everyday life of a two-person household with dogs in one place: who fed and walked the dogs, the dogs' health records, a shared calendar, notes and plans for each other, and each person's own food and training. It runs in the phone's browser (add it to the Home Screen and it works like an app), needs no account, and keeps the two phones in step through a private phrase only the two of you know.
+**A private family app for a couple, their kids and their dogs.** Everyday family life in one place: who fed and walked the dogs and did the chores, the dogs' appointments and health records, a shared calendar, plans and notes for each other, family photos and albums, and each person's own food and training. You sign in with Google, your family's content is end-to-end encrypted on your phones, and it runs in the phone's browser — add it to the Home Screen and it works like an app.
 
-## Why it's useful for a family with dogs
+**Open it:** the app is at `/family/` on the site (the Home Screen icon opens it). Tap **Continue with Google**, accept the terms, and create a family or open an invite. **Try it on this phone (demo)** runs everything on the phone without an account.
 
-- **No more "did you feed them?"** One tap logs a feeding or a walk, and the other phone sees it right away. The 🐕 tab turns red while the dogs still need their meal and green once they've eaten.
-- **The dogs' records in one place.** Vaccines with due dates, medications and refills, food and supplements, the vet and microchip, and the certificates themselves as PDFs or photos. Either of you can update them, and both see overdue vaccines and refills due soon.
-- **Happier dogs, made into a game.** "Golden days" (two outings, or an outing and a treat), streaks, the happiest month, and a monthly 🪙 gold coin for whoever did the most feedings and walks.
-- **Safe walks.** Hour-by-hour weather, air quality and an estimated pavement temperature, so you walk when the asphalt won't burn paws.
-- **One family calendar.** Shared events, repeating ones (paychecks, the gardener, the groomer), your iPhone calendars linked in, and the whole thing shown in Apple or Google Calendar.
-- **Time for each other.** Daily post-it notes, "feeling like…" plans the other answers with 🙌 / 🤔 / ⏰, and the shows you watch together.
-- **Each person's own health goals.** Meal plans with exact portions, a weekly check-in, a lifting program and workout tracking, kept per person: you can view each other's day, but only edit your own.
-- **Looking for another dog?** A shared board of adoption ads you've each found, with reactions and a status.
-- **Private by design.** Your data lives on your phones and in your own small cloud store, readable only with your household phrase. Nothing personal is in this code repository.
+## What's in it
 
-## The seven tabs
+The bottom bar: **Family · Dogs & chores · 💞 Us · Calendar · 🥗 Trackers** (or Me). **Me** is your picture at the top right, **＋** creates anything, and **🍿** opens Watch.
 
-| Tab | What it's for |
+### 👨‍👩‍👧 Family
+| Feature | What it does |
 |---|---|
-| **🏠 Home** | Today at a glance: the dog buttons and how close today is to a golden day, today's calendar, your day in time order (best run, ride and dog-walk windows with temperatures; after 9 PM it plans tomorrow), your gyms' yoga and fitness class schedules, your next meal, the weekly check-in and your 30-day weight trend, your partner's latest note and plan, and today's training. |
-| **🐕 Dogs** | Pavement temperature and the best walk windows, the Feed / Walk / Dog park / Treat buttons, golden days, dog profiles and documents, the dog-duty scoreboard, and the adoption board. |
-| **🍽 Food** | Your meal plan (with the morning weigh-in at the top), plus **Weight**, **Groceries** and **Scan** pages from the bar at the top. |
-| **🏋︎ Train** | Your training card (WHOOP / Garmin calories, workout fuel), the best run and ride windows, class schedules, and the lifting log. |
-| **📅 Calendar** | 💞 The 2-2-2-2 card on top (❤️ Log a date), then the shared family calendar, 👔 how each of you should dress for the chosen day, linked phone calendars, and the subscription link for Apple / Google Calendar. |
-| **💞 Us** | One page: 💌 today's notes, ✨ feeling like (plans) and 📺 watching, each a compact section. |
-| **🔐 Privacy** | Privacy settings: your household code (show, change, send), sharing status, and how your data is kept. |
+| **✨ Next up** | The one thing to do next and when — a run at the best free hour, calling Mom in her window, a class, new episodes when you're both free — with *Why?*, *Today's plan*, and an optional nudge 30 minutes before. Worked out on the phone. |
+| **Moments** (the feed) | Photos and updates for the family (or friends' families too), tags, likes, comments, 🙋 *Ask for help*. |
+| **📷 Albums** | The family's own albums: link a shared Google Photos album, copy photos in from your phone or pick them in Google Photos. Family only. |
+| **📰 News** | Politics, Tech and Bay Area headlines, each with a one-line summary, twice a day (about 6:45 AM and 3:45 PM). Pick your topics with ⋯ (just on your phone). |
+| **🎬 Movies** | Opt-in (Me › 🎬 Movies): what's in theaters with critic and audience scores, what's coming, where it's streaming, and 🔔 alerts for the ones you're waiting for. |
+| **🏃 Your day** | Best run, ride and dog-walk windows, your classes, 👔 what to wear, 📞 when to call Mom, and ticks for runs, rides and hot yoga (WHOOP / Strava workouts tick themselves). |
+| **📖 Threads** | Write-ups read and answered in your own time: Learned, Talk, How-to, Ask (with ✓ Best answer) and Poll — for just you two, the family, or friends' families. |
+| **🛒 Market** | *Coming:* sell, give away, lend or ask for things with your family and friends' families, with a lending library and "wanted" matches. |
 
-## How a family uses it: the secret phrase
+### 🐾 Dogs & chores
+| Feature | What it does |
+|---|---|
+| **🏆 Gold Card** | The month's chore race on top: points, streaks, and the prize. |
+| **🏠 The house** | Who cooked, did the dishes, laundry, garbage, groceries, cleaning — log for yourself, your partner or both. |
+| **🐾 The dogs** | Feed, walk, dog park, treats and meds; ⭐ golden days; 🦮 the best time to walk (with pavement heat). |
+| **📅 Appointments** | Grooming, vet, vaccines, dental and boarding, with who drives each way; dog appointments found in your linked calendars are suggested so you can add them in one tap. |
+| **💉 Vaccines, dog cards, 💰 spending** | What's due, each dog's details, and what the dogs cost this year. |
+| **🐶 Rescue news** | Dogs up for adoption and upcoming events from a local rescue, looked up once a day. |
 
-Each phone keeps its owner's data, and the two phones share through a **household code**. Think of it as a shared password: whoever has it can see your shared data, so keep it between the two of you.
+### 💞 Us (just the two of you)
+Notes, ✨ plans you answer 🙌 / 🤔 / ⏰, 💡 date ideas (movies, new restaurants, events — 💗 privately, matches become plans), **🧭 Plan an outing** around the Bay, ⭐ *How was it?* ratings that shape suggestions, 📓 your notebook, 💞 the 2-2-2-2 rhythm, and tonight's show.
 
-**Setting up (once, about 5 minutes):**
+### 📅 Calendar
+A shared month view with everyone's events, ⭐ golden days, ❤️ dates, 🐾 appointments and 💞 plans; repeating events; linked iCloud / Google calendars (read-only); 👔 dress for the day for both of you; reminders.
 
-1. **Open the app on both phones** in Safari (or the browser you'll use) and tap **Share › Add to Home Screen**. Safari, Chrome and the Home Screen icon each keep their own data, so always open it the same way.
-2. **Pick whose phone it is.** On first launch each of you taps your own name. You can only edit your own profile on your phone; your partner's is view-only.
-3. **Choose a secret phrase together**, out loud or in person: something only the two of you would know and nobody could guess, ideally 4 or more unrelated words (for example *"purple kites over the bay"*). Avoid your names, your dogs' names, your street or birthdays.
-4. **Type the same phrase on both phones.** Tap your partner's name at the top, then **Link phones**, type the phrase into the box and tap **Link**. Spaces, dashes and capitals don't matter: "Purple Kites" and "purple-kites" are the same.
-   *Or* skip the phrase: one phone taps **Send** to text its code, and the other enters it or taps the link.
-5. **Done.** Within a few minutes each phone shows the other's feedings, walks, notes, events and dog records.
+### 🍿 Watch
+What you're watching together, where you're up to, ratings, **🆕 new episodes** and **🕐 Up next** (episode dates from TMDB), the year recap, 🎲 show bingo and 💑 couples picks.
 
-**Changing the code (now and then, or if it may have been seen):** go to **🔐 Privacy › Our household code › 🔄 Change our code**. Either of you can do it.
+### 🥗 Trackers
+Each person's **🍽 Food** (meal plans with exact portions, logging, weekly check-ins, groceries, barcode scan) and **🏋︎ Train** (lifting program, runs, rides, climbing, WHOOP / Garmin). Private until you share with someone in Me. Details in *The trackers, in detail* below.
 
-- Everything moves to a new random code, and the old one is emptied, so an old screenshot or link shows nothing.
-- The other phone pauses sharing and pops up **New household code**.
-- Tap **Send to…** to send the new code privately (Messages or AirDrop). Your partner taps the link or pastes the code, and you're both back in sync.
-- Re-add the calendar subscription afterwards, because its link contains the code.
+### 👤 Me
+Your family and its people and pets, privacy (who sees your diet & fitness), 🔐 encryption, 📲 add a device, 🔑 recovery phrase, 🔔 notifications, 🌗 appearance, 💬 help, and your account (download your data, delete your account).
 
-**Good habits:**
-- Never post the phrase or code in a group chat or on social media, or put it in a screenshot.
-- Lock both phones with Face ID or a passcode.
-- Don't store passwords, ID or bank numbers in notes or documents.
+## Privacy in plain words
 
-## Privacy and security
+- **End-to-end encrypted:** posts, photos, comments, notes, plans, threads, albums, everyone's diet & fitness, the dogs' details and appointment notes, calendar events and ratings are locked on your phone with your family's key before they're sent. The server stores text it can't read.
+- **What the server can see:** names of people and pets, who's in which family, the chores log and Gold Card, games, dates and drivers of appointments, and when things happened.
+- **Your keys:** live only on your family's devices. A new device gets them from an invite link, **📲 Add a device**, or your **🔑 Recovery phrase**. Treat those links like passwords.
+- **AI features:** every one is optional, and none of them gets your family's keys.
 
-- **Where data lives.** Each phone stores its owner's data in the browser. A small Cloudflare worker (the *connector*) holds a copy of each person's shared data, filed under your household code, so the other phone can read it.
-- **What the connector requires.** It answers only to the right code and only over HTTPS. Service keys (Claude, WHOOP, Strava) are kept as Cloudflare secrets, never in the app or this repository. WHOOP and Strava sign-ins stay on the phone that made them.
-- **What's in the repository.** It holds only the app's code. Anyone who downloads or opens the app gets their own empty copy with its own new code. `.gitignore` blocks exports, documents, photos and connector secret files from ever being committed.
+| Feature | Who answers | What's sent |
+|---|---|---|
+| 💬 Help | Claude (Anthropic) | Your questions; to help with your account: your name, email, family and member names |
+| ✨ Tidy it up (Threads) | Claude | Only the text you tap it on |
+| 🏋️ Ask Claude (Train) | Claude | The workout command you typed and today's exercises |
+| 🧭 Plan an outing / swap a stop | Gemini with Google Search, or Claude | The place you typed, the day, your choices and your home town; your ratings line only goes to Claude |
+| 💡 Weekly date ideas | Gemini with Google Search, or Claude | Your area and the dates |
+| 📰 News and 🐶 rescue news | Gemini, or Claude | Public headlines and the rescue's name — nothing about you |
+
+The full privacy policy is in [family/privacy.html](family/privacy.html), and the technical details are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Features that need setup
+
+Most features work as soon as the connector (a small Cloudflare Worker) is deployed. Some need a key or a switch, all explained step by step in [server/README.md](server/README.md):
+- **Google sign-in:** a Google client ID.
+- **Claude features** (help, tidy, outings, date ideas): an Anthropic API key. **Gemini** (optional, free within Google's daily allowance): a Gemini API key; Claude stays as the backup.
+- **Date ideas, movies and episodes:** Ticketmaster, TMDB and OMDb keys (SeatGeek optional).
+- **📥 From Google Photos** in albums: the Google Photos Picker API switched on in Google Cloud.
+- **Photos:** the R2 bucket.
+
+## The older trackers without an account
+
+Before OurPawmily accounts, the trackers paired two phones with a shared **household code**. That still works for someone who opens the trackers without signing in (*Just the trackers?* on the sign-in screen), and it retires by itself once you're both on accounts and share with each other. Its last copies stay on the server for 🛟 Recover my data. If you still use it: treat the code like a password, never post it, and change it in 🔐 Privacy if it may have been seen.
 
 ---
 
 # Detailed specifications
 
-## 👨‍👩‍👧 OurPawmily Families (beta)
+## 👨‍👩‍👧 The family app, in detail
 
-The next version of the app, at `/family/` (also linked from 🔐 Privacy). It runs alongside the current app, which keeps working unchanged.
+Everything at `/family/`, feature by feature.
 
 - **Sign in with Google.** Your account is protected by Google's sign-in, including its 2-Step Verification. No shared phrase is needed.
 - **Families:** one person creates the family and becomes its creator.
@@ -89,16 +108,17 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
 - **Bring over the current app** (Me tab): copies everything the current app keeps on that phone into the family. Your own data goes to you, your partner's shared copy is held for them until they accept their invite, and each dog becomes a pet. **Download a backup** first saves the whole current app as a file. Nothing is deleted, and running it again refreshes the copies. Afterwards it reads every copy back from the server and compares it with the phone, section by section (✅ Sam: all 27 sections match: 412 weigh-ins, 210 days of meals…), and flags anything that didn't arrive.
 - **Demo:** until the connector is updated and given a Google client ID (see server/README.md), **Try it on this phone** runs the whole thing on the phone itself. You can sign in as different people to try invites.
 - **Choose what to manage:** when creating a family, pick from 🐶 Dogs, 🧺 Chores, 📸 Feed, 🥗 Diet & fitness and 📅 Calendar. Change it later in Me › Family settings, where the creator can also rename the family, hand it over or delete it.
-- **🐾 Dogs & chores** (tab): everything about the dogs on one screen.
-  - **📅 Coming up:** dog appointments (✂️ grooming, 🩺 vet, 💉 vaccination, 🦷 dental, 🏨 boarding). Each has the dogs going, the place, a 🚗 drop-off and a 🏁 pick-up with a driver, a repeat (e.g. grooming every 6 weeks) and notes. A leg nobody has taken shows "who? Tap to take it", on this screen and on the feed card the appointment posts. Mark it ✓ done with the cost; a vaccination sets the dog's next due date (rabies and DHPP every 3 years, the rest yearly), which the trackers pick up, and a repeating one books the next.
+- **🐾 Dogs & chores** (tab), top to bottom: 🏆 the Gold Card race, 🏠 The house (chores), then 🐾 The dogs (care log, walk times, appointments, vaccines, how happy they are, the dog cards, spending), the Hall of fame, and 🐶 rescue news.
+  - **📅 Appointments:** dog appointments (✂️ grooming, 🩺 vet, 💉 vaccination, 🦷 dental, 🏨 boarding). Each has the dogs going, the place, a 🚗 drop-off and a 🏁 pick-up with a driver, a repeat (e.g. grooming every 6 weeks) and notes. A leg nobody has taken shows "who? Tap to take it", on this screen and on the feed card the appointment posts. Mark it ✓ done with the cost; a vaccination sets the dog's next due date (rabies and DHPP every 3 years, the rest yearly), which the trackers pick up, and a repeating one books the next.
   - **💉 Vaccines:** anything due within 60 days, with 📅 Book it (or "booked ✓").
   - **🦮 Best time to walk:** today's best hour from the San Jose forecast, an hour-by-hour strip, and a pavement-heat warning for paws.
   - **The dogs:** a card each with photo, breed, age, weight, food and the most urgent vaccine or meds refill.
   - **How happy are the dogs:** golden days and outings this month, the golden-day streak, and the last 12 months.
   - **💰 Dog spending** this year, from the costs added to finished appointments.
-  - Then the shared log, house chores and the Gold Card (below).
+  - **From your calendars:** events in your linked calendars over the next 45 days that look like a dog appointment (groomer, vet, vaccine, dental, boarding, or a dog's name) are suggested with **＋ Add** (opens the appointment with the day, time and place filled in) or **Not a dog thing**. Once added, the calendar copy is hidden so it doesn't show twice.
+  - **🐶 Rescue news** (bottom): dogs up for adoption and upcoming events from a local dog rescue, with links checked before they're shown, looked up once a day; plus the 🐾 adoption board.
 - **🏆 Chores** (same tab): one shared log for the family. Pick **Who did it? Me · 👫 Both · <your partner>**, then tap what was done, so either of you can log a chore for the other. Got it wrong? Each entry has the other two choices (e.g. **Me · 👫 Both** on one logged for your partner); points follow. Switching to 👫 Both offers to add your partner to your earlier entries today. Whoever logged an entry (or did it) can undo it. **🏠 The house** folds away with Hide / Show (remembered on each phone) and still counts for the Gold Card.
-  - **The dogs:** 🍳 Breakfast, 🍲 Dinner, 🦮 Walk, 🌳 Dog park, 🦴 Treat, 💊 Meds, with ⭐ Golden day and a week strip.
+  - **The dogs:** 🍳 Breakfast, 🍲 Dinner, 🦮 Walk, 🌳 Dog park, 🦴 Treat, 💊 Meds, with ⭐ Golden day.
   - **The dogs say thank you:** when a day turns ⭐ golden, the dogs post a note on the feed thanking whoever took them out ("Dear Dad, thank you for a walk and the dog park… P.S. Please disregard any sock incidents. Forever yours, …"). Each note is put together from a greeting, a line about the day, a quirky P.S. and a sign-off, and recent lines aren't reused, so they read differently every time. One post a day, family only. Set what the pets call you in **Me › What the pets call you** (Dad, Mom…), and the family's creator can turn the notes off in Family settings.
   - **The house:** who cooked 🍳 breakfast (+2), 🥪 lunch (+2) and 🍝 dinner (+3), 🍽️ Dishes, 🗑️ Garbage, 🧺 Laundry, 🛒 Groceries, 🧽 Cleaning, 💩 Poop patrol.
   - **✎ Edit chores** (any grown-up): remove any chore from the buttons, built-in or your own (bring it back any time), or add your own to the dogs or the house (emoji, name, 0–5 points). What's already logged keeps its points.
@@ -120,10 +140,15 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
 - **📅 Calendar** (bottom bar), in the trackers' look: a month grid with a coloured dot for each person's events (one colour each, green for both) and ⭐ golden days, ❤️ us time, 🐾 dog appointments and 💞 plans; the chosen day's list with a name chip on every event (an invite you both accepted, or an event in two calendars, shows once with **Both**); ❤️ *Log a date* (on a past day, the 2-2-2-2 line, or ＋ › Log a date — a date with what and where, us time, an overnight trip or a getaway; ✎ Edit or delete from the day) — kept in your trackers, end-to-end encrypted, and combined with your partner's when you share; 👔 *Dress for the day* for both of you (one box marked *together* when you'll be in the same place, dressed for the longer of your two days); and *Coming up* for the next two weeks (appointment drop-offs and pick-ups show who's driving, or "nobody yet"). ＋ › 📅 Calendar event adds one (all day or timed, repeats, who it's for, a reminder); tap an event for ✎ Edit, Delete, **Add to my phone's calendar** (a calendar file) or Google Calendar. Events from the trackers' calendar come over the first time. **Linked calendars:** paste an iCloud public-calendar link or a Google secret iCal address and its events show read-only on your phone; the link itself is saved encrypted. Event titles, places and notes are encrypted like the rest; since the server can't read them, there's no subscription feed to Apple or Google Calendar any more — add events one at a time instead.
 - **Family under Me:** the Me tab lists everyone in the family with Manage ›, ＋ Person and ＋ Pet.
 - **✨ Next up** at the top of Moments: the one thing to do next and when (a due run at the best free hour, Mom in her window, a class, new episodes when you're both free), with Why?, Today's plan, ✓ / ⏰ / ✕ that teach it your habits, and an optional nudge 30 minutes before. Worked out on the phone.
+- **📰 News** (Moments): Politics, Tech and Bay Area tabs with the three latest stories each and *All ›* for six, every story with a one-line summary and a link to the outlet. Editions are made twice a day (about 6:45 AM and 3:45 PM Pacific) from public news feeds and shared by everyone; the summaries are written by Gemini (or Claude). **⋯** picks your topics or hides the news, on your phone only.
+- **📷 Albums** (Moments, under the share bar): ＋ New album with a name and, optionally, a Google Photos shared-album link (opens in Google Photos). Copy photos in **📷 From this phone** or **📥 From Google Photos** (Google's own picker: you choose photos and they're downloaded to your phone, then locked and uploaded). Open a photo to see it full size or remove it from the album; ✏️ renames, relinks or deletes the album. Album names, links and photos are encrypted like posts and seen only by your family. Kids can add photos.
+- **🎬 Movies** (opt-in: Me › 🎬 Movies): a card in Moments with **In theaters** (critic and audience scores, ⭐ critics' picks) and **Coming soon**. Tap a movie for its theaters date, where it's streaming or to rent, 🎟 showtimes, ✨ *Suggest to* your partner, and **🔔 Alert me** when it reaches theaters or streaming (a notification at 9 AM). Movie data from TMDB, where-to-watch from JustWatch, scores via OMDb.
+- **📺 New episodes and 🕐 Up next** (Watch): for the shows you're watching or have up next, the episode dates from TMDB: how many new episodes since where you're up to (🆕 3 new, E6–E8), the next drop, "Season 3 is out" for an up-next show, and the right show matched with *Not the right show?*. Shows with new episodes also feed ✨ Next up and tonight's pick.
+- **🛒 Market** (coming to Family): sale, free, lend and wanted listings for your family and, by default, friends' families (chosen per listing), with 🙋 interest, a lending library (lent to whom, back by when) and matches for what you're looking for. The server side is in place; the screens are next.
 - **🏃 Run, ride, hot yoga** in Your day: pick how often (every day to once a week); each shows a circle to tick when it's due (and a 7 AM note lists what's due), and a WHOOP / Strava workout or one logged in the trackers ticks it off by itself.
 - **📞 Call Mom** on the Today card: the best time to call, and (🔁 Remind me every 2 weeks) a box to tick when you've called — quiet until it's due again, then one notification a day at a good time until it's ticked.
 - **Family** (bottom left) has two tabs: **Moments** (the feed) and **📖 Threads** — write-ups people read and answer in their own time: 📚 Learned, 💬 Talk, 📌 How-to, ❓ Ask (▲ and ✓ Best answer) and 📊 Poll, for just the two of you, the family, or friends' families. Boards (Just us · Family · Dogs · House & money · Friends') filter them; replies can ❝ quote; opening one marks it read; follow for replies; pin the useful ones; drafts save themselves; ✨ Tidy it up (Claude, opt-in) turns rough notes into headings and bullets. A ☕ This week card sums it up on Sundays.
-- **💞 Us** (middle of the bottom bar, only for a couple): everything private between the two of you, in the order you need it — **For you** (a plan to answer with 🙌 / 🤔 / ⏰, a new note, "how was it?" after a plan), **💌 Notes**, **✨ Plans**, **💡 Date ideas** (well-rated movies at your theatres with showtimes, new bars and restaurants with OpenTable links, events, and a starter list — 💗 in private, and when you both pick the same one it's a match you can make into a plan for both calendars), **🧭 Where to?** (Plan an outing: type a Bay Area neighborhood or town, pick the day, cuisine and how you'll get there, and Claude plans a timeline with trains or parking, OpenTable and map links; swap any stop for another cuisine, save it, or send it to your partner as a plan), **⭐ How was it?** after a plan (😕 🙂 😍, 👎 👍 ❤️ per place, quick tags — kept in your encrypted trackers; they reorder the picks and, if you allow it, shape outings), **📓 Our notebook** (just-us write-ups as letters with ✍️ notes beside a paragraph, waiting in For you with 🌙 Tonight), **💞 2-2-2-2** with ❤️ Log a date and your recent dates, and **🍿 tonight's show**. A red badge on Us counts what's waiting for you. Shows you add are just you two unless you tick *Share with the family* (for bingo with everyone); any show can switch either way.
+- **💞 Us** (middle of the bottom bar, only for a couple): everything private between the two of you, in the order you need it — **For you** (a plan to answer with 🙌 / 🤔 / ⏰, a new note, "how was it?" after a plan), **💌 Notes**, **✨ Plans**, **💡 Date ideas** (well-rated movies at your theatres with showtimes, new bars and restaurants with OpenTable links, events, and a starter list — 💗 in private, and when you both pick the same one it's a match you can make into a plan for both calendars), **🧭 Where to?** (Plan an outing: type a Bay Area neighborhood or town, pick the day, cuisine and how you'll get there, and Gemini with Google Search — or Claude, always when your ratings are included — plans a timeline with trains or parking, OpenTable and map links, with every link checked; it plans in the background and tells you when it's ready; swap any stop for another cuisine, save it, or send it to your partner as a plan), **⭐ How was it?** after a plan (😕 🙂 😍, 👎 👍 ❤️ per place, quick tags — kept in your encrypted trackers; they reorder the picks and, if you allow it, shape outings), **📓 Our notebook** (just-us write-ups as letters with ✍️ notes beside a paragraph, waiting in For you with 🌙 Tonight), **💞 2-2-2-2** with ❤️ Log a date and your recent dates, and **🍿 tonight's show**. A red badge on Us counts what's waiting for you. Shows you add are just you two unless you tick *Share with the family* (for bingo with everyone); any show can switch either way.
 - **＋ Create** (top right, every screen): **You & your partner** — ✨ Suggest a plan, 💌 Note, ❤️ Log a date — then **Family** — 📅 Event, 🐾 Dog appointment, 📸 Post, 🙋 Ask for help. *Suggest a plan* is one flow for anything ahead (dinner, a movie, 🍷 date night…; tonight, tomorrow, this weekend or a day you pick): when you're both in, it goes on the calendar for both of you, and afterwards "❤️ Log it as a date" counts it for your 2-2-2-2. Posting also lives in the **Share with the family** bar at the top of the Feed.
 - **Bottom bar:** Feed · Dogs & chores · 💞 Us · Calendar · 🥗 Trackers (when the family manages diet & fitness; otherwise Me). **Me** is the round picture at the top right. The icons are drawn in the text colour, so they read the same in light and dark mode.
 - **🌗 Appearance** (Me): 📱 Automatic (follows your phone — iPhone can switch to dark at sunset), ☀️ Light or 🌙 Dark, for OurPawmily and your trackers on that device.
@@ -132,6 +157,10 @@ The next version of the app, at `/family/` (also linked from 🔐 Privacy). It r
 - **🍿 Watch** (🍿 at the top, or ＋ › Add to Watch): the shows and movies you watch together. **Now** has what you're watching, each with where you're up to (S2 · E5, ＋ Episode), 📺 *We watched tonight*, everyone's ★ ratings, ▶️ / 🎉 / ✋ status, and 🎲 *Bingo* (starts that show's game from its card set, or makes one). **By month** and the **year recap** (nights, shows, movies, finished, most watched, your favourite, which service) work as they did in the trackers, whose 📺 Watching list comes over the first time. Titles and services are end-to-end encrypted. **🎲 Bingo & 💑 picks ›** opens the games.
 - **One app:** the Home Screen icon opens OurPawmily, and 🥗 Trackers in its bottom bar opens food, macros and training (the sign-in screen also has *Just the trackers? Open them without signing in*). Once you're signed in, the trackers are just **🍽 Food** and **🏋︎ Train** (add more trackers later as you need them): Home, Calendar, 🐕 Dogs and 💞 Us live in OurPawmily, and 🔐 Privacy (with 🛟 Recover and WHOOP/Strava) is the 🔐 button at the top. **🏃 Your day** at the top of the Feed shows the best run and ride windows, dog walks, your Movement classes (added under Train › Movement) and links to both gyms' live yoga and fitness schedules. A pet's page in OurPawmily has *✎ Edit in 🥗 Trackers › Dogs* for food, meds, vaccines and the vet. *Ask Claude* in the trackers goes through your account.
 - **The household code retires** on its own once you're both on accounts and share your diet & fitness with each other: nothing is uploaded to it any more, the trackers say so in 🔐 Privacy, and its last copies stay on the server for 🛟 Recover my data.
+
+# The trackers, in detail
+
+The trackers are the food, training, dogs and calendar screens that came before the family app. Signed in, 🥗 Trackers shows just **🍽 Food** and **🏋︎ Train** (Home, Dogs, Calendar and Us live in the family app). Without an account, all of the tabs below are there and two phones share through the household code.
 
 ## 🏠 Home
 
@@ -337,11 +366,11 @@ Everything for the two of you on one page, in compact sections; forms and histor
 
 ## 🔐 Privacy
 
-- **Our household code:** masked until *Show*, when it was last changed, **🔄 Change our code** and **Send to…** (see *How a family uses it* above).
+- **Our household code** (trackers without an account): masked until *Show*, when it was last changed, **🔄 Change our code** and **Send to…**. Changing it moves everything to a new random code and empties the old one; send the new code privately (Messages or AirDrop), and re-add the calendar subscription.
 - **Sharing between your phones:** when this phone last sent and checked (with *Refresh*), whose phone it is, and a shortcut to the sharing, connector and device settings.
 - **How your data is kept:** a short summary of where your data lives and good habits.
 
-## Profiles and sharing
+## Profiles and sharing (trackers without an account)
 
 - **Profiles.** There are two profiles (names set in `js/storage.js`). First launch asks whose phone it is. Each person's data (profile, meals, weigh-ins, lifting, coins) is kept separately and is editable only on its owner's phone. The switch at the top shows the other person's day, view-only.
 - **Shared things.** Dog feedings, walks, treats and profiles, the calendar, notes, plans, shows and the adoption board are combined from both phones. Each phone writes only its own copy, so nothing is overwritten.
@@ -390,18 +419,22 @@ This is general guidance, not medical or veterinary advice. Check with a doctor,
 
 ## Run it
 
-No build step. Serve the folder over HTTP and open it:
+No build step: plain HTML, CSS and ES modules. Serve the folder over HTTP and open it:
 
 ```sh
-npm start          # python3 -m http.server 8080 → http://localhost:8080
-npm test           # unit tests
+npm start          # python3 -m http.server 8080 → http://localhost:8080 (family app at /family/)
+npm test           # unit tests (node:test)
 ```
+
+**Folders:** `family/` is the family app, `index.html` + `js/` the trackers (and shared logic the family app loads), `server/` the connector (Cloudflare Worker), `tests/` the tests, `scripts/` the release and link-check scripts, `docs/` the architecture summary. How it all fits together, including sign-in, encryption and what each AI feature sends, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+**The Check:** every push runs the tests, then opens every kind of link the app builds and every news feed in a real browser (`.github/workflows/check.yml`). A green ✓ on the newest commit (on the repo page, or the **Check** run in Actions — not *github-pages*) means it's safe to deploy the connector.
 
 The camera scanner needs **HTTPS** on a phone. The easiest host is GitHub Pages: repo **Settings → Pages → Deploy from branch** (root folder), then open the site on the phone and **Add to Home Screen**.
 
 ## The connector
 
-Sharing between phones, dog documents and photos, the calendar feed, linked iCloud calendars, WHOOP / Strava sign-in and *Ask Claude* go through a small Cloudflare Worker in [`server/`](server/README.md). App changes go live through GitHub Pages; connector changes need a deploy from a computer:
+Accounts and families, photos (R2), notifications, linked calendars, news, date ideas, outings, movies and episodes, WHOOP / Strava sign-in and the AI features go through a small Cloudflare Worker in [`server/`](server/README.md), with scheduled jobs for the nightly check, reminders, the news and the weekly date scout. App changes go live through GitHub Pages; connector changes need a deploy from a computer:
 
 ```sh
 cd server
@@ -413,7 +446,7 @@ Secrets are added with `npx wrangler secret put …` and never committed.
 
 ## Releasing an update
 
-Run `node scripts/bump-version.mjs` before committing. It gives every app file a new `?v=` address (through the import map in `index.html`) and renames the offline cache, so phones never mix old and new files after an update.
+Run `node scripts/bump-version.mjs` before committing. It gives every tracker file a new `?v=` address (through the import map in `index.html`) and renames the offline cache, so phones never mix old and new files after an update. For the family app, raise the `?v=` on `app.js` and `style.css` in `family/index.html` by hand; phones then offer *tap to update*. To bring this README up to date, run `/update-readme` in Claude Code.
 
 ## Code map
 
@@ -423,7 +456,11 @@ Run `node scripts/bump-version.mjs` before committing. It gives every app file a
 | `js/plan.js`, `js/foods.js` | Targets, meal planning, foods, check-in math |
 | `js/brief.js`, `js/briefTab.js` | Weather, walk / run / ride windows, dog buttons, golden days, scoreboard |
 | `family/crypto.js` | 🔐 End-to-end encryption: sealing, keys on the device, recovery phrase |
-| `family/` | 👨‍👩‍👧 OurPawmily Families (preview): sign-in, families, invites, feed, privacy, bringing data over |
+| `family/app.js` | 👨‍👩‍👧 The family app: every screen (feed, albums, news, movies, Next up, threads, Us, dogs & chores, calendar, watch, Me) |
+| `family/api.js`, `family/ideas.js`, `family/migrate.js` | Talking to the connector (and running it on the phone for the demo); ranking date ideas; bringing over the trackers |
+| `js/nextup.js` | ✨ Next up: candidates × free hours, scored on due-ness, weather, calendar and habits |
+| `js/dogcal.js` | 🐾 Spotting dog appointments in linked calendars |
+| `js/marketMatch.js` | 🛒 Matching listings to what you're looking for, on the phone |
 | `server/family.js` | The family API (`/v2/…` on the connector; also runs on the phone for the demo), help desk, nightly maintenance |
 | `server/us.js` | 💞 Feeling-like plans and notes: who they're for, days, answers, streaks |
 | `server/appts.js` | 🐾 Dog appointments: drivers, repeats, vaccine due dates, spending |
@@ -439,4 +476,14 @@ Run `node scripts/bump-version.mjs` before committing. It gives every app file a
 | `js/sync.js`, `js/household.js`, `js/storage.js` | Profiles, household sync, changing the household code |
 | `js/account.js`, `js/accountBoot.js` | Saves the trackers to your OurPawmily account (family sign-in) |
 | `js/recover.js` | 🛟 Recover: finds every copy of your trackers and adds back what's missing |
-| `server/worker.js` | The connector |
+| `server/worker.js` | The connector: routing and the scheduled jobs |
+| `server/threads.js` | 📖 Threads: boards, replies, polls, reads |
+| `server/albums.js` | 📷 Albums: sealed titles and links, photos in R2 |
+| `server/market.js` | 🛒 Market: listings, interest, lending |
+| `server/news.js` | 📰 News editions from public feeds, and 🐶 rescue news |
+| `server/scout.js`, `server/outing.js`, `server/links.js` | 💡 Weekly date ideas, 🧭 outings, and checking every link they find |
+| `server/search.js` | 🔎 Web search: Gemini first, Claude as the backup |
+| `server/movies.js`, `server/tv.js` | 🎬 Movies and alerts; 📺 episode dates (TMDB) |
+| `server/nudges.js`, `server/push.js` | 📞 Reminders and Next up nudges; 🔔 Web Push and the 15-minute reminders job |
+| `server/photos.js` | 📸 Photo files in R2, sizes and the family quota |
+| `server/assistant.js` | 🏋️ Ask Claude for workout commands |
