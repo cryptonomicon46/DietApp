@@ -56,7 +56,7 @@ await b.close();
 for (const [topic, { feeds }] of Object.entries(TOPICS)) {
   for (const [src, url] of feeds) {
     let status = 0, n = 0, note = '';
-    try { const r = await fetch(url, { headers: { 'User-Agent': 'OurPawmily news (family app)' } }); status = r.status; if (r.ok) n = parseFeed(await r.text()).length; } catch (e) { note = e.message; }
+    try { const r = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { 'User-Agent': 'OurPawmily news (family app)' } }); status = r.status; if (r.ok) n = parseFeed(await r.text()).length; } catch (e) { note = e.message; }
     const verdict = status === 404 || status === 410 || (status === 200 && !n) ? 'BROKEN' : status === 200 ? 'OK' : 'CHECK BY HAND';
     if (verdict === 'BROKEN') bad++;
     rows.push(`${verdict.padEnd(13)} ${String(status || '-').padEnd(4)} News feed: ${src} (${topic}, ${n} stories) — ${url}${note ? ` (${note})` : ''}`);
