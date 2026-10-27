@@ -22,6 +22,7 @@ export const NOTIFY_KINDS = {
   feed: '💬 Comments and help on your posts',
   fun: '⭐ Golden days and games',
   nudges: '📞 Reminders: calling Mom, workouts, movie releases',
+  market: '🛒 Market: new listings and who\'s interested',
 };
 export const wants = (user, kind) => user?.notify?.[kind] !== false;
 
