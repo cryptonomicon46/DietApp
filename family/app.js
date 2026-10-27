@@ -323,6 +323,7 @@ async function feedView() {
     <button type="button" class="sharebar" data-act="post">${avatar(me(), 30)}<span>Share with the family…</span><b>📷 Photo</b></button>
     <section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>
     <section class="card today" id="today"><div class="skeleton line"></div></section>
+    <section class="card news" id="newsCard" hidden></section>
     <section class="card movies" id="moviesCard" hidden></section>
     <div id="comingLine"></div>
     <div id="goldNews"></div>
@@ -330,6 +331,7 @@ async function feedView() {
   goldNews();
   renderYourDay();
   renderMovies().catch(() => {});
+  renderNews().catch(() => {});
   renderNextUp().catch(() => {});
   importUs().catch(() => {});
   const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts(), loadUs(), loadThreads().catch(() => {})]);
@@ -625,8 +627,9 @@ async function petsView() {
     <button type="button" class="ghost wide" data-act="addpet">＋ Add a pet</button>
     <section class="card" id="spend" hidden></section>` : ''}
     <section id="fame"></section>
-    ${dogs ? '<section class="card" id="rescue"><div class="row between"><b class="small">🐶 Rescue news</b><span class="tiny muted">coming soon</span></div><a class="small" href="../#adopt">🐾 Adoption board ›</a></section>' : ''}`;
+    ${dogs ? '<section class="card rescue" id="rescue"><div class="skeleton line"></div></section>' : ''}`;
   renderCare(); renderRace();
+  if (dogs) renderRescue().catch(() => {});
   if (!dogs) return;
   renderWalk();
   await loadAppts();
@@ -2693,6 +2696,58 @@ async function tvFixSheet(id) {
     ${r.results.map((s) => `<button type="button" class="fpick" data-tvpick="${id}:${s.id}"><span class="fp-i">${s.poster ? `<img src="${esc(s.poster)}" alt="">` : '📺'}</span><span class="grow"><b>${esc(s.name)}</b><small class="muted">${esc(s.year || '')}</small></span>${tvMap()[id] === s.id ? '✓' : ''}</button>`).join('') || '<p class="small muted">No match on TMDB.</p>'}
     <button type="button" class="linkish small" data-tvpick="${id}:0">It isn't on TMDB — stop looking</button>`);
 }
+// ---------- 📰 the news: Politics, Tech, Bay Area on Moments; rescue news on Dogs (shared, twice a day) ----------
+const nw = { data: null, tab: null };
+const newsSet = () => { try { return { off: false, topics: ['politics', 'tech', 'bay'], ...JSON.parse(LS.get('fam.newsSet') || '{}') }; } catch { return { off: false, topics: ['politics', 'tech', 'bay'] }; } };
+async function loadNews() {
+  let c = null; try { c = JSON.parse(LS.get('fam.news') || 'null'); } catch { /* none */ }
+  if (c && Date.now() - c.got < 30 * 60e3) return (nw.data = c.data);
+  const r = await api.get('/news').catch(() => null);
+  if (r?.news) { nw.data = r.news; try { LS.set('fam.news', JSON.stringify({ got: Date.now(), data: r.news })); } catch { /* full */ } }
+  return nw.data || c?.data || null;
+}
+const newsRow = (x) => `<a class="newsrow" href="${esc(x.url)}" target="_blank" rel="noopener"><b>${esc(x.title)}</b>${x.line ? `<small>${esc(x.line)}</small>` : ''}<small class="muted">${esc(x.src)} · ${ago(x.at)}</small></a>`;
+async function renderNews() {
+  const el = $('#newsCard'), st = newsSet();
+  if (!el || st.off) return;
+  const n = await loadNews();
+  if (!$('#newsCard') || !n) return;
+  const tabs = st.topics.filter((t) => n.topics?.[t]?.length);
+  if (!tabs.length) return;
+  if (!tabs.includes(nw.tab)) nw.tab = tabs[0];
+  const list = n.topics[nw.tab];
+  el.hidden = false;
+  el.innerHTML = `<div class="row between"><b>📰 News</b><button type="button" class="icon-btn" data-act="newsset" aria-label="News settings">⋯</button></div>
+    <div class="rchips">${tabs.map((t) => `<button type="button" class="chip ${nw.tab === t ? 'on' : ''}" data-newstab="${t}">${esc(n.labels?.[t] || t)}</button>`).join('')}</div>
+    ${list.slice(0, 3).map(newsRow).join('')}
+    <div class="row between"><button type="button" class="linkish small" data-act="newsall">All ${esc(n.labels?.[nw.tab] || '')} ›</button><span class="tiny muted">Updated ${ago(n.at)}</span></div>`;
+}
+function newsAllSheet() {
+  const n = nw.data;
+  if (!n) return;
+  openSheet(`<div class="row between"><h2>📰 ${esc(n.labels?.[nw.tab] || 'News')}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <div class="stack">${(n.topics[nw.tab] || []).map(newsRow).join('')}</div>
+    <p class="tiny muted">Headlines from each outlet's public feed, picked and summed up in a line by AI twice a day. Tap one to read it there.</p>`);
+}
+function newsSetSheet() {
+  const st = newsSet(), labels = nw.data?.labels || { politics: 'Politics', tech: 'Tech', bay: 'Bay Area' };
+  openSheet(`<div class="row between"><h2>📰 News</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <p class="small muted">Just for you, on this phone.</p>
+    <div class="card stack">${Object.entries(labels).map(([k, l]) => `<label class="switch-row"><span>${esc(l)}</span><input type="checkbox" data-newstopic="${k}" ${st.topics.includes(k) ? 'checked' : ''}><i class="switch"></i></label>`).join('')}
+    <label class="switch-row"><span>Show the news on Moments</span><input type="checkbox" data-newstopic="on" ${st.off ? '' : 'checked'}><i class="switch"></i></label></div>`);
+}
+async function renderRescue() {
+  const el = $('#rescue');
+  if (!el) return;
+  const r = (await loadNews())?.rescue;
+  if (!$('#rescue')) return;
+  if (!r || !(r.dogs.length || r.events.length)) { el.innerHTML = `<div class="row between"><b class="small">🐶 Rescue news</b><span class="tiny muted">${r ? 'nothing new today' : 'coming soon'}</span></div><a class="small" href="../#adopt">🐾 Adoption board ›</a>`; return; }
+  el.innerHTML = `<div class="row between"><b>🐶 ${esc(r.name)}</b>${r.site ? `<a class="small" href="${esc(r.site)}" target="_blank" rel="noopener">Their site ›</a>` : ''}</div>
+    ${r.events.length ? `<div class="stack tight">${r.events.map((e) => `<div class="small">📅 <b>${esc(shortDay(e.day))}</b> · ${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.title)}</a>` : esc(e.title)}${e.where ? ` <span class="muted">· ${esc(e.where)}</span>` : ''}</div>`).join('')}</div>` : ''}
+    ${r.dogs.length ? `<p class="tiny muted">Looking for a home</p><div class="rescuedogs">${r.dogs.map((d) => `<${d.url ? `a href="${esc(d.url)}" target="_blank" rel="noopener"` : 'div'} class="rescuedog"><b>🐕 ${esc(d.name)}</b><small class="muted">${esc(d.about)}</small></${d.url ? 'a' : 'div'}>`).join('')}</div>` : ''}
+    <div class="row between"><a class="small" href="../#adopt">🐾 Adoption board ›</a><span class="tiny muted">Looked up ${ago(r.at)} · check with the rescue</span></div>`;
+}
+
 // ---------- 🎬 movies: in theaters, coming soon, streaming, and alerts (opt-in, per person) ----------
 const mv = { prefs: null, lists: null, tab: 'now' };
 async function moviePrefs() { mv.prefs ||= await api.get('/account/movies').then((r) => r.movies).catch(() => ({ on: false, list: [] })); return mv.prefs; }
@@ -3014,7 +3069,9 @@ async function adminView() {
       ${(() => { const days = Object.values(sc.searches || {}), g = days.reduce((n, d) => n + (d.gemini || 0), 0), c = days.reduce((n, d) => n + (d.claude || 0), 0); return g + c ? `<p class="small muted">🔎 Searches this month (scout, outings, news): ${g} Gemini (free) · ${c} Claude</p>` : ''; })()}
       ${wk ? `<p class="small">${wk.ideas.length} ideas for ${esc(wk.area?.label || '')} · ${ago(wk.at)}: ${['movie', 'event', 'food'].map((k) => `${wk.ideas.filter((x) => x.kind === k).length} ${k === 'food' ? 'places' : `${k}s`}`).join(', ')}</p>` : '<p class="small muted">Hasn\'t run yet — it runs Wednesday mornings.</p>'}
       ${wk?.problems?.length ? `<ul class="small danger">${wk.problems.map((x) => `<li>⚠️ ${esc(x)}</li>`).join('')}</ul>` : ''}
-      <div class="row wrap"><button type="button" class="ghost" data-act="scoutrun">Run the scout now</button>${wk ? '<button type="button" class="ghost" data-act="linkcheck">🔗 Check links</button>' : ''}</div><div id="linkReport"></div></section>` : '';
+      <div class="row wrap"><button type="button" class="ghost" data-act="scoutrun">Run the scout now</button>${wk ? '<button type="button" class="ghost" data-act="linkcheck">🔗 Check links</button>' : ''}</div><div id="linkReport"></div></section>
+    <section class="card stack"><b>📰 News</b>${sc.news ? `<p class="small muted">${ago(sc.news.at)} · ${sc.news.stories} stories · 🐶 ${esc(sc.news.rescue || 'no rescue news')}</p>${sc.news.problems?.length ? `<ul class="small danger">${sc.news.problems.map((x) => `<li>⚠️ ${esc(x)}</li>`).join('')}</ul>` : ''}` : '<p class="small muted">Hasn\'t run yet — editions at 6:45 AM and 3:45 PM.</p>'}
+      <button type="button" class="ghost" data-act="newsrun">Make an edition now</button></section>` : '';
   const rep = r.report;
   const open = r.tickets.filter((t) => t.status === 'open');
   openSheet(`<div class="row between"><h2>🛠 Maintainer</h2><button type="button" class="linkish small" data-act="close">Done</button></div>
@@ -3354,6 +3411,7 @@ document.addEventListener('click', (e) => {
   if (d.feelcuisine != null) { feel.cuisine = d.feelcuisine; return renderFeelPicks(); }
   if (d.feelfind) return act(feelFind);
   if (d.nu) { const [w, i] = d.nu.split(':'); return act(() => nuAct(w, +i)); }
+  if (d.newstab) { nw.tab = d.newstab; return renderNews(); }
   if (d.movietab) { mv.tab = d.movietab; return renderMovies(); }
   if (d.movieall) return movieAllSheet(d.movieall);
   if (d.movie) return act(() => movieSheet(d.movie));
@@ -3479,6 +3537,8 @@ document.addEventListener('click', (e) => {
     case 'feel': return feelSheet();
     case 'outing': return outingAsk();
     case 'writeup': return writeupSheet();
+    case 'newsall': return newsAllSheet();
+    case 'newsset': return newsSetSheet();
     case 'nuplan': return nu.res ? nuPlan() : null;
     case 'nuknows': return act(nuKnows);
     case 'nureset': if (!confirm('Forget what Next up learned about you?')) return; LS.set(nuKey(), null); closeSheet(); toast('Forgotten'); return renderNextUp();
@@ -3504,6 +3564,7 @@ document.addEventListener('click', (e) => {
         ${r.broken.length ? `<ul class="small">${r.broken.map((x) => `<li>${esc(x.title)} — ${esc(String(x.status || x.error))} <a href="${esc(x.url)}" target="_blank" rel="noopener">open</a></li>`).join('')}</ul>` : ''}`;
       t.disabled = false; t.textContent = '🔗 Check again';
     });
+    case 'newsrun': t.disabled = true; t.textContent = 'Reading the news…'; return act(async () => { const r = await api.post('/admin/news/run'); LS.set('fam.news', null); toast(`📰 ${r.stories} stories${r.rescue ? ' · 🐶 rescue news' : ''}`); adminView(); });
     case 'scoutrun': t.disabled = true; t.textContent = 'Scouting… (a minute or two)'; return act(async () => { const r = await api.post('/admin/scout/run'); toast(`💡 ${r.areas?.map((a) => `${a.ideas ?? 0} ideas`).join(', ') || 'Done'}`); adminView(); });
     case 'eventnew': return calModule().then((C) => { calm.C = C; eventSheet(); });
     case 'feedsrefresh': return act(async () => { await refreshFeeds(true); renderCal(); });
@@ -3716,6 +3777,14 @@ document.addEventListener('change', async (e) => {
     h.hidden = !k[3]; h.querySelector('span').textContent = k[3] || 'Where?';
     t.form.idea.value = '';
     return renderFeelPicks();
+  }
+  if (t.dataset.newstopic) {
+    const st = newsSet(), k = t.dataset.newstopic;
+    if (k === 'on') st.off = !t.checked;
+    else st.topics = t.checked ? [...new Set([...st.topics, k])] : st.topics.filter((x) => x !== k);
+    LS.set('fam.newsSet', JSON.stringify(st));
+    if ($('#newsCard')) { $('#newsCard').hidden = true; renderNews(); }
+    return;
   }
   if (t.dataset.nuset) {
     const st = nuSettings();

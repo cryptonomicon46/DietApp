@@ -1,5 +1,5 @@
 // 🔗 Before a deploy: open one sample of every kind of link the app builds (OpenTable, Google Maps,
-// directions, Fandango, Ticketmaster, TMDB) in a real browser, plus the app's own pages.
+// directions, Fandango, Ticketmaster, TMDB) in a real browser, plus the app's own pages and the news feeds.
 // Fails on a page that's gone (404/410/5xx) or doesn't load; sites that turn away robots (401/403/429)
 // are listed as "check by hand" — so are OpenTable and Ticketmaster, whose bot protection refuses
 // robots outright (tap one of their links in the app once by hand). Screenshots go to link-report/.
@@ -9,6 +9,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { openTableUrl } from '../server/scout.js';
 import { shapeOuting } from '../server/outing.js';
 import { searchUrl } from '../server/links.js';
+import { TOPICS, parseFeed } from '../server/news.js';
 
 const day = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
 const o = shapeOuting({ area: 'Hayes Valley, San Francisco', stops: [{ time: '19:30', kind: 'dinner', name: 'Rich Table', opentable: true }] }, { day, from: 'San Jose', text: 'Hayes Valley' });
@@ -51,6 +52,16 @@ for (const [i, [name, url]] of links.entries()) {
   await p.close();
 }
 await b.close();
+// 📰 The news feeds: each should answer with stories (a feed that's moved is BROKEN).
+for (const [topic, { feeds }] of Object.entries(TOPICS)) {
+  for (const [src, url] of feeds) {
+    let status = 0, n = 0, note = '';
+    try { const r = await fetch(url, { headers: { 'User-Agent': 'OurPawmily news (family app)' } }); status = r.status; if (r.ok) n = parseFeed(await r.text()).length; } catch (e) { note = e.message; }
+    const verdict = status === 404 || status === 410 || (status === 200 && !n) ? 'BROKEN' : status === 200 ? 'OK' : 'CHECK BY HAND';
+    if (verdict === 'BROKEN') bad++;
+    rows.push(`${verdict.padEnd(13)} ${String(status || '-').padEnd(4)} News feed: ${src} (${topic}, ${n} stories) — ${url}${note ? ` (${note})` : ''}`);
+  }
+}
 const report = rows.join('\n');
 console.log(report);
 writeFileSync('link-report/report.txt', `${report}\n`);

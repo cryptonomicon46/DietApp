@@ -16,7 +16,7 @@
 // 15-minute one sends notification reminders (push.js).
 
 import { assist } from './assistant.js';
-import { familyApi, runMaintenance, runFamilyReminders, runScout } from './family.js';
+import { familyApi, runMaintenance, runFamilyReminders, runScout, runNewsEdition } from './family.js';
 import { mergeEvents, icsCalendar } from '../js/calendar.js';
 
 const WHOOP = {
@@ -40,7 +40,12 @@ export default {
     // (new films, scores, events — no Claude) the same way.
     else if (event.cron === '13 13-22 * * 3') ctx.waitUntil(runScout(env));
     else if (event.cron === '43 13-22 * * 4') ctx.waitUntil(runScout(env, { refresh: true }));
-    else ctx.waitUntil(runFamilyReminders(env, event.scheduledTime));
+    else {
+      ctx.waitUntil(runFamilyReminders(env, event.scheduledTime));
+      // 📰 At 6:45 and 3:45 Pacific: the news.
+      const news = runNewsEdition(env, event.scheduledTime);
+      if (news) ctx.waitUntil(news.catch(() => {}));
+    }
   },
   async fetch(req, env, ctx) {
     const url = new URL(req.url);

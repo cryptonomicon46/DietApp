@@ -53,6 +53,7 @@ import { threadRoutes } from './threads.js';
 import { nudgeRoutes } from './nudges.js';
 import { tvRoutes } from './tv.js';
 import { movieRoutes } from './movies.js';
+import { newsRoutes, runNews, editionDue } from './news.js';
 import { askClaude } from './scout.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
@@ -307,7 +308,7 @@ export async function familyApi(req, env, path, ctx = null) {
     }
     if (path === '/admin/scout' && method === 'GET') {
       const month = new Date().toISOString().slice(0, 7), key = areaKey(DEFAULT_AREA);
-      return json({ runs: (await db.get(`scoutruns:${key}:${month}`)) || [], week: await db.get(`ideas:${key}`), keys: { ticketmaster: !!env.TICKETMASTER_KEY, seatgeek: !!env.SEATGEEK_CLIENT_ID, tmdb: !!env.TMDB_KEY, omdb: !!env.OMDB_KEY, gemini: !!env.GEMINI_API_KEY, claude: !!env.ANTHROPIC_API_KEY }, model: env.GEMINI_API_KEY ? `${env.GEMINI_MODEL || 'gemini-2.5-flash'} (Claude as backup)` : env.SCOUT_MODEL || 'claude-sonnet-5-5', searches: (await db.get(`searchruns:${month}`)) || {} });
+      return json({ runs: (await db.get(`scoutruns:${key}:${month}`)) || [], week: await db.get(`ideas:${key}`), keys: { ticketmaster: !!env.TICKETMASTER_KEY, seatgeek: !!env.SEATGEEK_CLIENT_ID, tmdb: !!env.TMDB_KEY, omdb: !!env.OMDB_KEY, gemini: !!env.GEMINI_API_KEY, claude: !!env.ANTHROPIC_API_KEY }, model: env.GEMINI_API_KEY ? `${env.GEMINI_MODEL || 'gemini-2.5-flash'} (Claude as backup)` : env.SCOUT_MODEL || 'claude-sonnet-5-5', searches: (await db.get(`searchruns:${month}`)) || {}, news: await db.get('news:latest').then((n) => n && { at: n.at, problems: n.problems, stories: Object.values(n.topics).reduce((k, l) => k + l.length, 0), rescue: n.rescue ? `${n.rescue.dogs.length} dogs, ${n.rescue.events.length} events (${n.rescue.day})` : '' }) });
     }
     // 🔗 Every link in this week's ideas, opened now (up to 40 — the free plan allows 50 a run).
     if (path === '/admin/links' && method === 'POST') {
@@ -331,6 +332,10 @@ export async function familyApi(req, env, path, ctx = null) {
       await db.put(`ticket:${t.id}`, t, TICKET_TTL);
       return json({ ticket: t });
     }
+    if (path === '/admin/news/run' && method === 'POST') {
+      if (env.DEMO && !env.__anthropic && !env.GEMINI_API_KEY) return json({ error: 'the news runs on the live connector' }, 400);
+      return json(await runNews(env, db, { force: true }));
+    }
     if (path === '/admin/maintenance' && method === 'POST') {
       if (!env.HOUSEHOLD.list) return json({ error: 'not available in the demo' }, 400);
       return json({ report: await runMaintenance(env) });
@@ -343,6 +348,8 @@ export async function familyApi(req, env, path, ctx = null) {
   { const r = await movieRoutes({ path, method, body, req, env, db, user, json }); if (r) return r; }
   // 📺 Episode dates (TMDB) for the shows you're watching.
   { const r = await tvRoutes({ path, method, req, env, json, url }); if (r) return r; }
+  // 📰 Today's headlines and rescue news (one shared copy).
+  { const r = await newsRoutes({ path, method, db, json }); if (r) return r; }
   // 📞 Check-in reminders ("call Mom every two weeks").
   { const today = /^\d{4}-\d{2}-\d{2}$/.test(url(req).searchParams.get('today') || '') ? url(req).searchParams.get('today') : new Date().toISOString().slice(0, 10);
     const r = await nudgeRoutes({ path, method, body, db, user, json, today }); if (r) return r; }
@@ -1798,6 +1805,8 @@ export async function runScout(env, { db = store(env.HOUSEHOLD), force = false, 
   return { areas: [r], remaining: Math.max(0, todo.length - 1) };
 }
 export const runFamilyReminders = (env, at) => runReminders(env, at, { db: store(env.HOUSEHOLD) });
+// 📰 The 6:45 and 3:45 editions (from the 15-minute cron, as its own job).
+export const runNewsEdition = (env, at) => (editionDue(at) ? runNews(env, store(env.HOUSEHOLD), { now: new Date(at) }) : null);
 export const MODULES = ['dogs', 'chores', 'feed', 'health', 'calendar'];
 
 // Takes someone out of a family: their spot, their data, and (unless kept) their posts,
