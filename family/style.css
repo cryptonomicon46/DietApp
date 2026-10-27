@@ -747,3 +747,35 @@ i.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; back
   .wide2 .col-side { position: sticky; top: 64px; max-height: calc(100vh - 80px); overflow: auto; padding-right: 2px; scrollbar-width: thin; }
   .famtabs { max-width: 520px; }
 }
+
+/* ❓ help, 📖 the tour, and the hello / what's-new card */
+.help-top { width: 34px; height: 34px; border-radius: 50%; padding: 0; background: var(--card); color: var(--ink); border: 1.5px solid var(--line); font-weight: 800; font-size: 1rem; }
+.nav .nav-help { display: none; }
+.tourbtn { display: flex; gap: 12px; align-items: center; width: 100%; background: var(--brand-soft); color: var(--ink); border-radius: 16px; padding: 12px 14px; text-align: left; font-weight: 400; margin: 10px 0 0; }
+.tourbtn.soft { background: var(--bg); padding: 10px 12px; margin: 0; } .tourbtn b { display: block; } .tourbtn small { color: var(--muted); } .tourbtn .ti { font-size: 1.5rem; }
+.helprow { margin: 8px 0 10px; } .helprow .tourbtn { flex: 1; }
+.newbar { display: flex; gap: 6px; align-items: center; background: linear-gradient(135deg, var(--brand-soft), #fdf3dc); border: 1px solid #cfe3d7; border-radius: 16px; padding: 4px 4px 4px 0; margin: 0 0 10px; }
+.newbar .nb-go { flex: 1; display: flex; gap: 10px; align-items: center; background: none; color: var(--ink); text-align: left; font-weight: 400; font-size: .88rem; padding: 8px 12px; }
+.newbar .nb-go b { display: block; font-size: .95rem; } .newbar .nb-i { font-size: 1.6rem; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .newbar { background: linear-gradient(135deg, #1f3329, #3a2f17); border-color: #2f5a46; } }
+:root[data-theme=dark] .newbar { background: linear-gradient(135deg, #1f3329, #3a2f17); border-color: #2f5a46; }
+.how { display: inline-flex; background: var(--brand-soft); color: var(--brand); font-size: .85rem; padding: 6px 12px; margin-top: 8px; }
+.sheet.tourmode { min-height: min(86vh, 760px); display: flex; flex-direction: column; }
+.sheet.tourmode #sheetBody { flex: 1; display: flex; flex-direction: column; }
+.tour { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.tour .teyebrow { margin: 10px 0 0; font-size: .75rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--brand); }
+.tour h2 { font-size: 1.6rem; line-height: 1.15; margin: 0 0 8px; }
+.tcards { display: grid; gap: 8px; }
+.tcard { display: flex; gap: 12px; align-items: flex-start; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.tcard .ti { font-size: 1.4rem; line-height: 1.2; } .tcard b { display: block; } .tcard small { color: var(--muted); font-size: .86rem; line-height: 1.35; display: block; }
+.tdots { display: flex; gap: 5px; justify-content: center; margin: auto 0 12px; padding-top: 14px; } .tdots i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); } .tdots i.on { width: 20px; border-radius: 4px; background: var(--brand); }
+.tour .grow { flex: 1; }
+.tour.welcome { text-align: left; }
+.tour.welcome .tbig { font-size: 4rem; margin-top: auto; }
+.tour.welcome h1 { font-size: 2.1rem; line-height: 1.1; margin: 6px 0; }
+.tour.welcome .tnote { color: var(--brand); }
+@media (min-width: 700px) { .sheet.tourmode { min-height: 0; } .tdots { margin-top: 18px; } }
+@media (min-width: 1100px) {
+  .nav .nav-help { display: grid; margin-top: auto; color: var(--brand); }
+  .tcards { grid-template-columns: 1fr 1fr; }
+}

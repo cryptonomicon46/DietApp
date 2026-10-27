@@ -6,6 +6,7 @@ import { api } from './api.js';
 import { sealBytes, openBytes } from './crypto.js';
 import { keys, seal, tryOpen, newKey, makeCheck, checkKey, lockBackup, unlockBackup, newPhrase, keyFromHash, deviceLink, isSealed } from './crypto.js';
 import { planImport, legacySnapshot, backupBlob, runImport, importCare, verifyImport } from './migrate.js';
+import { slide as tourSlide, TOUR, WHATS_NEW, SCREEN as TOUR_SCREEN } from './tour.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -328,7 +329,7 @@ async function feedView() {
   if (th.list.length) $('#thDot').hidden = !unreadThreads().length;
   if (state.famTab === 'threads') { threadsView(); loadUs().then(() => usBadge()); return; }
   const m = {
-    nextUp: '<section class="nextup" id="nextUp" hidden></section>', digest: '<div id="digest"></div>',
+    nextUp: '<div id="hello"></div><section class="nextup" id="nextUp" hidden></section>', digest: '<div id="digest"></div>',
     share: `<button type="button" class="sharebar" data-act="post">${avatar(me(), 30)}<span>Share with the family…</span><b>📷 Photo</b></button>`,
     albums: '<section class="card albums" id="albums" hidden></section>',
     yourDay: '<section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>',
@@ -346,6 +347,7 @@ async function feedView() {
   renderMovies().catch(() => {});
   renderNews().catch(() => {});
   renderAlbums().catch(() => {});
+  helloCard();
   renderNextUp().catch(() => {});
   importUs().catch(() => {});
   const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts(), loadUs(), loadThreads().catch(() => {})]);
@@ -378,7 +380,7 @@ function renderPosts() {
   const asks = state.feed.filter((p) => p.help?.status === 'open' && !p.mine && p.help.to >= isoLocal());
   const rest = state.feed.filter((p) => !asks.includes(p));
   el.innerHTML = state.feed.length ? (asks.length ? `<h3>🙋 Can you help?</h3>${asks.map(postCard).join('')}${rest.length ? '<h3>Latest</h3>' : ''}` : '') + rest.map(postCard).join('')
-    : `<div class="empty card"><div class="big">📸</div><b>No posts yet</b><p class="small muted">Share a photo of the dogs, a win at the gym, or what's for dinner. Only your family${state.connected.length ? ' (and the families you connect with, if you choose)' : ''} can see it.</p><button type="button" data-view="compose">Make the first post</button></div>`;
+    : `<div class="empty card"><div class="big">📸</div><b>No posts yet</b><p class="small muted">Share a photo of the dogs, a win at the gym, or what's for dinner. Only your family${state.connected.length ? ' (and the families you connect with, if you choose)' : ''} can see it.</p><button type="button" data-view="compose">Make the first post</button>${howLink('moments', 'What’s in Moments')}</div>`;
 }
 // A vaccination done: on each dog's record, given that day and next due when the vet said.
 async function recordVaccine(a, given, due) {
@@ -693,7 +695,7 @@ function renderComing() {
   if (!el) return;
   const up = dogsHub.appts.filter((a) => a.status !== 'done');
   el.innerHTML = `<div class="row between"><b>📅 Appointments</b><button type="button" class="linkish small" data-act="apptnew">＋ Appointment</button></div>
-    ${up.length ? up.slice(0, 6).map((a) => apptRow(a)).join('') : '<p class="small muted">No appointments. Add grooming, the vet or a vaccination — with who drops off and who picks up.</p>'}
+    ${up.length ? up.slice(0, 6).map((a) => apptRow(a)).join('') : `<p class="small muted">No appointments. Add grooming, the vet or a vaccination — with who drops off and who picks up.</p>${howLink('dogs', 'How Dogs & chores works')}`}
     <div id="dogCal"></div>`;
   dogCalSuggestions().catch(() => {});
 }
@@ -2716,6 +2718,61 @@ async function tvFixSheet(id) {
     ${r.results.map((s) => `<button type="button" class="fpick" data-tvpick="${id}:${s.id}"><span class="fp-i">${s.poster ? `<img src="${esc(s.poster)}" alt="">` : '📺'}</span><span class="grow"><b>${esc(s.name)}</b><small class="muted">${esc(s.year || '')}</small></span>${tvMap()[id] === s.id ? '✓' : ''}</button>`).join('') || '<p class="small muted">No match on TMDB.</p>'}
     <button type="button" class="linkish small" data-tvpick="${id}:0">It isn't on TMDB — stop looking</button>`);
 }
+// ---------- 📖 the tour, ❓ help everywhere, and "what's new" ----------
+const tour = { list: TOUR, i: 0 };
+function tourSheet(list = TOUR, at = 0) {
+  tour.list = list; tour.i = Math.max(0, Math.min(at, list.length - 1));
+  LS.set('fam.tourSeen', '1');
+  $('#sheet').classList.add('tourmode');
+  renderTour();
+}
+function renderTour() {
+  const s = tourSlide(tour.list[tour.i]);
+  if (!s) return closeSheet();
+  const n = tour.list.length, last = tour.i === n - 1;
+  const dots = n > 1 ? `<div class="tdots">${tour.list.map((_, j) => `<i class="${j === tour.i ? 'on' : ''}"></i>`).join('')}</div>` : '';
+  // "Show me": the screen this page is about (Us only for a couple; it's in the app already).
+  const go = s.go && (s.go !== 'us' || partnerMember()) ? s.go : '';
+  openSheet(s.welcome
+    ? `<div class="tour welcome"><div class="row between"><span></span><button type="button" class="linkish small" data-tour="close">Skip</button></div>
+        <div class="tbig">🐾</div><h1>${esc(s.title.replace('{family}', fam()?.name || 'OurPawmily'))}</h1><p>${esc(s.text)}</p><p class="small tnote">${esc(s.note)}</p>
+        ${dots}<button type="button" class="wide" data-tour="next">Take the tour ›</button><p class="tiny muted center">Find it again any time: tap ❓ at the top.</p></div>`
+    : `<div class="tour"><div class="row between"><span class="small muted">${n > 1 ? `${tour.i + 1} of ${n}` : ''}</span><button type="button" class="linkish small" data-tour="close">Close ✕</button></div>
+        <p class="teyebrow">${esc(s.eyebrow || '')}</p><h2>${esc(s.title)}</h2>
+        <div class="tcards">${s.cards.map(([i, t, x]) => `<div class="tcard"><span class="ti">${i}</span><div><b>${esc(t)}</b><small>${esc(x)}</small></div></div>`).join('')}</div>
+        ${dots}<div class="row">${tour.i ? '<button type="button" class="ghost grow" data-tour="prev">‹ Back</button>' : ''}${go ? `<button type="button" class="ghost grow" data-tour="go" data-go="${go}">Show me</button>` : ''}<button type="button" class="grow" data-tour="${last ? 'close' : 'next'}">${last ? 'Done' : 'Next ›'}</button></div></div>`);
+}
+function tourAct(what, go) {
+  if (what === 'next') { tour.i = Math.min(tour.i + 1, tour.list.length - 1); return renderTour(); }
+  if (what === 'prev') { tour.i = Math.max(tour.i - 1, 0); return renderTour(); }
+  closeSheet();
+  if (what === 'go' && go) return show(go === 'threads' ? 'threads' : go);
+}
+// Swipe left / right between tour pages.
+let tourTouch = null;
+document.addEventListener('touchstart', (e) => { tourTouch = $('#sheet').classList.contains('tourmode') && e.target.closest?.('.tour:not(.welcome)') ? e.touches[0].clientX : null; }, { passive: true });
+document.addEventListener('touchend', (e) => {
+  if (tourTouch == null) return;
+  const dx = e.changedTouches[0].clientX - tourTouch; tourTouch = null;
+  if (Math.abs(dx) > 60) tourAct(dx < 0 ? 'next' : 'prev');
+}, { passive: true });
+$('#sheet').addEventListener('close', () => $('#sheet').classList.remove('tourmode'));
+// Someone new (just created or joined a family on this phone) sees the welcome once, then a
+// "New here?" card for a week; everyone else sees "What's new" once after an update with features.
+const newcomerAt = () => +(LS.get(`fam.newcomer.${state.fid}`) || 0);
+function markNewcomer(fid) { LS.set(`fam.newcomer.${fid}`, String(Date.now())); LS.set('fam.welcome', fid); LS.set('fam.whatsNew', WHATS_NEW.id); }
+function helloCard() {
+  const el = $('#hello');
+  if (!el) return;
+  if (LS.get('fam.welcome') === state.fid) { LS.set('fam.welcome', null); setTimeout(() => tourSheet(), 400); }
+  const fresh = newcomerAt() && Date.now() - newcomerAt() < 7 * 864e5 && !LS.get('fam.tourSeen') && !LS.get('fam.helloNo');
+  const news = !fresh && !newcomerAt() && LS.get('fam.whatsNew') !== WHATS_NEW.id;
+  el.innerHTML = fresh ? '<div class="newbar"><button type="button" class="nb-go" data-act="tour"><span class="nb-i">👋</span><span><b>New here? Take the 2-minute tour</b>The dogs, the chores, plans, photos and the calendar</span></button><button type="button" class="icon-btn" data-act="hellono" aria-label="Dismiss">✕</button></div>'
+    : news ? `<div class="newbar"><button type="button" class="nb-go" data-act="whatsnew"><span class="nb-i">✨</span><span><b>${esc(WHATS_NEW.title)}</b>${esc(WHATS_NEW.text)}</span></button><button type="button" class="icon-btn" data-act="whatsnewno" aria-label="Dismiss">✕</button></div>` : '';
+}
+// "How this works" on an empty card: the tour page about it.
+const howLink = (id, label) => `<button type="button" class="how" data-tourat="${id}">❓ ${esc(label)} ›</button>`;
+
 // ---------- 📷 albums: the family's own albums (a Google Photos link, and/or photos copied in) ----------
 // Photos are locked on this phone with the family key and stored like post photos; titles and
 // links are locked too. Family only. Google Photos: apps can only get photos you pick in Google's
@@ -3148,7 +3205,10 @@ const CHIPS = ['How do I set up a family?', 'How do I add people and pets?', "My
 // Assistant text → safe HTML: **bold**, links, line breaks.
 const rich = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|\s)_(.+?)_(?=\s|$)/g, '$1<i>$2</i>').replace(/https:\/\/[^\s<)]+/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`).replace(/\n/g, '<br>');
 function helpView() {
-  openSheet(`<div class="row between"><h2>💬 Help</h2><button type="button" class="linkish small" data-act="close">Done</button></div>
+  const here = state.user && state.family ? TOUR_SCREEN[state.view === 'feed' && state.famTab === 'threads' ? 'threads' : state.view] : '';
+  openSheet(`<div class="row between"><h2>❓ Help</h2><button type="button" class="linkish small" data-act="close">Done</button></div>
+    ${state.user && state.family ? `<button type="button" class="tourbtn" data-act="tour"><span class="ti">📖</span><span class="grow"><b>Take the tour</b><small>What’s in the app · 2 min</small></span><span class="muted">›</span></button>
+    <div class="row helprow"><button type="button" class="tourbtn soft" data-act="whatsnew"><span class="ti">✨</span><b>What’s new</b></button>${here ? `<button type="button" class="tourbtn soft" data-tourat="${here}"><span class="ti">🧭</span><b>This screen</b></button>` : ''}</div>` : ''}
     <div class="chat" id="chatLog"></div>
     <div class="chips" id="chatChips">${CHIPS.map((c) => `<button type="button" class="chip" data-ask="${esc(c)}">${esc(c)}</button>`).join('')}</div>
     <form id="chatForm" class="chat-form"><input name="text" placeholder="Ask anything about OurPawmily…" maxlength="1000" autocomplete="off"><button ${chat.busy ? 'disabled' : ''}>Send</button></form>
@@ -3549,6 +3609,8 @@ document.addEventListener('click', (e) => {
   if (d.feelfind) return act(feelFind);
   if (d.nu) { const [w, i] = d.nu.split(':'); return act(() => nuAct(w, +i)); }
   if (d.newstab) { nw.tab = d.newstab; return renderNews(); }
+  if (d.tour) return tourAct(d.tour, d.go);
+  if (d.tourat) return tourSheet(TOUR, Math.max(0, TOUR.indexOf(d.tourat)));
   if (d.album) return act(() => albumSheet(d.album));
   if (d.movietab) { mv.tab = d.movietab; return renderMovies(); }
   if (d.movieall) return movieAllSheet(d.movieall);
@@ -3672,6 +3734,10 @@ document.addEventListener('click', (e) => {
     case 'close': return closeSheet();
     case 'demo': return demoSignIn();
     case 'help': return helpView();
+    case 'tour': LS.set('fam.helloNo', '1'); return tourSheet();
+    case 'whatsnew': LS.set('fam.whatsNew', WHATS_NEW.id); helloCard(); return tourSheet(WHATS_NEW.slides);
+    case 'hellono': LS.set('fam.helloNo', '1'); return helloCard();
+    case 'whatsnewno': LS.set('fam.whatsNew', WHATS_NEW.id); return helloCard();
     case 'feel': return feelSheet();
     case 'outing': return outingAsk();
     case 'writeup': return writeupSheet();
@@ -3789,6 +3855,7 @@ document.addEventListener('click', (e) => {
       const r = await api.post(`/invites/${state.invite}/accept`);
       if (LS.get('fam.inviteKey')) await keys.set(r.family.fid, LS.get('fam.inviteKey'));
       LS.set('fam.invite', null); LS.set('fam.inviteKey', null); state.invite = null; state.fid = r.family.fid; state.view = 'feed';
+      markNewcomer(r.family.fid);
       toast(`Welcome to ${r.family.name}!`); boot();
     });
     case 'declineinvite': LS.set('fam.invite', null); state.invite = null; return boot();
@@ -4039,6 +4106,7 @@ document.addEventListener('submit', (e) => {
     return act(async () => {
       const r = await api.post('/families', v); state.fid = r.family.fid;
       await encryptFamily(r.family.fid);
+      markNewcomer(r.family.fid);
       if (mods.length) await api.patch(`/families/${r.family.fid}`, { modules: mods });
       closeSheet(); toast(`${r.family.name} is ready`); state.view = 'family'; boot();
     });

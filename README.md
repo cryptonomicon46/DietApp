@@ -42,6 +42,9 @@ What you're watching together, where you're up to, ratings, **🆕 new episodes*
 ### 🥗 Trackers
 Each person's **🍽 Food** (meal plans with exact portions, logging, weekly check-ins, groceries, barcode scan) and **🏋︎ Train** (lifting program, runs, rides, climbing, WHOOP / Garmin). Private until you share with someone in Me. Details in *The trackers, in detail* below.
 
+### ❓ Help and the tour
+The **❓** at the top of every screen (and **Help** at the foot of the sidebar on a Mac) opens Help: **📖 Take the tour** (one page per area, with *Show me* to jump there), **✨ What's new**, **🧭 This screen**, and the help chat. Someone who's just created or joined a family sees a welcome and the tour once, then a *New here?* card for a week; after an update with new features, everyone else gets one *What's new* card. Empty screens link to the page that explains them.
+
 ### 👤 Me
 Your family and its people and pets, privacy (who sees your diet & fitness), 🔐 encryption, 📲 add a device, 🔑 recovery phrase, 🔔 notifications, 🌗 appearance, 💬 help, and your account (download your data, delete your account).
 
@@ -457,6 +460,7 @@ Run `node scripts/bump-version.mjs` before committing. It gives every tracker fi
 | `js/brief.js`, `js/briefTab.js` | Weather, walk / run / ride windows, dog buttons, golden days, scoreboard |
 | `family/crypto.js` | 🔐 End-to-end encryption: sealing, keys on the device, recovery phrase |
 | `family/app.js` | 👨‍👩‍👧 The family app: every screen (feed, albums, news, movies, Next up, threads, Us, dogs & chores, calendar, watch, Me) |
+| `family/tour.js` | 📖 The in-app tour pages and "What's new" (kept in step with this README by `/update-readme`) |
 | `family/api.js`, `family/ideas.js`, `family/migrate.js` | Talking to the connector (and running it on the phone for the demo); ranking date ideas; bringing over the trackers |
 | `js/nextup.js` | ✨ Next up: candidates × free hours, scored on due-ness, weather, calendar and habits |
 | `js/dogcal.js` | 🐾 Spotting dog appointments in linked calendars |

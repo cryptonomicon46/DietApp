@@ -22,10 +22,12 @@ Update README.md so it fully and accurately describes OurPawmily as it is in the
 3. Rules:
    - Never include secrets, keys, tokens, household codes, invite or device links, account IDs, or real people's or family names. Use neutral names (Sam, Pat) in examples.
    - Don't describe features that aren't in the code. If unsure whether something ships, check the code; if still unsure, leave it out and list it in your summary.
-   - Don't change any code. Edit only README.md, unless docs/ARCHITECTURE.md is clearly out of date, in which case say so and propose the fix.
+   - Don't change any code. Edit only README.md and the wording in family/tour.js (step 4), unless docs/ARCHITECTURE.md is clearly out of date, in which case say so and propose the fix.
    - Keep it scannable: short sections, tables or bullets, emoji used the way the app uses them.
 
-4. When done:
+4. Keep the in-app tour in step: family/tour.js holds the 📖 tour pages (and "What's new"). If features were added or changed, update the matching pages there in the same plain words. When the change is something existing members should hear about, give WHATS_NEW a new `id` and list the new things on its `new` page. Run `npm test` (tests/tour.test.js checks the pages).
+
+5. When done:
    - Run `npm test` (it must still pass).
    - Show me a summary of what was added, removed or corrected, plus anything you weren't sure about.
    - Commit with a message starting "Docs: README", and push to main.
