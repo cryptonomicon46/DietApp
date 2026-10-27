@@ -58,3 +58,12 @@ test('a run every 2 days stays every 2 days', async () => {
   const r = await nudgeRoutes({ path: '/account/nudges/run', method: 'PUT', body: { every: 2 }, db, user: { uid: 'u' }, json: (data) => ({ data }), today: '2026-10-27' });
   assert.equal(r.data.nudges.run.every, 2);
 });
+
+test("Next up's top pick: saved for a nudge 30 minutes before, then sent once", async () => {
+  const m = new Map(), db = { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); } };
+  const json = (data, status = 200) => ({ status, data });
+  const at = Date.now() + 3 * 3600e3;
+  assert.equal((await nudgeRoutes({ path: '/account/nextup', method: 'PUT', body: { at: 5 }, db, user: { uid: 'u' }, json, today: '2026-10-27' })).status, 400);
+  await nudgeRoutes({ path: '/account/nextup', method: 'PUT', body: { at, title: '🏃 Run in 30 min?', body: '3 days since your last run' }, db, user: { uid: 'u' }, json, today: '2026-10-27' });
+  assert.deepEqual(m.get('nextup:u'), { at, title: '🏃 Run in 30 min?', body: '3 days since your last run', sent: false });
+});

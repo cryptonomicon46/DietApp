@@ -319,7 +319,7 @@ async function feedView() {
     <div id="famBody"></div>`;
   if (th.list.length) $('#thDot').hidden = !unreadThreads().length;
   if (state.famTab === 'threads') { threadsView(); loadUs().then(() => usBadge()); return; }
-  $('#famBody').innerHTML = `<div id="digest"></div>
+  $('#famBody').innerHTML = `<section class="nextup" id="nextUp" hidden></section><div id="digest"></div>
     <button type="button" class="sharebar" data-act="post">${avatar(me(), 30)}<span>Share with the family…</span><b>📷 Photo</b></button>
     <section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>
     <section class="card today" id="today"><div class="skeleton line"></div></section>
@@ -330,6 +330,7 @@ async function feedView() {
   goldNews();
   renderYourDay();
   renderMovies().catch(() => {});
+  renderNextUp().catch(() => {});
   importUs().catch(() => {});
   const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts(), loadUs(), loadThreads().catch(() => {})]);
   renderToday(); renderComingLine(); usBadge();
@@ -2120,6 +2121,124 @@ async function saveThreadEdit(f) {
 }
 async function threadAct(fn) { const r = await fn(); if (r?.thread) { const k = th.cur._key; th.cur = await openThreadText(r.thread, k); th.cur._key = k; renderThread(); } return r; }
 
+// ---------- ✨ Next up: what to do next, and when (worked out on this phone) ----------
+const nu = { res: null, ctx: null, watchKick: false };
+const NU_H = 3600e3;
+const nuKey = () => `fam.nextup.${state.fid}`;
+const nuLearned = () => { try { return JSON.parse(LS.get(nuKey()) || '{}'); } catch { return {}; } };
+const nuSettings = () => { try { return JSON.parse(LS.get('fam.nextupSet') || '{}'); } catch { return {}; } };
+async function nextUpCtx() {
+  const [N, B] = await Promise.all([import('../js/nextup.js'), import('../js/brief.js')]);
+  const now = new Date(), today = isoLocal(), tomorrow = shiftLocal(today, 1);
+  const wx = await walkWeather().catch(() => null);
+  const hours = wx ? wx.hourly.filter((h) => h.time > now && h.time - now < 30 * NU_H) : [];
+  if (!calm.nuLoaded) { calm.nuLoaded = true; await loadCal().catch(() => {}); }
+  const p = partnerMember();
+  const days = await Promise.all([today, tomorrow].map(async (d) => ({ d, list: await dayEntries(d).catch(() => []) })));
+  const busyFor = (pid) => days.flatMap(({ d, list }) => list.filter((e) => e.time && !e.allDay && (e.who === 'both' || e.who === pid)).map((e) => {
+    const start = new Date(`${d}T${e.time}`), end = e.end ? new Date(`${d}T${e.end}`) : new Date(start.getTime() + NU_H);
+    return { start, end: end > start ? end : new Date(start.getTime() + NU_H), title: e.title, icon: e.icon };
+  }));
+  const all = await loadNudges().catch(() => ({}));
+  const mine = await myTrackers().catch(() => null);
+  const classes = [today, tomorrow].flatMap((d) => B.classesOn(Array.isArray(mine?.gymClasses) ? mine.gymClasses : [], new Date(`${d}T12:00:00`))
+    .filter((c) => c.type === 'yoga').map((c) => ({ at: new Date(`${d}T${c.time}`), label: c.name || 'Yoga class', place: B.GYMS[c.gym]?.short || '' })));
+  const callWindows = me()?.legacyId && B.CALL.who === me().legacyId ? [...B.callWindows(today), ...B.callWindows(tomorrow)] : [];
+  let dogs = null;
+  if ((fam().modules || []).includes('dogs') && dogsOf().length) {
+    const c = await api.get(`/families/${state.fid}/care?to=${today}&days=1`).catch(() => null);
+    dogs = { enabled: true, walkedToday: (c?.days?.[today] || []).some((e) => e.kind === 'walk' || e.kind === 'park') };
+  }
+  // New episodes need the Watch list; it's fetched once in the background, then this runs again.
+  if (p && !watch.shows.length && !nu.watchKick) { nu.watchKick = true; loadWatch().then(loadTv).then(() => renderNextUp()).catch(() => {}); }
+  const shows = (watch.shows || []).filter((x) => x.status === 'watching' && x.ep?.newCount).map((x) => ({ id: x.id, title: x.title, newCount: x.ep.newCount, from: x.ep.from, to: x.ep.to }));
+  const A = await import('../js/activity.js');
+  const workouts = {};
+  for (const w of Array.isArray(mine?.workouts) ? mine.workouts : []) { const k = { running: 'run', cycling: 'bike', hotYoga: 'hotyoga' }[A.sportOf(w.name || '')]; if (k) (workouts[k] ||= []).push(new Date(w.start).getHours()); }
+  return { N, ctx: { now, hours, busy: busyFor(fam().me), partnerBusy: p ? busyFor(p.id) : [], nudges: all, classes, callWindows, dogs, shows, learned: nuLearned(), workouts } };
+}
+async function renderNextUp() {
+  const el = $('#nextUp');
+  if (!el || nuSettings().off) { if (el) el.hidden = true; return; }
+  const { N, ctx } = await nextUpCtx();
+  nu.ctx = ctx; nu.res = N.plan(ctx);
+  if (!$('#nextUp')) return;
+  const [top, ...alts] = nu.res.picks;
+  if (!top) { el.hidden = false; el.innerHTML = `<div class="nu-k">✨ Next up</div><p class="small muted">Nothing due right now. ${Object.keys(callNudge.all || {}).length ? '' : '<button type="button" class="linkish small" data-act="habits">🔁 Set up runs, rides or hot yoga</button>'}</p>`; return; }
+  el.hidden = false;
+  el.innerHTML = `<div class="row between"><span class="nu-k">✨ Next up · ${esc(top.when)}</span><span><button type="button" class="linkish tiny" data-act="nuplan">📅 Today's plan</button> <button type="button" class="linkish tiny" data-act="nuknows" aria-label="What Next up knows">⋯</button></span></div>
+    <h3 class="nu-t">${top.icon} ${esc(top.title)}</h3>
+    <p class="nu-why">${top.why.map(esc).join(' · ')}</p>
+    <div class="row wrap nu-acts"><button type="button" class="small" data-nu="done:0">✓ Done</button><button type="button" class="ghost small" data-nu="later:0">⏰ Later</button><button type="button" class="ghost small" data-nu="skip:0">✕ Not today</button><button type="button" class="linkish small" data-nu="why:0">Why?</button></div>
+    ${alts.map((a, i) => `<div class="nu-alt"><span>${a.icon}</span><span class="grow"><b>${esc(a.title)}</b> <small class="muted">${esc(a.when)} · ${esc(a.why[0] || '')}</small></span><button type="button" class="linkish tiny" data-nu="done:${i + 1}">✓</button><button type="button" class="linkish tiny" data-nu="skip:${i + 1}">✕</button></div>`).join('')}`;
+  nuSendNudge(top);
+}
+// 🔔 Optional: a notification 30 minutes before the top pick (sent by the connector).
+function nuSendNudge(top) {
+  if (!nuSettings().nudge || api.mode() === 'demo') return;
+  const sig = `${top.kind}:${top.at.getTime()}`;
+  if (LS.get('fam.nextupSent') === sig) return;
+  LS.set('fam.nextupSent', sig);
+  api.put('/account/nextup', { at: top.at.getTime(), title: `${top.icon} ${top.title} in 30 min?`, body: top.why.slice(0, 2).join(' · ') }).catch(() => {});
+}
+async function nuAct(what, i) {
+  const pick = nu.res?.picks[i];
+  if (!pick) return;
+  const N = await import('../js/nextup.js');
+  if (what === 'why') return nuWhy(pick);
+  if (what === 'done') {
+    if (['run', 'bike', 'hotyoga', 'callmom'].includes(pick.kind)) setNudges(await api.post(`/account/nudges/${pick.kind}/done?today=${isoLocal()}`, { date: isoLocal() }));
+    if (pick.kind === 'walk' || pick.withDogs) await api.post(`/families/${state.fid}/care`, { kind: 'walk', date: isoLocal(), by: 'me' }).catch(() => {});
+    if (pick.kind === 'show') await api.post(`/families/${state.fid}/watch/shows/${pick.show}/night`, { date: isoLocal() }).catch(() => {});
+    toast(`✓ ${pick.icon} ${pick.title} — nice`);
+  } else toast(what === 'later' ? `⏰ ${pick.title} — later` : `✕ Not today: ${pick.title}`);
+  LS.set(nuKey(), JSON.stringify(N.learn(nuLearned(), what, pick)));
+  if (what !== 'later') LS.set('fam.nextupSent', null);
+  closeSheet(); renderNextUp(); renderYourDay();
+}
+function nuWhy(p) {
+  const pct = Math.round(p.sure * 100);
+  openSheet(`<div class="row between"><h2>Why ${esc(p.title.toLowerCase())} at ${esc(p.when)}?</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <ul class="list">${p.why.map((w) => `<li>${esc(w)}</li>`).join('')}${p.kind !== 'show' && p.kind !== 'callmom' ? `<li>📅 You're free then</li>` : ''}</ul>
+    <div class="grp">How sure</div><div class="nu-bar"><i style="width:${pct}%"></i></div>
+    <p class="tiny muted">Out of ${nu.res.considered} times and things it tried. ${nu.res.all.length > 3 ? `Also possible: ${nu.res.all.slice(3, 6).map((x) => `${x.icon} ${esc(x.title)} ${esc(x.when)}`).join(', ')}.` : ''}</p>
+    <div class="grp">Tell it</div><div class="row wrap"><button type="button" class="ghost small" data-nu="later:${nu.res.picks.indexOf(p)}">⏰ Later</button><button type="button" class="ghost small" data-nu="skip:${nu.res.picks.indexOf(p)}">✕ Not today</button><button type="button" class="ghost small" data-act="habits">🔁 Change how often</button></div>`);
+}
+function nuPlan() {
+  const today = isoLocal(), ctx = nu.ctx;
+  const fixed = ctx.busy.filter((b) => isoLocal(b.start) === today).map((b) => ({ at: b.start, label: `${b.icon || '📅'} ${b.title}`, fixed: true }));
+  const sugg = nu.res.all.filter((x) => isoLocal(x.at) === today).map((x) => ({ at: x.at, label: `${x.icon} ${x.title}`, why: x.why[0] || '' }));
+  const items = [...fixed, ...sugg].sort((a, b) => a.at - b.at);
+  const clock = (d) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(':00', '');
+  openSheet(`<div class="row between"><h2>📅 Today's plan</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <div class="tl">${items.map((x) => `<div class="st ${x.fixed ? 'fixed' : ''}"><div class="t">${esc(clock(x.at))}</div><b>${esc(x.label)}</b>${x.why ? `<small class="muted">${esc(x.why)}</small>` : ''}</div>`).join('') || '<p class="small muted">Nothing on the calendar, and nothing due today.</p>'}</div>
+    <p class="tiny muted">Calendar items are fixed; ✨ suggestions are slotted into the free time around them.</p>`);
+}
+async function nuKnows() {
+  const ctx = nu.ctx || (await nextUpCtx()).ctx;
+  const l = ctx.learned, N = await import('../js/nextup.js');
+  const usual = N.usualHours(l, ctx.workouts);
+  const mode = (h) => { const e = Object.entries(h || {}).sort((a, b) => b[1] - a[1])[0]; return e ? new Date(2000, 0, 1, +e[0]).toLocaleTimeString(undefined, { hour: 'numeric' }) : ''; };
+  const DAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+  const rows = Object.entries(N.KINDS).map(([k, v]) => {
+    const done = (l.done || []).filter((d) => d.kind === k).length + (ctx.workouts[k]?.length || 0);
+    const skipDays = Object.entries(l.skips?.[k] || {}).filter(([, n]) => n >= 2).map(([d]) => DAYS[d]);
+    const set = ctx.nudges[k];
+    if (!done && !skipDays.length && !set) return '';
+    return `<li><span>${v.icon} <b>${v.label}</b></span><small class="muted">${[set ? `every ${set.every} day${set.every === 1 ? '' : 's'}` : '', done ? `${done} logged lately` : '', mode(usual[k]) ? `usually ~${mode(usual[k])}` : '', skipDays.length ? `skipped on ${skipDays.join(', ')}` : ''].filter(Boolean).join(' · ')}</small></li>`;
+  }).join('');
+  const took = (l.done || []).length, skipped = Object.values(l.skips || {}).reduce((n, o) => n + Object.values(o).reduce((a, b) => a + b, 0), 0);
+  const st = nuSettings();
+  openSheet(`<div class="row between"><h2>✨ What Next up knows</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <ul class="list nu-knows">${rows || '<li class="small muted">Not much yet — it learns from what you tick off, skip, and what WHOOP / Strava shows you did.</li>'}</ul>
+    ${took + skipped ? `<p class="small">Took ${took} of ${took + skipped} suggestions.</p>` : ''}
+    <div class="grp">Settings</div>
+    <label class="switch-row"><span>🔔 Nudge me 30 minutes before<small class="muted">A notification for the top pick, if it's still the plan</small></span><input type="checkbox" data-nuset="nudge" ${st.nudge ? 'checked' : ''}><i class="switch"></i></label>
+    <label class="switch-row"><span>✨ Show Next up<small class="muted">The bubble at the top of Moments</small></span><input type="checkbox" data-nuset="show" ${st.off ? '' : 'checked'}><i class="switch"></i></label>
+    <button type="button" class="linkish small danger" data-act="nureset">Forget what it learned</button>
+    <p class="tiny muted">Worked out on this phone from your reminders, workouts, calendar, the weather, class times and your Watch list. Nothing extra leaves the phone (the 30-minute nudge sends just that one suggestion to the connector so it can notify you).</p>`);
+}
+
 // Bringing over the trackers' "Feeling like" plans, answers and notes (once per family, each
 // person their own, locked before they're sent).
 async function importUs() {
@@ -3233,6 +3352,7 @@ document.addEventListener('click', (e) => {
   if (d.feelpick != null) { const x = feel.picks[+d.feelpick]; return x && feelFill(x); }
   if (d.feelcuisine != null) { feel.cuisine = d.feelcuisine; return renderFeelPicks(); }
   if (d.feelfind) return act(feelFind);
+  if (d.nu) { const [w, i] = d.nu.split(':'); return act(() => nuAct(w, +i)); }
   if (d.movietab) { mv.tab = d.movietab; return renderMovies(); }
   if (d.movieall) return movieAllSheet(d.movieall);
   if (d.movie) return act(() => movieSheet(d.movie));
@@ -3358,6 +3478,9 @@ document.addEventListener('click', (e) => {
     case 'feel': return feelSheet();
     case 'outing': return outingAsk();
     case 'writeup': return writeupSheet();
+    case 'nuplan': return nu.res ? nuPlan() : null;
+    case 'nuknows': return act(nuKnows);
+    case 'nureset': if (!confirm('Forget what Next up learned about you?')) return; LS.set(nuKey(), null); closeSheet(); toast('Forgotten'); return renderNextUp();
     case 'habits': return act(async () => { await loadNudges(); habitsSheet(); });
     case 'pollopt': { const w = $('#writeForm .wpoll'); if (w.querySelectorAll('[name=opt]').length >= 8) return; w.querySelector('[data-act=pollopt]').insertAdjacentHTML('beforebegin', `<input name="opt" maxlength="80" placeholder="Choice ${w.querySelectorAll('[name=opt]').length + 1}">`); return; }
     case 'tidy': {
@@ -3592,6 +3715,12 @@ document.addEventListener('change', async (e) => {
     h.hidden = !k[3]; h.querySelector('span').textContent = k[3] || 'Where?';
     t.form.idea.value = '';
     return renderFeelPicks();
+  }
+  if (t.dataset.nuset) {
+    const st = nuSettings();
+    if (t.dataset.nuset === 'nudge') { st.nudge = t.checked; LS.set('fam.nextupSent', null); if (!t.checked && api.mode() !== 'demo') api.del('/account/nextup').catch(() => {}); }
+    else st.off = !t.checked;
+    LS.set('fam.nextupSet', JSON.stringify(st)); toast('Saved'); return renderNextUp();
   }
   if (t.dataset.moviesonoff) return act(async () => { mv.prefs = (await api.put('/account/movies', { on: t.checked })).movies; toast(t.checked ? '🎬 Movies are on — see Family › Moments' : 'Movies are off'); });
   if (t.dataset.nudgedone && t.checked) {

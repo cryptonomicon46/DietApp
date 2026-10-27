@@ -209,6 +209,12 @@ export async function runReminders(env, at = Date.now(), { db }) {
       }
       if (due.length) await db.put(`nudges:${uid}`, nudges);
     }
+    // ✨ Next up's top pick, 30 minutes before.
+    const nx = await db.get(`nextup:${uid}`);
+    if (nx && !nx.sent && nx.at - 30 * 60000 >= from && nx.at - 30 * 60000 < to) {
+      sent += await sendTo(db, env, [uid], 'nudges', { title: nx.title, body: nx.body, url: 'family/#feed', tag: 'nextup' }, 3600);
+      await db.put(`nextup:${uid}`, { ...nx, sent: true }, 86400);
+    }
     // 🎬 Movie alerts, checked at 9 AM your time: in theaters, or now streaming.
     const mv = env.TMDB_KEY ? await db.get(`moviealerts:${uid}`) : null;
     if (mv?.on && mv.list?.length) {

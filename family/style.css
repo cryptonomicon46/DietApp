@@ -689,3 +689,14 @@ i.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; back
 /* 🎬 Movies */
 .movies .rchips { margin: 0; } .mrow { width: 100%; text-align: left; background: none; color: var(--ink); border-radius: 0; font-weight: 400; }
 .moviehead { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 8px; } .moviehead img { width: 92px; border-radius: 10px; flex: none; }
+
+/* ✨ Next up */
+.nextup { background: linear-gradient(150deg, var(--brand-soft), var(--card) 70%); border: 1px solid #b9dcc8; border-radius: 18px; padding: 12px 14px; margin-bottom: 12px; box-shadow: 0 4px 14px rgba(47, 125, 91, .12); }
+.nu-k { font-size: .7rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--brand); }
+.nu-t { margin: 4px 0 2px; font-size: 1.15rem; text-transform: none; letter-spacing: 0; color: var(--ink); } .nu-why { font-size: .8rem; color: var(--muted); margin: 0 0 8px; }
+.nu-acts { gap: 6px; } .nu-acts button { padding: 6px 12px; }
+.nu-alt { display: flex; gap: 8px; align-items: center; padding: 7px 0 0; margin-top: 7px; border-top: 1px solid var(--line); font-size: .85rem; } .nu-alt small { display: block; }
+.nu-bar { height: 7px; border-radius: 4px; background: var(--brand-soft); position: relative; } .nu-bar i { position: absolute; inset: 0 auto 0 0; background: var(--brand); border-radius: 4px; }
+.tl .st.fixed .t { color: var(--muted); } .nu-knows li { display: grid; gap: 2px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .nextup { border-color: #2f5a46; box-shadow: none; } }
+:root[data-theme=dark] .nextup { border-color: #2f5a46; box-shadow: none; }

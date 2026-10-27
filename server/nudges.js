@@ -24,6 +24,16 @@ export function nudgeState(n, today) {
 // GET /account/nudges · PUT /account/nudges/:id {every} (sets it up) · POST …/:id/done {date} ·
 // POST …/:id/undo · DELETE …/:id (turns it off).
 export async function nudgeRoutes({ path, method, body, db, user, json, today }) {
+  // ✨ Next up's top pick, for a notification 30 minutes before it (the phone works it out).
+  if (path === '/account/nextup') {
+    const key = `nextup:${user.uid}`;
+    if (method === 'DELETE') { await db.put(key, null, 60); return json({ ok: true }); }
+    if (method !== 'PUT') return json({ error: 'not found' }, 404);
+    const at = +body.at;
+    if (!Number.isFinite(at) || at < Date.now() - 36e5 || at > Date.now() + 2 * 864e5) return json({ error: 'when?' }, 400);
+    await db.put(key, { at, title: String(body.title || '').slice(0, 80), body: String(body.body || '').slice(0, 160), sent: false }, 2 * 86400);
+    return json({ ok: true });
+  }
   const m = path.match(/^\/account\/nudges(?:\/([a-z]+)(\/done|\/undo)?)?$/);
   if (!m) return null;
   const key = `nudges:${user.uid}`;
