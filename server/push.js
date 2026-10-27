@@ -5,6 +5,7 @@
 // end-to-end encrypted note, plan or event says: the connector can't read those.
 
 import { occursOn } from '../js/calendar.js';
+import { nudgesDue } from './nudges.js';
 
 const enc = new TextEncoder();
 const b64u = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -19,6 +20,7 @@ export const NOTIFY_KINDS = {
   events: '📅 Calendar reminders',
   feed: '💬 Comments and help on your posts',
   fun: '⭐ Golden days and games',
+  nudges: '📞 Check-in reminders (like calling Mom)',
 };
 export const wants = (user, kind) => user?.notify?.[kind] !== false;
 
@@ -190,6 +192,16 @@ export async function runReminders(env, at = Date.now(), { db }) {
   for (const uid of uids) {
     const user = await db.get(`user:${uid}`);
     if (!user) continue;
+    // 📞 Check-in reminders (one read per phone owner a run; a write only when one goes out).
+    const nudges = await db.get(`nudges:${uid}`);
+    if (nudges) {
+      const today = localDay(from, user.tz || 'America/Los_Angeles');
+      for (const d of nudgesDue(nudges, { today, from, to })) {
+        sent += await sendTo(db, env, [uid], d.kind, d.msg, d.ttl);
+        nudges[d.id] = { ...nudges[d.id], notified: today };
+        await db.put(`nudges:${uid}`, nudges);
+      }
+    }
     for (const fid of user.families || []) {
       const f = await famData(fid);
       const me = f?.fam.members.find((x) => x.uid === uid);

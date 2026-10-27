@@ -655,3 +655,14 @@ i.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; back
 .letter h3 { text-transform: none; letter-spacing: 0; color: inherit; }
 .para { padding-right: 52px; } .note-btn { position: absolute; right: 0; top: 2px; }
 .famtabs button { border: 0; }
+
+/* 📞 Call Mom: a box to tick when it's due */
+.call-due { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 10px 12px; border: 1px solid #f3c1cf; background: #fff6f8; border-radius: 14px; }
+.call-due b, .call-due small { display: block; } .call-due b { font-size: .95rem; }
+.call-check { position: relative; flex: none; width: 30px; height: 30px; cursor: pointer; }
+.call-check input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.call-check span { display: block; width: 30px; height: 30px; border: 2px solid var(--like); border-radius: 50%; background: var(--card); transition: background .2s; }
+.call-check input:checked + span { background: var(--like); box-shadow: inset 0 0 0 5px var(--card); }
+.call-due.done { opacity: .55; } .call-due.done b { text-decoration: line-through; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .call-due { background: #2e1d24; border-color: #5a2e3e; } }
+:root[data-theme=dark] .call-due { background: #2e1d24; border-color: #5a2e3e; }

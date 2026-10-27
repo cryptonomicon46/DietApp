@@ -50,6 +50,7 @@ import { DEFAULT_AREA, areaKey, scoutArea } from './scout.js';
 import { planOuting, swapStop } from './outing.js';
 import { checkLinks } from './links.js';
 import { threadRoutes } from './threads.js';
+import { nudgeRoutes } from './nudges.js';
 import { askClaude } from './scout.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
@@ -336,6 +337,9 @@ export async function familyApi(req, env, path, ctx = null) {
   }
 
   // ---- your account: devices, a copy of your data, deleting it ----
+  // 📞 Check-in reminders ("call Mom every two weeks").
+  { const today = /^\d{4}-\d{2}-\d{2}$/.test(url(req).searchParams.get('today') || '') ? url(req).searchParams.get('today') : new Date().toISOString().slice(0, 10);
+    const r = await nudgeRoutes({ path, method, body, db, user, json, today }); if (r) return r; }
   if (path === '/account/sessions' && method === 'GET') {
     return json({ sessions: (user.sessions || []).map((x) => ({ at: x.at, device: x.device || '', current: x.t === token })) });
   }

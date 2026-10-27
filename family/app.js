@@ -1151,11 +1151,42 @@ async function callLine() {
   const now = Date.now();
   let day = 'today', w = B.callWindows(isoLocal()).find((x) => x.end > now);
   if (!w) { day = 'tomorrow'; w = B.callWindows(shiftLocal(isoLocal(), 1))[0]; }
-  if (!w) return '';
   const t = (d, tz) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', ...(tz ? { timeZone: tz } : {}) }).replace(':00', '');
-  const live = w.start <= now;
-  return `<p class="call-line small">📞 <b>Call Mom</b> ${live ? `<span class="ok">now</span> — until ${t(w.end)}` : `${day} ${t(w.start)}–${t(w.end)}`} <span class="muted">(${t(w.start, B.CALL.there.tz)} her time)</span></p>`;
+  const live = w && w.start <= now;
+  const when = w ? `${live ? `<span class="ok">now</span> — until ${t(w.end)}` : `${day} ${t(w.start)}–${t(w.end)}`} <span class="muted">(${t(w.start, B.CALL.there.tz)} her time)</span>` : '';
+  // 🔁 Every two weeks: quiet until it's due, then a box to tick (and a notification each day it's due).
+  callNudge.data ||= await api.get(`/account/nudges?today=${isoLocal()}`).then((r) => r.nudges.callmom || null).catch(() => null);
+  const n = callNudge.data;
+  const short = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (!n) return `<p class="call-line small">📞 <b>Call Mom</b> ${when} · <button type="button" class="linkish small" data-callnudge="setup">🔁 Remind me every 2 weeks</button></p>`;
+  if (!n.due) {
+    const left = Math.round((Date.parse(n.next) - Date.parse(isoLocal())) / 864e5);
+    return `<p class="call-line small">📞 Called Mom ${n.last ? short(n.last) : ''} ✓ <span class="muted">· next in ${left} day${left === 1 ? '' : 's'}</span>${n.canUndo && n.last === isoLocal() ? ' · <button type="button" class="linkish small" data-callnudge="undo">Undo</button>' : ''} · <button type="button" class="linkish small" data-callnudge="edit">every ${n.every} days</button></p>`;
+  }
+  return `<div class="call-due"><label class="call-check"><input type="checkbox" data-callnudge="done"><span></span></label>
+    <div class="grow"><b>📞 Time to call Mom</b><small class="muted">${n.last ? `Last call ${short(n.last)} (${Math.round((Date.parse(isoLocal()) - Date.parse(n.last)) / 864e5)} days ago)` : `Every ${n.every} days`}${w ? ` · best ${when}` : ''}</small></div>
+    <button type="button" class="linkish tiny" data-callnudge="edit">⋯</button></div>`;
 }
+const callNudge = { data: null };
+async function callNudgeAct(what, t) {
+  const P = '/account/nudges/callmom';
+  if (what === 'setup') { const r = await api.put(`${P}?today=${isoLocal()}`, { every: 14 }); callNudge.data = r.nudges.callmom; toast('🔁 Every 2 weeks — tick it off when you\'ve called'); }
+  else if (what === 'done') {
+    const r = await api.post(`${P}/done?today=${isoLocal()}`, { date: isoLocal() });
+    callNudge.data = r.nudges.callmom;
+    toast(`✓ Called Mom — next reminder ${new Date(`${callNudge.data.next}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
+  } else if (what === 'undo') { const r = await api.post(`${P}/undo?today=${isoLocal()}`); callNudge.data = r.nudges.callmom; }
+  else if (what === 'edit') {
+    const n = callNudge.data;
+    return openSheet(`<h2>📞 Call Mom</h2><form id="callForm" class="stack">
+      <label>Remind me every<select name="every">${[7, 10, 14, 21, 30].map((d) => `<option value="${d}" ${d === n.every ? 'selected' : ''}>${d === 7 ? 'week' : d === 14 ? '2 weeks' : d === 21 ? '3 weeks' : d === 30 ? 'month' : `${d} days`}</option>`).join('')}</select></label>
+      <label>Last called<input type="date" name="last" max="${isoLocal()}" value="${n.last || ''}"></label>
+      <p class="tiny muted">When it's due, you get one notification a day at the start of a good time to call (her morning or evening) until you tick it off. Turn these off in Me › 🔔 Notifications › Check-in reminders.</p>
+      <div class="row between"><button type="button" class="ghost danger" data-callnudge="off">Stop reminding me</button><button>Save</button></div></form>`);
+  } else if (what === 'off') { await api.del(P); callNudge.data = null; closeSheet(); toast('Reminders stopped'); }
+  renderToday();
+}
+
 // 📅 Coming up (one line): the next dog appointment (and an open leg), and the next agreed plan.
 function renderComingLine() {
   const el = $('#comingLine');
@@ -3012,6 +3043,7 @@ document.addEventListener('click', (e) => {
   if (d.feelpick != null) { const x = feel.picks[+d.feelpick]; return x && feelFill(x); }
   if (d.feelcuisine != null) { feel.cuisine = d.feelcuisine; return renderFeelPicks(); }
   if (d.feelfind) return act(feelFind);
+  if (d.callnudge && d.callnudge !== 'done') return act(() => callNudgeAct(d.callnudge, t));
   if (d.famtab) { if (d.board) th.board = d.board; state.famTab = d.famtab; LS.set('fam.famTab', d.famtab); if (state.view !== 'feed') return show('feed'); return feedView(); }
   if (d.board) { th.board = d.board; return threadsView(); }
   if (d.thread) { const [f, id] = d.thread.split(':'); th.quote = null; return act(() => threadView(f, id)); }
@@ -3353,6 +3385,7 @@ document.addEventListener('change', async (e) => {
     t.form.idea.value = '';
     return renderFeelPicks();
   }
+  if (t.dataset.callnudge === 'done' && t.checked) { t.disabled = true; t.closest('.call-due')?.classList.add('done'); return act(() => new Promise((r) => setTimeout(r, 450)).then(() => callNudgeAct('done', t))); }
   if (t.form?.id === 'writeForm' && (t.name === 'aud' || t.name === 'cat')) {
     const f = t.form;
     f.querySelector('.wboards').hidden = f.aud.value !== 'family';
@@ -3401,6 +3434,7 @@ document.addEventListener('submit', (e) => {
     f.text.value = ''; f.querySelector('button').disabled = true;
     return ask(v.text || '');
   }
+  if (f.id === 'callForm') { e.preventDefault(); return act(async () => { const r = await api.put(`/account/nudges/callmom?today=${isoLocal()}`, { every: +v.every, last: v.last || undefined }); callNudge.data = r.nudges.callmom; closeSheet(); renderToday(); toast('Saved'); }); }
   if (f.id === 'writeForm') { e.preventDefault(); return act(() => (f.dataset.edit ? saveThreadEdit(f) : postThread(f))); }
   if (f.id === 'thReplyForm') {
     e.preventDefault();
