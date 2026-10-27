@@ -684,3 +684,4 @@ i.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; back
 .dogcal { display: flex; gap: 10px; border: 1px dashed #c9c3b3; border-radius: 12px; padding: 9px 11px; margin-top: 8px; background: var(--bg); }
 .dogcal b, .dogcal small { display: block; } .dogcal .row { gap: 6px; margin-top: 6px; }
 .dogcal .row { display: flex; flex-wrap: wrap; } .dogcal .row button { padding: 6px 12px; font-size: .8rem; }
+.ep-line { margin: 2px 0 4px; } .ep-new { color: var(--like); }

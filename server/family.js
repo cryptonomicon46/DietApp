@@ -51,6 +51,7 @@ import { planOuting, swapStop } from './outing.js';
 import { checkLinks } from './links.js';
 import { threadRoutes } from './threads.js';
 import { nudgeRoutes } from './nudges.js';
+import { tvRoutes } from './tv.js';
 import { askClaude } from './scout.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
@@ -337,6 +338,8 @@ export async function familyApi(req, env, path, ctx = null) {
   }
 
   // ---- your account: devices, a copy of your data, deleting it ----
+  // 📺 Episode dates (TMDB) for the shows you're watching.
+  { const r = await tvRoutes({ path, method, req, env, json, url }); if (r) return r; }
   // 📞 Check-in reminders ("call Mom every two weeks").
   { const today = /^\d{4}-\d{2}-\d{2}$/.test(url(req).searchParams.get('today') || '') ? url(req).searchParams.get('today') : new Date().toISOString().slice(0, 10);
     const r = await nudgeRoutes({ path, method, body, db, user, json, today }); if (r) return r; }
@@ -723,7 +726,7 @@ export async function familyApi(req, env, path, ctx = null) {
     const save = () => db.put(key, { ...w, shows: w.shows.slice(-500), nights: w.nights.slice(-3000) });
     const bodyOf = (v) => sealed(v, 4000) ?? (fam.e2ee ? null : (typeof v === 'object' && v ? JSON.stringify(v).slice(0, 2000) : null));
     const day = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '');
-    const STATUSES = ['watching', 'finished', 'dropped'];
+    const STATUSES = ['watching', 'upnext', 'finished', 'dropped'];
     // 🔒 A show is the couple's own unless it's shared with the family ("aud": "family"). Older
     // shows (no aud) stay as they were: the family's.
     const couple = [me.id, partnerOf(fam, me)?.id].filter(Boolean);

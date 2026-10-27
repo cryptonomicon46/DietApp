@@ -1313,8 +1313,9 @@ function forYou() {
   const notes = us.notes.filter((n) => n.by !== meId && n.at > seen);
   const after = us.plans.filter((p) => p.agreed && !p.done && !isUpcoming(p) && p.day >= shiftLocal(isoLocal(), -7) && !ratedByMe(p.id));
   const matches = ideas.matches || [];
+  const eps = (watch.shows || []).filter((x) => x.status === 'watching' && x.ep?.newCount && x.ep.latest >= shiftLocal(isoLocal(), -7) && LS.get(`fam.epSeen.${x.id}`) !== x.ep.latest);
   const letters = th.list.filter((t) => t.aud === 'us' && t.unread).sort((a, b) => (LS.get(`fam.tonight.${b.id}`) ? 1 : 0) - (LS.get(`fam.tonight.${a.id}`) ? 1 : 0));
-  return { ask, notes, after, matches, letters, count: ask.length + notes.length + matches.length + letters.length };
+  return { ask, notes, after, matches, letters, eps, count: ask.length + notes.length + matches.length + letters.length + eps.length };
 }
 function usBadge() {
   const b = $('#usBadge');
@@ -1340,6 +1341,7 @@ async function usView() {
   await Promise.all([loadUs(), loadRhythm().then((r) => { calm.rhythm = r; }).catch(() => {}), loadWatch().catch(() => {}), loadIdeas().catch(() => {}), loadThreads().catch(() => {})]);
   if (state.view !== 'us') return;
   renderUs();
+  loadTv().then(() => { if (state.view === 'us' && $('#usNotesC')) { renderUs(); usBadge(); } }).catch(() => {});
   // Opening Us counts its new notes as seen (after this visit's "new" marks are drawn).
   LS.set(usSeenKey(), String(Date.now()));
   usBadge();
@@ -1350,7 +1352,9 @@ function renderUs() {
   const wn = (p) => (KINDS[p.kind] || KINDS.other);
   $('#usSub').textContent = `🔒 Just you two${us.streak > 1 ? ` · 💌 ${us.streak}-day note streak` : ''}`;
   // For you
-  $('#usFor').innerHTML = f.ask.length || f.notes.length || f.after.length || f.matches.length || f.letters.length ? `<div class="foryou"><div class="row between"><b class="small up">For you</b>${f.count ? `<span class="small" style="color:var(--like);font-weight:800">${f.count}</span>` : ''}</div>
+  $('#usFor').innerHTML = f.ask.length || f.notes.length || f.after.length ||  f.matches.length || f.letters.length || f.eps.length ? `<div class="foryou"><div class="row between"><b class="small up">For you</b>${f.count ? `<span class="small" style="color:var(--like);font-weight:800">${f.count}</span>` : ''}</div>
+    ${f.eps.map((x) => `<div class="fy"><span class="fy-i">🆕</span><div><b>${esc(x.title)}: ${x.ep.newCount} new episode${x.ep.newCount === 1 ? '' : 's'}</b><small>E${x.ep.from}${x.ep.to !== x.ep.from ? `–${x.ep.to}` : ''} out ${x.ep.latest === isoLocal() ? 'today' : shortDay(x.ep.latest)}${x.ep.nextDrop ? ` · next ${shortDay(x.ep.nextDrop)}` : ''}</small>
+      <div class="ans"><button type="button" class="small" data-watchnight="${x.id}">📺 Watching tonight</button><button type="button" class="ghost small" data-epseen="${x.id}:${x.ep.latest}">Later</button></div></div></div>`).join('')}
     ${f.letters.map((t) => `<div class="fy"><span class="fy-i">📓</span><div><b>${t.mine ? `${esc(t.lastByName)} added a note to “${esc(t.title)}”` : `${esc(t.byName)} wrote: ${esc(t.title)}`}</b><small>${t.mins} min read${t.replies ? ` · ${t.replies} note${t.replies === 1 ? '' : 's'}` : ''}${LS.get(`fam.tonight.${t.id}`) ? ' · 🌙 saved for tonight' : ''}</small>
       <div class="ans"><button type="button" class="small" data-thread="${t.fid}:${t.id}">Read</button>${LS.get(`fam.tonight.${t.id}`) ? '' : `<button type="button" class="ghost small" data-tonightlater="${t.id}">🌙 Tonight</button>`}</div></div></div>`).join('')}
     ${f.matches.map((m) => `<div class="fy"><span class="fy-i">💞</span><div><b>It's a match: ${esc(m.idea.title)}</b><small>You both 💗 it${m.idea.day ? ` · ${esc(dayText(m.idea.day, m.idea.time))}` : ''}</small>
@@ -1397,9 +1401,9 @@ function renderUs() {
       : `<p class="small muted">Read something, tried something, had an idea? Write ${esc(pName)} about it while it's fresh — it waits here until they have a moment.</p>`}
     ${book.length > 6 ? '<button type="button" class="linkish small" data-board="us" data-famtab="threads">All of it ›</button>' : ''}`;
   // Tonight's show
-  const on = (watch.shows || []).filter((x) => x.status === 'watching').sort((a, b) => (watch.S?.lastActive(b) || '').localeCompare(watch.S?.lastActive(a) || ''))[0];
+  const on = (watch.shows || []).filter((x) => x.status === 'watching').sort((a, b) => (b.ep?.newCount ? 1 : 0) - (a.ep?.newCount ? 1 : 0) || (watch.S?.lastActive(b) || '').localeCompare(watch.S?.lastActive(a) || ''))[0];
   const tonightLogged = on?.nights.some((n) => n.date === isoLocal());
-  $('#usTonight').innerHTML = `<section class="card tonightc"><span class="big">🍿</span><div class="grow">${on ? `<b>${esc(on.title)}</b>${on.progress ? ` <small class="muted">S${on.progress.s || 1} · E${on.progress.e}</small>` : ''}<br><small class="muted">${on.aud === 'family' ? '👨‍👩‍👧 shared with the family' : '🔒 just you two'}</small>` : '<b>Watching together</b><br><small class="muted">Add what you two are watching</small>'}</div>
+  $('#usTonight').innerHTML = `<section class="card tonightc"><span class="big">🍿</span><div class="grow">${on ? `<b>${esc(on.title)}</b>${on.progress ? ` <small class="muted">S${on.progress.s || 1} · E${on.progress.e}</small>` : ''}${on.ep?.newCount ? ` <small class="ep-new">🆕 ${on.ep.newCount} new</small>` : ''}<br><small class="muted">${on.aud === 'family' ? '👨‍👩‍👧 shared with the family' : '🔒 just you two'}</small>` : '<b>Watching together</b><br><small class="muted">Add what you two are watching</small>'}</div>
     ${on ? `<button type="button" class="${tonightLogged ? '' : 'ghost'} small" data-watchnight="${on.id}">${tonightLogged ? '✓ Tonight' : '📺 Tonight'}</button>` : ''}<button type="button" class="linkish small" data-view="watch">All ›</button></section>`;
 }
 // When you both say yes, the plan goes on the calendar for both of you (once).
@@ -2509,7 +2513,61 @@ async function loadWatch() {
   const orphans = bodies.filter((x) => !people.some((m) => m.id === x.by));
   if (orphans.length) records.push({ person: 'gone', shows: orphans.map((x) => ({ id: x.id, title: x.title || '🔒 Locked', service: x.service || 'other', kind: x.kind || 'show', date: x.date || isoLocal(new Date(x.at)), at: x.at })), nights: [], status: {}, ratings: {} });
   watch.data = w;
+  const before = new Map((watch.shows || []).map((x) => [x.id, x]));
   watch.shows = watch.S.mergeShows(records).map((x) => ({ ...x, progress: w.progress[x.id] || null, aud: w.shows.find((y) => y.id === x.id)?.aud || 'family' }));
+  // Episode dates already looked up stay, worked out again against the new progress.
+  for (const x of watch.shows) { const b = before.get(x.id); if (b?.tv && watch.tvm) { x.tv = b.tv; x.ep = watch.tvm.episodeStatus(x.tv, x.progress, isoLocal()); } }
+}
+// 📺 Episode dates for the shows you're watching (or have up next), from TMDB through the
+// connector. Which TMDB show each one is, and the dates, are kept on this phone.
+const tvMapKey = () => `fam.tmdbMap.${state.fid}`;
+const tvMap = () => { try { return JSON.parse(LS.get(tvMapKey()) || '{}'); } catch { return {}; } };
+async function tvInfo(id) {
+  let c = null; try { c = JSON.parse(LS.get(`fam.tv.${id}`) || 'null'); } catch { /* none */ }
+  if (c && Date.now() - c.at < 6 * 3600e3) return c.show;
+  const r = await api.get(`/tv/${id}`).catch(() => null);
+  if (r?.show) { try { LS.set(`fam.tv.${id}`, JSON.stringify({ at: Date.now(), show: r.show })); } catch { /* full */ } return r.show; }
+  return c?.show || null;
+}
+async function loadTv() {
+  watch.tvm ||= await import('../server/tv.js');
+  const { episodeStatus } = watch.tvm;
+  const map = tvMap();
+  const list = watch.shows.filter((x) => x.kind !== 'movie' && !x.locked && ['watching', 'upnext'].includes(x.status)).slice(0, 15);
+  await Promise.all(list.map(async (x) => {
+    if (map[x.id] === undefined) {
+      const r = await api.get(`/tv/search?q=${encodeURIComponent(x.title)}`).catch(() => null);
+      if (!r) return;
+      map[x.id] = r.results[0]?.id || 0;
+    }
+    if (!map[x.id]) return;
+    x.tv = await tvInfo(map[x.id]);
+    x.ep = episodeStatus(x.tv, x.progress, isoLocal());
+  }));
+  try { LS.set(tvMapKey(), JSON.stringify(map)); } catch { /* full */ }
+  watch.tvAt = Date.now();
+}
+const shortDay = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+// "🆕 3 new · E9–11 · next Wed, Nov 4 (E12)"
+function epLine(x) {
+  const e = x.ep;
+  if (!e) return '';
+  const bits = [];
+  if (x.status === 'upnext' && e.latest) bits.push(`📺 Season ${e.season} is out`);
+  else if (e.newCount) bits.push(`<b class="ep-new">🆕 ${e.newCount} new${e.from ? ` · E${e.from}${e.to !== e.from ? `–${e.to}` : ''}` : ''}</b>`);
+  else if (e.newSeason) bits.push(`<b class="ep-new">🆕 Season ${e.newSeason} is out</b>`);
+  else if (x.status === 'watching' && e.latest) bits.push('✓ Caught up');
+  if (e.nextDrop) bits.push(`next ${shortDay(e.nextDrop)}${e.nextBatch.length ? ` (E${e.nextBatch[0]}${e.nextBatch.length > 1 ? `–${e.nextBatch[e.nextBatch.length - 1]}` : ''})` : ''}`);
+  else if (e.ended) bits.push('ended');
+  return bits.length ? `<div class="ep-line small">${bits.join(' · ')} <button type="button" class="linkish tiny" data-tvfix="${x.id}" aria-label="Not this show?">ⓘ</button></div>` : '';
+}
+async function tvFixSheet(id) {
+  const x = watch.shows.find((y) => y.id === id);
+  if (!x) return;
+  const r = await api.get(`/tv/search?q=${encodeURIComponent(x.title)}`);
+  openSheet(`<h2>Which show is “${esc(x.title)}”?</h2><p class="small muted">For new-episode dates (from TMDB).</p>
+    ${r.results.map((s) => `<button type="button" class="fpick" data-tvpick="${id}:${s.id}"><span class="fp-i">${s.poster ? `<img src="${esc(s.poster)}" alt="">` : '📺'}</span><span class="grow"><b>${esc(s.name)}</b><small class="muted">${esc(s.year || '')}</small></span>${tvMap()[id] === s.id ? '✓' : ''}</button>`).join('') || '<p class="small muted">No match on TMDB.</p>'}
+    <button type="button" class="linkish small" data-tvpick="${id}:0">It isn't on TMDB — stop looking</button>`);
 }
 async function watchView() {
   $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div>`;
@@ -2517,6 +2575,7 @@ async function watchView() {
   await act(loadWatch);
   if (state.view !== 'watch') return;
   renderWatch();
+  loadTv().then(() => { if (state.view === 'watch') renderWatch(); }).catch(() => {});
 }
 const svcBadge = (k) => { const v = watch.S.SERVICES[k] || watch.S.SERVICES.other; return `<span class="svc" style="background:${v.bg};color:${v.fg}">${esc(v.name)}</span>`; };
 const monthLabel = (ym, month = 'long') => new Date(`${ym}-15T12:00:00`).toLocaleDateString(undefined, { month, year: 'numeric' });
@@ -2530,7 +2589,7 @@ function watchCard(x, opts = {}) {
     : `${x.nights.length} night${x.nights.length === 1 ? '' : 's'} together${opts.monthNights != null ? ` · ${opts.monthNights} this month` : ''}`;
   return `<div class="show-card ${x.status}" data-watchshow="${x.id}">
     <div class="show-top">${svcBadge(x.service)}<span class="show-status">${S.STATUS[x.status] || ''}</span></div>
-    <div class="show-title">${esc(x.title)}</div>
+    <div class="show-title">${esc(x.title)}</div>${epLine(x)}
     <div class="small muted">${nights}${x.rating ? ` · ${x.rating}★ avg` : ''}</div>
     ${x.kind !== 'movie' && x.status === 'watching' ? `<div class="row wrap progress-row"><span class="pill">${pg ? `S${pg.s || 1} · E${pg.e}` : 'Not started'}</span><button type="button" class="ghost small" data-watchep="${x.id}">＋ Episode</button><button type="button" class="linkish small" data-watchpg="${x.id}">Set…</button></div>
       <button type="button" class="${tonight ? 'tonight on' : 'tonight'}" data-watchnight="${x.id}">${tonight ? `✓ Watched tonight${tonight.by === my ? '' : ` (${esc(member(tonight.by)?.name || '')})`}` : '📺 We watched tonight'}</button>` : ''}
@@ -2549,9 +2608,11 @@ function renderWatch() {
   const tabs = [['now', 'Now'], ['month', 'By month'], ['year', `${year} recap`]];
   let body = '';
   if (watch.tab === 'now') {
-    const on = shows.filter((x) => x.status === 'watching');
-    const also = S.monthShows(shows, ym).filter((x) => x.status !== 'watching');
+    const on = shows.filter((x) => x.status === 'watching').sort((a, b) => (b.ep?.newCount || 0) - (a.ep?.newCount || 0));
+    const next = shows.filter((x) => x.status === 'upnext');
+    const also = S.monthShows(shows, ym).filter((x) => x.status !== 'watching' && x.status !== 'upnext');
     body = `${on.length ? on.map((x) => watchCard(x)).join('') : '<p class="small muted">Nothing on the go. Add what you\'re watching together.</p>'}
+      ${next.length ? `<h3>🕐 Up next</h3>${next.map((x) => watchCard(x)).join('')}` : ''}
       ${also.length ? `<details class="us-more"><summary>Also in ${monthLabel(ym).split(' ')[0]} · ${also.length}</summary>${also.map((x) => watchCard(x, { monthNights: x.monthNights })).join('')}</details>` : ''}
       <button type="button" class="ghost wide" data-act="watchadd">＋ Add a show or movie</button>`;
   } else if (watch.tab === 'month') {
@@ -3122,6 +3183,9 @@ document.addEventListener('click', (e) => {
   if (d.feelpick != null) { const x = feel.picks[+d.feelpick]; return x && feelFill(x); }
   if (d.feelcuisine != null) { feel.cuisine = d.feelcuisine; return renderFeelPicks(); }
   if (d.feelfind) return act(feelFind);
+  if (d.tvfix) return act(() => tvFixSheet(d.tvfix));
+  if (d.tvpick) { const [id, tid] = d.tvpick.split(':'); const m = tvMap(); m[id] = +tid; LS.set(tvMapKey(), JSON.stringify(m)); closeSheet(); const x = watch.shows.find((y) => y.id === id); if (x) { delete x.tv; delete x.ep; } return act(async () => { await loadTv(); if (state.view === 'watch') renderWatch(); else if (state.view === 'us') renderUs(); }); }
+  if (d.epseen) { const i = d.epseen.indexOf(':'); LS.set(`fam.epSeen.${d.epseen.slice(0, i)}`, d.epseen.slice(i + 1)); renderUs(); return usBadge(); }
   if (d.dogcal != null) { const x = dogCal.list[+d.dogcal]; if (!x) return; return apptSheet(null, { type: x.m.type, pets: x.m.pets.length ? x.m.pets : undefined, place: x.e.place || '', dropAt: `${x.e.date}T${x.e.allDay || !x.e.start ? '09:00' : x.e.start}`, notes: `From ${x.feed || 'a linked calendar'}: ${x.e.title}`, calKey: x.key }); }
   if (d.dogcalno != null) { const x = dogCal.list[+d.dogcalno]; if (!x) return; const mk = dogCalMarks(); mk[x.key] = 'no'; LS.set(dogCalKey(), JSON.stringify(mk)); return dogCalSuggestions(); }
   if (d.nudgeundo) return act(async () => { setNudges(await api.post(`/account/nudges/${d.nudgeundo}/undo?today=${isoLocal()}`)); renderYourDay(); });

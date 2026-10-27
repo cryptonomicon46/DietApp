@@ -27,7 +27,8 @@ export const api = {
       demoApi ||= (await import('../server/family.js')).familyApi;
       const u = new URL(`https://demo.local${path}`);
       const req = new Request(u, { method, headers: api.token() ? { Authorization: `Bearer ${api.token()}` } : {}, body: body ? JSON.stringify(body) : undefined });
-      ({ status, data } = await demoApi(req, { HOUSEHOLD: demoKv, DEMO: true }, u.pathname));
+      // A TMDB key of your own can be given to the demo (for episode dates); it stays on this phone.
+      ({ status, data } = await demoApi(req, { HOUSEHOLD: demoKv, DEMO: true, ...(LS.get('fam.demo.tmdbKey') ? { TMDB_KEY: LS.get('fam.demo.tmdbKey') } : {}) }, u.pathname));
     } else {
       const res = await fetch(`${connectorUrl()}/v2${path}`, { method, headers: { 'Content-Type': 'application/json', ...(api.token() ? { Authorization: `Bearer ${api.token()}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
       status = res.status;

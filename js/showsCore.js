@@ -14,7 +14,7 @@ export const SERVICES = {
   theater:   { name: 'Theater',     bg: '#8a5a00', fg: '#fff' },
   other:     { name: 'Other',       bg: '#6b7280', fg: '#fff' },
 };
-export const STATUS = { watching: '▶️ Watching', finished: '🎉 Finished', dropped: '✋ Dropped' };
+export const STATUS = { watching: '▶️ Watching', upnext: '🕐 Up next', finished: '🎉 Finished', dropped: '✋ Dropped' };
 
 // records: [{ person, shows: [{id, title, service, kind, date, at}], nights: [{show, date, at}],
 //             status: {showId: {s, at, date}}, ratings: {showId: 1–5} }]
