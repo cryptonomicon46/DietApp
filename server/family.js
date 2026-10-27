@@ -1445,7 +1445,7 @@ export async function familyApi(req, env, path, ctx = null) {
   }
 
   // ---- 📖 threads ----
-  { const r = await threadRoutes({ path, method, body, db, user, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url }); if (r) return r; }
+  { const r = await threadRoutes({ path, method, body, db, user, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url, blobs: blobStore(env) }); if (r) return r; }
   // ---- 📷 albums (family only) ----
   { const r = await albumRoutes({ path, method, body, db, loadFamily, meIn, sealed, clean, randomId, json, blobs: blobStore(env) }); if (r) return r; }
   // ---- 🛒 the Market (family, and friends' families by default) ----

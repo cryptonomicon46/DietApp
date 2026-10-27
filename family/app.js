@@ -485,7 +485,7 @@ function photosReady() {
   return photoSupport;
 }
 // A picked photo (File, or the preview data URL) → {full, thumb: JPEG bytes, aspect}.
-async function photoFiles(src) {
+async function photoFiles(src, { max = 1600, q = 0.82 } = {}) {
   // A data URL is turned into bytes here (the app's security policy doesn't allow fetching data: links).
   const fromDataUrl = (u) => { const [head, b64] = u.split(','); const bin = atob(b64); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return new Blob([out], { type: head.slice(5).split(';')[0] || 'image/jpeg' }); };
   const bmp = await createImageBitmap(src instanceof Blob ? src : fromDataUrl(src));
@@ -497,7 +497,7 @@ async function photoFiles(src) {
     const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', q));
     return new Uint8Array(await blob.arrayBuffer());
   };
-  return { full: await make(1600, 0.82), thumb: await make(560, 0.72), aspect: Math.round((bmp.width / bmp.height) * 1000) / 1000 };
+  return { full: await make(max, q), thumb: await make(560, 0.72), aspect: Math.round((bmp.width / bmp.height) * 1000) / 1000 };
 }
 // Unlocked photos: in memory for this visit, and on the phone (IndexedDB) for next time.
 const photoKeys = new Map();   // photoId → the post's key (null when not locked)
@@ -1961,7 +1961,8 @@ async function openThreadText(t, k) {
   const o = async (v) => { if (v == null) return ''; const r = await tryOpen(k, v, null); return r ?? (isSealed(v) ? '🔒' : v); };
   return { ...t, title: await o(t.title), body: await o(t.body),
     replies: Array.isArray(t.replies) ? await Promise.all(t.replies.map(async (r) => ({ ...r, text: await o(r.text), quote: typeof r.quote === "string" ? await o(r.quote) : r.quote }))) : t.replies,
-    poll: t.poll?.opts ? { ...t.poll, opts: await Promise.all(t.poll.opts.map(o)) } : t.poll };
+    poll: t.poll?.opts ? { ...t.poll, opts: await Promise.all(t.poll.opts.map(o)) } : t.poll,
+    shots: Array.isArray(t.shots) ? await Promise.all(t.shots.map(async (x) => ({ ...x, cap: await o(x.cap) }))) : [] };
 }
 async function loadThreads() {
   const r = await api.get('/threads').catch(() => null);
@@ -2001,7 +2002,7 @@ const blockText = (b) => (b.type === 'ul' ? b.items.join(' · ') : b.text);
 
 function threadRow(t) {
   const [ico, cat] = THREAD_CATS[t.cat] || THREAD_CATS.talk;
-  const last = t.replies ? `${t.replies} repl${t.replies === 1 ? 'y' : 'ies'}${t.lastByName && t.lastAt > t.at ? ` · ${esc(t.lastByName)} ${ago(t.lastAt)}` : ''}` : `${t.mins} min read`;
+  const last = `${t.shotCount ? `📷 ${t.shotCount} · ` : ''}${t.replies ? `${t.replies} repl${t.replies === 1 ? 'y' : 'ies'}${t.lastByName && t.lastAt > t.at ? ` · ${esc(t.lastByName)} ${ago(t.lastAt)}` : ''}` : `${t.mins} min read`}`;
   return `<button type="button" class="th ${t.unread ? 'unread' : ''}" data-thread="${t.fid}:${t.id}"><span class="cat">${ico} ${cat} · <span class="aud a-${t.board}">${THREAD_BOARDS[t.board] || ''}</span>${t.pinned ? ' · 📌' : ''}${t.best ? ' · ✓ answered' : ''}${t.poll ? ` · ${t.poll.n} voted` : ''}</span>
     <b>${t.unread ? '<i class="dot"></i>' : ''}${esc(t.title)}</b><small class="muted">${esc(t.mine ? 'You' : t.byName)}${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · ${last}</small></button>`;
 }
@@ -2062,12 +2063,15 @@ function renderThread() {
         ${blocks.map((b, i) => `<div class="para" data-para="${i}">${blockHtml(b)}${atPara(i).map((r) => `<div class="margin">✍️ <b>${esc(r.mine ? 'You' : r.name)}:</b> ${linkify(r.text)}</div>`).join('')}${b.type === 'h' ? '' : `<button type="button" class="linkish tiny note-btn" data-thquote="p:${i}">✍️ Note</button>`}</div>`).join('')}</article>`
     : `<div class="cat">${ico} ${cat} · ${THREAD_BOARDS[t.board] || ''}</div><h2 class="thtitle">${esc(t.title)}</h2>
        <div class="post first"><span class="av a1">${esc((t.byName || '?')[0])}</span><div class="grow"><div class="h"><b>${esc(t.mine ? 'You' : t.byName)}</b>${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · #1${t.editedAt ? ' · edited' : ''}</div><div class="t thbody">${blocks.map(blockHtml).join('')}</div></div></div>${pollHtml}`;
+  for (const x of t.shots || []) photoKeys.set(x.id, t._key || null);
+  const shotsHtml = t.shots?.length ? `<div class="thshots">${t.shots.map((x) => `<figure><button type="button" class="ph grid" data-photoid="${x.id}" data-pfid="${t.fid}" aria-label="Open screenshot${x.cap ? `: ${esc(x.cap)}` : ''}"><img alt=""></button>${x.cap ? `<figcaption>${esc(x.cap)}</figcaption>` : ''}</figure>`).join('')}</div>` : '';
   const replies = letter ? t.replies.filter((r) => r.quote == null || typeof r.quote !== 'number') : t.replies;
   const sorted = t.cat === 'ask' ? [...replies].sort((a, b) => (b.id === t.bestId) - (a.id === t.bestId) || b.ups - a.ups || a.at - b.at) : replies;
   $('#view').innerHTML = `${demoBanner()}<div class="thread-page">
     <div class="row between"><button type="button" class="linkish" data-thback="1">‹ ${letter ? 'Us' : 'Threads'}</button>
       <span class="row"><button type="button" class="linkish small" data-thfollow="1">${t.following ? '🔔 Following' : '🔕 Follow'}</button>${t.mine ? ` <button type="button" class="linkish small" data-thedit="1">Edit</button>` : ''}${t.mine || fam()?.members.find((x) => x.id === meId)?.role === 'owner' ? ` <button type="button" class="linkish small" data-thpin="1">${t.pinned ? 'Unpin' : '📌 Pin'}</button> <button type="button" class="linkish small danger" data-thdel="1">Delete</button>` : ''}</span></div>
     ${body}
+    ${shotsHtml}
     ${seen ? `<p class="tiny muted">${seen}</p>` : ''}
     ${sorted.length ? `<div class="grp">${letter ? 'Notes' : `${sorted.length} repl${sorted.length === 1 ? 'y' : 'ies'}`}</div>${sorted.map(replyHtml).join('')}` : ''}
     <form id="thReplyForm" class="stack reply-box">${th.quote ? `<div class="quote">❝ ${esc(th.quote.label)} ❞ <button type="button" class="linkish tiny" data-thquote="x">✕</button></div>` : ''}
@@ -2080,9 +2084,12 @@ function writeupSheet(preset = {}) {
   let d = {}; try { d = JSON.parse(LS.get(draftKey()) || '{}'); } catch { /* none */ }
   if (preset.edit) {
     const t = preset.edit;
+    ws.shots = (t.shots || []).map((x) => ({ id: x.id, aspect: x.aspect, cap: x.cap || '' }));
     openSheet(`<h2>✎ Edit</h2><form id="writeForm" class="stack" data-edit="${t.id}"><input name="title" maxlength="120" value="${esc(t.title)}" required><textarea name="body" rows="12" maxlength="12000">${esc(t.body)}</textarea>
       <div class="toolbar"><button type="button" class="linkish small" data-wfmt="## ">H</button><button type="button" class="linkish small" data-wfmt="- ">• List</button><span class="grow"></span><button type="button" class="linkish small" data-act="tidy">✨ Tidy it up</button></div>
+      <div class="shotarea"><div class="row between"><b class="small">📷 Screenshots</b><label class="btn ghost small">＋ Add<input type="file" accept="image/*" multiple hidden data-wshots="1"></label></div><div id="shotBox" class="shotbox"></div><p class="tiny muted">Plan comparisons, coverage tables… Pick from Photos, or paste (⌘V) or drag them in. Locked like your photos.</p></div>
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save</button></div></form>`);
+    renderShotBox();
     return;
   }
   const p = partnerMember(), hasFriends = (fam().connections || []).length;
@@ -2098,12 +2105,67 @@ function writeupSheet(preset = {}) {
       <input name="title" maxlength="120" placeholder="Title" value="${esc(v.title)}" required>
       <textarea name="body" rows="9" maxlength="12000" placeholder="${v.aud === 'us' ? 'Just type it while it\'s fresh — rough is fine. Paste links. Tap ✨ to tidy it up.' : 'What\'s it about? Paste links; “## ” makes a heading, “- ” a list.'}">${esc(v.body)}</textarea>
       <div class="toolbar"><button type="button" class="linkish small" data-wfmt="## ">H</button><button type="button" class="linkish small" data-wfmt="- ">• List</button><span class="grow"></span><button type="button" class="linkish small" data-act="tidy">✨ Tidy it up</button></div>
+      <div class="shotarea"><div class="row between"><b class="small">📷 Screenshots</b><label class="btn ghost small">＋ Add<input type="file" accept="image/*" multiple hidden data-wshots="1"></label></div><div id="shotBox" class="shotbox"></div><p class="tiny muted">Plan comparisons, coverage tables… Pick from Photos, or paste (⌘V) or drag them in. Locked like your photos.</p></div>
       <div class="wpoll stack" ${v.cat === 'poll' ? '' : 'hidden'}>${v.opts.map((o, i) => `<input name="opt" maxlength="80" placeholder="Choice ${i + 1}" value="${esc(o)}">`).join('')}<button type="button" class="linkish small" data-act="pollopt">＋ Another choice</button><label class="small">Closes (optional)<input type="date" name="closes" min="${isoLocal()}"></label></div>
       ${p ? `<label class="switch-row wnudge" ${v.aud === 'us' ? '' : 'hidden'}><span>🔔 Let ${esc(p.name)} know now<small class="muted">Otherwise it waits quietly in Us › For you</small></span><input type="checkbox" name="nudge"><i class="switch"></i></label>` : ''}
       <div class="row end"><button type="button" class="ghost" data-act="close">Later</button><button>Post</button></div>
-      <p class="tiny muted">🔒 End-to-end encrypted. Drafts stay on this phone. ✨ Tidy it up sends only this text to Claude, and only when you tap it.</p>
+      <p class="tiny muted">🔒 End-to-end encrypted. Drafts stay on this phone (screenshots until you post). ✨ Tidy it up sends only this text to Claude, and only when you tap it.</p>
     </form>`);
+  if (!preset.keepShots) ws.shots = [];
+  renderShotBox();
 }
+// 📷 Screenshots on a write-up: picked, pasted or dropped; captioned; uploaded (locked) when you post.
+const ws = { shots: [] };
+const MAX_SHOTS = 12;
+function renderShotBox() {
+  const el = $('#shotBox');
+  if (!el) return;
+  el.innerHTML = ws.shots.map((x, i) => `<div class="wshot"><button type="button" class="wshot-x" data-wshotrm="${i}" aria-label="Remove screenshot">✕</button>
+    <span class="wshot-img">${x.url || photoUrls.get(`${x.id}:thumb`) ? `<img alt="" src="${esc(x.url || photoUrls.get(`${x.id}:thumb`))}">` : '📷'}</span>
+    <input data-wcap="${i}" maxlength="80" placeholder="Caption" value="${esc(x.cap || '')}" aria-label="Caption"></div>`).join('');
+  // Saved ones not yet on this phone: fetched (and unlocked) in the background.
+  for (const x of ws.shots) if (x.id && !x.url && !photoUrls.get(`${x.id}:thumb`)) photoUrl(state.fid, x.id, 'thumb', th.cur?._key || fk()).then(() => renderShotBox()).catch(() => {});
+}
+function addShots(files) {
+  const imgs = [...files].filter((f) => f.type?.startsWith('image/'));
+  if (!imgs.length) return false;
+  const room = MAX_SHOTS - ws.shots.length;
+  if (room <= 0) { toast(`Up to ${MAX_SHOTS} screenshots`); return true; }
+  for (const f of imgs.slice(0, room)) ws.shots.push({ file: f, url: URL.createObjectURL(f), cap: '' });
+  if (imgs.length > room) toast(`Added ${room} — up to ${MAX_SHOTS} screenshots`);
+  renderShotBox();
+  return true;
+}
+// Uploads the new ones (sharper than photos, so table text stays readable) → [{id, aspect, cap}].
+async function uploadShots(k) {
+  if (!ws.shots.length) return [];
+  if (!(await photosReady())) { toast('Screenshots need photo storage on the connector'); return ws.shots.filter((x) => x.id).map(({ id, aspect, cap }) => ({ id, aspect, cap })); }
+  const L = async (x) => (x && k ? seal(k, x) : x);
+  const out = [];
+  for (const [i, x] of ws.shots.entries()) {
+    if (x.id) { out.push({ id: x.id, aspect: x.aspect, cap: await L(x.cap.trim()) }); continue; }
+    toast(`📷 Sending screenshot ${i + 1} of ${ws.shots.length}…`);
+    const made = await photoFiles(x.file, { max: 2400, q: 0.9 });
+    const id = randomToken();
+    for (const size of ['thumb', 'full']) await api.bytes('PUT', `/families/${state.fid}/photos/${id}?size=${size}`, k ? await sealBytes(k, made[size]) : made[size]);
+    rememberPhoto(id, 'thumb', made.thumb);
+    Object.assign(x, { id, aspect: made.aspect, file: null });
+    out.push({ id, aspect: made.aspect, cap: await L(x.cap.trim()) });
+  }
+  return out;
+}
+document.addEventListener('paste', (e) => {
+  if (!$('#writeForm') || !$('#sheet').open) return;
+  const files = [...(e.clipboardData?.items || [])].filter((it) => it.kind === 'file').map((it) => it.getAsFile()).filter(Boolean);
+  if (addShots(files)) e.preventDefault();
+});
+document.addEventListener('dragover', (e) => { if ($('#writeForm') && $('#sheet').open) { e.preventDefault(); $('#writeForm').classList.add('dropping'); } });
+document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) $('#writeForm')?.classList.remove('dropping'); });
+document.addEventListener('drop', (e) => {
+  if (!$('#writeForm') || !$('#sheet').open) return;
+  e.preventDefault(); $('#writeForm').classList.remove('dropping');
+  addShots(e.dataTransfer?.files || []);
+});
 function saveDraft() {
   const f = $('#writeForm'); if (!f) return;
   const v = Object.fromEntries(new FormData(f));
@@ -2123,9 +2185,10 @@ async function postThread(f) {
   }
   const L = (x) => (k ? seal(k, x) : x);
   const words = `${v.title} ${v.body}`.split(/\s+/).length;
-  const r = await api.post(`/families/${state.fid}/threads`, { aud: v.aud, board: v.board, cat: v.cat, title: await L(v.title.trim()), body: await L(v.body.trim()), mins: Math.max(1, Math.round(words / 200)), nudge: !!v.nudge, cid: f.dataset.cid || (f.dataset.cid = Math.random().toString(36).slice(2, 12)),
+  const shots = await uploadShots(k);
+  const r = await api.post(`/families/${state.fid}/threads`, { shots, aud: v.aud, board: v.board, cat: v.cat, title: await L(v.title.trim()), body: await L(v.body.trim()), mins: Math.max(1, Math.round(words / 200)), nudge: !!v.nudge, cid: f.dataset.cid || (f.dataset.cid = Math.random().toString(36).slice(2, 12)),
     ...(v.cat === 'poll' ? { poll: { opts: await Promise.all(opts.map(L)), closes: v.closes || '' } } : {}), ...(pk ? { pk } : {}) });
-  LS.set(draftKey(), null);
+  LS.set(draftKey(), null); ws.shots = [];
   closeSheet();
   th.loaded = 0; th.board = v.aud === 'us' ? 'us' : 'new';
   toast(v.aud === 'us' ? `📓 Saved for ${partnerName()} to read` : '📖 Posted');
@@ -2137,11 +2200,11 @@ async function postThread(f) {
 async function saveThreadEdit(f) {
   const k = th.cur._key, L = (x) => (k ? seal(k, x) : x);
   const words = `${f.title.value} ${f.body.value}`.split(/\s+/).length;
-  const patch = { title: await L(f.title.value.trim()), body: await L(f.body.value.trim()), mins: Math.max(1, Math.round(words / 200)) };
+  const patch = { title: await L(f.title.value.trim()), body: await L(f.body.value.trim()), mins: Math.max(1, Math.round(words / 200)), shots: await uploadShots(k) };
   closeSheet();
   return threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}`, patch));
 }
-async function threadAct(fn) { const r = await fn(); if (r?.thread) { const k = th.cur._key; th.cur = await openThreadText(r.thread, k); th.cur._key = k; renderThread(); } return r; }
+async function threadAct(fn) { const r = await fn(); if (r?.thread) { const k = th.cur._key; th.cur = await openThreadText(r.thread, k); th.cur._key = k; const s = th.list.find((x) => x.id === r.thread.id); if (s) s.shotCount = (r.thread.shots || []).length; renderThread(); } return r; }
 
 // ---------- ✨ Next up: what to do next, and when (worked out on this phone) ----------
 const nu = { res: null, ctx: null, watchKick: false };
@@ -3609,6 +3672,7 @@ document.addEventListener('click', (e) => {
   if (d.feelfind) return act(feelFind);
   if (d.nu) { const [w, i] = d.nu.split(':'); return act(() => nuAct(w, +i)); }
   if (d.newstab) { nw.tab = d.newstab; return renderNews(); }
+  if (d.wshotrm) { const [x] = ws.shots.splice(+d.wshotrm, 1); if (x?.url) URL.revokeObjectURL(x.url); return renderShotBox(); }
   if (d.tour) return tourAct(d.tour, d.go);
   if (d.tourat) return tourSheet(TOUR, Math.max(0, TOUR.indexOf(d.tourat)));
   if (d.album) return act(() => albumSheet(d.album));
@@ -3989,6 +4053,7 @@ document.addEventListener('change', async (e) => {
     t.form.idea.value = '';
     return renderFeelPicks();
   }
+  if (t.dataset.wshots) { addShots(t.files); t.value = ''; return; }
   if (t.dataset.albumfiles) {
     const files = [...t.files].filter((x) => x.type.startsWith('image/')).slice(0, 50);
     if (!files.length) return;
@@ -4433,4 +4498,4 @@ if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
 boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; });
 document.addEventListener('toggle', (e) => {
   if (e.target.matches?.('details[data-house]')) { LS.set(`fam.${e.target.dataset.house || 'house'}Open`, e.target.open ? '1' : '0'); const f = e.target.querySelector('.fold'); if (f) f.textContent = e.target.open ? 'Hide' : 'Show'; return; } const c = e.target.closest?.('[data-couple]'); if (c && e.target === c) bingo.open[c.dataset.couple] = c.open; }, true);
-document.addEventListener('input', (e) => { if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); if (e.target.closest?.('#writeForm')) { clearTimeout(saveDraft.t); saveDraft.t = setTimeout(saveDraft, 400); } });
+document.addEventListener('input', (e) => { if (e.target.dataset?.wcap) { const x = ws.shots[+e.target.dataset.wcap]; if (x) x.cap = e.target.value; return; } if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); if (e.target.closest?.('#writeForm')) { clearTimeout(saveDraft.t); saveDraft.t = setTimeout(saveDraft, 400); } });

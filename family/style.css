@@ -779,3 +779,19 @@ i.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; back
   .nav .nav-help { display: grid; margin-top: auto; color: var(--brand); }
   .tcards { grid-template-columns: 1fr 1fr; }
 }
+
+/* 📷 screenshots on a thread */
+.shotarea { display: grid; gap: 6px; background: var(--bg); border: 1px dashed var(--line); border-radius: 14px; padding: 10px 12px; }
+#writeForm.dropping .shotarea { border-color: var(--brand); background: var(--brand-soft); }
+.shotbox { display: flex; gap: 8px; overflow-x: auto; } .shotbox:empty { display: none; }
+.wshot { position: relative; flex: 0 0 96px; display: grid; gap: 4px; }
+.wshot-img { width: 96px; height: 120px; border-radius: 10px; overflow: hidden; background: var(--card); border: 1px solid var(--line); display: grid; place-items: center; }
+.wshot-img img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.wshot input { font-size: .78rem; padding: 4px 6px; border-radius: 8px; }
+.wshot-x { position: absolute; top: 4px; right: 4px; z-index: 1; width: 24px; height: 24px; padding: 0; border-radius: 50%; background: rgba(20,25,22,.7); color: #fff; font-size: .75rem; }
+.thshots { display: flex; gap: 10px; overflow-x: auto; margin: 4px 0 12px; padding-bottom: 4px; }
+.thshots figure { margin: 0; flex: 0 0 132px; display: grid; gap: 4px; }
+.thshots .ph { width: 132px; height: 170px; border-radius: 12px; border: 1px solid var(--line); }
+.thshots .ph img { object-position: top; }
+.thshots figcaption { font-size: .8rem; font-weight: 600; color: var(--muted); }
+@media (min-width: 1100px) { .thshots figure { flex-basis: 180px; } .thshots .ph { width: 180px; height: 230px; } }
