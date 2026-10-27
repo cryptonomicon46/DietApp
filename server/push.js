@@ -19,7 +19,7 @@ export const NOTIFY_KINDS = {
   us: '💞 Plans, answers and notes',
   appts: '🐾 Dog appointments and vaccines',
   events: '📅 Calendar reminders',
-  feed: '💬 Comments and help on your posts',
+  feed: '💬 Comments, tags and help on your posts',
   fun: '⭐ Golden days and games',
   nudges: '📞 Reminders: calling Mom, workouts, movie releases',
   market: '🛒 Market: new listings and who\'s interested',

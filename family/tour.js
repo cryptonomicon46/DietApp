@@ -18,10 +18,10 @@ export const SLIDES = [
     ['🎬', 'Movies', 'What’s in theaters and coming, with scores. Turn it on in Me.'],
   ] },
   { id: 'threads', eyebrow: 'Family › Threads', title: 'Longer conversations, in your own time', go: 'threads', cards: [
-    ['📚', 'Learned, Talk, How-to', 'Write-ups for just you two, the family, or friends’ families.'],
-    ['❓', 'Ask and 📊 Poll', 'Questions with a best answer, and quick votes.'],
+    ['📚', 'Write it up', 'Learned, Talk, How-to, ❓ Ask or 📊 Poll — for just you two, the family, or friends’ families.'],
+    ['📷', 'Screenshots', 'Add plan comparisons or tables: pick, paste or drag them in, with a caption each.'],
+    ['🏷️', 'Tag people', 'Tap a face or type @. They get a notification; new things land in ✨ For you.'],
     ['✨', 'Tidy it up', 'Turns rough notes into headings and bullets, only when you tap it.'],
-    ['🛒', 'Market (coming soon)', 'Sell, give away, lend or ask for things with family and friends.'],
   ] },
   { id: 'dogs', eyebrow: 'Dogs & chores', title: 'The house and the dogs, top to bottom', go: 'pets', cards: [
     ['🏆', 'Gold Card', 'The month’s chore race, with a prize for the winner.'],
@@ -60,16 +60,16 @@ export const SLIDES = [
 
 // After an update with new features: one card on Moments for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-10',
-  title: 'New: Albums, News, Movies & more',
-  text: 'See what changed in 2 quick screens',
+  id: '2026-10b',
+  title: 'New: screenshots and tags in Threads',
+  text: 'Plus Albums, News, Movies and ❓ Help',
   slides: ['new', 'help'],
 };
 SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'New this month', cards: [
+  ['🏷️', 'Threads: screenshots and tags', 'Add screenshots with captions, tag people with @, and see what’s for you in ✨ For you.'],
   ['📷', 'Albums', 'Family › Moments: link Google Photos albums or copy photos in.'],
   ['📰', 'News', 'Politics, Tech and Bay Area headlines on Moments, and 🐶 rescue news on Dogs.'],
   ['🎬', 'Movies and 🆕 episodes', 'Turn Movies on in Me; Watch shows new episodes and what’s up next.'],
-  ['✨', 'Next up', 'The one thing to do next, at the top of Moments.'],
   ['🖥️', 'Bigger screens', 'On a Mac or iPad, a sidebar and two columns.'],
 ] });
 

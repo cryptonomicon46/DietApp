@@ -1,5 +1,5 @@
 // Offline cache for the app shell. Barcode lookups always go to the network.
-const CACHE = 'lean-plate-v255';
+const CACHE = 'lean-plate-v256';
 const SHELL = ['./', 'index.html', 'styles.css', 'js/app.js', 'js/plan.js', 'js/foods.js', 'js/activity.js', 'js/devices.js', 'js/research.js', 'js/lifting.js', 'js/lift.js', 'js/rewards.js', 'js/storage.js', 'js/sync.js', 'js/account.js', 'js/accountBoot.js', 'js/recover.js', 'family/crypto.js', 'js/analytics.js', 'js/zip.js', 'js/review.js', 'js/commands.js', 'js/notes.js', 'js/plans.js', 'js/poster.js', 'js/share.js', 'js/brief.js', 'js/briefTab.js', 'js/shows.js', 'js/showsCore.js', 'js/dogs.js', 'js/adopt.js', 'js/household.js', 'js/rhythm.js', 'js/dexa.js', 'js/bodycomp.js', 'js/climb.js', 'js/progress.js', 'js/cheer.js', 'js/photos.js', 'js/dress.js', 'js/dressTab.js', 'js/calendar.js', 'js/calTab.js', 'manifest.webmanifest', 'theme.js', 'icon.svg', 'icon-180.png'];
 
 self.addEventListener('install', (e) => {
@@ -32,9 +32,13 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('push', (e) => {
   let m = {};
   try { m = e.data ? e.data.json() : {}; } catch { m = { body: e.data?.text() || '' }; }
-  e.waitUntil(self.registration.showNotification(m.title || 'OurPawmily', {
-    body: m.body || '', tag: m.tag || undefined, icon: 'icon-180.png', badge: 'icon-180.png', data: { url: m.url || 'family/' },
-  }));
+  e.waitUntil(Promise.all([
+    self.registration.showNotification(m.title || 'OurPawmily', {
+      body: m.body || '', tag: m.tag || undefined, icon: 'icon-180.png', badge: 'icon-180.png', data: { url: m.url || 'family/' },
+    }),
+    // An open app checks for what's new and shows its own banner.
+    self.clients.matchAll({ type: 'window' }).then((wins) => wins.forEach((w) => w.postMessage({ pushed: m.tag || true }))),
+  ]));
 });
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();

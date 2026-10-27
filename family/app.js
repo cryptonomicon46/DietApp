@@ -1969,9 +1969,30 @@ async function loadThreads() {
   if (!r) return th.list;
   th.list = await Promise.all(r.threads.map(async (t) => openThreadText(t, await threadKey(t))));
   th.loaded = Date.now();
-  famBadge(); usBadge();
+  famBadge(); usBadge(); threadBanner();
   return th.list;
 }
+// 🏷️ A banner when something new arrives (a tag first): once per thread, never for your own.
+function threadBanner() {
+  const seen = +(LS.get('fam.bannerAt') || 0);
+  const fresh = th.list.filter((t) => t.unread && !t.mine && Math.max(t.at, t.lastAt || 0) > seen);
+  LS.set('fam.bannerAt', String(Date.now()));
+  // Not over an open sheet (it couldn't be tapped there); the badges still show it.
+  if (!seen || !fresh.length || (state.view === 'feed' && state.famTab === 'threads') || $('#sheet').open) return;
+  const t = fresh.sort((a, b) => b.tagged - a.tagged || b.lastAt - a.lastAt)[0];
+  const who = t.lastAt > t.at && t.lastByName ? t.lastByName : t.byName;
+  const head = t.tagged ? `🏷️ ${who} tagged you` : t.lastAt > t.at ? `💬 ${who} replied` : `📖 ${who} posted`;
+  $('#dropBanner')?.remove();
+  const el = document.createElement('div');
+  el.id = 'dropBanner'; el.className = 'dropban'; el.setAttribute('role', 'status');
+  el.innerHTML = `<button type="button" class="db-go" data-thread="${t.fid}:${t.id}"><b>${esc(head)}</b><small>${esc(t.title)}${fresh.length > 1 ? ` · and ${fresh.length - 1} more` : ''}</small></button><button type="button" class="db-x" aria-label="Dismiss">✕</button>`;
+  document.body.append(el);
+  el.querySelector('.db-x').onclick = () => el.remove();
+  el.querySelector('.db-go').addEventListener('click', () => el.remove());
+  setTimeout(() => el.classList.add('out'), 7000); setTimeout(() => el.remove(), 7600);
+}
+// Coming back to the app (or a notification arriving while it's open): one quick check.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.family && Date.now() - th.loaded > 60000) loadThreads().then(() => { if (state.view === 'feed' && state.famTab === 'threads') threadsView(); }).catch(() => {}); });
 const unreadThreads = (us = false) => th.list.filter((t) => t.unread && (us ? t.aud === 'us' : t.aud !== 'us'));
 function famBadge() {
   const b = $('#famBadge');
@@ -2004,7 +2025,7 @@ function threadRow(t) {
   const [ico, cat] = THREAD_CATS[t.cat] || THREAD_CATS.talk;
   const last = `${t.shotCount ? `📷 ${t.shotCount} · ` : ''}${t.replies ? `${t.replies} repl${t.replies === 1 ? 'y' : 'ies'}${t.lastByName && t.lastAt > t.at ? ` · ${esc(t.lastByName)} ${ago(t.lastAt)}` : ''}` : `${t.mins} min read`}`;
   return `<button type="button" class="th ${t.unread ? 'unread' : ''}" data-thread="${t.fid}:${t.id}"><span class="cat">${ico} ${cat} · <span class="aud a-${t.board}">${THREAD_BOARDS[t.board] || ''}</span>${t.pinned ? ' · 📌' : ''}${t.best ? ' · ✓ answered' : ''}${t.poll ? ` · ${t.poll.n} voted` : ''}</span>
-    <b>${t.unread ? '<i class="dot"></i>' : ''}${esc(t.title)}</b><small class="muted">${esc(t.mine ? 'You' : t.byName)}${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · ${last}</small></button>`;
+    <b>${t.unread ? '<i class="dot"></i>' : ''}${esc(t.title)}</b><small class="muted">${esc(t.mine ? 'You' : t.byName)}${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · ${last}</small>${t.unread && !t.mine ? `<span class="thbadge ${t.tagged ? 'tag' : ''}">${t.tagged ? '🏷️ You’re tagged' : 'New'}</span>` : ''}</button>`;
 }
 // The Sunday digest: one calm summary of the week, on Sundays and Mondays until you close it.
 function digestCard() {
@@ -2029,10 +2050,14 @@ async function threadsView() {
   if (!th.loaded || Date.now() - th.loaded > 20000) { el.innerHTML = '<div class="skeleton card"></div>'; await loadThreads(); if (!$('#famBody') || state.famTab !== 'threads') return; }
   const hasFriends = (fam().connections || []).length || th.list.some((t) => !t.own);
   const boards = ['new', ...(partnerMember() ? ['us'] : []), 'family', ...((fam().modules || []).includes('dogs') ? ['dogs'] : []), 'house', ...(hasFriends ? ['friends'] : [])];
-  const list = th.board === 'new' ? th.list : th.list.filter((t) => t.board === th.board);
-  el.innerHTML = `<div class="row between"><div class="rchips boards">${boards.map((b) => `<button type="button" class="chip ${th.board === b ? 'on' : ''}" data-board="${b}">${b === 'new' ? 'New' : THREAD_BOARDS[b]}${b !== 'new' && th.list.some((t) => t.board === b && t.unread) ? ' <i class="dot"></i>' : ''}</button>`).join('')}</div></div>
+  // ✨ For you: tags and anything new first (tags on top), then everything else under Earlier.
+  const forYou = th.list.filter((t) => t.unread && !t.mine).sort((a, b) => b.tagged - a.tagged || b.lastAt - a.lastAt);
+  const list = th.board === 'new' ? [...forYou, ...th.list.filter((t) => !forYou.includes(t))] : th.list.filter((t) => t.board === th.board);
+  const rows = th.board === 'new' && forYou.length && forYou.length < list.length
+    ? `${forYou.map(threadRow).join('')}<div class="grp">Earlier</div>${list.slice(forYou.length).map(threadRow).join('')}` : list.map(threadRow).join('');
+  el.innerHTML = `<div class="row between"><div class="rchips boards">${boards.map((b) => `<button type="button" class="chip ${th.board === b ? 'on' : ''}" data-board="${b}">${b === 'new' ? `✨ For you${forYou.length ? ` <span class="cnt">${forYou.length}</span>` : ''}` : THREAD_BOARDS[b]}${b !== 'new' && th.list.some((t) => t.board === b && t.unread) ? ' <i class="dot"></i>' : ''}</button>`).join('')}</div></div>
     <button type="button" class="input-like" data-act="writeup">✍️ Write something up…</button>
-    <div class="thlist">${list.map(threadRow).join('') || `<div class="card center"><p class="small">${th.board === 'us' ? `Write ${esc(partnerName())} something to read later — what you read about, a plan, an idea.` : 'Start a thread: something you learned, a question, a decision to talk through, or a how-to.'}</p><button type="button" data-act="writeup">✍️ Write it up</button></div>`}</div>`;
+    <div class="thlist">${rows || `<div class="card center"><p class="small">${th.board === 'us' ? `Write ${esc(partnerName())} something to read later — what you read about, a plan, an idea.` : 'Start a thread: something you learned, a question, a decision to talk through, or a how-to.'}</p><button type="button" data-act="writeup">✍️ Write it up</button></div>`}</div>`;
 }
 // One thread: just-us ones read like a letter (notes in the margin); the rest like a forum topic.
 async function threadView(fid, id) {
@@ -2047,6 +2072,9 @@ function renderThread() {
   const t = th.cur, meId = fam()?.me;
   const [ico, cat] = THREAD_CATS[t.cat] || THREAD_CATS.talk;
   const blocks = mdBlocks(t.body);
+  const tagged = (t.tags || []).map((id) => member(id)).filter(Boolean);
+  const tagLine = tagged.length ? `<p class="small tagline">🏷️ ${tagged.map((m) => esc(m.id === meId ? 'You' : m.name)).join(', ')}</p>` : '';
+  const mention = (html) => tagged.reduce((h, m) => h.replace(new RegExp(`@${esc(m.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\d])`, 'gu'), `<span class="mention">@${esc(m.name)}</span>`), html);
   const letter = t.aud === 'us';
   const atPara = (i) => t.replies.filter((r) => r.quote === i);
   const replyHtml = (r, n) => `<div class="post" id="r-${r.id}"><span class="av ${r.mine ? 'a1' : 'a2'}">${esc((r.name || '?')[0])}</span><div class="grow">
@@ -2062,7 +2090,7 @@ function renderThread() {
     ? `<article class="letter"><div class="lmeta">${esc(t.mine ? 'You' : t.byName)} · ${esc(new Date(t.at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }))} · ${t.mins} min</div><h3>${esc(t.title)}</h3>
         ${blocks.map((b, i) => `<div class="para" data-para="${i}">${blockHtml(b)}${atPara(i).map((r) => `<div class="margin">✍️ <b>${esc(r.mine ? 'You' : r.name)}:</b> ${linkify(r.text)}</div>`).join('')}${b.type === 'h' ? '' : `<button type="button" class="linkish tiny note-btn" data-thquote="p:${i}">✍️ Note</button>`}</div>`).join('')}</article>`
     : `<div class="cat">${ico} ${cat} · ${THREAD_BOARDS[t.board] || ''}</div><h2 class="thtitle">${esc(t.title)}</h2>
-       <div class="post first"><span class="av a1">${esc((t.byName || '?')[0])}</span><div class="grow"><div class="h"><b>${esc(t.mine ? 'You' : t.byName)}</b>${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · #1${t.editedAt ? ' · edited' : ''}</div><div class="t thbody">${blocks.map(blockHtml).join('')}</div></div></div>${pollHtml}`;
+       <div class="post first"><span class="av a1">${esc((t.byName || '?')[0])}</span><div class="grow"><div class="h"><b>${esc(t.mine ? 'You' : t.byName)}</b>${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · #1${t.editedAt ? ' · edited' : ''}</div><div class="t thbody">${mention(blocks.map(blockHtml).join(''))}</div>${tagLine}</div></div>${pollHtml}`;
   for (const x of t.shots || []) photoKeys.set(x.id, t._key || null);
   const shotsHtml = t.shots?.length ? `<div class="thshots">${t.shots.map((x) => `<figure><button type="button" class="ph grid" data-photoid="${x.id}" data-pfid="${t.fid}" aria-label="Open screenshot${x.cap ? `: ${esc(x.cap)}` : ''}"><img alt=""></button>${x.cap ? `<figcaption>${esc(x.cap)}</figcaption>` : ''}</figure>`).join('')}</div>` : '';
   const replies = letter ? t.replies.filter((r) => r.quote == null || typeof r.quote !== 'number') : t.replies;
@@ -2085,11 +2113,14 @@ function writeupSheet(preset = {}) {
   if (preset.edit) {
     const t = preset.edit;
     ws.shots = (t.shots || []).map((x) => ({ id: x.id, aspect: x.aspect, cap: x.cap || '' }));
+    ws.tags = new Set(t.tags || []);
     openSheet(`<h2>✎ Edit</h2><form id="writeForm" class="stack" data-edit="${t.id}"><input name="title" maxlength="120" value="${esc(t.title)}" required><textarea name="body" rows="12" maxlength="12000">${esc(t.body)}</textarea>
       <div class="toolbar"><button type="button" class="linkish small" data-wfmt="## ">H</button><button type="button" class="linkish small" data-wfmt="- ">• List</button><span class="grow"></span><button type="button" class="linkish small" data-act="tidy">✨ Tidy it up</button></div>
+      <div class="tagrow" id="tagRow"></div><div class="atpop" id="atPop" hidden></div>
       <div class="shotarea"><div class="row between"><b class="small">📷 Screenshots</b><label class="btn ghost small">＋ Add<input type="file" accept="image/*" multiple hidden data-wshots="1"></label></div><div id="shotBox" class="shotbox"></div><p class="tiny muted">Plan comparisons, coverage tables… Pick from Photos, or paste (⌘V) or drag them in. Locked like your photos.</p></div>
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save</button></div></form>`);
-    renderShotBox();
+    $('#writeForm').dataset.aud = t.aud;
+    renderShotBox(); renderTagRow();
     return;
   }
   const p = partnerMember(), hasFriends = (fam().connections || []).length;
@@ -2105,18 +2136,55 @@ function writeupSheet(preset = {}) {
       <input name="title" maxlength="120" placeholder="Title" value="${esc(v.title)}" required>
       <textarea name="body" rows="9" maxlength="12000" placeholder="${v.aud === 'us' ? 'Just type it while it\'s fresh — rough is fine. Paste links. Tap ✨ to tidy it up.' : 'What\'s it about? Paste links; “## ” makes a heading, “- ” a list.'}">${esc(v.body)}</textarea>
       <div class="toolbar"><button type="button" class="linkish small" data-wfmt="## ">H</button><button type="button" class="linkish small" data-wfmt="- ">• List</button><span class="grow"></span><button type="button" class="linkish small" data-act="tidy">✨ Tidy it up</button></div>
+      <div class="tagrow" id="tagRow"></div><div class="atpop" id="atPop" hidden></div>
       <div class="shotarea"><div class="row between"><b class="small">📷 Screenshots</b><label class="btn ghost small">＋ Add<input type="file" accept="image/*" multiple hidden data-wshots="1"></label></div><div id="shotBox" class="shotbox"></div><p class="tiny muted">Plan comparisons, coverage tables… Pick from Photos, or paste (⌘V) or drag them in. Locked like your photos.</p></div>
       <div class="wpoll stack" ${v.cat === 'poll' ? '' : 'hidden'}>${v.opts.map((o, i) => `<input name="opt" maxlength="80" placeholder="Choice ${i + 1}" value="${esc(o)}">`).join('')}<button type="button" class="linkish small" data-act="pollopt">＋ Another choice</button><label class="small">Closes (optional)<input type="date" name="closes" min="${isoLocal()}"></label></div>
       ${p ? `<label class="switch-row wnudge" ${v.aud === 'us' ? '' : 'hidden'}><span>🔔 Let ${esc(p.name)} know now<small class="muted">Otherwise it waits quietly in Us › For you</small></span><input type="checkbox" name="nudge"><i class="switch"></i></label>` : ''}
       <div class="row end"><button type="button" class="ghost" data-act="close">Later</button><button>Post</button></div>
       <p class="tiny muted">🔒 End-to-end encrypted. Drafts stay on this phone (screenshots until you post). ✨ Tidy it up sends only this text to Claude, and only when you tap it.</p>
     </form>`);
-  if (!preset.keepShots) ws.shots = [];
-  renderShotBox();
+  if (!preset.keepShots) { ws.shots = []; ws.tags = new Set(preset.tags || []); }
+  renderShotBox(); renderTagRow();
 }
 // 📷 Screenshots on a write-up: picked, pasted or dropped; captioned; uploaded (locked) when you post.
-const ws = { shots: [] };
+const ws = { shots: [], tags: new Set() };
 const MAX_SHOTS = 12;
+// 🏷️ Who you can tag: people with an account in this family who'll see the thread.
+const taggable = (aud) => (fam()?.members || []).filter((m) => m.kind === 'person' && m.status === 'active' && m.id !== fam().me && (aud !== 'us' || m.id === partnerMember()?.id));
+function renderTagRow() {
+  const f = $('#writeForm'), el = $('#tagRow');
+  if (!f || !el) return;
+  const aud = f.dataset.aud || f.aud?.value || 'family';
+  const people = taggable(aud);
+  for (const id of ws.tags) if (!people.some((m) => m.id === id)) ws.tags.delete(id);
+  el.hidden = !people.length;
+  el.innerHTML = `<b class="small">🏷️ Tag</b><div class="people">${people.map((m) => `<button type="button" class="tagp ${ws.tags.has(m.id) ? 'on' : ''}" data-wtag="${m.id}" aria-pressed="${ws.tags.has(m.id)}">${avatar(m, 40)}<span>${esc(m.name)}</span></button>`).join('')}</div>
+    <small class="muted">${ws.tags.size ? `${[...ws.tags].map((id) => esc(member(id)?.name || '')).join(' and ')} will get a notification.` : 'Tap a face, or type @ in the text.'}</small>`;
+}
+// Typing "@Pa" offers matching people; picking one writes "@Pat " and tags them.
+function atSuggest(ta) {
+  const pop = $('#atPop'), f = $('#writeForm');
+  if (!pop || !f) return;
+  const before = ta.value.slice(0, ta.selectionStart);
+  const m = before.match(/(^|\s)@([\p{L}\d]{0,20})$/u);
+  const people = m ? taggable(f.dataset.aud || f.aud?.value || 'family').filter((p) => p.name.toLowerCase().startsWith(m[2].toLowerCase())).slice(0, 5) : [];
+  pop.hidden = !people.length;
+  pop.innerHTML = people.map((p) => `<button type="button" data-atpick="${p.id}">${avatar(p, 28)}<b>${esc(p.name)}</b><small class="muted">${esc(relLabel(p))}</small></button>`).join('');
+}
+function atPick(id) {
+  const ta = $('#writeForm [name=body]'), p = member(id);
+  if (!ta || !p) return;
+  const at = ta.selectionStart, before = ta.value.slice(0, at).replace(/@[\p{L}\d]{0,20}$/u, `@${p.name} `);
+  ta.value = before + ta.value.slice(at); ta.focus(); ta.selectionStart = ta.selectionEnd = before.length;
+  ws.tags.add(id); $('#atPop').hidden = true; renderTagRow(); saveDraft();
+}
+// ✨ Tidy it up keeps your @tags exactly: they go as @1, @2… and come back as names.
+function maskMentions(text) {
+  const names = (fam()?.members || []).filter((m) => m.kind === 'person').map((m) => m.name).sort((a, b) => b.length - a.length);
+  const used = [];
+  const masked = names.reduce((t, n) => t.replace(new RegExp(`@${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\d])`, 'gu'), () => { if (!used.includes(n)) used.push(n); return `@${used.indexOf(n) + 1}`; }), text);
+  return { masked, unmask: (t) => t.replace(/@(\d{1,2})(?!\d)/g, (x, i) => (used[+i - 1] ? `@${used[+i - 1]}` : x)) };
+}
 function renderShotBox() {
   const el = $('#shotBox');
   if (!el) return;
@@ -2186,9 +2254,10 @@ async function postThread(f) {
   const L = (x) => (k ? seal(k, x) : x);
   const words = `${v.title} ${v.body}`.split(/\s+/).length;
   const shots = await uploadShots(k);
-  const r = await api.post(`/families/${state.fid}/threads`, { shots, aud: v.aud, board: v.board, cat: v.cat, title: await L(v.title.trim()), body: await L(v.body.trim()), mins: Math.max(1, Math.round(words / 200)), nudge: !!v.nudge, cid: f.dataset.cid || (f.dataset.cid = Math.random().toString(36).slice(2, 12)),
+  const tags = [...ws.tags].filter((id) => taggable(v.aud).some((m) => m.id === id));
+  const r = await api.post(`/families/${state.fid}/threads`, { shots, tags, aud: v.aud, board: v.board, cat: v.cat, title: await L(v.title.trim()), body: await L(v.body.trim()), mins: Math.max(1, Math.round(words / 200)), nudge: !!v.nudge, cid: f.dataset.cid || (f.dataset.cid = Math.random().toString(36).slice(2, 12)),
     ...(v.cat === 'poll' ? { poll: { opts: await Promise.all(opts.map(L)), closes: v.closes || '' } } : {}), ...(pk ? { pk } : {}) });
-  LS.set(draftKey(), null); ws.shots = [];
+  LS.set(draftKey(), null); ws.shots = []; ws.tags = new Set();
   closeSheet();
   th.loaded = 0; th.board = v.aud === 'us' ? 'us' : 'new';
   toast(v.aud === 'us' ? `📓 Saved for ${partnerName()} to read` : '📖 Posted');
@@ -2200,7 +2269,7 @@ async function postThread(f) {
 async function saveThreadEdit(f) {
   const k = th.cur._key, L = (x) => (k ? seal(k, x) : x);
   const words = `${f.title.value} ${f.body.value}`.split(/\s+/).length;
-  const patch = { title: await L(f.title.value.trim()), body: await L(f.body.value.trim()), mins: Math.max(1, Math.round(words / 200)), shots: await uploadShots(k) };
+  const patch = { title: await L(f.title.value.trim()), body: await L(f.body.value.trim()), mins: Math.max(1, Math.round(words / 200)), shots: await uploadShots(k), tags: [...ws.tags] };
   closeSheet();
   return threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}`, patch));
 }
@@ -3397,7 +3466,10 @@ function refreshPush() {
   if (api.mode() === 'demo' || !pushOk() || Notification.permission !== 'granted' || LS.get('fam.pushSync') === isoLocal()) return;
   swReady().then((reg) => reg.pushManager.getSubscription()).then((sub) => sub && sendSub(sub)).then(() => LS.set('fam.pushSync', isoLocal())).catch(() => {});
 }
-if (pushOk()) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data?.open && state.family) show(e.data.open === 'dogs' ? 'pets' : e.data.open); });
+if (pushOk()) navigator.serviceWorker.addEventListener('message', (e) => {
+  if (e.data?.open && state.family) show(e.data.open === 'dogs' ? 'pets' : e.data.open);
+  if (e.data?.pushed && state.family) loadThreads().then(() => { if (state.view === 'feed' && state.famTab === 'threads') threadsView(); }).catch(() => {});
+});
 
 // ✎ Edit chores: remove any chore (built-in or your own) from the buttons, bring one back, or
 // add your own to the dogs or the house. What's already logged always keeps its points.
@@ -3672,6 +3744,8 @@ document.addEventListener('click', (e) => {
   if (d.feelfind) return act(feelFind);
   if (d.nu) { const [w, i] = d.nu.split(':'); return act(() => nuAct(w, +i)); }
   if (d.newstab) { nw.tab = d.newstab; return renderNews(); }
+  if (d.wtag) { ws.tags.has(d.wtag) ? ws.tags.delete(d.wtag) : ws.tags.add(d.wtag); return renderTagRow(); }
+  if (d.atpick) return atPick(d.atpick);
   if (d.wshotrm) { const [x] = ws.shots.splice(+d.wshotrm, 1); if (x?.url) URL.revokeObjectURL(x.url); return renderShotBox(); }
   if (d.tour) return tourAct(d.tour, d.go);
   if (d.tourat) return tourSheet(TOUR, Math.max(0, TOUR.indexOf(d.tourat)));
@@ -3821,9 +3895,9 @@ document.addEventListener('click', (e) => {
     case 'tidy': {
       const ta = $('#writeForm [name=body]');
       if (ta.value.trim().length < 20) return toast('Write a little more first');
-      const before = ta.value;
+      const before = ta.value, mm = maskMentions(before);
       t.disabled = true; t.textContent = '✨ Tidying…';
-      return api.post(`/families/${state.fid}/tidy`, { text: before }).then((r) => { ta.value = r.text; saveDraft(); t.textContent = '↩︎ Undo tidy'; t.dataset.act = 'untidy'; t.dataset.before = before; })
+      return api.post(`/families/${state.fid}/tidy`, { text: mm.masked }).then((r) => { ta.value = mm.unmask(r.text); saveDraft(); t.textContent = '↩︎ Undo tidy'; t.dataset.act = 'untidy'; t.dataset.before = before; })
         .catch((err) => { toast(err.message); t.textContent = '✨ Tidy it up'; }).finally(() => { t.disabled = false; });
     }
     case 'untidy': { const ta = $('#writeForm [name=body]'); ta.value = t.dataset.before || ta.value; saveDraft(); t.textContent = '✨ Tidy it up'; t.dataset.act = 'tidy'; return; }
@@ -4086,7 +4160,8 @@ document.addEventListener('change', async (e) => {
     f.querySelector('.wnudge')?.toggleAttribute('hidden', f.aud.value !== 'us');
     f.querySelector('.wpoll').hidden = f.cat.value !== 'poll';
     saveDraft();
-    if (t.name === 'aud' && (t.value === 'us') !== !f.querySelector('input[name=cat][value=poll]')) { const keep = { aud: t.value }; return writeupSheet(keep); }
+    if (t.name === 'aud' && (t.value === 'us') !== !f.querySelector('input[name=cat][value=poll]')) { const keep = { aud: t.value, keepShots: true }; return writeupSheet(keep); }
+    if (t.name === 'aud') renderTagRow();
     return;
   }
   if (t.form?.id === 'outForm' && t.name === 'day') { const pd = t.form.querySelector('[name=pickday]'); pd.hidden = t.value !== 'pick'; if (!pd.hidden) pd.focus(); return; }
@@ -4498,4 +4573,4 @@ if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
 boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; });
 document.addEventListener('toggle', (e) => {
   if (e.target.matches?.('details[data-house]')) { LS.set(`fam.${e.target.dataset.house || 'house'}Open`, e.target.open ? '1' : '0'); const f = e.target.querySelector('.fold'); if (f) f.textContent = e.target.open ? 'Hide' : 'Show'; return; } const c = e.target.closest?.('[data-couple]'); if (c && e.target === c) bingo.open[c.dataset.couple] = c.open; }, true);
-document.addEventListener('input', (e) => { if (e.target.dataset?.wcap) { const x = ws.shots[+e.target.dataset.wcap]; if (x) x.cap = e.target.value; return; } if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); if (e.target.closest?.('#writeForm')) { clearTimeout(saveDraft.t); saveDraft.t = setTimeout(saveDraft, 400); } });
+document.addEventListener('input', (e) => { if (e.target.name === 'body' && e.target.closest?.('#writeForm')) atSuggest(e.target); if (e.target.dataset?.wcap) { const x = ws.shots[+e.target.dataset.wcap]; if (x) x.cap = e.target.value; return; } if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); if (e.target.closest?.('#writeForm')) { clearTimeout(saveDraft.t); saveDraft.t = setTimeout(saveDraft, 400); } });

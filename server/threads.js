@@ -15,6 +15,14 @@ const MAX_SHOTS = 12;
 
 export async function threadRoutes(c) {
   const { path, method, body, db, user, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url, blobs } = c;
+  // 🏷️ Who's tagged: grown-ups and kids with accounts in your own family who can see the thread
+  // (a just-us thread: only your partner). Stored as member ids; their accounts stay on the server.
+  const tagsOf = (fam, me, aud, ids) => {
+    const ok = fam.members.filter((x) => x.kind === 'person' && x.uid && x.id !== me.id && (aud !== 'us' || x.id === partnerOf(fam, me)?.id));
+    const pick = [...new Set(Array.isArray(ids) ? ids : [])].map((id) => ok.find((x) => x.id === id)).filter(Boolean).slice(0, 20);
+    return { tags: pick.map((x) => x.id), uids: pick.map((x) => x.uid) };
+  };
+  const tellTagged = (uids, me, t) => uids.length && tell(uids, t.aud === 'us' ? 'us' : 'feed', { title: `🏷️ ${me.name} tagged you in a thread`, body: `${BOARDS[t.board] || (t.aud === 'us' ? '💞 Just us' : 'Threads')} · tap to read`, url: 'family/#threads', tag: `thread-${t.id}` });
   const shotsOf = (fam, v) => (Array.isArray(v) ? v : []).filter((x) => okPhotoId(x?.id)).slice(0, MAX_SHOTS)
     .map((x) => ({ id: x.id, aspect: Math.min(4, Math.max(0.2, +x.aspect || 1)), cap: (x.cap && text(fam, x.cap, 80)) || '' }));
   const text = (fam, v, max) => sealed(v, max * 3 + 200) ?? (fam.e2ee ? null : typeof v === 'string' ? String(v).replace(/[\u0000-\u0009\u000b-\u001f]/g, ' ').trim().slice(0, max) : null);
@@ -30,12 +38,12 @@ export async function threadRoutes(c) {
   };
   const summary = (t, own, famName) => ({
     id: t.id, fid: t.fid, aud: t.aud, board: t.board, cat: t.cat, title: t.title, by: t.by, byName: t.byName, byAvatar: t.byAvatar, mine: t.byUid === user.uid,
-    at: t.at, lastAt: t.lastAt, lastByName: t.lastByName, replies: t.replies.filter((r) => !blocked.has(r.uid)).length, mins: t.mins || 1, pinned: !!t.pinned, shotCount: (t.shots || []).length,
+    at: t.at, lastAt: t.lastAt, lastByName: t.lastByName, replies: t.replies.filter((r) => !blocked.has(r.uid)).length, mins: t.mins || 1, pinned: !!t.pinned, shotCount: (t.shots || []).length, tagged: (t.tagUids || []).includes(user.uid),
     unread: (t.reads?.[user.uid] || 0) < t.lastAt && t.lastByUid !== user.uid, following: (t.followers || []).includes(user.uid), own, familyName: famName,
     best: !!t.best, poll: t.poll ? { closes: t.poll.closes, voted: t.poll.votes?.[user.uid] != null, n: Object.keys(t.poll.votes || {}).length } : null, ...(t.pk ? { pk: t.pk } : {}),
   });
   const full = (t, own, fam) => ({
-    ...summary(t, own, fam?.name || ''), body: t.body, editedAt: t.editedAt || null, shots: t.shots || [],
+    ...summary(t, own, fam?.name || ''), body: t.body, editedAt: t.editedAt || null, shots: t.shots || [], tags: t.tags || [],
     replies: t.replies.filter((r) => !blocked.has(r.uid)).map((r) => ({ id: r.id, name: r.name, text: r.text, quote: r.quote ?? null, at: r.at, mine: r.uid === user.uid, ups: (r.ups || []).length, upped: (r.ups || []).includes(user.uid) })),
     bestId: t.best || null,
     poll: t.poll ? { opts: t.poll.opts, closes: t.poll.closes, counts: t.poll.opts.map((_, i) => Object.values(t.poll.votes || {}).filter((v) => v === i).length), mine: t.poll.votes?.[user.uid] ?? null } : null,
@@ -93,11 +101,14 @@ export async function threadRoutes(c) {
       at: now, lastAt: now, lastByUid: user.uid, lastByName: me.name, replies: [], reads: { [user.uid]: now }, followers: [user.uid], ...(poll ? { poll } : {}), ...(pk ? { pk } : {}) };
     const shots = blobs ? shotsOf(fam, body.shots) : [];
     if (shots.length) t.shots = shots;
+    const tg = tagsOf(fam, me, aud, body.tags);
+    if (tg.tags.length) { t.tags = tg.tags; t.tagUids = tg.uids; }
     await db.put(`thread:${fam.fid}:${t.id}`, t);
     await db.put(`threads:${fam.fid}`, [t.id, ...((await db.get(`threads:${fam.fid}`)) || [])].slice(0, 300));
     if (cid) await db.put(`threadcid:${user.uid}:${cid}`, t.id, 2 * 86400);
     // Read in your own time: a just-us write-up only pings when you ask it to.
-    if (aud === 'us' && body.nudge) await tell([partner.uid], 'us', { title: `📓 ${me.name} wrote you something`, body: 'Read it when you have a moment', url: 'family/#us', tag: `thread-${t.id}` });
+    if (aud === 'us' && body.nudge && !tg.uids.includes(partner.uid)) await tell([partner.uid], 'us', { title: `📓 ${me.name} wrote you something`, body: 'Read it when you have a moment', url: 'family/#us', tag: `thread-${t.id}` });
+    await tellTagged(tg.uids, me, t);
     return json({ thread: full(t, true, fam) });
   }
   if (!id) return json({ error: 'not found' }, 404);
@@ -121,6 +132,12 @@ export async function threadRoutes(c) {
     if (body.body != null) { const v = text(a.fam, body.body, 12000); if (v == null) return json({ error: 'expected sealed text' }, 400); t.body = v; t.editedAt = Date.now(); }
     if (body.mins != null) t.mins = Math.max(1, Math.min(60, Math.round(+body.mins || 1)));
     if (body.pinned != null) t.pinned = !!body.pinned;
+    if (body.tags != null && a.own && t.byUid === user.uid) {
+      const me = meIn(a.fam), tg = tagsOf(a.fam, me, t.aud, body.tags);
+      const added = tg.uids.filter((u) => !(t.tagUids || []).includes(u));
+      t.tags = tg.tags; t.tagUids = tg.uids;
+      await tellTagged(added, me, t);
+    }
     if (body.shots != null && blobs) {
       const next = shotsOf(a.fam, body.shots);
       for (const x of t.shots || []) if (!next.some((y) => y.id === x.id)) await deletePhoto(blobs, fid, x.id).catch(() => {});

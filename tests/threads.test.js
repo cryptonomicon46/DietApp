@@ -102,3 +102,37 @@ test('threads: screenshots with captions, kept in step on edit, removed with the
   await call(`${F}/threads/${t.id}`, sam, 'DELETE');
   assert.deepEqual(blobs(), [], 'deleting the thread deletes its screenshots');
 });
+
+test('threads: tagging people who can see it, with a nudge for the newly tagged only', async () => {
+  const m = new Map(), told = [];
+  const env = { DEMO: true, __push: (sub, msg) => { told.push(msg.title); return 201; }, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
+  const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path.split('?')[0]); return { status: r.status, ...r.data }; };
+  const signIn = async (email) => { const { token } = await call('/auth/demo', null, 'POST', { email }); await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true }); return token; };
+  const sam = await signIn('sam@example.com'), pat = await signIn('pat@example.com'), mom = await signIn('mom@example.com');
+  const { family } = await call('/families', sam, 'POST', { name: 'Fam' });
+  const ids = {};
+  for (const [token, email, name, relation] of [[pat, 'pat@example.com', 'Pat', 'spouse'], [mom, 'mom@example.com', 'Mom', 'parent']]) {
+    const add = await call(`/families/${family.fid}/members`, sam, 'POST', { kind: 'person', name, relation, email });
+    const inv = await call(`/families/${family.fid}/invites`, sam, 'POST', { kind: 'member', memberId: add.member.id });
+    await call(`/invites/${inv.invite.code}/accept`, token, 'POST');
+    ids[name] = add.member.id;
+  }
+  const kidOnly = await call(`/families/${family.fid}/members`, sam, 'POST', { kind: 'person', name: 'Baby', relation: 'child' });
+  // Notifications are only sent to phones that subscribed: give Pat's and Mom's accounts one each.
+  for (const t of [pat, mom]) await call('/push/subscribe', t, 'POST', { endpoint: 'https://fcm.googleapis.com/fcm/send/abc' + Math.random().toString(36).slice(2), keys: { p256dh: 'B'.repeat(87), auth: 'A'.repeat(22) } });
+  const T = `/families/${family.fid}/threads`;
+  const meId = family.me;
+  const t = (await call(T, sam, 'POST', { aud: 'family', board: 'house', title: 'Health plans', body: '@Pat can you check?', tags: [ids.Pat, meId, kidOnly.member.id, 'nobody'] })).thread;
+  assert.deepEqual(t.tags, [ids.Pat], 'not yourself, not someone without an account, not a stranger');
+  assert.equal(told.filter((x) => /tagged you/.test(x)).length, 1);
+  const forPat = (await call('/threads', pat)).threads.find((x) => x.id === t.id);
+  assert.equal(forPat.tagged, true);
+  assert.equal(forPat.tagUids, undefined, 'account ids stay on the server');
+  assert.equal((await call('/threads', mom)).threads.find((x) => x.id === t.id).tagged, false);
+  told.length = 0;
+  await call(`${T}/${t.id}`, sam, 'PATCH', { tags: [ids.Pat, ids.Mom] });
+  assert.equal(told.filter((x) => /tagged you/.test(x)).length, 1, 'only Mom, newly tagged, is told');
+  assert.equal((await call(`${T}/${t.id}`, pat, 'PATCH', { tags: [] })).status, 403, 'only who wrote it changes tags');
+  const us = (await call(T, sam, 'POST', { aud: 'us', title: 'Just us', body: 'x', tags: [ids.Pat, ids.Mom] })).thread;
+  assert.deepEqual(us.tags, [ids.Pat], 'a just-us thread can only tag your partner');
+});

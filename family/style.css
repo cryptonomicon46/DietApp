@@ -795,3 +795,24 @@ i.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; back
 .thshots .ph img { object-position: top; }
 .thshots figcaption { font-size: .8rem; font-weight: 600; color: var(--muted); }
 @media (min-width: 1100px) { .thshots figure { flex-basis: 180px; } .thshots .ph { width: 180px; height: 230px; } }
+
+/* 🏷️ tags, @ suggestions, the For you badge, and the banner */
+.tagrow { display: grid; gap: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.tagrow .people { display: flex; gap: 10px; flex-wrap: wrap; }
+.tagp { display: grid; justify-items: center; gap: 3px; background: none; color: var(--muted); padding: 2px; font-size: .72rem; font-weight: 700; border-radius: 12px; }
+.tagp .av { transition: box-shadow .15s; } .tagp.on { color: var(--brand); } .tagp.on .av { box-shadow: 0 0 0 3px var(--brand); }
+.atpop { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.12); overflow: hidden; margin-top: -6px; }
+.atpop button { display: flex; gap: 10px; align-items: center; width: 100%; background: none; color: var(--ink); border-radius: 0; padding: 8px 12px; font-weight: 400; border-bottom: 1px solid var(--line); }
+.atpop button:last-child { border: 0; } .atpop small { margin-left: auto; }
+.mention { color: var(--brand); font-weight: 700; background: var(--brand-soft); border-radius: 6px; padding: 0 3px; }
+.tagline { margin: 6px 0 0; color: var(--muted); }
+.thbadge { display: inline-block; justify-self: start; margin-top: 4px; font-size: .7rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); }
+.thbadge.tag { background: #fdecc8; color: #8a5a00; }
+.chip .cnt { background: #e0245e; color: #fff; border-radius: 999px; padding: 0 6px; font-size: .7rem; margin-left: 2px; }
+.dropban { position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%); width: min(560px, calc(100% - 20px)); z-index: 30; display: flex; align-items: center; background: rgba(29,36,32,.96); color: #fff; border-radius: 18px; box-shadow: 0 12px 30px rgba(0,0,0,.25); animation: dropin .35s ease-out; transition: opacity .5s, transform .5s; }
+.dropban.out { opacity: 0; transform: translate(-50%, -20px); }
+.dropban .db-go { flex: 1; background: none; color: inherit; text-align: left; display: grid; gap: 2px; padding: 12px 14px; font-weight: 400; }
+.dropban .db-go b { font-size: .95rem; } .dropban .db-go small { color: #c9d6cf; font-size: .82rem; }
+.dropban .db-x { background: none; color: #c9d6cf; padding: 10px 14px; }
+@keyframes dropin { from { opacity: 0; transform: translate(-50%, -24px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) { .dropban { animation: none; } }
