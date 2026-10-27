@@ -753,6 +753,7 @@ async function renderYourDay() {
     const gyms = Object.keys(B.GYMS).map((k) => `<span><b>${esc(B.GYMS[k].short)}</b> <a href="${B.gymSchedule(k, 'yoga')}" target="_blank" rel="noopener">🧘 Yoga</a> · <a href="${B.gymSchedule(k, 'fitness')}" target="_blank" rel="noopener">🏋️ Fitness</a></span>`).join('');
     el.innerHTML = `<div class="row between"><b>🏃 ${late ? `Tomorrow · ${day.toLocaleDateString(undefined, { weekday: 'long' })}` : 'Your day'}</b><span class="small muted">best times outside</span></div>
       ${list.length ? `<ul class="dayplan">${list.map((i) => `<li><b>${clock(i.t)}</b><span>${esc(i.label)}${i.temp ? ` <span class="plan-temp">${i.temp}</span>` : ''}</span>${i.note ? `<small class="muted">${esc(i.note)}</small>` : ''}</li>`).join('')}</ul>` : '<p class="small muted">No good run, ride or walk windows left today.</p>'}
+      ${await habitsLine(mine).catch(() => '')}
       <div class="gymlinks small">🧗 Movement classes: ${gyms}</div>
       ${acts.length > 1 ? '<p class="tiny muted">Run and ride are alternatives — pick whichever fits.' + (list.some((i) => i.label.endsWith('🐾')) ? ' 🐾 = a good time to walk the dogs too.' : '') + '</p>' : ''}`;
   } catch { if ($('#yourDay')) $('#yourDay').remove(); }
@@ -1155,7 +1156,7 @@ async function callLine() {
   const live = w && w.start <= now;
   const when = w ? `${live ? `<span class="ok">now</span> — until ${t(w.end)}` : `${day} ${t(w.start)}–${t(w.end)}`} <span class="muted">(${t(w.start, B.CALL.there.tz)} her time)</span>` : '';
   // 🔁 Every two weeks: quiet until it's due, then a box to tick (and a notification each day it's due).
-  callNudge.data ||= await api.get(`/account/nudges?today=${isoLocal()}`).then((r) => r.nudges.callmom || null).catch(() => null);
+  await loadNudges();
   const n = callNudge.data;
   const short = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   if (!n) return `<p class="call-line small">📞 <b>Call Mom</b> ${when} · <button type="button" class="linkish small" data-callnudge="setup">🔁 Remind me every 2 weeks</button></p>`;
@@ -1167,15 +1168,67 @@ async function callLine() {
     <div class="grow"><b>📞 Time to call Mom</b><small class="muted">${n.last ? `Last call ${short(n.last)} (${Math.round((Date.parse(isoLocal()) - Date.parse(n.last)) / 864e5)} days ago)` : `Every ${n.every} days`}${w ? ` · best ${when}` : ''}</small></div>
     <button type="button" class="linkish tiny" data-callnudge="edit">⋯</button></div>`;
 }
-const callNudge = { data: null };
+const callNudge = { data: null, all: null };
+// 🔁 Check-in reminders for this account (Call Mom, Run, Ride, Hot yoga), loaded once a session.
+async function loadNudges(fresh = false) {
+  if (!callNudge.all || fresh) callNudge.all = await api.get(`/account/nudges?today=${isoLocal()}`).then((r) => r.nudges).catch(() => callNudge.all || {});
+  callNudge.data = callNudge.all.callmom || null;
+  return callNudge.all;
+}
+const setNudges = (r) => { callNudge.all = r.nudges; callNudge.data = r.nudges.callmom || null; };
+const MOVE_NUDGES = { run: ['🏃', 'Run', 2, 'running'], bike: ['🚴', 'Ride', 3, 'cycling'], hotyoga: ['🧘', 'Hot yoga', 3, 'hotYoga'] };
+// The last day you did each, from WHOOP / Strava workouts and what you logged in the trackers.
+async function lastWorkouts(mine) {
+  const A = await import('../js/activity.js');
+  const last = {};
+  const note = (sport, day) => { if (sport && day && (!last[sport] || day > last[sport])) last[sport] = day; };
+  for (const w of Array.isArray(mine?.workouts) ? mine.workouts : []) note(A.sportOf(w.name || ''), isoLocal(new Date(w.start)));
+  for (const a of Array.isArray(mine?.activities) ? mine.activities : []) note(a.sport, a.date);
+  return last;
+}
+// 🏃 The habits line in Your day: due ones with a box to tick, the rest quietly "next Thu".
+async function habitsLine(mine) {
+  const all = await loadNudges();
+  const on = Object.keys(MOVE_NUDGES).filter((k) => all[k]);
+  if (!on.length) return '<p class="small habits-setup"><button type="button" class="linkish small" data-act="habits">🔁 Remind me to run, ride or do hot yoga every few days</button></p>';
+  // A run or ride from WHOOP / Strava (or logged in the trackers) ticks it off by itself.
+  const last = await lastWorkouts(mine).catch(() => ({}));
+  for (const k of on) {
+    const d = last[MOVE_NUDGES[k][3]];
+    if (d && d <= isoLocal() && (!all[k].last || d > all[k].last)) setNudges(await api.post(`/account/nudges/${k}/done?today=${isoLocal()}`, { date: d }));
+  }
+  const short = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' });
+  return `<div class="habits">${on.map((k) => {
+    const n = callNudge.all[k], [ico, label] = MOVE_NUDGES[k];
+    if (n.due) return `<label class="habit due"><input type="checkbox" data-nudgedone="${k}"><span class="hc"></span>${ico} <b>${label}</b><small>${n.last ? `${Math.round((Date.parse(isoLocal()) - Date.parse(n.last)) / 864e5)} days` : 'due'}</small></label>`;
+    return `<span class="habit">${ico} ${label} <small>✓ ${n.last === isoLocal() ? 'today' : short(n.last)} · next ${short(n.next)}</small>${n.canUndo && n.last === isoLocal() ? ` <button type="button" class="linkish tiny" data-nudgeundo="${k}">Undo</button>` : ''}</span>`;
+  }).join('')}<button type="button" class="linkish tiny" data-act="habits" aria-label="Reminder settings">⋯</button></div>`;
+}
+function habitsSheet() {
+  const all = callNudge.all || {};
+  const opts = (cur) => [1, 2, 3, 4, 5, 7].map((d) => `<option value="${d}" ${d === cur ? 'selected' : ''}>${d === 1 ? 'every day' : d === 7 ? 'once a week' : `every ${d} days`}</option>`).join('');
+  openSheet(`<h2>🔁 Remind me</h2><form id="habitForm" class="stack">
+    ${Object.entries(MOVE_NUDGES).map(([k, [ico, label, every]]) => `<div class="habit-row"><label class="switch-row"><span>${ico} ${label}</span><input type="checkbox" name="on_${k}" ${all[k] ? 'checked' : ''}><i class="switch"></i></label>
+      <select name="every_${k}" aria-label="How often: ${label}">${opts(all[k]?.every || every)}</select></div>`).join('')}
+    <p class="tiny muted">It stays quiet until it's been that long since the last one. Then it shows a box to tick in Your day, and a 7 AM notification lists what's due. A run or ride from WHOOP or Strava — or anything you log in the trackers — ticks it off by itself. Turn the notifications off in Me › 🔔 Notifications › Check-in reminders.</p>
+    <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save</button></div></form>`);
+}
+async function saveHabits(f) {
+  const v = Object.fromEntries(new FormData(f));
+  for (const k of Object.keys(MOVE_NUDGES)) {
+    if (v[`on_${k}`]) setNudges(await api.put(`/account/nudges/${k}?today=${isoLocal()}`, { every: +v[`every_${k}`] }));
+    else if (callNudge.all?.[k]) setNudges(await api.del(`/account/nudges/${k}?today=${isoLocal()}`));
+  }
+  closeSheet(); renderYourDay(); toast('Saved');
+}
 async function callNudgeAct(what, t) {
   const P = '/account/nudges/callmom';
-  if (what === 'setup') { const r = await api.put(`${P}?today=${isoLocal()}`, { every: 14 }); callNudge.data = r.nudges.callmom; toast('🔁 Every 2 weeks — tick it off when you\'ve called'); }
+  if (what === 'setup') { const r = await api.put(`${P}?today=${isoLocal()}`, { every: 14 }); setNudges(r); toast('🔁 Every 2 weeks — tick it off when you\'ve called'); }
   else if (what === 'done') {
     const r = await api.post(`${P}/done?today=${isoLocal()}`, { date: isoLocal() });
-    callNudge.data = r.nudges.callmom;
+    setNudges(r);
     toast(`✓ Called Mom — next reminder ${new Date(`${callNudge.data.next}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`);
-  } else if (what === 'undo') { const r = await api.post(`${P}/undo?today=${isoLocal()}`); callNudge.data = r.nudges.callmom; }
+  } else if (what === 'undo') { const r = await api.post(`${P}/undo?today=${isoLocal()}`); setNudges(r); }
   else if (what === 'edit') {
     const n = callNudge.data;
     return openSheet(`<h2>📞 Call Mom</h2><form id="callForm" class="stack">
@@ -1183,7 +1236,7 @@ async function callNudgeAct(what, t) {
       <label>Last called<input type="date" name="last" max="${isoLocal()}" value="${n.last || ''}"></label>
       <p class="tiny muted">When it's due, you get one notification a day at the start of a good time to call (her morning or evening) until you tick it off. Turn these off in Me › 🔔 Notifications › Check-in reminders.</p>
       <div class="row between"><button type="button" class="ghost danger" data-callnudge="off">Stop reminding me</button><button>Save</button></div></form>`);
-  } else if (what === 'off') { await api.del(P); callNudge.data = null; closeSheet(); toast('Reminders stopped'); }
+  } else if (what === 'off') { setNudges(await api.del(`${P}?today=${isoLocal()}`)); closeSheet(); toast('Reminders stopped'); }
   renderToday();
 }
 
@@ -3043,6 +3096,7 @@ document.addEventListener('click', (e) => {
   if (d.feelpick != null) { const x = feel.picks[+d.feelpick]; return x && feelFill(x); }
   if (d.feelcuisine != null) { feel.cuisine = d.feelcuisine; return renderFeelPicks(); }
   if (d.feelfind) return act(feelFind);
+  if (d.nudgeundo) return act(async () => { setNudges(await api.post(`/account/nudges/${d.nudgeundo}/undo?today=${isoLocal()}`)); renderYourDay(); });
   if (d.callnudge && d.callnudge !== 'done') return act(() => callNudgeAct(d.callnudge, t));
   if (d.famtab) { if (d.board) th.board = d.board; state.famTab = d.famtab; LS.set('fam.famTab', d.famtab); if (state.view !== 'feed') return show('feed'); return feedView(); }
   if (d.board) { th.board = d.board; return threadsView(); }
@@ -3151,6 +3205,7 @@ document.addEventListener('click', (e) => {
     case 'feel': return feelSheet();
     case 'outing': return outingAsk();
     case 'writeup': return writeupSheet();
+    case 'habits': return act(async () => { await loadNudges(); habitsSheet(); });
     case 'pollopt': { const w = $('#writeForm .wpoll'); if (w.querySelectorAll('[name=opt]').length >= 8) return; w.querySelector('[data-act=pollopt]').insertAdjacentHTML('beforebegin', `<input name="opt" maxlength="80" placeholder="Choice ${w.querySelectorAll('[name=opt]').length + 1}">`); return; }
     case 'tidy': {
       const ta = $('#writeForm [name=body]');
@@ -3385,6 +3440,10 @@ document.addEventListener('change', async (e) => {
     t.form.idea.value = '';
     return renderFeelPicks();
   }
+  if (t.dataset.nudgedone && t.checked) {
+    const k = t.dataset.nudgedone; t.disabled = true; t.closest('.habit')?.classList.add('done');
+    return act(async () => { await new Promise((r) => setTimeout(r, 400)); setNudges(await api.post(`/account/nudges/${k}/done?today=${isoLocal()}`, { date: isoLocal() })); toast(`✓ ${MOVE_NUDGES[k][1]} done — next ${new Date(`${callNudge.all[k].next}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })}`); renderYourDay(); });
+  }
   if (t.dataset.callnudge === 'done' && t.checked) { t.disabled = true; t.closest('.call-due')?.classList.add('done'); return act(() => new Promise((r) => setTimeout(r, 450)).then(() => callNudgeAct('done', t))); }
   if (t.form?.id === 'writeForm' && (t.name === 'aud' || t.name === 'cat')) {
     const f = t.form;
@@ -3434,7 +3493,8 @@ document.addEventListener('submit', (e) => {
     f.text.value = ''; f.querySelector('button').disabled = true;
     return ask(v.text || '');
   }
-  if (f.id === 'callForm') { e.preventDefault(); return act(async () => { const r = await api.put(`/account/nudges/callmom?today=${isoLocal()}`, { every: +v.every, last: v.last || undefined }); callNudge.data = r.nudges.callmom; closeSheet(); renderToday(); toast('Saved'); }); }
+  if (f.id === 'habitForm') { e.preventDefault(); return act(() => saveHabits(f)); }
+  if (f.id === 'callForm') { e.preventDefault(); return act(async () => { const r = await api.put(`/account/nudges/callmom?today=${isoLocal()}`, { every: +v.every, last: v.last || undefined }); setNudges(r); closeSheet(); renderToday(); toast('Saved'); }); }
   if (f.id === 'writeForm') { e.preventDefault(); return act(() => (f.dataset.edit ? saveThreadEdit(f) : postThread(f))); }
   if (f.id === 'thReplyForm') {
     e.preventDefault();

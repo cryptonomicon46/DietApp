@@ -23,6 +23,19 @@ test('due every 14 days from the last call; a notification once a day at the cal
   assert.equal(nudgesDue({ callmom: { every: 14, last: '2026-10-20' } }, { today, from: slot, to: slot + 9e5 }).length, 0, 'not due yet');
 });
 
+test('workouts: one morning note for what is due', () => {
+  const today = '2026-10-27';
+  const all = { run: { every: 2, last: '2026-10-24' }, bike: { every: 3, last: '2026-10-26' }, hotyoga: { every: 3, last: '2026-10-23' } };
+  assert.equal(nudgesDue(all, { today, from: 0, to: 9e5, hour: 9 }).length, 0, 'only at 7 AM');
+  const [d] = nudgesDue(all, { today, from: 0, to: 9e5, hour: 7 });
+  assert.deepEqual(d.ids, ['run', 'hotyoga']);
+  assert.equal(d.msg.title, '💪 Due today');
+  assert.match(d.msg.body, /🏃 Run \(3 days\) · 🧘 Hot yoga \(4 days\)/);
+  const one = nudgesDue({ run: all.run }, { today, from: 0, to: 9e5, hour: 7 })[0];
+  assert.equal(one.msg.title, '🏃 Time for a run');
+  assert.equal(nudgesDue({ run: { ...all.run, notified: today } }, { today, from: 0, to: 9e5, hour: 7 }).length, 0);
+});
+
 test('set up, tick off, undo, change, stop', async () => {
   const m = new Map(), db = { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); } };
   const json = (data, status = 200) => ({ status, data });
@@ -38,4 +51,10 @@ test('set up, tick off, undo, change, stop', async () => {
   assert.equal((await call('/account/nudges/zzz', 'PUT')).status, 404);
   await call('/account/nudges/callmom', 'DELETE');
   assert.deepEqual((await call('/account/nudges')).data.nudges, {});
+});
+
+test('a run every 2 days stays every 2 days', async () => {
+  const m = new Map(), db = { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); } };
+  const r = await nudgeRoutes({ path: '/account/nudges/run', method: 'PUT', body: { every: 2 }, db, user: { uid: 'u' }, json: (data) => ({ data }), today: '2026-10-27' });
+  assert.equal(r.data.nudges.run.every, 2);
 });

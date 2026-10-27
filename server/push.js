@@ -195,12 +195,17 @@ export async function runReminders(env, at = Date.now(), { db }) {
     // 📞 Check-in reminders (one read per phone owner a run; a write only when one goes out).
     const nudges = await db.get(`nudges:${uid}`);
     if (nudges) {
-      const today = localDay(from, user.tz || 'America/Los_Angeles');
-      for (const d of nudgesDue(nudges, { today, from, to })) {
+      const tz = user.tz || 'America/Los_Angeles';
+      const today = localDay(from, tz);
+      // The local hour, on the run that starts it (minute 0–14).
+      const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date(from)).map((x) => [x.type, x.value]));
+      const hour = +parts.minute < 15 ? +parts.hour : null;
+      const due = nudgesDue(nudges, { today, from, to, hour });
+      for (const d of due) {
         sent += await sendTo(db, env, [uid], d.kind, d.msg, d.ttl);
-        nudges[d.id] = { ...nudges[d.id], notified: today };
-        await db.put(`nudges:${uid}`, nudges);
+        for (const id of d.ids) nudges[id] = { ...nudges[id], notified: today };
       }
+      if (due.length) await db.put(`nudges:${uid}`, nudges);
     }
     for (const fid of user.families || []) {
       const f = await famData(fid);

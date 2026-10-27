@@ -666,3 +666,15 @@ i.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; back
 .call-due.done { opacity: .55; } .call-due.done b { text-decoration: line-through; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .call-due { background: #2e1d24; border-color: #5a2e3e; } }
 :root[data-theme=dark] .call-due { background: #2e1d24; border-color: #5a2e3e; }
+
+/* 🏃 Habits in Your day */
+.habits { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 4px; }
+.habit { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; font-size: .8rem; background: var(--card); }
+.habit small { color: var(--muted); }
+.habit.due { border-color: #f3c1cf; background: #fff6f8; cursor: pointer; position: relative; } .habit.due small { color: #b0164b; font-weight: 700; }
+.habit.due input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.habit .hc { width: 18px; height: 18px; border: 2px solid var(--like); border-radius: 50%; background: var(--card); flex: none; }
+.habit.done { opacity: .55; } .habit.done .hc { background: var(--like); box-shadow: inset 0 0 0 3px var(--card); } .habit.done b { text-decoration: line-through; }
+.habit-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; } .habit-row select { width: auto; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .habit.due { background: #2e1d24; border-color: #5a2e3e; } :root:not([data-theme=light]) .habit.due small { color: #ff8fb1; } }
+:root[data-theme=dark] .habit.due { background: #2e1d24; border-color: #5a2e3e; } :root[data-theme=dark] .habit.due small { color: #ff8fb1; }
