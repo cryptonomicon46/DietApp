@@ -31,7 +31,7 @@ export const SLIDES = [
     ['🧒', 'Grown-ups only', 'Never pets or kids: only people with their own account who are 18 or over.'],
   ] },
   { id: 'dogs', eyebrow: 'Dogs & chores', title: 'The house and the dogs, top to bottom', go: 'pets', cards: [
-    ['🏆', 'Gold Card', 'The month’s chore race, with a prize for the winner.'],
+    ['🏆', 'Gold Card and ⚔️ the fight', 'The month’s chore race, and under it your check-in health bars, head to head.'],
     ['🏠', 'The house', 'Cooking, dishes, laundry: log it for you, your partner or both.'],
     ['🐾', 'The dogs', 'Fed, walked, park, treats, meds. A ⭐ golden day is two outings, or one and a treat.'],
     ['📅', 'Appointments', 'Groomer, vet, vaccines, who drives. Ones in your calendars are suggested.'],
@@ -49,7 +49,7 @@ export const SLIDES = [
     ['🍿', 'Watch', 'Where you’re up to, 🆕 new episodes, 🕐 up next, bingo and couples picks.'],
   ] },
   { id: 'me', eyebrow: 'Trackers and Me', title: 'Each person’s own', go: 'me', cards: [
-    ['🥗', 'Trackers', 'Food (meal plans, logging, groceries, ⚔️ the check-in fight) and Train (lifting, runs, rides). Private until you share.'],
+    ['🥗', 'Trackers', 'Food (meal plans, logging, groceries) and Train (lifting, runs, rides). Private until you share.'],
     ['👤', 'Me', 'Your family, people and pets, notifications, light or dark, and your account.'],
     ['🔑', 'Recovery phrase', 'Write it down: it unlocks your family on a new phone if you lose this one.'],
   ] },
@@ -76,7 +76,7 @@ SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'New this month', c
   ['💬', 'Chats', 'Tap 💬 at the top: message any grown-up in the family, or everyone at once.'],
   ['👀', 'Threads: Seen by and 🗂 boards', 'See who’s opened a write-up, and move it to the right board — or one of your own.'],
   ['🏷️', 'Threads: screenshots, PDFs and tags', 'Add screenshots and PDFs, tag people with @, and see what’s for you in ✨ For you.'],
-  ['⚔️', 'The check-in fight', 'Trackers › Food › Weight: a health bar that fills with weigh-ins and logged meals.'],
+  ['⚔️', 'The check-in fight', 'Dogs & chores, under the Gold Card: health bars that fill with weigh-ins and logged meals.'],
   ['📷', 'Albums and 📰 News', 'On Moments: Google Photos albums, and headlines twice a day.'],
 ] });
 

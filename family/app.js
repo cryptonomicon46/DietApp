@@ -658,6 +658,7 @@ async function petsView() {
   const chores = mods.includes('chores');
   // 🏆 The scores first, then the house, then everything about the dogs together, news last.
   const house = `<section class="card gold" id="race"><div class="skeleton line"></div></section>
+    <section class="fightcard" id="fight" hidden></section>
     ${chores ? `<h3 class="grp-h">🏠 The house</h3><section class="card care" id="careHouse"><div class="skeleton line"></div></section>` : ''}`;
   const dogPart = `${dogs ? `<h3 class="grp-h">🐾 The dogs</h3><section class="card care" id="careDogs"><div class="skeleton line"></div></section>
     <section class="card walkcard" id="walk"><div class="skeleton line"></div></section>
@@ -672,7 +673,7 @@ async function petsView() {
   $('#view').innerHTML = `${demoBanner()}${wide() && dogs
     ? `<div class="wide2 pets"><div class="col-main">${house}${fame}${rescue}</div><div class="col-main">${dogPart}</div></div>`
     : `${house}${dogPart}${fame}${rescue}`}`;
-  renderCare(); renderRace();
+  renderCare(); renderRace(); renderFight().catch(() => {});
   if (dogs) renderRescue().catch(() => {});
   if (!dogs) return;
   renderWalk();
@@ -966,6 +967,45 @@ async function renderRace() {
     <div class="row between prize"><span>🎁 Prize: <b>${esc(race.prize || 'set a prize!')}</b></span>${me().role === 'owner' ? '<button type="button" class="linkish small" data-act="prize">✎</button>' : ''}</div>`;
   const fame = $('#fame');
   if (fame) fame.innerHTML = race.gold.length ? `<h3>Hall of fame</h3><div class="fame">${race.gold.map((g) => `<div class="mini-gold"><b>${esc(monthName(g.month))}</b><span>${g.winners.map((w) => esc(w.name)).join(' & ')}</span><small>${g.points} pts${g.prize ? ` · ${esc(g.prize)}` : ''}</small></div>`).join('')}</div>` : '';
+}
+// ⚔️ The check-in fight (js/fight.js), under the Gold Card: who checked in more — the morning
+// weigh-in and each meal logged — over the last 7 days, never the scale. From your own trackers
+// and, head to head, your partner's when they share diet & fitness with you. Worked out here.
+const fight = { open: false, data: null };
+async function renderFight(fresh = true) {
+  const el = $('#fight');
+  if (!el || !(fam().modules || []).includes('health') || me()?.relation === 'child') return;
+  if (fresh || !fight.data) {
+    const partner = partnerMember();
+    const [F, mine, theirs] = await Promise.all([import('../js/fight.js'), myTrackers(), partner ? api.get(`/families/${state.fid}/members/${partner.id}/data`).then(openData).catch(() => null) : null]);
+    const has = (d) => d && !d.locked && ((d.weights || []).length || Object.keys(d.mealLog || {}).length);
+    fight.data = { F, mine: mine && !mine.locked ? mine : {}, theirs: has(theirs) ? theirs : null, partner };
+  }
+  const { F, mine, theirs, partner } = fight.data, today = isoLocal();
+  const prize = [mine.fightPrize, theirs?.fightPrize].filter((x) => x?.month === today.slice(0, 7)).sort((a, b) => b.at - a.at)[0]?.text || '';
+  el.hidden = false;
+  el.innerHTML = F.fightHtml({ me: { name: 'You', data: mine }, rival: theirs ? { name: partner.name, data: theirs } : null, today, open: fight.open, prize })
+    .replace('When your partner shares diet &amp; fitness with you', partner ? `When ${esc(partner.name)} shares diet &amp; fitness with you (their Me › Who can see my diet &amp; fitness)` : 'When your partner shares diet &amp; fitness with you');
+  // A perfect week (7 of 7 check-in days) just finished: PERFECT!, once.
+  const won = F.perfectWeek(mine, today);
+  if (won && LS.get('fam.fightPerfect') !== won) {
+    LS.set('fam.fightPerfect', won);
+    const fx = document.createElement('div');
+    fx.className = 'fg-perfect'; fx.setAttribute('role', 'status');
+    fx.innerHTML = '<div><div class="big">PERFECT!</div><p>7 of 7 check-in days last week.</p><button type="button" class="ghost">🎉 Nice</button></div>';
+    fx.querySelector('button').onclick = () => fx.remove();
+    document.body.append(fx);
+  }
+}
+// This month's prize: kept in your own trackers (locked like the rest), so it follows you.
+async function saveFightPrize(text) {
+  const data = await openData(await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null));
+  if (data.locked) return toast('This device needs the family key first');
+  const fightPrize = { text: text.trim().slice(0, 60), month: isoLocal().slice(0, 7), at: Date.now() };
+  await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData({ ...data, fightPrize }) });
+  mineCache = null;
+  if (fight.data) fight.data.mine = { ...fight.data.mine, fightPrize };
+  toast('🎁 Prize saved');
 }
 // A little burst of joy for every chore logged.
 function celebrate(kind, x, y) {
@@ -3928,6 +3968,7 @@ document.addEventListener('click', (e) => {
   if (d.thfollow) return act(async () => { const r = await api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/follow`); th.cur.following = r.following; renderThread(); toast(r.following ? '🔔 You\'ll hear about new replies' : '🔕 No more replies from this one'); });
   if (d.thpin) return act(() => threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}`, { pinned: !th.cur.pinned })));
   if (d.thdel) { if (!confirm('Delete this thread and its replies?')) return; return act(async () => { await api.del(`/families/${th.cur.fid}/threads/${th.cur.id}`); th.loaded = 0; th.list = th.list.filter((x) => x.id !== th.cur.id); th.cur = null; toast('Deleted'); show('feed'); }); }
+  if (d.fight) { fight.open = !fight.open; return renderFight(false); }
   if (d.thedit) return writeupSheet({ edit: th.cur });
   if (d.thmove) return moveSheet();
   if (d.thmoveto) return moveThread(d.thmoveto);
@@ -4249,6 +4290,7 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.dataset.fightprize) return act(() => saveFightPrize(t.value));
   if (t.name === 'photo' && t.files?.[0]) {
     draft.text = $('#postForm textarea')?.value || draft.text;
     draft.file = t.files[0];

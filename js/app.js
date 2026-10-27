@@ -35,7 +35,6 @@ import { makeZip } from './zip.js';
 import { drawPoster, planCsvRows, drawReportPoster } from './poster.js';
 import { RANGES, PHASE_NAMES, buildReport, reportText, reportCsvRows, weeklyRows, rangeTitle, combosText, combosCsvRows } from './share.js';
 import { programReview } from './review.js';
-import { fightHtml, perfectWeek } from './fight.js';
 
 // ---------- storage ----------
 // Each person's data is kept separately (see storage.js); `store` reads/writes the open profile.
@@ -2196,39 +2195,11 @@ function renderWeight() {
     <div><b>${now.toFixed(1)}</b><span>current</span></div>
     <div><b>${Math.max(now - state.profile.goalLb, 0).toFixed(1)}</b><span>lb to goal</span></div>`;
   drawChart();
-  renderFight();
   renderDexa(state.weights);
   renderPhotos();
 }
 
-// ⚔️ The check-in fight (js/fight.js): you, and your partner when their data is on this phone.
-let fightOpen = false;
-const fightName = (id) => profileStore(id).get('profile', null)?.name?.split(/\s+/)[0] || PROFILES.find((p) => p.id === id)?.name || id;
-function renderFight() {
-  const el = $('#fightCard');
-  if (!el) return;
-  const me = ownerId() || activeProfile().id, other = PROFILES.find((p) => p.id !== me)?.id;
-  const mine = personData(me), theirs = other ? personData(other) : null;
-  // Only when they share with you (in an account) or you share a household: then their data is here.
-  const rival = theirs && (theirs.weights.length || Object.keys(theirs.mealLog || {}).length) ? { name: fightName(other), data: theirs } : null;
-  const prize = [me, other].filter(Boolean).map((id) => profileStore(id).get('fightPrize', null)).filter((x) => x && x.month === isoDate().slice(0, 7)).sort((a, b) => b.at - a.at)[0]?.text || '';
-  el.innerHTML = fightHtml({ me: { name: fightName(me), data: mine }, rival, today: isoDate(), open: fightOpen, prize });
-  const won = perfectWeek(mine, isoDate());
-  if (won && global.get('fightPerfect', null) !== won) {
-    global.set('fightPerfect', won);
-    const fx = document.createElement('div');
-    fx.className = 'fg-perfect'; fx.setAttribute('role', 'status');
-    fx.innerHTML = '<div><div class="big">PERFECT!</div><p>7 of 7 check-in days last week.</p><button type="button" class="ghost">🎉 Nice</button></div>';
-    fx.querySelector('button').onclick = () => fx.remove();
-    document.body.append(fx);
-  }
-}
-document.addEventListener('click', (e) => { if (e.target.closest('[data-fight]')) { fightOpen = !fightOpen; renderFight(); } });
-document.addEventListener('change', (e) => {
-  if (!e.target.dataset?.fightprize) return;
-  const me = ownerId() || activeProfile().id;
-  profileStore(me).set('fightPrize', { text: e.target.value.trim().slice(0, 60), month: isoDate().slice(0, 7), at: Date.now() });
-});
+
 
 let chartRange = '90';
 $('#chartRange').onclick = (e) => {
