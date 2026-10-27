@@ -10,7 +10,7 @@ import { checkLinks } from './links.js';
 export const TOPICS = {
   politics: { label: 'Politics', feeds: [['NPR', 'https://feeds.npr.org/1014/rss.xml'], ['PBS NewsHour', 'https://www.pbs.org/newshour/feeds/rss/politics'], ['CalMatters', 'https://calmatters.org/feed/']] },
   tech: { label: 'Tech', feeds: [['The Verge', 'https://www.theverge.com/rss/index.xml'], ['Ars Technica', 'https://feeds.arstechnica.com/arstechnica/index'], ['TechCrunch', 'https://techcrunch.com/feed/'], ['Hacker News', 'https://news.ycombinator.com/rss']] },
-  bay: { label: 'Bay Area', feeds: [['Mercury News', 'https://www.mercurynews.com/feed/'], ['KQED', 'https://www.kqed.org/news/feed']] },
+  bay: { label: 'Bay Area', feeds: [['KQED', 'https://ww2.kqed.org/news/feed/'], ['SF Standard', 'https://sfstandard.com/feed/'], ['SFGate', 'https://www.sfgate.com/bayarea/feed/Bay-Area-News-429.php'], ['San José Spotlight', 'https://sanjosespotlight.com/feed/'], ['ABC7', 'https://abc7news.com/feed/']] },
 };
 export const RESCUE = 'California Doodle Rescue';
 const PER_TOPIC = 6, FRESH = 36 * 3600e3;
