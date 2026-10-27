@@ -434,6 +434,13 @@ export async function familyApi(req, env, path, ctx = null) {
         fam.e2ee = true; fam.keyCheck = body.keyCheck; fam.e2eeAt = Date.now();
       }
       if (body.share && typeof body.share === 'object') fam.share = { kids: !!body.share.kids, pets: body.share.pets !== false };
+      // 🤝 Set up for friends: who'll take it over once they've joined.
+      if (body.setupFor === null) delete fam.setupFor;
+      else if (body.setupFor && typeof body.setupFor === 'object') {
+        const t = fam.members.find((x) => x.id === body.setupFor.takeover && x.kind === 'person' && x.relation !== 'child' && x.id !== me.id);
+        if (!t) return json({ error: 'pick the grown-up who will take it over' }, 400);
+        fam.setupFor = { by: me.id, takeover: t.id, at: fam.setupFor?.at || Date.now() };
+      }
       await db.put(`family:${fam.fid}`, fam);
       return json({ family: familyOut(fam, user) });
     }
@@ -455,7 +462,15 @@ export async function familyApi(req, env, path, ctx = null) {
       const t = fam.members.find((x) => x.id === body.memberId && x.kind === 'person' && x.uid && x.relation !== 'child');
       if (!t) return json({ error: 'pick a grown-up who has joined' }, 400);
       me.role = 'member'; t.role = 'owner';
+      delete fam.setupFor;
       await db.put(`family:${fam.fid}`, fam);
+      await tell([t.uid], 'us', { title: `🤝 ${fam.name} is yours now`, body: `${me.name} handed it over — you can change its settings in Me.`, url: 'family/#me', tag: `owner-${fam.fid}` });
+      // Set up for friends: leave once it's theirs (posts stay), or stay on to help.
+      if (body.then === 'leave') {
+        await removeMember(db, fam, me, { keepPosts: true });
+        user.families = user.families.filter((f) => f !== fam.fid); await saveUser();
+        return json({ ok: true, left: true });
+      }
       return json({ family: familyOut(fam, user) });
     }
     if (m[2] === '/disconnect') {
@@ -1362,6 +1377,18 @@ export async function familyApi(req, env, path, ctx = null) {
 
   // 🔐 Keys for friends' families: one per connection, locked with each family's own key. The
   // inviting family parks theirs under the invite until it's accepted.
+  // 🤝 Two families you're a grown-up in, connected directly (setting one up for friends).
+  m = path.match(/^\/families\/([a-z0-9]+)\/link$/);
+  if (m && method === 'POST') {
+    const a = await loadFamily(m[1]), b = await loadFamily(clean(body.with, 24));
+    if (!a || !b || a.fid === b.fid) return json({ error: 'not found' }, 404);
+    const ma = meIn(a), mb = meIn(b);
+    if (ma.relation === 'child' || mb.relation === 'child' || (ma.role !== 'owner' && mb.role !== 'owner')) return json({ error: 'not allowed' }, 403);
+    a.connections = [...new Set([...(a.connections || []), b.fid])];
+    b.connections = [...new Set([...(b.connections || []), a.fid])];
+    await db.put(`family:${a.fid}`, a); await db.put(`family:${b.fid}`, b);
+    return json({ ok: true });
+  }
   m = path.match(/^\/families\/([a-z0-9]+)\/connkeys\/(pending\/)?([a-z0-9]{6,40})$/);
   if (m && method === 'PUT') {
     const fam = await loadFamily(m[1]);
@@ -1405,7 +1432,10 @@ export async function familyApi(req, env, path, ctx = null) {
     const inv = await db.get(`invite:${m[1]}`);
     if (!inv) return json({ error: 'this invite has expired or was already used' }, 404);
     const mine = inv.email === user.email;
-    if (!m[2] && method === 'GET') return json({ invite: { kind: inv.kind, familyName: inv.familyName, byName: inv.byName, email: inv.email, forYou: mine, note: inv.note || '' } });
+    if (!m[2] && method === 'GET') {
+      const takeover = inv.kind === 'member' && (await db.get(`family:${inv.fid}`))?.setupFor?.takeover === inv.memberId;
+      return json({ invite: { kind: inv.kind, familyName: inv.familyName, byName: inv.byName, email: inv.email, forYou: mine, note: inv.note || '', takeover } });
+    }
     if (m[2] && method === 'POST') {
       if (!mine) return json({ error: `this invite is for ${inv.email} — sign in with that Google account` }, 403);
       const fam = await db.get(`family:${inv.fid}`);
@@ -1418,6 +1448,8 @@ export async function familyApi(req, env, path, ctx = null) {
         await db.put(`family:${fam.fid}`, fam);
         if (!user.families.includes(fam.fid)) { user.families.push(fam.fid); await saveUser(); }
         await db.del(`invite:${m[1]}`);
+        const setter = fam.setupFor?.takeover === t.id && fam.members.find((x) => x.id === fam.setupFor.by && x.uid);
+        if (setter) await tell([setter.uid], 'us', { title: `🤝 ${t.name} joined ${fam.name}`, body: 'Hand it over whenever you\'re ready (Me › the setup checklist).', url: 'family/#me', tag: `setup-${fam.fid}` });
         return json({ family: familyOut(fam, user) });
       }
       // A friend's family: theirs (new, or one they already run) connects to the inviter's.
@@ -1689,7 +1721,7 @@ async function makeInvite(db, inv) {
 }
 function familyOut(fam, user) {
   const me = fam.members.find((m) => m.uid === user.uid);
-  return { fid: fam.fid, name: fam.name, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', chores: fam.chores || [], hiddenChores: fam.hiddenChores || [], goldenPosts: fam.goldenPosts !== false, e2ee: !!fam.e2ee, keyCheck: fam.keyCheck || '', connkeys: fam.connkeys || {}, share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
+  return { fid: fam.fid, name: fam.name, me: me?.id || '', myRole: me?.role || '', modules: fam.modules || MODULES, goldPrize: fam.goldPrize || '', chores: fam.chores || [], hiddenChores: fam.hiddenChores || [], goldenPosts: fam.goldenPosts !== false, e2ee: !!fam.e2ee, keyCheck: fam.keyCheck || '', connkeys: fam.connkeys || {}, share: { kids: !!fam.share?.kids, pets: fam.share?.pets !== false }, setupFor: fam.setupFor || null, connections: fam.connections || [], members: fam.members.map((m) => memberView(m, true)) };
 }
 const url = (req) => new URL(req.url);
 // A post as one viewer sees it: no account ids (theirs or anyone else's), just "is it mine".
