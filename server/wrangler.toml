@@ -25,3 +25,13 @@ bucket_name = "ourpawmily-photos"
 # reminders (appointments, calendar events, vaccines due). Thursdays: the 💡 date scout (scout.js).
 [triggers]
 crons = ["13 10 * * *", "*/15 * * * *", "13 13-22 * * 3", "43 13-22 * * 4"]
+
+# 💬 Chats between the grown-ups: one Durable Object per family (chatHub.js), SQLite-backed so it
+# runs on the free plan. It keeps the (sealed) messages and the phones' live connections.
+[[durable_objects.bindings]]
+name = "CHAT"
+class_name = "ChatHub"
+
+[[migrations]]
+tag = "chat-v1"
+new_sqlite_classes = ["ChatHub"]

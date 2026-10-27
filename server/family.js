@@ -56,6 +56,7 @@ import { movieRoutes } from './movies.js';
 import { newsRoutes, runNews, editionDue } from './news.js';
 import { albumRoutes } from './albums.js';
 import { marketRoutes } from './market.js';
+import { chatRoutes, ChatCore, runOp, PAGE as CHAT_PAGE } from './chat.js';
 import { askClaude } from './scout.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
@@ -138,6 +139,7 @@ const memberView = (m, inside) => ({
 export async function familyApi(req, env, path, ctx = null) {
   const db = store(env.HOUSEHOLD);
   db.blobs = blobStore(env); // photo files go with the posts they belong to
+  db.chat = env.CHAT || null; // 💬 each family's chats (chatHub.js)
   const json = (data, status = 200) => ({ status, data });
   const method = req.method;
   let body = {}, bytes = null;
@@ -1303,6 +1305,7 @@ export async function familyApi(req, env, path, ctx = null) {
       await db.put(`family:${fam.fid}`, fam);
       await db.del(`data:${fam.fid}:${t.id}`);
       await db.del(`dataprev:${fam.fid}:${t.id}`);
+      if (t.uid) await forgetInChats(db, fam.fid, t.id, false);
       if (t.uid) { const u = await db.get(`user:${t.uid}`); if (u) { u.families = u.families.filter((f) => f !== fam.fid); await db.put(`user:${u.uid}`, u); } }
       return json({ ok: true });
     }
@@ -1449,6 +1452,8 @@ export async function familyApi(req, env, path, ctx = null) {
   // ---- 📷 albums (family only) ----
   { const r = await albumRoutes({ path, method, body, db, loadFamily, meIn, sealed, clean, randomId, json, blobs: blobStore(env) }); if (r) return r; }
   // ---- 🛒 the Market (family, and friends' families by default) ----
+  // ---- 💬 chats between the grown-ups ----
+  { const r = await chatRoutes({ path, method, body, user, loadFamily, meIn, tell, json, url: () => url(req), hub: (fid) => chatHub(db, fid), blobs: blobStore(env), deletePhoto }); if (r) return r; }
   { const r = await marketRoutes({ path, method, body, db, user, families, loadFamily, meIn, sealed, clean, randomId, tell, json, blobs: blobStore(env) }); if (r) return r; }
   // ✨ Tidy it up: rough notes into headings and bullets. Only the text you tap it on is sent.
   m = path.match(/^\/families\/([a-z0-9]+)\/tidy$/);
@@ -1817,6 +1822,23 @@ export const MODULES = ['dogs', 'chores', 'feed', 'health', 'calendar'];
 
 // Takes someone out of a family: their spot, their data, and (unless kept) their posts,
 // comments and likes there.
+// 💬 A family's chats: its Durable Object on the connector, or (the demo) the same code over this store.
+function chatHub(db, fid) {
+  if (db.chat) {
+    const stub = db.chat.get(db.chat.idFromName(fid));
+    return { live: true, call: (op, args = {}) => stub.fetch('https://chat/op', { method: 'POST', body: JSON.stringify({ op, ...args }) }).then((r) => r.json()) };
+  }
+  const core = new ChatCore({ get: (k) => db.get(`chat:${fid}:${k}`), put: (k, v) => db.put(`chat:${fid}:${k}`, v), delete: (k) => db.del(`chat:${fid}:${k}`) });
+  return { live: false, call: async (op, args = {}) => {
+    if (op === 'wipe') { for (const id of await core.index()) { const c = await core.meta(id); for (let n = 0; n * CHAT_PAGE < c.seq; n++) await db.del(`chat:${fid}:m:${id}:${n}`); await db.del(`chat:${fid}:c:${id}`); } await db.del(`chat:${fid}:index`); return { ok: true }; }
+    return (await runOp(core, op, args)).out;
+  } };
+}
+// Someone leaving: their one-to-one chats go (and, when their account goes, their group messages).
+async function forgetInChats(db, fid, memberId, all) {
+  const r = await chatHub(db, fid).call('forget', { member: memberId, all }).catch(() => null);
+  for (const id of r?.files || []) await deletePhoto(db.blobs, fid, id).catch(() => {});
+}
 async function removeMember(db, fam, t, { keepPosts = true } = {}) {
   fam.members = fam.members.filter((x) => x.id !== t.id);
   for (const x of fam.members) x.shareWith = (x.shareWith || []).filter((id) => id !== t.id);
@@ -1825,6 +1847,7 @@ async function removeMember(db, fam, t, { keepPosts = true } = {}) {
   await db.del(`dataprev:${fam.fid}:${t.id}`);
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) await db.del(`bingocard:${fam.fid}:${g.id}:${t.id}`);
   for (const s of (await db.get(`picks:${fam.fid}`)) || []) await db.del(`pickcard:${fam.fid}:${s.id}:${t.id}`);
+  if (t.uid) await forgetInChats(db, fam.fid, t.id, !keepPosts);
   if (keepPosts || !t.uid) return;
   // The family keeps its dog-care log, without their name on it.
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) {
@@ -1875,6 +1898,7 @@ async function deleteFamily(db, fam) {
   await db.del(`picks:${fam.fid}`);
   await db.del(`albums:${fam.fid}`); // their photos went with deleteFamilyPhotos
   await db.del(`market:${fam.fid}`);
+  await chatHub(db, fam.fid).call('wipe').catch(() => {});
   for (const c of fam.connections || []) {
     const o = await db.get(`family:${c}`);
     if (o) { o.connections = (o.connections || []).filter((f) => f !== fam.fid); if (o.connkeys) delete o.connkeys[fam.fid]; await db.put(`family:${o.fid}`, o); }
@@ -2011,6 +2035,7 @@ async function helpTool(db, env, { user, token, name, input, app, transcript, ex
 export async function runMaintenance(env) {
   const kv = env.HOUSEHOLD, db = store(kv);
   db.blobs = blobStore(env);
+  db.chat = env.CHAT || null;
   const report = { at: Date.now(), counts: { families: 0, accounts: 0, people: 0, pets: 0, openTickets: 0 }, fixes: [], problems: [] };
   const fix = (s) => report.fixes.push(s);
   const keys = async (prefix) => {

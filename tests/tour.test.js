@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SLIDES, TOUR, WHATS_NEW, SCREEN, slide } from '../family/tour.js';
 
-const VIEWS = ['feed', 'threads', 'pets', 'us', 'calendar', 'me'];
+const VIEWS = ['feed', 'threads', 'chats', 'pets', 'us', 'calendar', 'me'];
 
 test('every tour page has a title and its cards, and ids are unique', () => {
   assert.equal(new Set(SLIDES.map((s) => s.id)).size, SLIDES.length);

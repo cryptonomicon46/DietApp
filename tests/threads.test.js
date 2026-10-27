@@ -48,6 +48,12 @@ test('threads: who sees what, replies and read receipts, polls, best answers, pi
   await call(`${T}/${fam.id}/vote`, kid, 'POST', { i: 1 });
   await call(`${T}/${fam.id}/vote`, kid, 'POST', { i: 0 });
   assert.deepEqual((await call(`${T}/${fam.id}`, pat)).thread.poll.counts, [2, 0]);
+  // 👀 Who's seen it: Sam opened it; the author isn't listed; voting alone isn't opening.
+  await call(`${T}/${fam.id}`, sam);
+  const seenBy = (await call(`${T}/${fam.id}`, pat)).thread.seen;
+  assert.equal(seenBy.length, 1);
+  assert.ok(seenBy[0].at > 0);
+  assert.deepEqual((await call(`${T}/${ask.id}`, friend)).thread.seen, [], "friends' families don't see who in yours read it");
 
   // Ask: a friend answers, it's upvoted, and the asker marks it best.
   const fr = (await call(`${T}/${ask.id}/replies`, friend, 'POST', { text: 'Jamie at Bark Buddies' })).thread.replies[0];

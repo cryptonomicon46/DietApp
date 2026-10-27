@@ -7,7 +7,7 @@ export const SLIDES = [
   { id: 'oneminute', eyebrow: 'The basics', title: 'The app in one minute', cards: [
     ['📱', 'Like an app', 'Add it to your Home Screen. It works on a Mac or iPad too.'],
     ['🔑', 'Google sign-in', 'No new password: your Google account keeps it yours.'],
-    ['🧭', 'Getting around', 'Family · Dogs & chores · 💞 Us · Calendar · Trackers along the bottom; ＋ creates anything; ❓ is help.'],
+    ['🧭', 'Getting around', 'Family · Dogs & chores · 💞 Us · Calendar · Trackers along the bottom; 💬 chats, ❓ help and ＋ create at the top.'],
     ['🔒', 'Private', 'What you write and post is locked on your phone before it’s sent.'],
   ] },
   { id: 'moments', eyebrow: 'Family › Moments', title: 'Your day and your photos, in one feed', go: 'feed', cards: [
@@ -20,8 +20,14 @@ export const SLIDES = [
   { id: 'threads', eyebrow: 'Family › Threads', title: 'Longer conversations, in your own time', go: 'threads', cards: [
     ['📚', 'Write it up', 'Learned, Talk, How-to, ❓ Ask or 📊 Poll — for just you two, the family, or friends’ families.'],
     ['📷', 'Screenshots and 📎 PDFs', 'Add plan comparisons, tables or a whole deck as a PDF: pick, paste or drag them in.'],
-    ['🏷️', 'Tag people', 'Tap a face or type @. They get a notification; new things land in ✨ For you.'],
+    ['🏷️', 'Tag people', 'Tap a face or type @. They get a notification, and you see when they’ve seen it.'],
     ['✨', 'Tidy it up', 'Turns rough notes into headings and bullets, only when you tap it.'],
+  ] },
+  { id: 'chats', eyebrow: '💬 Chats', title: 'Message the grown-ups', go: 'chats', cards: [
+    ['💬', 'One to one, or everyone', 'A chat with each grown-up in the family, and 👨‍👩‍👧 Grown-ups when there are three or more.'],
+    ['😊', 'Emojis, reactions, replies', 'Tap a message to react, reply or unsend. Add photos, screenshots or PDFs with ＋.'],
+    ['⚡', 'Instant', 'Messages arrive as they’re sent, with typing… and ✓✓ Read.'],
+    ['🧒', 'Grown-ups only', 'Never pets or kids: only people with their own account who are 18 or over.'],
   ] },
   { id: 'dogs', eyebrow: 'Dogs & chores', title: 'The house and the dogs, top to bottom', go: 'pets', cards: [
     ['🏆', 'Gold Card', 'The month’s chore race, with a prize for the winner.'],
@@ -47,7 +53,7 @@ export const SLIDES = [
     ['🔑', 'Recovery phrase', 'Write it down: it unlocks your family on a new phone if you lose this one.'],
   ] },
   { id: 'privacy', eyebrow: 'Privacy', title: 'Locked on your phone first', cards: [
-    ['🔒', 'Locked', 'Posts, photos, notes, plans, threads, albums, diet and fitness, the dogs’ details, events.'],
+    ['🔒', 'Locked', 'Posts, photos, messages, notes, plans, threads, albums, diet and fitness, the dogs’ details, events.'],
     ['👀', 'Server sees', 'Names, who’s in the family, the chores log, appointment times, when things happened.'],
     ['🤖', 'AI helpers', 'Optional. Help, Tidy it up and outings use Claude or Gemini; none of them gets your keys.'],
   ] },
@@ -60,19 +66,20 @@ export const SLIDES = [
 
 // After an update with new features: one card on Moments for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-10c',
-  title: 'New: the check-in fight, and Threads upgrades',
-  text: 'Plus screenshots, PDFs, tags, Albums and News',
+  id: '2026-10d',
+  title: 'New: 💬 Chats for the grown-ups',
+  text: 'Plus who’s seen your threads, and the check-in fight',
   slides: ['new', 'help'],
 };
 SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'New this month', cards: [
+  ['💬', 'Chats', 'Tap 💬 at the top: message any grown-up in the family, or everyone at once.'],
+  ['👀', 'Seen by, in Threads', 'See who’s opened your write-up, the people you tagged first.'],
   ['🏷️', 'Threads: screenshots, PDFs and tags', 'Add screenshots and PDFs, tag people with @, and see what’s for you in ✨ For you.'],
-  ['📷', 'Albums', 'Family › Moments: link Google Photos albums or copy photos in.'],
-  ['📰', 'News', 'Politics, Tech and Bay Area headlines on Moments, and 🐶 rescue news on Dogs.'],
   ['⚔️', 'The check-in fight', 'Trackers › Food › Weight: a health bar that fills with weigh-ins and logged meals.'],
+  ['📷', 'Albums and 📰 News', 'On Moments: Google Photos albums, and headlines twice a day.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);
 export const slide = (id) => SLIDES.find((s) => s.id === id) || null;
 // The tour page for the screen you're on.
-export const SCREEN = { feed: 'moments', threads: 'threads', pets: 'dogs', us: 'us', watch: 'calendar', calendar: 'calendar', me: 'me', family: 'me', member: 'me' };
+export const SCREEN = { feed: 'moments', threads: 'threads', pets: 'dogs', us: 'us', watch: 'calendar', calendar: 'calendar', me: 'me', family: 'me', member: 'me', chats: 'chats', chat: 'chats' };

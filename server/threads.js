@@ -53,6 +53,8 @@ export async function threadRoutes(c) {
     // Who's read it (for a just-us thread, when; for others, how many).
     readers: t.aud === 'us' ? Object.entries(t.reads || {}).filter(([u]) => u !== t.byUid).map(([, at]) => at) : [],
     readCount: Object.keys(t.reads || {}).filter((u) => u !== t.byUid).length,
+    // 👀 Who in your own family has opened it, and when (member ids; accounts stay here).
+    seen: own && fam?.members ? fam.members.filter((m) => m.uid && m.uid !== t.byUid && t.reads?.[m.uid]).map((m) => ({ id: m.id, at: t.reads[m.uid] })) : [],
   });
 
   // The list: every family you're in, and threads friends' families shared with friends.

@@ -6,7 +6,7 @@
 
 ## What's in it
 
-The bottom bar: **Family · Dogs & chores · 💞 Us · Calendar · 🥗 Trackers** (or Me). **Me** is your picture at the top right, **＋** creates anything, and **🍿** opens Watch.
+The bottom bar: **Family · Dogs & chores · 💞 Us · Calendar · 🥗 Trackers** (or Me). Along the top right: **💬** your chats, **❓** help, **＋** creates anything, and **Me** (your picture). **🍿** opens Watch.
 
 ### 👨‍👩‍👧 Family
 | Feature | What it does |
@@ -17,7 +17,8 @@ The bottom bar: **Family · Dogs & chores · 💞 Us · Calendar · 🥗 Tracker
 | **📰 News** | Politics, Tech and Bay Area headlines, each with a one-line summary, twice a day (about 6:45 AM and 3:45 PM). Pick your topics with ⋯ (just on your phone). |
 | **🎬 Movies** | Opt-in (Me › 🎬 Movies): what's in theaters with critic and audience scores, what's coming, where it's streaming, and 🔔 alerts for the ones you're waiting for. |
 | **🏃 Your day** | Best run, ride and dog-walk windows, your classes, 👔 what to wear, 📞 when to call Mom, and ticks for runs, rides and hot yoga (WHOOP / Strava workouts tick themselves). |
-| **📖 Threads** | Write-ups read and answered in your own time: Learned, Talk, How-to, Ask (with ✓ Best answer) and Poll — for just you two, the family, or friends' families. Add 📷 screenshots (plan comparisons, tables…) and 📎 PDFs (a benefits deck…), 🏷️ tag people with @, and see tags and anything new first in ✨ For you. |
+| **📖 Threads** | Write-ups read and answered in your own time: Learned, Talk, How-to, Ask (with ✓ Best answer) and Poll — for just you two, the family, or friends' families. Add 📷 screenshots (plan comparisons, tables…) and 📎 PDFs (a benefits deck…), 🏷️ tag people with @, see who's seen it (the people you tagged first), and see tags and anything new first in ✨ For you. |
+| **💬 Chats** | Instant messages between the grown-ups in the family: one to one, and a **👨‍👩‍👧 Grown-ups** group when there are three or more. Emojis, reactions, replies, photos, screenshots and PDFs, *typing…*, ✓✓ read and *Seen by*. Never pets or kids: only people with their own account, not added as a child and not under 18 by their birthday. The 💬 at the top right (with a count). |
 | **🛒 Market** | *Coming:* sell, give away, lend or ask for things with your family and friends' families, with a lending library and "wanted" matches. |
 
 ### 🐾 Dogs & chores
@@ -50,8 +51,8 @@ Your family and its people and pets, privacy (who sees your diet & fitness), �
 
 ## Privacy in plain words
 
-- **End-to-end encrypted:** posts, photos, comments, notes, plans, threads, albums, everyone's diet & fitness, the dogs' details and appointment notes, calendar events and ratings are locked on your phone with your family's key before they're sent. The server stores text it can't read.
-- **What the server can see:** names of people and pets, who's in which family, the chores log and Gold Card, games, dates and drivers of appointments, and when things happened.
+- **End-to-end encrypted:** posts, photos, comments, notes, plans, threads, chat messages, albums, everyone's diet & fitness, the dogs' details and appointment notes, calendar events and ratings are locked on your phone with your family's key before they're sent. The server stores text it can't read.
+- **What the server can see:** names of people and pets, who's in which family, the chores log and Gold Card, games, dates and drivers of appointments, who's chatting with whom and when (and reactions), and when things happened.
 - **Your keys:** live only on your family's devices. A new device gets them from an invite link, **📲 Add a device**, or your **🔑 Recovery phrase**. Treat those links like passwords.
 - **AI features:** every one is optional, and none of them gets your family's keys.
 
@@ -149,6 +150,8 @@ Everything at `/family/`, feature by feature.
 - **📺 New episodes and 🕐 Up next** (Watch): for the shows you're watching or have up next, the episode dates from TMDB: how many new episodes since where you're up to (🆕 3 new, E6–E8), the next drop, "Season 3 is out" for an up-next show, and the right show matched with *Not the right show?*. Shows with new episodes also feed ✨ Next up and tonight's pick.
 - **📷 Screenshots in Threads:** up to 12 per write-up — ＋ Add (several at once), paste (⌘V on a Mac) or drag them in, with a caption each. They're kept sharper than photos so table text stays readable, show as a strip in the thread, open full size, can be added or removed with Edit, are locked with the thread's key like post photos, and are deleted with the thread.
 - **📎 PDFs in Threads:** up to 5 per write-up, 20 MB each — 📎 PDF next to ＋ Screenshot, or paste / drag them in. Each shows as a card with its name, pages and size; tapping it unlocks it on that device and opens it in the phone's or Mac's own PDF viewer (on an iPad or Mac a preview shows right in the sheet), with *Save a copy*. Locked with the thread's key, counted in the family's photo space, removable with Edit, deleted with the thread. Save PowerPoint or Keynote decks as PDF first (File › Export › PDF).
+- **💬 Chats:** the 💬 at the top right (a red count shows chats with something new) opens your chats: one with each other grown-up in the family, plus **👨‍👩‍👧 Grown-ups** when there are three or more. Who can chat is checked by the connector on every message: a person with their own account who wasn't added as a child and isn't under 18 by their birthday (add a birthday in their profile; a birthday can only keep someone out, never let a child in); never pets. Type and send (Enter sends on a Mac; Shift+Enter for a new line), 😊 for emojis (an emoji on its own shows big), tap a message to react (❤️ 😂 😮 😢 🙏 👍), ↩︎ Reply, copy or unsend it, and ＋ for 🖼️ Photos, 📷 Camera, 📋 Screenshot (kept sharper) or 📎 PDF — or paste and drag them in. Messages show instantly and arrive the moment they're sent (a live connection while the app is open), with *typing…*, *online*, ✓ Sent / ✓✓ Read, and *Seen by* in the group. Someone who joins the group later sees what's said from then on. Notifications say who wrote ("💬 Pat"), never what, and only when you're not already looking at that chat (Me › 🔔 *Messages from your family*). On a Mac or a big iPad the list and the conversation sit side by side. Leaving the family removes your one-to-one chats; deleting your account also removes your messages in the group.
+- **👀 Seen by, in Threads:** under a write-up, everyone you tagged with ✓ *seen* (and when) or *not yet*, then everyone else in the family who's opened it. Friends' families don't see who in yours has read it.
 - **🏷️ Tags in Threads:** tap faces under a write-up, or type **@** and pick a name. Only people with an account who'll see the thread can be tagged (just-us: only your partner). Tagged people get a notification ("Sam tagged you in a thread", never the content); the server knows who's tagged, like tags on photo posts. **✨ For you** (first chip in Threads) puts tags and anything new on top, marked *🏷️ You're tagged* or *New*, with a count. A banner slides down in the app when something new arrives (not over an open sheet), the Family tab keeps its badge until you've looked, and coming back to the app checks once. ✨ Tidy it up sends @tags as @1, @2… and puts the names back.
 - **🛒 Market** (coming to Family): sale, free, lend and wanted listings for your family and, by default, friends' families (chosen per listing), with 🙋 interest, a lending library (lent to whom, back by when) and matches for what you're looking for. The server side is in place; the screens are next.
 - **🏃 Run, ride, hot yoga** in Your day: pick how often (every day to once a week); each shows a circle to tick when it's due (and a 7 AM note lists what's due), and a WHOOP / Strava workout or one logged in the trackers ticks it off by itself.
@@ -445,7 +448,7 @@ The camera scanner needs **HTTPS** on a phone. The easiest host is GitHub Pages:
 
 ## The connector
 
-Accounts and families, photos (R2), notifications, linked calendars, news, date ideas, outings, movies and episodes, WHOOP / Strava sign-in and the AI features go through a small Cloudflare Worker in [`server/`](server/README.md), with scheduled jobs for the nightly check, reminders, the news and the weekly date scout. App changes go live through GitHub Pages; connector changes need a deploy from a computer:
+Accounts and families, photos (R2), 💬 chats (a Durable Object per family), notifications, linked calendars, news, date ideas, outings, movies and episodes, WHOOP / Strava sign-in and the AI features go through a small Cloudflare Worker in [`server/`](server/README.md), with scheduled jobs for the nightly check, reminders, the news and the weekly date scout. App changes go live through GitHub Pages; connector changes need a deploy from a computer:
 
 ```sh
 cd server
@@ -489,7 +492,9 @@ Run `node scripts/bump-version.mjs` before committing. It gives every tracker fi
 | `js/account.js`, `js/accountBoot.js` | Saves the trackers to your OurPawmily account (family sign-in) |
 | `js/recover.js` | 🛟 Recover: finds every copy of your trackers and adds back what's missing |
 | `server/worker.js` | The connector: routing and the scheduled jobs |
-| `server/threads.js` | 📖 Threads: boards, replies, polls, reads |
+| `server/threads.js` | 📖 Threads: boards, replies, polls, reads, who's seen it |
+| `server/chat.js`, `server/chatHub.js` | 💬 Chats: who can chat, messages, reactions, reads; each family's live chat room (a Durable Object) |
+| `family/chat.js` | 💬 The chat screens, loaded only once the app is on screen |
 | `server/albums.js` | 📷 Albums: sealed titles and links, photos in R2 |
 | `server/market.js` | 🛒 Market: listings, interest, lending |
 | `server/news.js` | 📰 News editions from public feeds, and 🐶 rescue news |

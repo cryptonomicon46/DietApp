@@ -16,6 +16,7 @@ const hkdf = async (salt, ikm, info, len) => new Uint8Array(await crypto.subtle.
 
 // What you can turn on or off (Me › 🔔 Notifications). All on to start with.
 export const NOTIFY_KINDS = {
+  chat: '💬 Messages from your family',
   us: '💞 Plans, answers and notes',
   appts: '🐾 Dog appointments and vaccines',
   events: '📅 Calendar reminders',

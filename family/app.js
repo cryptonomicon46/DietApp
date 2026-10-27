@@ -146,10 +146,11 @@ async function boot() {
   if (!state.families.length) return onboard();
   if (!state.families.some((f) => f.fid === state.fid)) state.fid = state.families[0].fid;
   await loadFamily();
-  const hv = location.hash.match(/^#(feed|dogs|calendar|me|us|threads)$/)?.[1];
+  const hv = location.hash.match(/^#(feed|dogs|calendar|me|us|threads|chats|chat=[a-z0-9_]+)$/)?.[1];
   if (hv) { state.view = hv === 'dogs' ? 'pets' : hv; history.replaceState(null, '', location.pathname + location.search); }
-  show(state.view === 'member' && !member(state.memberId) ? 'feed' : state.view === 'us' && !partnerMember() ? 'feed' : state.view);
+  show(state.view === 'member' && !member(state.memberId) ? 'feed' : state.view === 'us' && !partnerMember() ? 'feed' : state.view === 'chat' ? 'chats' : state.view);
   refreshPush();
+  startChats();
   if (partnerMember() && state.view !== 'us') loadUs().then(usBadge).catch(() => {});
 }
 async function loadFamily() {
@@ -300,6 +301,8 @@ async function inviteView() {
 
 // ---------- views ----------
 function show(view, extra) {
+  if (/^chat=/.test(view || '')) { extra = view.slice(5); view = 'chat'; }
+  if (view !== 'chat' && view !== 'chats') dmMod?.leave();
   if (view === 'threads') { state.famTab = 'threads'; LS.set('fam.famTab', 'threads'); view = 'feed'; }
   if (view !== 'compose') state.prevView = view;
   state.view = view;
@@ -310,7 +313,29 @@ function show(view, extra) {
   document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === lit));
   window.scrollTo(0, 0);
   if (view !== 'bingo') clearInterval(bingo.timer);
+  $('#chatTop')?.classList.toggle('on', view === 'chats' || view === 'chat');
+  if (view === 'chats' || view === 'chat') return dms().then((d) => (view === 'chat' ? d.convView(extra) : d.listView())).catch((e) => toast(e.message));
   ({ feed: feedView, family: familyView, pets: petsView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, us: usView })[view]?.();
+}
+// 💬 Chats (chat.js): loaded once the app is on screen, so it never slows the start.
+let dmMod = null;
+const ageYears = (born) => { const [y, m, d] = born.split('-').map(Number), t = new Date(); return t.getFullYear() - y - (t.getMonth() + 1 < m || (t.getMonth() + 1 === m && t.getDate() < d) ? 1 : 0); };
+// The same rule the connector uses: a person with their own account, not added as a child, and
+// not under 18 by their birthday.
+const grownUp = (m) => m?.kind === 'person' && m.status === 'active' && m.relation !== 'child' && !(/^\d{4}-\d{2}-\d{2}$/.test(m.born || '') && ageYears(m.born) < 18);
+const canChat = () => grownUp(me()) && (fam()?.members || []).some((m) => m.id !== fam().me && grownUp(m));
+function chatBadge(n) { const b = $('#chatBadge'); if (b) { b.hidden = !n; b.textContent = n > 9 ? '9+' : String(n); } }
+async function dms() {
+  dmMod ||= await import(`./chat.js?v=${VERSION}`);
+  await dmMod.start({ api, esc, avatar, hue, ago, toast, fam, me, member, fk, seal, tryOpen, sealBytes, openBytes, photoFiles, photoBox, rememberPhoto, photosReady, openSheet, closeSheet, show, state, wide, demoBanner, setBadge: chatBadge });
+  return dmMod;
+}
+function startChats() {
+  const on = !!state.family && canChat();
+  $('#chatTop').hidden = !on;
+  if (!on) { dmMod?.stop(); chatBadge(0); return; }
+  const go = () => dms().catch(() => {});
+  if ('requestIdleCallback' in window) requestIdleCallback(go, { timeout: 3000 }); else setTimeout(go, 1200);
 }
 const demoBanner = () => (api.mode() === 'demo' ? '<div class="banner">Demo — everything stays on this phone.</div>' : '');
 // 🖥 A wide window (a Mac, a big iPad in landscape): side-by-side layouts. Crossing the line
@@ -2086,7 +2111,15 @@ function renderThread() {
         <button type="button" class="linkish tiny" data-thquote="r:${r.id}">❝ Quote</button>${r.mine ? `<button type="button" class="linkish tiny" data-thrdel="${r.id}">Delete</button>` : ''}</div></div></div>`;
   const pollHtml = t.poll ? `<div class="poll">${t.poll.opts.map((o, i) => { const total = t.poll.counts.reduce((a, b) => a + b, 0) || 1; return `<button type="button" class="${t.poll.mine === i ? 'on' : ''}" data-thvote="${i}"><i style="width:${Math.round((t.poll.counts[i] / total) * 100)}%"></i><span>${t.poll.mine === i ? '✓ ' : ''}${esc(o)} · ${t.poll.counts[i]}</span></button>`; }).join('')}
     <p class="tiny muted">${t.poll.closes ? `Closes ${esc(dayText(t.poll.closes).replace(/ ·.*/, ''))} · ` : ''}tap to vote, tap another to change</p></div>` : '';
-  const seen = !t.mine ? '' : letter ? (t.readers.length ? `✓ Read by ${esc(partnerName())} ${ago(Math.max(...t.readers))}` : `Not read yet by ${esc(partnerName())}`) : t.readCount ? `Seen by ${t.readCount}` : '';
+  const seen = !t.mine ? '' : letter ? (t.readers.length ? `✓ Read by ${esc(partnerName())} ${ago(Math.max(...t.readers))}` : `Not read yet by ${esc(partnerName())}`) : t.readCount && !(t.seen || []).length ? `Seen by ${t.readCount}` : '';
+  // 👀 Who's seen it: the people tagged first (seen or not yet), then everyone else who opened it.
+  const seenAt = Object.fromEntries((t.seen || []).map((x) => [x.id, x.at]));
+  const others = (t.seen || []).filter((x) => !(t.tags || []).includes(x.id) && x.id !== meId).map((x) => member(x.id)).filter(Boolean);
+  const tagState = tagged.filter((m) => m.id !== meId && m.id !== t.by);
+  const seenRow = letter || (!tagState.length && !others.length) ? '' : `<div class="seenrow" aria-label="Who's seen it">
+    ${tagState.map((m) => `<span class="seenp ${seenAt[m.id] ? 'yes' : 'no'}" title="${esc(m.name)}${seenAt[m.id] ? ` saw it ${ago(seenAt[m.id])}` : ' hasn’t opened it yet'}">${avatar(m, 26)}<small>🏷️ ${esc(m.name)} · ${seenAt[m.id] ? `✓ seen ${ago(seenAt[m.id])}` : 'not yet'}</small></span>`).join('')}
+    ${others.length ? `<span class="seenp yes">${others.slice(0, 5).map((m) => avatar(m, 26)).join('')}<small>👀 Seen by ${others.slice(0, 3).map((m) => esc(m.name)).join(', ')}${others.length > 3 ? ` +${others.length - 3}` : ''}</small></span>` : ''}
+  </div>`;
   const body = letter
     ? `<article class="letter"><div class="lmeta">${esc(t.mine ? 'You' : t.byName)} · ${esc(new Date(t.at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }))} · ${t.mins} min</div><h3>${esc(t.title)}</h3>
         ${blocks.map((b, i) => `<div class="para" data-para="${i}">${blockHtml(b)}${atPara(i).map((r) => `<div class="margin">✍️ <b>${esc(r.mine ? 'You' : r.name)}:</b> ${linkify(r.text)}</div>`).join('')}${b.type === 'h' ? '' : `<button type="button" class="linkish tiny note-btn" data-thquote="p:${i}">✍️ Note</button>`}</div>`).join('')}</article>`
@@ -2103,6 +2136,7 @@ function renderThread() {
     ${body}
     ${docsHtml}
     ${shotsHtml}
+    ${seenRow}
     ${seen ? `<p class="tiny muted">${seen}</p>` : ''}
     ${sorted.length ? `<div class="grp">${letter ? 'Notes' : `${sorted.length} repl${sorted.length === 1 ? 'y' : 'ies'}`}</div>${sorted.map(replyHtml).join('')}` : ''}
     <form id="thReplyForm" class="stack reply-box">${th.quote ? `<div class="quote">❝ ${esc(th.quote.label)} ❞ <button type="button" class="linkish tiny" data-thquote="x">✕</button></div>` : ''}
@@ -3534,6 +3568,7 @@ function refreshPush() {
 }
 if (pushOk()) navigator.serviceWorker.addEventListener('message', (e) => {
   if (e.data?.open && state.family) show(e.data.open === 'dogs' ? 'pets' : e.data.open);
+  if (typeof e.data?.pushed === 'string' && e.data.pushed.startsWith('chat-')) return dmMod?.refresh();
   if (e.data?.pushed && state.family) loadThreads().then(() => { if (state.view === 'feed' && state.famTab === 'threads') threadsView(); }).catch(() => {});
 });
 

@@ -18,6 +18,7 @@ let demoApi = null;
 
 export const api = {
   mode: () => LS.get('fam.mode') || 'live',
+  base: () => connectorUrl(),
   setMode: (m) => LS.set('fam.mode', m),
   token: () => LS.get(`fam.token.${api.mode()}`),
   setToken: (t) => LS.set(`fam.token.${api.mode()}`, t),

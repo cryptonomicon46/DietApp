@@ -18,6 +18,8 @@
 import { assist } from './assistant.js';
 import { familyApi, runMaintenance, runFamilyReminders, runScout, runNewsEdition } from './family.js';
 import { mergeEvents, icsCalendar } from '../js/calendar.js';
+// 💬 Each family's chats live in a Durable Object (chatHub.js); wrangler.toml binds it as CHAT.
+export { ChatHub } from './chatHub.js';
 
 const WHOOP = {
   auth: 'https://api.prod.whoop.com/oauth/oauth2/auth',
@@ -60,6 +62,13 @@ export default {
     const callback = `${url.origin}/${url.pathname.split('/')[1]}/callback`;
 
     try {
+      // ---- 💬 A phone's live chat connection: straight to its family's chats, with a one-time ticket ----
+      if (url.pathname === '/v2/chat/ws') {
+        const fid = url.searchParams.get('fid') || '';
+        if (!env.CHAT || !/^[a-z0-9]{6,24}$/.test(fid)) return json({ error: 'not found' }, 404);
+        if (req.headers.get('Origin') !== origin) return json({ error: 'not allowed' }, 403);
+        return env.CHAT.get(env.CHAT.idFromName(fid)).fetch(new Request(`https://chat/ws?t=${encodeURIComponent(url.searchParams.get('t') || '')}`, req));
+      }
       // ---- OurPawmily Families (v2): Google sign-in, families, invites, feed — see family.js ----
       if (url.pathname.startsWith('/v2/')) {
         if (!env.HOUSEHOLD) return json({ error: 'HOUSEHOLD storage not set up — see server/README.md' }, 501);

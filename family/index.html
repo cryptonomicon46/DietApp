@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#2f7d5b">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawmily">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob: https://*.googleusercontent.com https://image.tmdb.org; connect-src 'self' https://*.workers.dev https://accounts.google.com/gsi/ https://api.open-meteo.com https://air-quality-api.open-meteo.com https://geocoding-api.open-meteo.com https://api.themoviedb.org https://photospicker.googleapis.com https://*.googleusercontent.com; frame-src https://accounts.google.com/gsi/ blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob: https://*.googleusercontent.com https://image.tmdb.org; connect-src 'self' https://*.workers.dev wss://*.workers.dev https://accounts.google.com/gsi/ https://api.open-meteo.com https://air-quality-api.open-meteo.com https://geocoding-api.open-meteo.com https://api.themoviedb.org https://photospicker.googleapis.com https://*.googleusercontent.com; frame-src https://accounts.google.com/gsi/ blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>OurPawmily</title>
   <script src="../theme.js"></script>
@@ -20,12 +20,12 @@
   <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="stylesheet" href="style.css?v=51">
+  <link rel="stylesheet" href="style.css?v=52">
 </head>
 <body>
   <header class="bar" id="bar" hidden>
     <button type="button" class="fam-switch" id="famSwitch"></button>
-    <span class="row"><button type="button" class="help-top" data-act="help" aria-label="Help and the tour">?</button><button type="button" class="icon-btn plus-top" id="newPostTop" aria-label="Create">＋</button>
+    <span class="row"><button type="button" class="chat-top" id="chatTop" data-view="chats" aria-label="Chats" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 6.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H11l-4.5 3.5V16.5h0a2 2 0 0 1-2-2z"/><path d="M8.5 9.5h7M8.5 12.5h4.5"/></svg><span class="badge" id="chatBadge" hidden></span></button><button type="button" class="help-top" data-act="help" aria-label="Help and the tour">?</button><button type="button" class="icon-btn plus-top" id="newPostTop" aria-label="Create">＋</button>
     <button type="button" class="me-top" id="meTop" data-view="me" aria-label="Me: your account and settings"></button></span>
   </header>
   <div id="lockBanner" class="lockbanner" hidden></div>
@@ -41,6 +41,6 @@
   </nav>
   <dialog id="sheet" class="sheet"><div id="sheetBody"></div></dialog>
   <div class="toast" id="toast" hidden></div>
-  <script type="module" src="app.js?v=62"></script>
+  <script type="module" src="app.js?v=63"></script>
 </body>
 </html>
