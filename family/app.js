@@ -321,6 +321,7 @@ async function feedView() {
   if (state.famTab === 'threads') { threadsView(); loadUs().then(() => usBadge()); return; }
   $('#famBody').innerHTML = `<section class="nextup" id="nextUp" hidden></section><div id="digest"></div>
     <button type="button" class="sharebar" data-act="post">${avatar(me(), 30)}<span>Share with the family…</span><b>📷 Photo</b></button>
+    <section class="card albums" id="albums" hidden></section>
     <section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>
     <section class="card today" id="today"><div class="skeleton line"></div></section>
     <section class="card news" id="newsCard" hidden></section>
@@ -332,6 +333,7 @@ async function feedView() {
   renderYourDay();
   renderMovies().catch(() => {});
   renderNews().catch(() => {});
+  renderAlbums().catch(() => {});
   renderNextUp().catch(() => {});
   importUs().catch(() => {});
   const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts(), loadUs(), loadThreads().catch(() => {})]);
@@ -531,7 +533,8 @@ new MutationObserver(() => { for (const el of document.querySelectorAll('.ph[dat
   .observe(document.body, { childList: true, subtree: true });
 // Tap: the full photo.
 async function photoViewer(fid, id) {
-  openSheet(`<div class="viewer"><img alt="" src="${photoUrls.get(`${id}:thumb`) || ''}"><p class="small muted center" id="viewerNote">Loading the full photo…</p><div class="row end"><button type="button" class="ghost" data-act="close">Close</button></div></div>`);
+  const inAlbum = al.open?.photos.some((p) => p.id === id) && me()?.relation !== 'child';
+  openSheet(`<div class="viewer"><img alt="" src="${photoUrls.get(`${id}:thumb`) || ''}"><p class="small muted center" id="viewerNote">Loading the full photo…</p><div class="row end">${inAlbum ? `<button type="button" class="linkish small danger" data-act="albumrm" data-id="${id}">Remove from album</button><button type="button" class="ghost" data-act="albumback">Back</button>` : '<button type="button" class="ghost" data-act="close">Close</button>'}</div></div>`);
   try { const u = await photoUrl(fid, id, 'full', photoKeys.get(id)); const img = $('.viewer img'); if (img) img.src = u; $('#viewerNote')?.remove(); }
   catch { if ($('#viewerNote')) $('#viewerNote').textContent = "Couldn't load the full photo."; }
 }
@@ -2696,6 +2699,123 @@ async function tvFixSheet(id) {
     ${r.results.map((s) => `<button type="button" class="fpick" data-tvpick="${id}:${s.id}"><span class="fp-i">${s.poster ? `<img src="${esc(s.poster)}" alt="">` : '📺'}</span><span class="grow"><b>${esc(s.name)}</b><small class="muted">${esc(s.year || '')}</small></span>${tvMap()[id] === s.id ? '✓' : ''}</button>`).join('') || '<p class="small muted">No match on TMDB.</p>'}
     <button type="button" class="linkish small" data-tvpick="${id}:0">It isn't on TMDB — stop looking</button>`);
 }
+// ---------- 📷 albums: the family's own albums (a Google Photos link, and/or photos copied in) ----------
+// Photos are locked on this phone with the family key and stored like post photos; titles and
+// links are locked too. Family only. Google Photos: apps can only get photos you pick in Google's
+// own picker (no reading your library), so "From Google Photos" opens it and copies what you pick.
+const al = { list: null, open: null };
+const GOOGLE_ALBUM = /^https:\/\/(photos\.app\.goo\.gl|photos\.google\.com)\/\S+$/;
+async function loadAlbums() {
+  const r = await api.get(`/families/${state.fid}/albums`);
+  al.list = await Promise.all(r.albums.map(async (a) => ({ ...a, title: (await unlock(a.title)) ?? '🔒', link: a.link ? (await unlock(a.link)) || '' : '' })));
+  return al.list;
+}
+async function renderAlbums() {
+  const el = $('#albums');
+  if (!el || lockedHere() || !(await photosReady())) return;
+  const list = await loadAlbums().catch(() => null);
+  if (!$('#albums') || !list) return;
+  el.hidden = false;
+  el.innerHTML = `<div class="row between"><b class="small">📷 Albums</b>${list.length ? '' : '<span class="tiny muted">Trips, the dogs, holidays…</span>'}</div>
+    <div class="albumstrip">${list.map((a) => { if (a.cover) photoKeys.set(a.cover, fk()); return `<button type="button" class="albumtile" data-album="${a.id}">${a.cover ? `<span class="ph grid" data-photoid="${a.cover}" data-pfid="${state.fid}"><img alt=""></span>` : `<span class="albumicon">${a.link ? '🔗' : '📷'}</span>`}<b>${esc(a.title)}</b><small class="muted">${a.count ? `${a.count} photo${a.count === 1 ? '' : 's'}` : a.link ? 'Google Photos' : 'Empty'}</small></button>`; }).join('')}
+      <button type="button" class="albumtile add" data-act="albumnew"><span class="albumicon">＋</span><b>New album</b></button></div>`;
+}
+function albumForm(a = null) {
+  openSheet(`<div class="row between"><h2>${a ? 'Edit album' : '📷 New album'}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <form id="albumForm" class="stack" ${a ? `data-id="${a.id}"` : ''}>
+      <label>Name<input name="title" required maxlength="60" value="${esc(a?.title || '')}" placeholder="e.g. Tahoe 2026"></label>
+      <label>Google Photos album link <small class="muted">(optional)</small><input name="link" type="url" maxlength="300" value="${esc(a?.link || '')}" placeholder="https://photos.app.goo.gl/…"></label>
+      <p class="tiny muted">In Google Photos: open the album › Share › Create link, then paste it here. Everyone in ${esc(fam().name)} can open it. You can also copy photos into the album here (from this phone or picked in Google Photos); those are locked so only ${esc(fam().name)} can see them.</p>
+      <div class="row end">${a ? `<button type="button" class="linkish small danger" data-act="albumdel" data-id="${a.id}">Delete album</button>` : ''}<button type="button" class="ghost" data-act="close">Cancel</button><button>${a ? 'Save' : 'Create'}</button></div>
+    </form>`);
+}
+async function saveAlbum(f) {
+  const v = Object.fromEntries(new FormData(f));
+  const link = v.link.trim();
+  if (link && !GOOGLE_ALBUM.test(link)) return toast('Paste a Google Photos album link (photos.app.goo.gl/…)');
+  const body = { title: await lock(v.title.trim()), link: link ? await lock(link) : '' };
+  const r = f.dataset.id ? await api.patch(`/families/${state.fid}/albums/${f.dataset.id}`, body) : await api.post(`/families/${state.fid}/albums`, body);
+  toast(f.dataset.id ? 'Saved' : '📷 Album made');
+  await renderAlbums();
+  return albumSheet(r.album.id);
+}
+async function albumSheet(id) {
+  openSheet('<h2>📷</h2><div class="skeleton line"></div>');
+  const r = await api.get(`/families/${state.fid}/albums/${id}`);
+  const a = { ...r.album, title: (await unlock(r.album.title)) ?? '🔒', link: r.album.link ? (await unlock(r.album.link)) || '' : '' };
+  al.open = a;
+  for (const p of a.photos) photoKeys.set(p.id, fk());
+  const grownUp = me()?.relation !== 'child';
+  openSheet(`<div class="row between"><h2>📷 ${esc(a.title)}</h2><span class="row">${grownUp ? `<button type="button" class="icon-btn" data-act="albumedit" aria-label="Edit album">✏️</button>` : ''}<button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></span></div>
+    ${a.link ? `<a class="btn ghost wide" href="${esc(a.link)}" target="_blank" rel="noopener">🔗 Open in Google Photos</a>` : ''}
+    <div class="row wrap"><label class="btn small">📷 From this phone<input type="file" accept="image/*" multiple hidden data-albumfiles="${a.id}"></label>
+      ${api.mode() === 'demo' ? '' : `<button type="button" class="ghost small" data-act="albumgoogle">📥 From Google Photos</button>`}</div>
+    <div id="albumProgress" class="small muted"></div>
+    ${a.photos.length ? `<div class="albumgrid">${a.photos.slice().reverse().map((p) => `<button type="button" class="ph grid" data-photoid="${p.id}" data-pfid="${state.fid}" aria-label="Open photo"><img alt=""></button>`).join('')}</div>` : `<p class="small muted">${a.link ? 'Copy favorites in to keep them here, locked to the family.' : 'No photos yet.'}</p>`}
+    ${grownUp && a.photos.length ? '<p class="tiny muted">Open a photo to remove it from the album.</p>' : ''}`);
+}
+// Photos into an album: shrunk to two sizes and locked on this phone, then listed in the album.
+async function addToAlbum(id, blobs, say = () => {}) {
+  const added = [];
+  for (const [i, b] of blobs.entries()) {
+    say(`Adding ${i + 1} of ${blobs.length}…`);
+    const made = await photoFiles(b);
+    const pid = randomToken();
+    for (const size of ['thumb', 'full']) await api.bytes('PUT', `/families/${state.fid}/photos/${pid}?size=${size}`, fk() ? await sealBytes(fk(), made[size]) : made[size]);
+    rememberPhoto(pid, 'thumb', made.thumb);
+    added.push({ id: pid, aspect: made.aspect });
+    // A few at a time, so a long upload keeps what's done if the phone sleeps.
+    if (added.length % 5 === 0 || i === blobs.length - 1) await api.patch(`/families/${state.fid}/albums/${id}`, { add: added.splice(0) });
+  }
+}
+// Google Photos Picker: a sign-in just for picking (photospicker scope), a session, Google's picker
+// in a new tab, then the picked photos downloaded straight to this phone.
+const PICKER = 'https://photospicker.googleapis.com/v1';
+async function pickFromGooglePhotos(id) {
+  const cfg = await api.liveConfig();
+  if (!cfg.googleClientId) throw new Error('Google Photos needs the connector set up for Google sign-in');
+  if (!window.google?.accounts?.oauth2) await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = res; s.onerror = () => rej(new Error("Couldn't reach Google")); document.head.append(s); });
+  const token = await new Promise((res, rej) => window.google.accounts.oauth2.initTokenClient({
+    client_id: cfg.googleClientId, scope: 'https://www.googleapis.com/auth/photospicker.mediaitems.readonly',
+    callback: (r) => (r.error ? rej(new Error(r.error_description || r.error)) : res(r.access_token)),
+    error_callback: (e) => rej(new Error(e.type === 'popup_closed' ? 'cancelled' : e.message || 'Google sign-in was cancelled')),
+  }).requestAccessToken());
+  const H = { Authorization: `Bearer ${token}` };
+  const call = async (path, init = {}) => { const r = await fetch(`${PICKER}${path}`, { ...init, headers: H }); if (!r.ok) throw new Error(r.status === 403 ? 'Google Photos isn\'t switched on for this app yet (see server/README.md)' : `Google Photos: ${r.status}`); return r.status === 204 ? null : r.json(); };
+  const session = await call('/sessions', { method: 'POST' });
+  // Opening the picker has to come from a tap (phones block pop-ups otherwise).
+  openSheet(`<h2>📥 From Google Photos</h2><p class="small">Pick the photos in Google Photos, tap <b>Done</b>, then come back here.</p>
+    <a class="btn wide" href="${esc(session.pickerUri)}/autoclose" target="_blank" rel="noopener">Open Google Photos</a>
+    <p class="small muted" id="pickWait">Waiting for your picks…</p><div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button></div>`);
+  const every = Math.max(2000, parseFloat(session.pollingConfig?.pollInterval || '3') * 1000);
+  const until = Date.now() + Math.min(15 * 60e3, parseFloat(session.pollingConfig?.timeoutIn || '900') * 1000);
+  try {
+    let done = false;
+    while (!done && Date.now() < until && $('#pickWait')) {
+      await new Promise((r) => setTimeout(r, every));
+      if (document.visibilityState === 'visible' || Date.now() % 3 === 0) done = (await call(`/sessions/${session.id}`)).mediaItemsSet;
+    }
+    if (!done) return;
+    const items = [];
+    let page = '';
+    do { const r = await call(`/mediaItems?${new URLSearchParams({ sessionId: session.id, pageSize: '100', ...(page ? { pageToken: page } : {}) })}`); items.push(...(r.mediaItems || []).filter((x) => x.type === 'PHOTO')); page = r.nextPageToken || ''; } while (page && items.length < 100);
+    if (!items.length) return toast('No photos picked');
+    openSheet('<h2>📥 Copying your photos</h2><p class="small muted" id="albumProgress">Starting…</p>');
+    const blobs = [];
+    for (const [i, x] of items.slice(0, 100).entries()) {
+      if ($('#albumProgress')) $('#albumProgress').textContent = `Downloading ${i + 1} of ${Math.min(items.length, 100)}…`;
+      const r = await fetch(`${x.mediaFile.baseUrl}=w2048-h2048`, { headers: H });
+      if (r.ok) blobs.push(await r.blob());
+    }
+    await addToAlbum(id, blobs, (t) => { if ($('#albumProgress')) $('#albumProgress').textContent = t; });
+    toast(`📷 ${blobs.length} photo${blobs.length === 1 ? '' : 's'} added`);
+  } finally {
+    call(`/sessions/${session.id}`, { method: 'DELETE' }).catch(() => {});
+  }
+  await renderAlbums();
+  return albumSheet(id);
+}
+
 // ---------- 📰 the news: Politics, Tech, Bay Area on Moments; rescue news on Dogs (shared, twice a day) ----------
 const nw = { data: null, tab: null };
 const newsSet = () => { try { return { off: false, topics: ['politics', 'tech', 'bay'], ...JSON.parse(LS.get('fam.newsSet') || '{}') }; } catch { return { off: false, topics: ['politics', 'tech', 'bay'] }; } };
@@ -3412,6 +3532,7 @@ document.addEventListener('click', (e) => {
   if (d.feelfind) return act(feelFind);
   if (d.nu) { const [w, i] = d.nu.split(':'); return act(() => nuAct(w, +i)); }
   if (d.newstab) { nw.tab = d.newstab; return renderNews(); }
+  if (d.album) return act(() => albumSheet(d.album));
   if (d.movietab) { mv.tab = d.movietab; return renderMovies(); }
   if (d.movieall) return movieAllSheet(d.movieall);
   if (d.movie) return act(() => movieSheet(d.movie));
@@ -3538,6 +3659,12 @@ document.addEventListener('click', (e) => {
     case 'outing': return outingAsk();
     case 'writeup': return writeupSheet();
     case 'newsall': return newsAllSheet();
+    case 'albumnew': return albumForm();
+    case 'albumback': return al.open ? act(() => albumSheet(al.open.id)) : closeSheet();
+    case 'albumrm': if (!confirm('Remove this photo from the album?')) return; return act(async () => { await api.patch(`/families/${state.fid}/albums/${al.open.id}`, { remove: [d.id] }); toast('Removed'); renderAlbums(); albumSheet(al.open.id); });
+    case 'albumedit': return al.open ? albumForm(al.open) : null;
+    case 'albumdel': if (!confirm(`Delete “${al.open?.title || 'this album'}” and the photos copied into it? (The Google Photos album itself isn't touched.)`)) return; return act(async () => { await api.del(`/families/${state.fid}/albums/${d.id}`); closeSheet(); toast('Album deleted'); renderAlbums(); });
+    case 'albumgoogle': { const id = al.open?.id; return id ? act(() => pickFromGooglePhotos(id).catch((e) => { if (e.message !== 'cancelled') throw e; })) : null; }
     case 'newsset': return newsSetSheet();
     case 'nuplan': return nu.res ? nuPlan() : null;
     case 'nuknows': return act(nuKnows);
@@ -3777,6 +3904,12 @@ document.addEventListener('change', async (e) => {
     h.hidden = !k[3]; h.querySelector('span').textContent = k[3] || 'Where?';
     t.form.idea.value = '';
     return renderFeelPicks();
+  }
+  if (t.dataset.albumfiles) {
+    const files = [...t.files].filter((x) => x.type.startsWith('image/')).slice(0, 50);
+    if (!files.length) return;
+    const id = t.dataset.albumfiles;
+    return act(async () => { await addToAlbum(id, files, (x) => { if ($('#albumProgress')) $('#albumProgress').textContent = x; }); toast(`📷 ${files.length} added`); await renderAlbums(); albumSheet(id); });
   }
   if (t.dataset.newstopic) {
     const st = newsSet(), k = t.dataset.newstopic;
@@ -4058,6 +4191,7 @@ document.addEventListener('submit', (e) => {
     e.preventDefault();
     return act(async () => { await api.del(`/families/${state.fid}`, { confirm: v.confirm.trim() }); closeSheet(); state.fid = null; toast('Family deleted'); boot(); });
   }
+  if (f.id === 'albumForm') { e.preventDefault(); return act(() => saveAlbum(f)); }
   if (f.id === 'handoverForm') {
     e.preventDefault();
     return act(async () => { await api.post(`/families/${state.fid}/owner`, { memberId: v.memberId }); closeSheet(); await boot(); toast('Handed over'); });

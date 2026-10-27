@@ -90,7 +90,8 @@ export async function runNews(env, db, { now = new Date(), fetcher = env.__fetch
   await Promise.all(Object.entries(TOPICS).map(async ([t, { feeds }]) => {
     const got = await Promise.all(feeds.map(async ([src, url]) => {
       try {
-        const r = await fetcher(url, { headers: { 'User-Agent': 'OurPawmily news (family app)', Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml' } });
+        // A feed that doesn't answer in 8 seconds is skipped this edition.
+        const r = await fetcher(url, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'OurPawmily news (family app)', Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml' } });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return parseFeed(await r.text()).map((x) => ({ ...x, src }));
       } catch (e) { problems.push(`${src}: ${e.message}`); return []; }

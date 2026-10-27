@@ -708,3 +708,16 @@ i.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; back
 .newsrow small { line-height: 1.35; }
 .rescuedogs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
 .rescuedog { flex: 0 0 150px; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); text-decoration: none; }
+
+/* 📷 albums */
+.albumstrip { display: flex; gap: 10px; overflow-x: auto; padding: 8px 0 2px; scroll-snap-type: x proximity; }
+.albumtile { flex: 0 0 104px; display: flex; flex-direction: column; gap: 2px; padding: 0; background: none; color: var(--ink); text-align: left; font-weight: 400; scroll-snap-align: start; }
+.albumtile .ph, .albumtile .albumicon { width: 104px; height: 104px; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: var(--bg); font-size: 2rem; }
+.albumtile .ph { display: block; }
+.albumtile .ph img { width: 100%; height: 100%; object-fit: cover; }
+.albumtile b { font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.albumtile small { font-size: .72rem; }
+.albumtile.add .albumicon { border: 2px dashed var(--line); color: var(--muted); }
+.albumgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.albumgrid .ph { aspect-ratio: 1; border-radius: 6px; overflow: hidden; }
+.albumgrid .ph img { width: 100%; height: 100%; object-fit: cover; }

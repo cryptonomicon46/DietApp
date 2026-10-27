@@ -54,6 +54,7 @@ import { nudgeRoutes } from './nudges.js';
 import { tvRoutes } from './tv.js';
 import { movieRoutes } from './movies.js';
 import { newsRoutes, runNews, editionDue } from './news.js';
+import { albumRoutes } from './albums.js';
 import { askClaude } from './scout.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
@@ -1444,6 +1445,8 @@ export async function familyApi(req, env, path, ctx = null) {
 
   // ---- 📖 threads ----
   { const r = await threadRoutes({ path, method, body, db, user, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url }); if (r) return r; }
+  // ---- 📷 albums (family only) ----
+  { const r = await albumRoutes({ path, method, body, db, loadFamily, meIn, sealed, clean, randomId, json, blobs: blobStore(env) }); if (r) return r; }
   // ✨ Tidy it up: rough notes into headings and bullets. Only the text you tap it on is sent.
   m = path.match(/^\/families\/([a-z0-9]+)\/tidy$/);
   if (m && method === 'POST') {
@@ -1867,6 +1870,7 @@ async function deleteFamily(db, fam) {
   await db.del(`bingopacks:${fam.fid}`);
   for (const s of (await db.get(`picks:${fam.fid}`)) || []) for (const x of fam.members) await db.del(`pickcard:${fam.fid}:${s.id}:${x.id}`);
   await db.del(`picks:${fam.fid}`);
+  await db.del(`albums:${fam.fid}`); // their photos went with deleteFamilyPhotos
   for (const c of fam.connections || []) {
     const o = await db.get(`family:${c}`);
     if (o) { o.connections = (o.connections || []).filter((f) => f !== fam.fid); if (o.connkeys) delete o.connkeys[fam.fid]; await db.put(`family:${o.fid}`, o); }
