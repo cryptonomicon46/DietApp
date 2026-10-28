@@ -448,7 +448,9 @@ npm start          # python3 -m http.server 8080 → http://localhost:8080 (fami
 npm test           # unit tests (node:test)
 ```
 
-**Folders:** `family/` is the family app, `index.html` + `js/` the trackers (and shared logic the family app loads), `server/` the connector (Cloudflare Worker), `tests/` the tests, `scripts/` the release and link-check scripts, `docs/` the architecture summary. How it all fits together, including sign-in, encryption and what each AI feature sends, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**Folders:** `family/` is the family app, `index.html` + `js/` the trackers (and shared logic the family app loads), `server/` the connector (Cloudflare Worker), `tests/` the tests, `scripts/` the release and link-check scripts, `docs/` the project documents. How it all fits together, including sign-in, encryption and what each AI feature sends, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+**Project documents:** [CLAUDE.md](CLAUDE.md) (how changes are made, tested, documented and deployed), [docs/OURPAWMILY_2_0.md](docs/OURPAWMILY_2_0.md) (the approved 2.0 direction), [docs/BUILD_PROGRESS.md](docs/BUILD_PROGRESS.md) (what's built, with evidence, and what's open), [docs/FUTURE_FEATURES.md](docs/FUTURE_FEATURES.md) and [docs/AMENDMENT-US-READ-WATCH-DISCOVER.md](docs/AMENDMENT-US-READ-WATCH-DISCOVER.md) (design only, not built). Run `/update-readme` in Claude Code for a full pass over this README, the help guide and the tour.
 
 **The Check:** every push runs the tests, then opens every kind of link the app builds and every news feed in a real browser, and runs a performance budget on `/family/` (start-up requests, duplicates, layout shift, script size; `scripts/perf/`) (`.github/workflows/check.yml`). A green ✓ on the newest commit (on the repo page, or the **Check** run in Actions — not *github-pages*) means it's safe to deploy the connector.
 
