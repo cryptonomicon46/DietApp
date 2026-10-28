@@ -4,58 +4,61 @@
 <body><main>
 <nav><a href="./">‹ OurPawmily</a> · <a href="terms.html">Terms</a> · <a href="delete-account.html">Deleting your account</a></nav>
 <h1>Privacy Policy</h1>
-<p class="muted">OurPawmily Families (beta) · Version 2026-10 · Last updated October 21, 2026</p>
+<p class="muted">OurPawmily Families (beta) · Version 2026-10 · Last updated October 28, 2026</p>
 
 <div class="card"><b>The short version.</b> Your family is private: only the people you invite can see it. Your diet & fitness data is visible only to the people you choose. We don't show ads, don't sell or share your data with advertisers, and don't track you across other apps or websites. You can download or delete everything from the app at any time.</div>
 
 <h2>What we collect</h2>
 <ul>
-  <li><b>From Google when you sign in:</b> your name, email address, profile picture and Google account ID. We never see your Google password.</li>
+  <li><b>From Google when you sign in:</b> your name, email address, profile picture and Google account ID. Only an email address Google has verified can sign in. We never see your Google password.</li>
   <li><b>What you add:</b>
     <ul>
       <li>your family's name</li>
       <li>the names and relationships of the people you add, and the email addresses you send invites to</li>
       <li>your pets' names, breeds, birthdays and care records (feedings, walks, treats, medications, vaccines, vet details)</li>
-      <li>posts, photos, comments and likes</li>
+      <li>threads, replies, chat messages, photos, albums and PDFs, and who uploaded each photo or PDF</li>
+      <li>posts, comments and likes from the old family feed (no longer shown in the app, but kept, not deleted)</li>
       <li>if you bring them over from the current app: your diet & fitness records (weigh-ins, meals, training, workouts) and other tracker data</li>
     </ul>
   </li>
   <li><b>To keep your account secure:</b> the type of device and browser you signed in from, and when (e.g. "iPhone · Safari"), so you can see your sign-ins and sign out everywhere.</li>
   <li><b>If you turn on notifications:</b> the address your phone's push service (Apple, Google, Mozilla or Microsoft) gives for this app on that device, your time zone (so reminders come at the right local time), which kinds of notifications you want, and your pets' vaccine due dates (pet and date only).</li>
-  <li><b>Safety:</b> posts you report and people you block.</li>
+  <li><b>Safety:</b> what you report (a thread, a reply or a chat message, with who reported it and why) and people you block. A chat report keeps only which message it was and the reason, never what the message says, which stays end-to-end encrypted.</li>
 </ul>
 <p>We don't collect your location, contacts, advertising identifiers or analytics about how you use the app. Progress photos you take in the trackers stay on your phone and are never uploaded.</p>
 
 <h2>Who can see what</h2>
 <ul>
-  <li><b>Your family:</b> the people in your family see its members, pets, posts and dog-care log.</li>
+  <li><b>Your family:</b> the people in your family see its members, pets, threads, albums and dog-care log. The family's creator sees how many times something in the family was reported.</li>
   <li><b>Diet & fitness:</b> visible only to you, plus anyone you turn sharing on for (Me › Who can see my diet & fitness). Nobody else can turn it on for you.</li>
-  <li><b>Connected families</b> (friends' families you invite) see only the posts you mark "+ connected families", and the names of your family's members. They never see email addresses.</li>
+  <li><b>Connected families</b> (friends' families you invite) see only the threads (and older posts) you shared with them, and the names of your family's members. They can open a photo or PDF only through the shared thread or post it's on, never one that tags someone your family keeps private, and nothing once the families disconnect. They never see email addresses.</li>
+  <li><b>Photos and PDFs:</b> only the person who uploaded a file, or the family's creator, can replace or delete it, and a file can only be attached by the person who uploaded it.</li>
+  <li><b>The old family feed:</b> the app no longer shows the feed. Posts already made are kept on the server, not deleted, until you delete your account or the family; a read-only view of them is planned.</li>
   <li><b>Children under 13</b> don't have accounts. Parents can add them as profiles they manage, holding only what the parent enters.</li>
 </ul>
 
 <h2>Where it's stored and who processes it</h2>
 <ul>
-  <li><b>Cloudflare</b> hosts the app's server and stores your family's data, including post photos (Cloudflare R2), which in an end-to-end encrypted family are locked on your phone before they're uploaded.</li>
+  <li><b>Cloudflare</b> hosts the app's server and stores your family's data, including photos and PDFs (Cloudflare R2), which in an end-to-end encrypted family are locked on your phone before they're uploaded.</li>
   <li><b>Google</b> handles sign-in.</li>
   <li><b>GitHub Pages</b> serves the app's files.</li>
   <li>Notifications are delivered by your device's push service (<b>Apple</b>, <b>Google</b>, <b>Mozilla</b> or <b>Microsoft</b>). Each one is encrypted so only your device can read it, and it says who did what (e.g. "Pat left you a note"), never what an encrypted note, plan or event says.</li>
   <li>The trackers fetch weather from <b>Open-Meteo</b>. Those requests carry no personal data, only fixed city locations.</li>
   <li><b>💡 Date ideas:</b> once a week the connector looks up events (Ticketmaster, SeatGeek), movies and their ratings (TMDB, OMDb) and uses Google's Gemini with Google Search (or, as a backup, Claude from Anthropic with web search) to find showtimes and new places to eat. It only ever sends your area (a ZIP code's town) and the dates — never names, plans or what you picked. Your 💗 picks are sent as codes made with your family key, so the connector can tell when you've both picked the same idea without knowing what it was. Links to OpenTable, Ticketmaster or a theatre open their own sites.</li>
-  <li><b>📷 Albums:</b> album names, Google Photos links and photos copied into an album are stored like posts (end-to-end encrypted in an encrypted family) and seen only by your family. When you pick photos from Google Photos, your phone asks Google for permission to see just the photos you pick, downloads them from Google, and locks them before they're sent; the connector never talks to Google Photos.</li>
-  <li><b>📰 News and 🐶 rescue news:</b> the connector reads public news feeds and a dog rescue's public listings twice a day and has Google's Gemini (or Claude) sum them up. It's the same for everyone and nothing about you is sent; which topics you see is kept on your phone. Tapping a story opens the outlet's own site.</li>
+  <li><b>📷 Albums:</b> album names, Google Photos links and photos copied into an album are stored like threads (end-to-end encrypted in an encrypted family) and seen only by your family. When you pick photos from Google Photos, your phone asks Google for permission to see just the photos you pick, downloads them from Google, and locks them before they're sent; the connector never talks to Google Photos.</li>
+  <li><b>📰 News and 🐶 rescue news:</b> hidden for now. While they're hidden the app doesn't load them and the connector doesn't fetch them. If they come back, the connector reads public news feeds and a dog rescue's public listings and has Google's Gemini (or Claude) sum them up; it's the same for everyone and nothing about you is sent.</li>
   <li><b>🧭 Plan an outing:</b> when you ask for one, the connector sends Claude (Anthropic, with web search) the place you typed, the day, the choices you tapped (like "Thai" or "Caltrain") and your home town, plus the one-line taste summary if 💞 Use our taste is on. Outings never go to Google's free Gemini service. The plan comes back to your phone; if you send it to your partner it's stored like any other plan (end-to-end encrypted in an encrypted family). Saved outings stay on your phone; the finished plan is also kept on the connector for one day (so asking again is instant and a phone that closed the app can pick it up), then deleted.</li>
   <li><b>📞 Check-in reminders:</b> for "call Mom every two weeks" and run / ride / hot yoga reminders, the connector keeps how often and the date you last did each (so it can send the reminder), under your account only. Your workouts themselves stay in your encrypted trackers; your phone works out the last date.</li>
   <li><b>🎬 Movies:</b> if you switch movies on, the connector keeps that setting and the movies you asked to be alerted about (their TMDB numbers and titles) under your account, to send the alerts.</li>
   <li><b>📺 Episode dates:</b> to show when new episodes of your shows come out, your phone asks the connector for a show's dates by its TMDB number (looked up from the title once); the connector fetches them from TMDB and keeps nothing about who asked. Which TMDB show each of yours is stays on your phone.</li>
   <li><b>💬 Chats:</b> messages between the grown-ups in a family (one to one, and the Grown-ups group), and their photos, screenshots and PDFs (with the PDFs' names), are end-to-end encrypted in an encrypted family. The connector keeps who wrote in which chat and when, reactions, who has read up to which message, and who has the app open (to show "online" and to skip notifications for a chat you're looking at). Children never have chats: only people with their own account who weren't added as a child and aren't under 18 by the birthday on their profile. Notifications say who wrote, never what. Unsending a message deletes its text and files; leaving a family deletes your one-to-one chats in it, and deleting your account also deletes your messages in the group.</li>
-  <li><b>📖 Threads:</b> titles, write-ups, replies and poll choices are end-to-end encrypted in an encrypted family (threads shared with friends' families get their own key, like posts). The connector keeps who wrote what and when, who it's for, the board, who in the family has opened it (shown to the family as "Seen by"), who last moved it to another board, the names of boards your family adds (not encrypted, like chore names), votes and ▲s. Screenshots and PDFs added to a thread, their captions and the PDFs' names are encrypted the same way (the connector sees only each file's size). When you tag someone, the connector keeps who was tagged (so it can notify them, like tags on photo posts); the notification says who tagged them, never what the thread says. ✨ Tidy it up sends only the text you tap it on to Claude (Anthropic), with tagged names replaced by placeholders, and keeps nothing. Drafts stay on your phone.</li>
+  <li><b>📖 Threads:</b> titles, write-ups, replies and poll choices are end-to-end encrypted in an encrypted family (threads shared with friends' families get their own key, like posts). The connector keeps who wrote what and when, who it's for, the board, who in the family has opened it (shown to the family as "Seen by"), who last moved it to another board, the names of boards your family adds (not encrypted, like chore names), votes and ▲s. Screenshots and PDFs added to a thread, their captions and the PDFs' names are encrypted the same way (the connector sees only each file's size). When you tag someone, the connector keeps who was tagged (so it can notify them); the notification says who tagged them, never what the thread says. ✨ Tidy it up sends only the text you tap it on to Claude (Anthropic), with tagged names replaced by placeholders, and keeps nothing. Drafts stay on your phone.</li>
   <li><b>⭐ Ratings:</b> how a date or outing went is kept in your own trackers, end-to-end encrypted in an encrypted family (your partner sees it if you share your trackers). Your phone uses it to put what you like first. When you plan an outing, a one-line summary (like "they love sushi; avoid long waits") goes with the request only while 💞 Use our taste is on — you see the exact line first.</li>
   <li>If you use 💬 Help, your questions (and the account details needed to answer them, like your families' member names) are sent to <b>Anthropic</b>'s API so Claude can answer. If you report a problem, the report and that help chat are kept for the app's maintainer for up to 180 days.</li>
   <li>If the app hits an error, the error message and where it happened (no account or personal data) are counted so we can fix it.</li>
   <li>If you use "Ask Claude" in the trackers, what you type and the data needed to answer it is sent to <b>Anthropic</b>'s API. Anthropic doesn't use API data to train its models by default.</li>
 </ul>
-<p>Data is encrypted in transit (HTTPS). Families are <b>end-to-end encrypted</b>: posts, photos, comments, notes, plans, diet &amp; fitness data, your pets' details and appointment notes are locked on your family's devices with a key the server never sees, so neither we nor our providers can read them. The server can read what it needs to work: your account (name, email), the names of family members and pets, who's in which family, the chores log, games, and dates of appointments. Your recovery backup is locked with a phrase only you have; if you lose every device and the phrase, your encrypted data can't be recovered by anyone.</p>
+<p>Data is encrypted in transit (HTTPS). Families are <b>end-to-end encrypted</b>: threads, chat messages, posts, photos, comments, notes, plans, diet &amp; fitness data, your pets' details and appointment notes are locked on your family's devices with a key the server never sees, so neither we nor our providers can read them. The server can read what it needs to work: your account (name, email), the names of family members and pets, who's in which family, the chores log, games, and dates of appointments. Your recovery backup is locked with a phrase only you have; if you lose every device and the phrase, your encrypted data can't be recovered by anyone.</p>
 
 <h2>How long we keep it</h2>
 <ul>
@@ -69,7 +72,7 @@
 <h2>Your choices and rights</h2>
 <ul>
   <li><b>Download your data:</b> Me › Account & security › Download my data (a JSON file).</li>
-  <li><b>Correct it:</b> edit your name, pets and posts in the app.</li>
+  <li><b>Correct it:</b> edit your name, pets and threads in the app.</li>
   <li><b>Delete it:</b> Me › Account & security › Delete my account, or leave or delete a family.</li>
   <li><b>Sign out everywhere:</b> Me › Account & security.</li>
   <li><b>Contact us:</b> use the support email shown in the app (Me › Account & security) or on the app's store listing.</li>

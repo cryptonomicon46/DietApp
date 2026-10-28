@@ -8,12 +8,12 @@ Line numbers are approximate; function names are the stable reference.
 
 | Path | What it is |
 |---|---|
-| `family/` | **OurPawmily**, the family PWA (the main app). `index.html` (CSP, shell), `app.js` (all screens, ~4.2k lines, one ES module), `api.js` (fetch wrapper; runs the server in-browser for the demo), `crypto.js` (E2EE), `ideas.js` (date-idea ranking), `migrate.js` (import from the older trackers), `style.css`, policy pages (`privacy.html`, `terms.html`, `delete-account.html`) |
-| `index.html`, `js/`, `styles.css`, `sw.js`, `theme.js` | The **trackers** (diet, training, dogs, shows, calendar…) at the site root. `js/` also holds pure logic modules the family app imports lazily (`brief.js`, `calendar.js`, `dogcal.js`, `dress.js`, `nextup.js`, `rhythm.js`, `showsCore.js`, `activity.js`) |
-| `server/` | The **Cloudflare Worker** ("the connector"). `worker.js` (entry, routing, crons), `family.js` (the v2 family API: auth, families, invites, feed, data, admin), feature modules (`threads.js`, `chat.js` + `chatHub.js` (chats; a Durable Object), `albums.js`, `market.js`, `nudges.js`, `tv.js`, `movies.js`, `news.js`, `outing.js`, `scout.js`, `search.js`, `links.js`, `push.js`, `photos.js`, `appts.js`, `us.js`, `bingo.js`, `picks.js`, `goldenPost.js`), AI modules (`helpAgent.js`, `helpGuide.js`, `assistant.js`), `wrangler.toml`, `README.md` (setup) |
-| `tests/` | `node:test` suites (52 files, 227 tests), fixtures |
-| `scripts/` | `bump-version.mjs` (cache-busting version), `check-links.mjs` (browser link check + news feeds) |
-| `.github/workflows/check.yml` | CI on every push: tests, then the link check |
+| `family/` | **OurPawmily**, the family PWA (the main app). `index.html` (CSP, shell), `app.js` (all screens, ~4.2k lines, one ES module), `api.js` (fetch wrapper; runs the server in-browser for the demo), `crypto.js` (E2EE), `ideas.js` (date-idea ranking), `migrate.js` (import from the older trackers), `tour.js` (tour and What's new), `chat.js` (chat screens, lazy), `style.css`, policy pages (`privacy.html`, `terms.html`, `delete-account.html`). Navigation (2.0): bottom bar 🏠 Home · 💞 Us (couples) · 📅 Calendar · 📖 Threads (tabs: Threads, 📷 Photos = albums) · 💪 Health (opens the trackers' food/training screens for now, when the family manages diet & fitness); top right 💬 chats, ❓ help, ＋ create, Me. Home holds Next up, the week's thread digest, Your day, Today, Movies (opt-in), then the Gold Card, chores and the dogs (formerly the "Dogs & chores" tab). The social feed ("Moments"), 📰 News, 🐶 Rescue news and the ❤️ health meter are no longer shown; old `#feed`/`#dogs` links open Home |
+| `index.html`, `js/`, `styles.css`, `sw.js`, `theme.js` | The **trackers** (diet, training, dogs, shows, calendar…) at the site root. `js/server.js` holds the connector's built-in address for both apps (localStorage `fam.server`; no longer read from the trackers' `lp.g.sync`, a previously set address is copied once). `js/` also holds pure logic modules the family app imports lazily (`brief.js`, `calendar.js`, `dogcal.js`, `dress.js`, `nextup.js`, `rhythm.js`, `showsCore.js`, `activity.js`) |
+| `server/` | The **Cloudflare Worker** ("the connector"). `worker.js` (entry, routing, crons), `family.js` (the v2 family API: auth, families, invites, feed (kept, not shown in 2.0), data, admin), feature modules (`threads.js`, `chat.js` + `chatHub.js` (chats; a Durable Object), `albums.js`, `market.js`, `nudges.js`, `tv.js`, `movies.js`, `news.js`, `outing.js`, `scout.js`, `search.js`, `links.js`, `push.js`, `photos.js`, `appts.js`, `us.js`, `bingo.js`, `picks.js`, `goldenPost.js`), AI modules (`helpAgent.js`, `helpGuide.js`, `assistant.js`), `wrangler.toml`, `README.md` (setup) |
+| `tests/` | `node:test` suites (62 files, 261 tests), fixtures |
+| `scripts/` | `bump-version.mjs` (cache-busting version), `check-links.mjs` (browser link check + news feeds), `perf/` (performance budget: `seed.mjs`, `pages.mjs`, `weather.mjs`, `budget.mjs`, `budget.json`) |
+| `.github/workflows/check.yml` | CI on every push: tests, the link check, and the performance budget job |
 | `mockups/` | Design mockups (not shipped) |
 
 ## 2. Technology stack
@@ -28,10 +28,10 @@ Line numbers are approximate; function names are the stable reference.
 - **Static site:** GitHub Pages serves the repository (`APP_ORIGIN` in `server/wrangler.toml`). It is not Cloudflare Pages.
 - **Worker** (`server/worker.js`): `fetch` handles
   - `/v2/*` → `familyApi()` in `server/family.js` (everything in OurPawmily);
-  - legacy tracker endpoints: `/household/<code>/…` (data, calendar `.ics`, files), `/ics` (calendar proxy), `/assistant` (workout "Ask Claude"), WHOOP and Strava OAuth (`/whoop/*`, `/strava/*`).
+  - legacy tracker endpoints: `/household/<code>/…` (data, calendar `.ics`, files), `/ics` (calendar proxy), `/assistant` (workout "Ask Claude"), WHOOP and Strava OAuth (`/whoop/*`, `/strava/*`; Strava is no longer offered for new connections). `/v2/config` reports which device connections are set up (only whether, never keys).
 - **Crons** (`wrangler.toml`, dispatched in `worker.js scheduled()`):
   - `13 10 * * *`: nightly maintenance (`runMaintenance`).
-  - `*/15 * * * *`: reminders and pushes (`runReminders` in `push.js`); at 6:45/15:45 Pacific also the news (`runNews` in `news.js`).
+  - `*/15 * * * *`: reminders and pushes (`runReminders` in `push.js`); at 6:45/15:45 Pacific also the news edition (`news.js`), but only when the `NEWS_ON` var is set — news is hidden in 2.0 (code and stored editions kept).
   - `13 13-22 * * 3`: Wednesday date scout, one area per run (`runScout`).
   - `43 13-22 * * 4`: Thursday refresh (no AI).
 - **Durable Object** `ChatHub` (`server/chatHub.js`, SQLite-backed, free plan; bound as `CHAT`): one per family (`idFromName(fid)`). It stores that family's chat messages (sealed) and holds the phones' WebSockets (hibernation API, `ping`/`pong` auto-response). The Worker authenticates every chat request in `chatRoutes()` (`server/chat.js`) and passes the caller's member ID, their allowed chats and the family's current grown-ups to `POST /op`; sockets connect at `/v2/chat/ws` with a one-time ticket (60 s, single use, stored in the object) and an `Origin` check, and are closed when their member leaves or stops being eligible. The demo runs the same `ChatCore` over its local store.
@@ -41,13 +41,13 @@ Line numbers are approximate; function names are the stable reference.
 ## 4. Authentication and authorization
 
 1. **Google sign-in** (Google Identity Services in the browser) → `POST /v2/auth/google` with the ID token.
-2. `verifyGoogle()` (`server/family.js`) checks the RS256 signature against Google's certs (cached 1 h), issuer, audience (`GOOGLE_CLIENT_ID`), expiry and `email_verified` (see the open item in §9).
+2. `verifyGoogle()` (`server/family.js`) checks the RS256 signature against Google's certs (cached 1 h), issuer, audience (`GOOGLE_CLIENT_ID`), expiry, `email_verified` (must be `true`; a missing claim is refused) and `iat` (a token issued in the future is refused).
 3. `startSession()` issues a random session token (stored in KV as `session:<token>`, 30-day TTL; the newest 10 per account are listed in the user record for "sign out everywhere"). The phone keeps it and sends `Authorization: Bearer …`.
-4. **Authorization** is by membership: `loadFamily()`/`meIn()` only return a family whose `members[]` includes the caller's account ID (`g<google sub>`). Roles: `owner` (settings, delete, hand-over), `member`, and `relation: child` (restricted writes; no chats). Chats (`grownUp()` in `server/chat.js`) require an account, `relation !== 'child'`, and no birthday under 18. Friends' families are linked through `connections[]` and only see posts with `audience: 'connections'` (feed and post routes).
+4. **Authorization** is by membership: `loadFamily()`/`meIn()` only return a family whose `members[]` includes the caller's account ID (`g<google sub>`). Roles: `owner` (settings, delete, hand-over), `member`, and `relation: child` (restricted writes; no chats). Chats (`grownUp()` in `server/chat.js`) require an account, `relation !== 'child'`, and no birthday under 18. Friends' families are linked through `connections[]` and only see posts and threads shared with connections. **Files** (`server/photos.js`): each upload records its uploader (`fileby:<fid>:<pid>`); only the uploader or the family's creator can replace or delete it; posts, thread screenshots/PDFs, albums, chat messages and market listings accept only files the caller uploaded; a connected family fetches a file only by naming the shared post or thread it's on, never one tagging a member the family keeps private, and nothing after disconnecting. **Report/block** exist on threads and replies (report hides it for the reporter; the creator sees a count) and chat messages (the report keeps the message ID and reason, never the sealed content); blocking hides threads, replies and chats from that account.
 5. **Invites** (`makeInvite`, `/invites/:code(/accept)`): single-use, 14-day TTL, bound to one email; accepting requires the signed-in Google email to equal the invite's email, then the account ID is bound to the member spot.
 6. **Admin**: `ADMIN_EMAILS` secret; the maintainer desk (`/admin/*`).
 7. **Demo mode**: `family/api.js` runs `familyApi` in the browser with a localStorage store; `/auth/demo` exists only when `env.DEMO` is set.
-8. **Legacy trackers** authenticate with a **household code** (a shared secret in the URL path). Account users have moved to v2, but the endpoints remain for recovery.
+8. **Legacy trackers** authenticate with a **household code** (a shared secret in the URL path). The code is no longer shown, typed or sent anywhere in the UI (no Privacy card, no "Link phones", no `#link=`, no calendar subscribe link); phones that already shared through one keep syncing in the background until migration, and 🛟 Recover reads the old copies. "Just the trackers" sharing without an account is retired: sharing is only through a family. The endpoints remain.
 
 ## 5. End-to-end encryption and key management
 
@@ -76,11 +76,11 @@ Keys are never sent to any AI provider. All calls happen on the Worker; none run
 | ✨ Tidy it up | `/families/:fid/tidy` in `family.js` | Anthropic (Haiku by default) | The decrypted text of the one note it's tapped on | Explicit tap |
 | 🏋️ Ask Claude (trackers) | `assistant.js`, `/assistant` | Anthropic (`assistant.js` MODEL) | The typed workout command and today's exercise list | Explicit command |
 | 💡 Weekly date scout | `scout.js` `claudeScout` → `search.js` `askSearch` | Gemini (Google Search) if `GEMINI_API_KEY`, else Claude | The area (town), dates, movie titles now playing | Cron, Wednesdays |
-| 🧭 Plan an outing / ⇄ swap a stop | `outing.js` → `askSearch` | Gemini free tier unless the request includes the couple's taste line (then Claude); Claude fallback | Free text the person typed (≤120 chars), day, chosen chips, home town; optionally the taste line from their ratings | Explicit request |
-| 📰 News summaries | `news.js` `summarize` | Gemini without search, else Claude Haiku | Public RSS headlines and blurbs only | Cron, twice a day |
-| 🐶 Rescue news | `news.js` → `askSearch` | Gemini (Google Search), else Claude | The rescue's name and today's date | Cron, once a day |
+| 🧭 Plan an outing / ⇄ swap a stop | `outing.js` → `askSearch` | Anthropic (Claude) only — never Gemini's free tier | Free text the person typed (≤120 chars), day, chosen chips, home town; the taste line from their ratings only when 💞 Use our taste is on | Explicit request |
+| 📰 News summaries | `news.js` `summarize` | Gemini without search, else Claude Haiku | Public RSS headlines and blurbs only | Cron, twice a day — only with `NEWS_ON` (hidden in 2.0) |
+| 🐶 Rescue news | `news.js` → `askSearch` | Gemini (Google Search), else Claude | The rescue's name and today's date | With the news edition — only with `NEWS_ON` (hidden in 2.0) |
 
-Usage is counted per provider in KV (`searchruns:<month>`, `scoutruns:…`, `outingruns:…`, `tidyruns:…`) with monthly caps (env `SCOUT_MAX_RUNS`, `OUTING_MAX_RUNS`, `TIDY_MAX_RUNS`). The open privacy question about outing text and Gemini's free tier is in §9.
+Usage is counted per provider in KV (`searchruns:<month>`, `scoutruns:…`, `outingruns:…`, `tidyruns:…`) with monthly caps (env `SCOUT_MAX_RUNS`, `OUTING_MAX_RUNS`, `TIDY_MAX_RUNS`). Outing text no longer goes to Gemini (fixed in 2.0 Phase 0, see §9).
 
 ## 7. Other external services
 
@@ -91,24 +91,30 @@ Usage is counted per provider in KV (`searchruns:<month>`, `scoutruns:…`, `out
 | Open-Meteo | Weather and geocoding, called from the phone | Coordinates or town names |
 | TMDB, OMDb, JustWatch (via TMDB) | Shows, movies, scores, where to watch | Titles and IDs |
 | Ticketmaster, SeatGeek | Events for the scout | Area, dates |
-| Public RSS feeds | News | — (fetch only) |
-| WHOOP, Strava | Workout import (trackers) | OAuth tokens (kept on the phone, excluded from sync) |
+| Public RSS feeds | News (only with `NEWS_ON`) | — (fetch only) |
+| WHOOP, Strava | Workout import (trackers; WHOOP only when its secrets are set, Strava only to disconnect an existing link) | OAuth tokens (kept on the phone, excluded from sync) |
 
 ## 8. Tests and CI
 
-- `npm test` runs 227 `node:test` tests across 52 files, covering:
+- `npm test` runs 261 `node:test` tests across 62 files, covering:
   - server routes, called directly with an in-memory KV (`family.test.js`, `threads.test.js`, `nudges.test.js`, `movies.test.js`, `tv.test.js`, `news.test.js`, `search.test.js`, `outing.test.js`, `photos.test.js`, `push.test.js`, …);
   - pure logic (`nextup.test.js`, `ideas.test.js`, `dogcal.test.js`, `calendar.test.js`, …);
   - crypto (`e2ee.test.js`).
+  - 2.0 guard rails (`dependencies.test.js`): where the household code is still used, no code or connector set-up in what people see, and Home starting without the feed or news.
 - CI (`check.yml`) runs the tests, then `scripts/check-links.mjs` in Chromium. Sites that block robots (OpenTable, Ticketmaster) are reported as "check by hand".
+- **Performance budget** (a separate CI job, `scripts/perf/`: `seed.mjs`, `pages.mjs`, `weather.mjs`, `budget.mjs`, `budget.json`): cold and warm start of `/family/` on a throttled phone profile against `wrangler dev`. It fails on more than 18 start-up API requests, any duplicate request, layout shift over 0.05, or start-up script over 200 KB gzipped. Paint times (FCP/LCP) are reported, and checked only with `PERF_STRICT=1`.
 - UI flows are checked with Playwright scripts during development (not committed). There are no committed end-to-end UI tests.
 
 ## 9. Known limitations and open items
 
-Security items under review (no changes made yet):
-1. **Connected-family photo access:** `/families/:fid/photos/:id` lets any member of a connected family fetch any photo ID of that family, not only photos on posts shared with them (encrypted families' photos stay locked; never-encrypted families' would not).
-2. **`email_verified`:** `verifyGoogle()` rejects only an explicit `false`; a missing claim passes.
-3. **Outing text → Gemini free tier:** free text typed by the person goes to a provider whose free tier may use it to improve products.
+Security items previously under review — all **FIXED in 2.0 Phase 0**:
+1. **Connected-family photo access — FIXED:** files record their uploader; a connected family can fetch a file only by naming the shared post or thread it's on (never one tagging a privately kept member, nothing after disconnecting), and only the uploader or the creator can replace or delete it.
+2. **`email_verified` — FIXED:** `verifyGoogle()` now requires `email_verified` to be `true` (a missing claim is refused) and refuses tokens issued in the future.
+3. **Outing text → Gemini free tier — FIXED:** 🧭 outings and swapping a stop go to Claude only, never Gemini.
+
+**FUTURE SECURITY PROJECT: Per-person/per-area cryptographic isolation for Diet and Fitness.** Today every family member holds the same family key, so Family membership permissions (household areas, Diet/Fitness sharing) are enforced by the server, not cryptographically isolated between family members. Acceptable for the beta; before a commercial or external-family launch this will be separately designed and audited (whether personal Health areas need separate encryption keys). Not part of Phase 0 or 1; the key architecture is unchanged.
+
+Household-code migration (open): the remaining household-code dependencies are listed in `tests/dependencies.test.js` — `sync.ensure` creating codes, dog documents and adoption photos stored under the code, the old calendar subscription link, 🛟 Recover's old copies, linked calendars in the trackers going through the code, and the legacy assistant route. They are to be migrated in Phase 2/10.
 
 Design items deferred to the security redesign:
 - **Invite and device links carry the key**, so the key ends up in email and messaging histories.
@@ -116,15 +122,15 @@ Design items deferred to the security redesign:
 - **Invite keys are left in localStorage** (`fam.inviteKey`/`fam.inviteCk`) if an invite is declined or has expired.
 - **Session tokens are stored unhashed** in KV.
 - **Keys are kept as extractable strings**, and the session token is in localStorage, so an XSS would expose both.
-- **Legacy household-code endpoints** remain, with older plaintext tracker copies.
+- **Legacy household-code endpoints** remain (hidden from the UI), with older plaintext tracker copies, until the Phase 2/10 migration.
 - **500 responses return `err.message`.**
 - **Decrypted photos are cached on the phone** (IndexedDB `photoDb`) with no expiry, and they stay after leaving a family.
 
 ## 10. Performance notes and likely bottlenecks
 
 - **No build step:** `family/app.js` is ~378 KB unminified (plus `style.css` ~71 KB), parsed on every cold start. Feature logic is lazy-loaded; the screens are not.
-- **`/v2/feed`:** reads up to 40 post records per family and per connected family (one KV read each), then the phone decrypts each.
+- **`/v2/feed`:** reads up to 40 post records per family and per connected family (one KV read each), then the phone decrypts each. Since 2.0 the app no longer calls it at start-up (Home loads without the feed or news).
 - **`families()`** loads every family record of the caller on many requests.
 - **Reminders cron:** lists all push subscriptions every 15 minutes and walks each user's families.
-- **External lookups** (scout, news, outings, movies) are cached in KV or the Cache API and run in the background (`ctx.waitUntil`, background jobs with notifications), but the first news edition and the first scout of the week are slow by design.
+- **External lookups** (scout, news, outings, movies) are cached in KV or the Cache API and run in the background (`ctx.waitUntil`, background jobs with notifications), but the first news edition (when `NEWS_ON` is set) and the first scout of the week are slow by design.
 - **The phone caches** photos (decrypted bytes in IndexedDB), TMDB lookups, news (30 min), movies (6 h) and geocoding in localStorage.

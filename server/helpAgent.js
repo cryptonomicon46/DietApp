@@ -56,7 +56,7 @@ export const ACCOUNT_TOOLS = [
 export const GUEST_TOOLS = [REPORT];
 
 export function helpSystem({ signedIn, name = '', supportEmail = '' }) {
-  return `You are the help desk inside OurPawmily, a private family app (families, people, kids and pets, a family feed, chores with a monthly Gold Card, asking for help) that sits alongside the OurPawmily diet & fitness trackers. You help people use it and fix account problems.
+  return `You are the help desk inside OurPawmily, a private family app (Home with chores, the Gold Card and the dogs; Us; the family calendar; Threads and Photos; chats between grown-ups) that sits alongside the OurPawmily diet & fitness trackers. You help people use it and fix account problems.
 
 How to answer:
 - Short, warm and practical: a sentence or two, or a few numbered steps naming the exact tabs and buttons from the guide. Phone screen, so no long essays or tables.
@@ -105,7 +105,7 @@ export async function runHelpAgent({ client, system, messages, tools, run, maxSt
       tools,
       messages: convo,
     });
-    if (res.stop_reason === 'refusal') return { reply: 'Sorry — I can\'t help with that one. Ask me about families, invites, the feed, chores or the diet app.', used };
+    if (res.stop_reason === 'refusal') return { reply: 'Sorry — I can\'t help with that one. Ask me about families, invites, threads, chores or the diet app.', used };
     last = textOf(res) || last;
     convo.push({ role: 'assistant', content: res.content });
     if (res.stop_reason === 'pause_turn') continue;
