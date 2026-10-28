@@ -105,9 +105,10 @@ updating, and a private family subscription link will replace it later.
 
 ## Linked calendars
 
-The update also adds `GET /ics?code=<household>&url=<calendar link>`, which fetches a
-public iCloud (`*.icloud.com`), Google (`calendar.google.com`) or Outlook calendar for
-a known household — phones can't fetch those directly because of browser rules.
+The connector fetches a linked iCloud (`*.icloud.com`), Google (`calendar.google.com`) or
+Outlook calendar for the app — phones can't fetch those directly because of browser rules.
+The secret calendar link is sent in the request body (`POST /v2/ics {url}`; the older trackers
+use `POST /ics {code, url}`), never in a URL.
 
 ## OurPawmily Families (preview): Google sign-in
 

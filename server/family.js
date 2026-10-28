@@ -643,10 +643,11 @@ export async function familyApi(req, env, path, ctx = null) {
     return json({ error: 'not found' }, 404);
   }
   // A linked calendar's events: fetched here (phones can't read other sites), from calendar hosts only.
-  if (path === '/ics' && method === 'GET') {
+  // The secret link comes in the request body (POST), never in a URL that could end up in logs.
+  if (path === '/ics' && method === 'POST') {
     if (!(await underLimit(db, `rate:${user.uid}:ics:${Math.floor(Date.now() / 60000)}`, 30, 120))) return json({ error: 'too many — try again in a minute' }, 429);
     let target;
-    try { target = new URL((url(req).searchParams.get('url') || '').trim().replace(/^webcals?:/i, 'https:')); } catch { return json({ error: 'not a link' }, 400); }
+    try { target = new URL(String(body.url || '').trim().replace(/^webcals?:/i, 'https:')); } catch { return json({ error: 'not a link' }, 400); }
     const host = target.hostname.toLowerCase();
     if (!(target.protocol === 'https:' && (host.endsWith('.icloud.com') || host === 'calendar.google.com' || host === 'outlook.live.com' || host === 'outlook.office365.com'))) return json({ error: 'only iCloud, Google or Outlook calendar links' }, 400);
     if (env.DEMO) return json({ error: 'linked calendars need the live connector' }, 400);

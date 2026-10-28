@@ -20,7 +20,8 @@ export const NOTIFY_KINDS = {
   us: '💞 Plans, answers and notes',
   appts: '🐾 Dog appointments and vaccines',
   events: '📅 Calendar reminders',
-  feed: '💬 Comments, tags and help on your posts',
+  // Still stored as 'feed' (the old Moments setting), so everyone keeps the choice they made.
+  feed: '📖 Threads: tags and replies',
   fun: '⭐ Golden days and games',
   nudges: '📞 Reminders: calling Mom, workouts, movie releases',
   market: '🛒 Market: new listings and who\'s interested',
@@ -214,7 +215,7 @@ export async function runReminders(env, at = Date.now(), { db }) {
     // ✨ Next up's top pick, 30 minutes before.
     const nx = await db.get(`nextup:${uid}`);
     if (nx && !nx.sent && nx.at - 30 * 60000 >= from && nx.at - 30 * 60000 < to) {
-      sent += await sendTo(db, env, [uid], 'nudges', { title: nx.title, body: nx.body, url: 'family/#feed', tag: 'nextup' }, 3600);
+      sent += await sendTo(db, env, [uid], 'nudges', { title: nx.title, body: nx.body, url: 'family/#home', tag: 'nextup' }, 3600);
       await db.put(`nextup:${uid}`, { ...nx, sent: true }, 86400);
     }
     // 🎬 Movie alerts, checked at 9 AM your time: in theaters, or now streaming.

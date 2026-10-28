@@ -79,17 +79,19 @@ export default {
         return json(r.data, r.status);
       }
 
-      // ---- Linked calendars: GET /ics?code=<household>&url=<public iCloud / Google calendar link> ----
+      // ---- Linked calendars (legacy trackers): POST /ics {code, url} ----
       // The phone can't fetch another site's calendar directly (browsers block it), so the
-      // connector does — only for a known household, and only from calendar hosts.
+      // connector does — only for a known household, and only from calendar hosts. The code and
+      // the secret calendar link travel in the body, never in a URL that could end up in logs.
       if (url.pathname === '/ics') {
-        if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405);
-        const code = url.searchParams.get('code') || '';
+        if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+        const ask = await req.json().catch(() => ({}));
+        const code = typeof ask.code === 'string' ? ask.code : '';
         const known = /^[a-z0-9-]{12,64}$/.test(code) && env.HOUSEHOLD
           && (await env.HOUSEHOLD.list({ prefix: `${code}:`, limit: 1 })).keys.length > 0;
         if (!known) return json({ error: 'turn on household sharing first' }, 403);
         let target;
-        try { target = new URL((url.searchParams.get('url') || '').trim().replace(/^webcals?:/i, 'https:')); } catch { return json({ error: 'not a link' }, 400); }
+        try { target = new URL(String(ask.url || '').trim().replace(/^webcals?:/i, 'https:')); } catch { return json({ error: 'not a link' }, 400); }
         const host = target.hostname.toLowerCase();
         const allowed = target.protocol === 'https:' && (host.endsWith('.icloud.com') || host === 'calendar.google.com' || host === 'outlook.live.com' || host === 'outlook.office365.com');
         if (!allowed) return json({ error: 'only iCloud, Google or Outlook calendar links' }, 400);

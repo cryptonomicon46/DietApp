@@ -52,12 +52,8 @@ export async function refreshFeeds(force = false) {
     for (const f of due) {
       const cache = feedCache();
       try {
-        const res = await fetch(`${s.url}/ics?code=${encodeURIComponent(s.code)}&url=${encodeURIComponent(f.url)}`);
-        if (!res.ok) {
-          const msg = (await res.json().catch(() => ({}))).error || `error ${res.status}`;
-          // An older connector doesn't know /ics yet.
-          throw new Error(res.status === 404 && msg === 'not found' ? 'connector needs the one-time update — run “npx wrangler deploy” in server/' : msg);
-        }
+        const res = await fetch(`${s.url}/ics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: s.code, url: f.url }) });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `error ${res.status}`);
         const events = parseIcs(await res.text(), { localTz: localTz(), from, who: f.who, source: f.name }).slice(0, 1500);
         cache[f.id] = { fetchedAt: Date.now(), events };
       } catch (err) {

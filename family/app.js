@@ -44,8 +44,8 @@ const fam = () => state.family;
 const shared = makeShared((path) => api.get(path));
 // Changes (not opening the live chat or marking it read) clear what's shared.
 const call0 = api.call;
-// (A chat ticket or read receipt, and the vaccine due list for reminders, change nothing the app reads.)
-api.call = (method, path, body) => { if (method !== 'GET' && !/\/chats\/(ticket|[a-z0-9_]+\/read)$|\/vaxdue$/.test(path)) shared.clear(); return call0(method, path, body); };
+// (A chat ticket or read receipt, the vaccine due list for reminders and reading a linked calendar change nothing the app reads.)
+api.call = (method, path, body) => { if (method !== 'GET' && !/\/chats\/(ticket|[a-z0-9_]+\/read)$|\/vaxdue$|^\/ics$/.test(path)) shared.clear(); return call0(method, path, body); };
 const memberData = (id = fam().me) => shared(`/families/${state.fid}/members/${id}/data`);
 // Work the first screen doesn't need: after a pause, when the phone is idle.
 const later = (fn, ms) => setTimeout(() => { if ('requestIdleCallback' in window) requestIdleCallback(() => fn(), { timeout: 4000 }); else fn(); }, ms);
@@ -2687,7 +2687,7 @@ async function refreshFeeds(force = false) {
   const from = shiftLocal(isoLocal(), -30);
   for (const f of due) {
     try {
-      const { ics } = await api.get(`/ics?url=${encodeURIComponent(f.url)}`);
+      const { ics } = await api.post('/ics', { url: f.url });
       cache[f.id] = { at: Date.now(), events: calm.C.parseIcs(ics, { localTz: Intl.DateTimeFormat().resolvedOptions().timeZone, from, source: f.name }).slice(0, 1500) };
     } catch (err) { cache[f.id] = { ...(cache[f.id] || {}), at: Date.now(), error: err.message }; }
   }
