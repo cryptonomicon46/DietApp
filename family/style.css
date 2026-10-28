@@ -789,6 +789,19 @@ i.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; back
 .wshot-img img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
 .wshot input { font-size: .78rem; padding: 4px 6px; border-radius: 8px; }
 .wshot-x { position: absolute; top: 4px; right: 4px; z-index: 1; width: 24px; height: 24px; padding: 0; border-radius: 50%; background: rgba(20,25,22,.7); color: #fff; font-size: .75rem; }
+/* 🔎 Thread search */
+.thsearch { width: 100%; margin: 0 0 10px; min-height: 44px; }
+.snip { margin: -6px 4px 12px; line-height: 1.4; }
+.snip mark, .thlist mark { background: color-mix(in srgb, var(--brand) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.feedback-send { margin: 10px 0; display: grid; gap: 6px; justify-items: start; }
+/* 📷 Images on a reply, and the ones waiting to be sent */
+.rshots { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
+.rshots .ph { width: 92px; height: 92px; border-radius: 10px; border: 1px solid var(--line); }
+.rshots.pending { margin: 0; }
+.rshot { position: relative; width: 64px; height: 64px; }
+.rshot img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
+.rshot .icon-btn { position: absolute; top: -8px; right: -8px; width: 26px; height: 26px; min-width: 0; font-size: .7rem; background: var(--card); }
+.rshot-add { cursor: pointer; display: inline-flex; align-items: center; min-height: 44px; }
 .thshots { display: flex; gap: 10px; overflow-x: auto; margin: 4px 0 12px; padding-bottom: 4px; }
 .thshots figure { margin: 0; flex: 0 0 132px; display: grid; gap: 4px; }
 .thshots .ph { width: 132px; height: 170px; border-radius: 12px; border: 1px solid var(--line); }
@@ -946,3 +959,44 @@ body.in-chat main { padding-bottom: 0; }
 .albums > .skeleton.line, .nextup > .skeleton.line { height: 100%; min-height: 60px; }
 /* the scrolling board row clips what sticks out, so it gets the room itself (same spacing as before) */
 .boards { padding-block: 7px; margin: -7px 0 1px; }
+
+/* 🏠 Home: 🔔 Needs you (requests), 🛒 Groceries, the dogs row, pinned threads */
+.card-h { font-size: 1rem; margin: 0; }
+.attn, .groc { min-height: 96px; }
+.attn-list, .glist { list-style: none; margin: 8px 0 0; padding: 0; }
+.attn-row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.attn-row:first-child { border-top: 0; }
+.attn-row .grow { flex: 1 1 170px; min-width: 0; }
+.attn-row b, .attn-row small { display: block; overflow-wrap: anywhere; }
+.attn-row.done { opacity: .6; }
+.attn-acts { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+.attn-acts button { min-height: 44px; }
+.attn-go { display: block; width: 100%; text-align: left; background: none; color: var(--ink); padding: 4px 0; font-weight: 400; min-height: 44px; }
+.attn-go b, .attn-go small { display: block; }
+.attn-sub { font-size: .85rem; margin: 12px 0 0; color: var(--muted); }
+.grocadd { display: flex; gap: 8px; margin-top: 8px; }
+.grocadd input { flex: 1; min-width: 0; }
+.gi { display: flex; align-items: center; gap: 4px; border-top: 1px solid var(--line); }
+.gi:first-child { border-top: 0; }
+.gtick { flex: 1; display: flex; justify-content: flex-start; align-items: center; gap: 10px; background: none; color: var(--ink); text-align: left; font-weight: 400; padding: 8px 0; min-height: 44px; }
+.gtick i { width: 22px; height: 22px; flex-shrink: 0; border: 2px solid var(--line); border-radius: 6px; display: grid; place-items: center; font-style: normal; font-size: .8rem; color: #fff; }
+.gi.got .gtick i { background: var(--brand); border-color: var(--brand); }
+.gi.got .gtick span { text-decoration: line-through; color: var(--muted); }
+.ggot { margin-top: 8px; }
+.ggot summary { cursor: pointer; padding: 8px 0; min-height: 32px; }
+.dogrow { display: flex; gap: 12px; overflow-x: auto; padding: 4px 2px 10px; scrollbar-width: none; }
+.dogchip { display: grid; justify-items: center; gap: 4px; background: none; color: var(--ink); font-weight: 600; font-size: .8rem; padding: 4px; min-width: 64px; }
+.dogchip .addav { width: 48px; height: 48px; border-radius: 50%; border: 2px dashed var(--line); display: grid; place-items: center; font-size: 1.2rem; color: var(--muted); }
+.dogmore summary { cursor: pointer; list-style: none; display: grid; gap: 2px; min-height: 44px; align-content: center; }
+.dogmore summary::-webkit-details-marker { display: none; }
+.dogmore summary::after { content: '›'; position: absolute; right: 16px; top: 14px; transition: transform .2s; color: var(--muted); }
+.dogmore { position: relative; }
+.dogmore[open] summary::after { transform: rotate(90deg); }
+.dogmore #dogMoreBody > * { margin-top: 12px; }
+.pins .nbrow:first-of-type { border-top: 0; }
+/* Narrow phones (320 px): the care log's Me · Both · Pat · Undo wraps instead of scrolling the page. */
+@media (max-width: 359px) { .care-acts { gap: 10px; flex-wrap: wrap; flex: 0 1 auto; } .care-acts button + button::before { margin-right: 10px; } }
+.gi .icon-btn, .attn-acts .icon-btn { min-width: 44px; min-height: 44px; }
+/* A file input that stays reachable by keyboard: invisible, with the focus ring on its label. */
+.vh { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+label:has(> .vh:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }

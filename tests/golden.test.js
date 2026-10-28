@@ -1,4 +1,4 @@
-// ⭐ Golden-day thank-you posts from the dogs.
+// ⭐ Golden-day thank-yous from the dogs (a notification and a cheer; no longer an old-feed post).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { familyApi, TERMS_VERSION, petNames } from '../server/family.js';
@@ -35,7 +35,7 @@ test('the dogs call people Mom & Dad unless told otherwise', () => {
   assert.deepEqual(petNames([{ name: 'Sam', petCalls: 'Auntie' }]), ['Auntie']);
 });
 
-test('the day turning golden posts once, thanking whoever took the dogs out, by their pet name', async () => {
+test('the day turning golden thanks once, thanking whoever took the dogs out, by their pet name', async () => {
   const m = new Map();
   const env = { DEMO: true, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
   const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path); return { status: r.status, ...r.data }; };
@@ -56,8 +56,7 @@ test('the day turning golden posts once, thanking whoever took the dogs out, by 
   assert.match(r.golden.text, /a walk and the dog park/i);
   assert.equal((await log('walk')).golden, undefined, 'once a day');
   const feed = await call('/feed', token);
-  assert.equal(feed.posts.filter((p) => p.golden).length, 1);
-  assert.ok(!JSON.stringify(feed).includes('byUid'));
+  assert.equal(feed.posts.length, 0, 'nothing goes on the old feed (2.0)');
 
   // The family can turn it off.
   await call(`/families/${family.fid}`, token, 'PATCH', { goldenPosts: false });

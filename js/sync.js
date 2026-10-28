@@ -9,87 +9,11 @@ import { account } from './account.js';
 // account, and your partner's comes from there when they share it with you; the household code
 // carries on alongside until both of you have moved over (and share with each other), then stops.
 
-// Your Cloudflare connector. Not secret: data there can only be read with the household code.
-export const DEFAULT_CONNECTOR = 'https://lean-plate-connect.sandman-amani.workers.dev';
-
 export const sync = {
   settings: () => global.get('sync', null),
-  // Sharing is on by default: each phone starts its own private household code, and
-  // linking the two phones is typing one phone's code into the other (join).
-  ensure() {
-    if (this.settings() || !ownerId() || global.get('shareOff', false)) return false;
-    this.save({ url: DEFAULT_CONNECTOR, code: householdCode(newHouseholdCode()) });
-    return true;
-  },
-  // Link with another phone's code: this phone switches to exactly that code, and its old
-  // code gets a forwarding note so a phone still on it follows. If both phones enter each
-  // other's code, the later link wins (notes older than this phone's own link are ignored).
-  async join(code) {
-    // Accepts the other phone's code or a private phrase you both type ("Sunset Tacos 4821").
-    code = householdCode(code);
-    if (!code) throw new Error('Use the code from the other phone, or a phrase of at least 6 letters/numbers (both phones type the same one).');
-    const s = this.settings();
-    const url = s?.url || DEFAULT_CONNECTOR;
-    // After your partner changed the code, only their new code is accepted (it already holds
-    // their data), and nothing is left on the old code pointing to it.
-    if (s?.moved) {
-      if (code === s.code) throw new Error('That\'s the old code. Use the new one from the other phone.');
-      const res = await fetch(`${url}/household/${encodeURIComponent(code)}/${s.moved.by}`);
-      if (!res.ok) throw new Error(res.status === 404 ? 'That code doesn\'t match. Ask for the new code to be sent again.' : `Couldn't check the code (${res.status}).`);
-    }
-    global.set('shareOff', false);
-    const old = s?.code;
-    const at = Date.now();
-    this.save({ url, code, linkedAt: at, ...(s?.moved ? { changedAt: s.moved.at } : {}) });
-    if (old && old !== code && !s?.moved) await this.forward(old, code, at);
-    await this.push();
-    return this.pull();
-  },
-  // Change the household code (either phone, any time): everything moves to a new random
-  // code, then the old code is emptied and marked "moved", without saying where to. The
-  // partner's phone sees that, stops using the old code, and asks for the new one, which
-  // you send it yourselves. fileIds: dog documents and adoption photos to carry over.
-  async rotate(fileIds = []) {
-    const s = this.settings();
-    if (!this.household()) throw new Error('Turn on sharing first.');
-    const old = s.code;
-    const code = householdCode(newHouseholdCode());
-    const at = Date.now();
-    const rec = (c, k) => `${s.url}/household/${encodeURIComponent(c)}/${k}`;
-    const put = (u, body, type = 'application/json') => fetch(u, { method: 'PUT', headers: { 'Content-Type': type }, body });
-    // 1. Your partner's latest data, so the new code is complete before they switch.
-    for (const p of PROFILES.filter((x) => x.id !== ownerId())) {
-      const res = await fetch(rec(old, p.id));
-      if (!res.ok) continue;
-      const text = await res.text();
-      if (JSON.parse(text)?.moved) continue;
-      if (!(await put(rec(code, p.id), text)).ok) throw new Error('Couldn\'t copy to the new code. Nothing changed.');
-    }
-    // 2. Your own data, and this phone switches.
-    this.save({ url: s.url, code, linkedAt: at, changedAt: at });
-    try { await this.push(); } catch (err) { this.save(s); throw new Error(`Couldn't reach the connector. Nothing changed. (${err.message})`); }
-    // 3. Files.
-    let files = 0;
-    for (const id of new Set(fileIds)) {
-      const res = await fetch(rec(old, `file/${id}`)).catch(() => null);
-      if (!res?.ok) continue;
-      const blob = await res.blob();
-      if ((await put(rec(code, `file/${id}`), blob, res.headers.get('Content-Type') || blob.type).catch(() => null))?.ok) {
-        files++;
-        await fetch(rec(old, `file/${id}`), { method: 'DELETE' }).catch(() => {});
-      }
-    }
-    // 4. Empty the old code. savedAt 0 so an older app version never imports the empty record.
-    await put(rec(old, 'link'), JSON.stringify({ moved: true, by: ownerId(), savedAt: at }));
-    for (const p of PROFILES) await put(rec(old, p.id), JSON.stringify({ moved: true, savedAt: 0 })).catch(() => {});
-    return { code, files };
-  },
-  async forward(from, to, at) {
-    const res = await fetch(`${this.settings().url}/household/${encodeURIComponent(from)}/link`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ movedTo: to, savedAt: at }),
-    });
-    if (!res.ok) throw new Error(`link failed (${res.status})`);
-  },
+  // 2.0: sharing is through your OurPawmily family, so this phone never makes, joins or changes a
+  // household code any more. A phone that already has one keeps syncing it (and following a change
+  // made from an older copy of the app) until it moves to its family.
   // If the other phone moved our household (a newer link than ours), follow it. A phone you
   // linked yourself (code or phrase typed / link opened) stays put, so codes can't drift apart.
   async follow() {
@@ -217,8 +141,3 @@ export function householdCode(input) {
   if (code && code !== s.code) global.set('sync', { ...s, code });
 })();
 
-export function newHouseholdCode() {
-  const a = new Uint8Array(12);
-  crypto.getRandomValues(a);
-  return Array.from(a, (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('').replace(/(.{4})(?=.)/g, '$1-');
-}

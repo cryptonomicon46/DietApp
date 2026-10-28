@@ -31,7 +31,7 @@ test('events: locked, repeat and who kept, imported once (newest copy wins), fam
   // Linked calendars: sealed; only iCloud/Google/Outlook links are fetched.
   await call(`/families/${family.fid}/calfeeds`, sam, 'PUT', { feeds: [{ id: 'f1', who: 'both', body: await seal(FK, { name: 'Home', url: 'webcal://p01-caldav.icloud.com/x' }) }] });
   assert.equal((await call(E, sam)).feeds.length, 1);
-  assert.equal((await call('/ics?url=https://evil.example/cal.ics', sam)).status, 400);
+  assert.equal((await call('/ics', sam, 'POST', { url: 'https://evil.example/cal.ics' })).status, 400);
   // Nobody outside the family; deleting.
   assert.equal((await call(E, out)).status, 404);
   await call(`${E}/${ev.id}`, sam, 'DELETE');

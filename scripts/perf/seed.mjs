@@ -55,5 +55,8 @@ await call(`/families/${fid}/members/${me}`, sam, 'PATCH', { shareWith: [ids.Pat
 await call(`/families/${fid}/members/${ids.Pat}`, pat, 'PATCH', { shareWith: [me] });
 const dm = `d_${[me, ids.Pat].sort().join('_')}`;
 for (let i = 0; i < 12; i++) await call(`/families/${fid}/chats/${i % 3 ? dm : 'g'}`, i % 3 ? [sam, pat][i % 2] : who(i), 'POST', { t: await L(`Synthetic chat ${i} 🙂`) });
+// 🙋 A request from Pat and a few groceries, as a household would have.
+await call(`/families/${fid}/requests`, pat, 'POST', { kind: 'ride', box: await L('A ride to the airport on Friday') });
+await call(`/families/${fid}/groceries`, sam, 'POST', { items: await Promise.all(['Milk', 'Eggs', 'Bread', 'Dog food'].map(L)) });
 writeFileSync(OUT, JSON.stringify({ fid, k, sam, pat }));
 console.log('seeded', fid);

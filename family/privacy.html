@@ -17,6 +17,7 @@
       <li>the names and relationships of the people you add, and the email addresses you send invites to</li>
       <li>your pets' names, breeds, birthdays and care records (feedings, walks, treats, medications, vaccines, vet details)</li>
       <li>threads, replies, chat messages, photos, albums and PDFs, and who uploaded each photo or PDF</li>
+      <li>🙋 requests for a hand (what you need, the kind, an optional day and time, who's helping) and the family's 🛒 grocery list (each item, who added or ticked it, and when)</li>
       <li>posts, comments and likes from the old family feed (no longer shown in the app, but kept, not deleted)</li>
       <li>if you bring them over from the current app: your diet & fitness records (weigh-ins, meals, training, workouts) and other tracker data</li>
     </ul>
@@ -29,17 +30,17 @@
 
 <h2>Who can see what</h2>
 <ul>
-  <li><b>Your family:</b> the people in your family see its members, pets, threads, albums and dog-care log. The family's creator sees how many times something in the family was reported.</li>
+  <li><b>Your family:</b> the people in your family see its members, pets, threads, albums, dog-care log and grocery list; the grown-ups see 🙋 requests (kids don't). The family's creator sees how many times something in the family was reported.</li>
   <li><b>Diet & fitness:</b> visible only to you, plus anyone you turn sharing on for (Me › Who can see my diet & fitness). Nobody else can turn it on for you.</li>
   <li><b>Connected families</b> (friends' families you invite) see only the threads (and older posts) you shared with them, and the names of your family's members. They can open a photo or PDF only through the shared thread or post it's on, never one that tags someone your family keeps private, and nothing once the families disconnect. They never see email addresses.</li>
   <li><b>Photos and PDFs:</b> only the person who uploaded a file, or the family's creator, can replace or delete it, and a file can only be attached by the person who uploaded it.</li>
-  <li><b>The old family feed:</b> the app no longer shows the feed. Posts already made are kept on the server, not deleted, until you delete your account or the family; a read-only view of them is planned.</li>
+  <li><b>The old family feed:</b> the app no longer shows the feed. Posts already made are kept on the server, not deleted, until you delete your account, leave the family, or the family is deleted; a read-only view of them is planned.</li>
   <li><b>Children under 13</b> don't have accounts. Parents can add them as profiles they manage, holding only what the parent enters.</li>
 </ul>
 
 <h2>Where it's stored and who processes it</h2>
 <ul>
-  <li><b>Cloudflare</b> hosts the app's server and stores your family's data, including photos and PDFs (Cloudflare R2), which in an end-to-end encrypted family are locked on your phone before they're uploaded.</li>
+  <li><b>Cloudflare</b> hosts the app's server and stores your family's data, including photos, PDFs and dog documents (Cloudflare R2), which in an end-to-end encrypted family are locked on your phone before they're uploaded.</li>
   <li><b>Google</b> handles sign-in.</li>
   <li><b>GitHub Pages</b> serves the app's files.</li>
   <li>Notifications are delivered by your device's push service (<b>Apple</b>, <b>Google</b>, <b>Mozilla</b> or <b>Microsoft</b>). Each one is encrypted so only your device can read it, and it says who did what (e.g. "Pat left you a note"), never what an encrypted note, plan or event says.</li>
@@ -52,13 +53,13 @@
   <li><b>🎬 Movies:</b> if you switch movies on, the connector keeps that setting and the movies you asked to be alerted about (their TMDB numbers and titles) under your account, to send the alerts.</li>
   <li><b>📺 Episode dates:</b> to show when new episodes of your shows come out, your phone asks the connector for a show's dates by its TMDB number (looked up from the title once); the connector fetches them from TMDB and keeps nothing about who asked. Which TMDB show each of yours is stays on your phone.</li>
   <li><b>💬 Chats:</b> messages between the grown-ups in a family (one to one, and the Grown-ups group), and their photos, screenshots and PDFs (with the PDFs' names), are end-to-end encrypted in an encrypted family. The connector keeps who wrote in which chat and when, reactions, who has read up to which message, and who has the app open (to show "online" and to skip notifications for a chat you're looking at). Children never have chats: only people with their own account who weren't added as a child and aren't under 18 by the birthday on their profile. Notifications say who wrote, never what. Unsending a message deletes its text and files; leaving a family deletes your one-to-one chats in it, and deleting your account also deletes your messages in the group.</li>
-  <li><b>📖 Threads:</b> titles, write-ups, replies and poll choices are end-to-end encrypted in an encrypted family (threads shared with friends' families get their own key, like posts). The connector keeps who wrote what and when, who it's for, the board, who in the family has opened it (shown to the family as "Seen by"), who last moved it to another board, the names of boards your family adds (not encrypted, like chore names), votes and ▲s. Screenshots and PDFs added to a thread, their captions and the PDFs' names are encrypted the same way (the connector sees only each file's size). When you tag someone, the connector keeps who was tagged (so it can notify them); the notification says who tagged them, never what the thread says. ✨ Tidy it up sends only the text you tap it on to Claude (Anthropic), with tagged names replaced by placeholders, and keeps nothing. Drafts stay on your phone.</li>
+  <li><b>📖 Threads:</b> titles, write-ups, replies and poll choices are end-to-end encrypted in an encrypted family (threads shared with friends' families get their own key, like posts). The connector keeps who wrote what and when, who it's for, the board, who in the family has opened it (shown to the family as "Seen by"), who last moved it to another board, the names of boards your family adds (not encrypted, like chore names), votes and ▲s. Screenshots and PDFs added to a thread, images added to a reply, their captions and the PDFs' names are encrypted the same way (the connector sees only each file's size). It also keeps which threads you ☆ saved (only you see that) and when a reply was edited. 🔎 Search happens on your phone: the threads are unlocked in memory only while you search; nothing is stored and the connector keeps no search index. On the 💡 App feedback board, 📮 Send to the app's developer sends only the summary and details you see (and can change) in the form, with your email, as a help ticket — nothing is sent unless you tap Send this. When you tag someone, the connector keeps who was tagged (so it can notify them); the notification says who tagged them, never what the thread says. ✨ Tidy it up sends only the text you tap it on to Claude (Anthropic), with tagged names replaced by placeholders, and keeps nothing. Drafts stay on your phone.</li>
   <li><b>⭐ Ratings:</b> how a date or outing went is kept in your own trackers, end-to-end encrypted in an encrypted family (your partner sees it if you share your trackers). Your phone uses it to put what you like first. When you plan an outing, a one-line summary (like "they love sushi; avoid long waits") goes with the request only while 💞 Use our taste is on — you see the exact line first.</li>
   <li>If you use 💬 Help, your questions (and the account details needed to answer them, like your families' member names) are sent to <b>Anthropic</b>'s API so Claude can answer. If you report a problem, the report and that help chat are kept for the app's maintainer for up to 180 days.</li>
   <li>If the app hits an error, the error message and where it happened (no account or personal data) are counted so we can fix it.</li>
   <li>If you use "Ask Claude" in the trackers, what you type and the data needed to answer it is sent to <b>Anthropic</b>'s API. Anthropic doesn't use API data to train its models by default.</li>
 </ul>
-<p>Data is encrypted in transit (HTTPS). Families are <b>end-to-end encrypted</b>: threads, chat messages, posts, photos, comments, notes, plans, diet &amp; fitness data, your pets' details and appointment notes are locked on your family's devices with a key the server never sees, so neither we nor our providers can read them. The server can read what it needs to work: your account (name, email), the names of family members and pets, who's in which family, the chores log, games, and dates of appointments. Your recovery backup is locked with a phrase only you have; if you lose every device and the phrase, your encrypted data can't be recovered by anyone.</p>
+<p>Data is encrypted in transit (HTTPS). Families are <b>end-to-end encrypted</b>: threads, chat messages, posts, photos, comments, notes, plans, requests, grocery items, diet &amp; fitness data, your pets' details and appointment notes are locked on your family's devices with a key the server never sees, so neither we nor our providers can read them. The server can read what it needs to work: your account (name, email), the names of family members and pets, who's in which family, the chores log, games, dates of appointments, and a request's kind, day, time and who's helping. Your recovery backup is locked with a phrase only you have; if you lose every device and the phrase, your encrypted data can't be recovered by anyone.</p>
 
 <h2>How long we keep it</h2>
 <ul>
@@ -66,7 +67,7 @@
   <li><b>Sign-ins:</b> expire after 30 days.</li>
   <li><b>Invites:</b> expire after 14 days or when used.</li>
   <li><b>Problem reports:</b> 180 days. <b>Error counts:</b> 30 days.</li>
-  <li><b>When you delete your account:</b> your account, sign-ins, diet & fitness data, posts, comments and likes are deleted immediately (see <a href="delete-account.html">Deleting your account</a>). Copies may linger in our providers' systems only for as long as their own retention allows.</li>
+  <li><b>When you delete your account:</b> your account, sign-ins, diet & fitness data, threads and replies you wrote (with their screenshots and PDFs), your requests for a hand, posts, comments and likes are deleted immediately (grocery items you added stay on the family's shared list until someone removes them) (see <a href="delete-account.html">Deleting your account</a>). Copies may linger in our providers' systems only for as long as their own retention allows.</li>
 </ul>
 
 <h2>Your choices and rights</h2>

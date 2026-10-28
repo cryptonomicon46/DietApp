@@ -50,6 +50,7 @@ import { DEFAULT_AREA, areaKey, scoutArea } from './scout.js';
 import { planOuting, swapStop } from './outing.js';
 import { checkLinks } from './links.js';
 import { threadRoutes } from './threads.js';
+import { homeRoutes } from './home.js';
 import { nudgeRoutes } from './nudges.js';
 import { tvRoutes } from './tv.js';
 import { movieRoutes } from './movies.js';
@@ -263,7 +264,7 @@ export async function familyApi(req, env, path, ctx = null) {
         && !(p.tags || []).some((t) => !sharedWithFriends(owner, owner.members.find((x) => x.id === t)));
     }
     const t = await db.get(`thread:${fid}:${id}`);
-    return !!t && t.aud === 'connections' && !blocked.has(t.byUid) && [...(t.shots || []), ...(t.docs || [])].some((x) => x.id === pid);
+    return !!t && t.aud === 'connections' && !blocked.has(t.byUid) && [...(t.shots || []), ...(t.docs || []), ...t.replies.filter((r) => !blocked.has(r.uid)).flatMap((r) => r.shots || [])].some((x) => x.id === pid);
   };
   const loadFamily = async (fid) => {
     const fam = /^[a-z0-9]{6,24}$/.test(fid) ? await db.get(`family:${fid}`) : null;
@@ -528,10 +529,10 @@ export async function familyApi(req, env, path, ctx = null) {
       await db.put(`care:${fam.fid}:${date}`, list);
       const idx = (await db.get(`careidx:${fam.fid}`)) || [];
       if (!idx.includes(date)) await db.put(`careidx:${fam.fid}`, [...idx, date].slice(-800));
-      // ⭐ The day just turned golden: the dogs say thank you on the feed.
-      const golden = ['walk', 'park', 'treat'].includes(entry.kind) && !isGolden(list.slice(0, -1)) && isGolden(list) ? await goldenDayPost(db, fam, date, list) : null;
-      if (golden) await tell(adultsOf(fam, user.uid), 'fun', { title: '⭐ A golden day!', body: `${golden.byName} wrote you a thank-you`, url: 'family/#feed', tag: `golden-${date}` });
-      return json({ entry, ...(golden ? { golden: postOut(golden, user, { own: true, familyName: fam.name }) } : {}) });
+      // ⭐ The day just turned golden: the dogs say thank you.
+      const golden = ['walk', 'park', 'treat'].includes(entry.kind) && !isGolden(list.slice(0, -1)) && isGolden(list) ? await goldenDay(db, fam, date, list) : null;
+      if (golden) await tell(adultsOf(fam, user.uid), 'fun', { title: `⭐ A golden day! — ${golden.byName}`, body: golden.text, url: 'family/#home', tag: `golden-${date}` });
+      return json({ entry, ...(golden ? { golden } : {}) });
     }
     // Bringing over the current app's history: replaces what an earlier import added, day by day.
     if (method === 'PUT' && !m[2]) {
@@ -643,10 +644,11 @@ export async function familyApi(req, env, path, ctx = null) {
     return json({ error: 'not found' }, 404);
   }
   // A linked calendar's events: fetched here (phones can't read other sites), from calendar hosts only.
-  if (path === '/ics' && method === 'GET') {
+  // The secret link comes in the request body (POST), never in a URL that could end up in logs.
+  if (path === '/ics' && method === 'POST') {
     if (!(await underLimit(db, `rate:${user.uid}:ics:${Math.floor(Date.now() / 60000)}`, 30, 120))) return json({ error: 'too many — try again in a minute' }, 429);
     let target;
-    try { target = new URL((url(req).searchParams.get('url') || '').trim().replace(/^webcals?:/i, 'https:')); } catch { return json({ error: 'not a link' }, 400); }
+    try { target = new URL(String(body.url || '').trim().replace(/^webcals?:/i, 'https:')); } catch { return json({ error: 'not a link' }, 400); }
     const host = target.hostname.toLowerCase();
     if (!(target.protocol === 'https:' && (host.endsWith('.icloud.com') || host === 'calendar.google.com' || host === 'outlook.live.com' || host === 'outlook.office365.com'))) return json({ error: 'only iCloud, Google or Outlook calendar links' }, 400);
     if (env.DEMO) return json({ error: 'linked calendars need the live connector' }, 400);
@@ -964,16 +966,10 @@ export async function familyApi(req, env, path, ctx = null) {
       if (!a.pets.length) return json({ error: 'which dog is going?' }, 400);
       if (!a.dropAt && !a.pickAt) return json({ error: 'when is it?' }, 400);
       await save([...list, a]);
-      // It goes on the feed, so the other driver can take the open leg from there.
-      const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '',
-        text: '', photo: '', appt: a.id, tags: a.pets, tagNames: Object.fromEntries(a.pets.map((id) => [id, fam.members.find((x) => x.id === id)?.name || ''])), tagKinds: Object.fromEntries(a.pets.map((id) => [id, 'pet'])),
-        audience: 'family', likes: [], comments: [], at: Date.now() };
-      await db.put(`post:${fam.fid}:${post.id}`, post);
-      await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
       const open = (a.dropAt && !a.dropBy) || (a.pickAt && !a.pickBy);
       const start = startOf(a);
       await tell(adultsOf(fam, user.uid), 'appts', { title: `${APPT_TYPES[a.type].icon} ${me.name} booked ${APPT_TYPES[a.type].label.toLowerCase()} for ${a.pets.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ')}`,
-        body: `${new Date(`${start.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}${open ? ' — can you drive?' : ''}`, url: 'family/#dogs', tag: `appt-${a.id}` });
+        body: `${new Date(`${start.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}${open ? ' — can you drive?' : ''}`, url: 'family/#home', tag: `appt-${a.id}` });
       return json({ appt: a });
     }
     const a = list.find((x) => x.id === m[2]);
@@ -984,7 +980,7 @@ export async function familyApi(req, env, path, ctx = null) {
       if (body.claim === 'drop' || body.claim === 'pick') {
         a[`${body.claim}By`] = body.release ? '' : me.id;
         await tell(adultsOf(fam, user.uid), 'appts', { title: body.release ? `🚗 ${me.name} can't do the ${body.claim === 'drop' ? 'drop-off' : 'pick-up'} after all` : `🚗 ${me.name} will do the ${body.claim === 'drop' ? 'drop-off' : 'pick-up'}`,
-          body: `${APPT_TYPES[a.type].label} for ${a.pets.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ')}`, url: 'family/#dogs', tag: `appt-${a.id}` });
+          body: `${APPT_TYPES[a.type].label} for ${a.pets.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ')}`, url: 'family/#home', tag: `appt-${a.id}` });
       }
       if (body.edit) Object.assign(a, cleanAppt({ ...a, ...body.edit }, ctx));
       let next = null;
@@ -1113,7 +1109,7 @@ export async function familyApi(req, env, path, ctx = null) {
       // One live game at a time per set: starting again ends the old one.
       const rest = games.map((x) => (x.packId === p.id && x.status === 'live' ? { ...x, status: 'done' } : x));
       await db.put(`bingogames:${fam.fid}`, [g, ...rest].slice(0, 20));
-      await tell(adultsOf(fam, user.uid), 'fun', { title: `🎲 ${me.name} started ${g.title} bingo`, body: 'Grab your card', url: 'family/#feed', tag: `bingo-${g.id}` });
+      await tell(adultsOf(fam, user.uid), 'fun', { title: `🎲 ${me.name} started ${g.title} bingo`, body: 'Grab your card', url: 'family/#bingo', tag: `bingo-${g.id}` });
       return json({ game: gameOut(g) });
     }
     const g = what === 'games' && id ? games.find((x) => x.id === id) : null;
@@ -1140,7 +1136,7 @@ export async function familyApi(req, env, path, ctx = null) {
       const now = bingoLines(c.marks).length;
       let bingo = null;
       if (now > had && !g.winners.some((w) => w.id === me.id)) {
-        // BINGO: you're on the winners list, and it goes on the feed.
+        // BINGO: you're on the winners list, and the grown-ups hear about it.
         const fresh = (await db.get(`bingogames:${fam.fid}`)) || [];
         const live = fresh.find((x) => x.id === g.id);
         if (live) {
@@ -1148,12 +1144,8 @@ export async function familyApi(req, env, path, ctx = null) {
           live.winners.push({ id: me.id, name: me.name, at: Date.now() });
           g.winners = live.winners;
           await db.put(`bingogames:${fam.fid}`, fresh);
-          const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '',
-            text: `🎉 BINGO! ${first ? 'First to win' : `Bingo #${live.winners.length}`} at ${g.title} bingo 🎲`, photo: '', tags: [], tagNames: {}, tagKinds: {}, audience: 'family', likes: [], comments: [], at: Date.now(), bingo: g.id };
-          await db.put(`post:${fam.fid}:${post.id}`, post);
-          await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
           bingo = { first };
-          await tell(adultsOf(fam, user.uid), 'fun', { title: `🎉 BINGO! ${me.name} ${first ? 'won' : 'got one too'}`, body: `${g.title} bingo`, url: 'family/#feed', tag: `bingo-${g.id}` });
+          await tell(adultsOf(fam, user.uid), 'fun', { title: `🎉 BINGO! ${me.name} ${first ? 'won' : 'got one too'}`, body: `${g.title} bingo`, url: 'family/#bingo', tag: `bingo-${g.id}` });
         }
       }
       return json({ ...(await view(c)), bingo });
@@ -1227,20 +1219,9 @@ export async function familyApi(req, env, path, ctx = null) {
       return json(await view());
     }
     if (act === '/outcome' && method === 'POST') {
-      const had = s.outcome[c.id];
       if (body.outcome && !OUTCOMES[body.outcome]) return json({ error: 'how did it end?' }, 400);
       if (body.outcome) s.outcome[c.id] = body.outcome; else delete s.outcome[c.id];
       await save(seasons);
-      // The ending goes on the feed, with who called it.
-      if (body.outcome && body.outcome !== had) {
-        const called = [];
-        for (const x of players) if (((await db.get(cardKey(x.id))) || {})[c.id]?.outcome === body.outcome) called.push(x.name);
-        const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '',
-          text: `${OUTCOMES[body.outcome]} — ${c.a} & ${c.b} (${s.title}). ${called.length ? `🔮 Called it: ${called.join(', ')}!` : 'Nobody saw that coming! 😱'}`,
-          photo: '', tags: [], tagNames: {}, tagKinds: {}, audience: 'family', likes: [], comments: [], at: Date.now() };
-        await db.put(`post:${fam.fid}:${post.id}`, post);
-        await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
-      }
       return json(await view());
     }
     return json({ error: 'not found' }, 404);
@@ -1329,12 +1310,8 @@ export async function familyApi(req, env, path, ctx = null) {
     if (method === 'DELETE') {
       if (t.role === 'owner') return json({ error: "the family's creator can't be removed" }, 400);
       if (!(me.role === 'owner' || self || !t.uid)) return json({ error: 'not allowed' }, 403);
-      fam.members = fam.members.filter((x) => x.id !== t.id);
-      for (const x of fam.members) x.shareWith = (x.shareWith || []).filter((id) => id !== t.id);
-      await db.put(`family:${fam.fid}`, fam);
-      await db.del(`data:${fam.fid}:${t.id}`);
-      await db.del(`dataprev:${fam.fid}:${t.id}`);
-      if (t.uid) await forgetInChats(db, fam.fid, t.id, false);
+      // Removing yourself is leaving: the same clean-up as /leave.
+      await removeMember(db, fam, t, { keepPosts: !self });
       if (t.uid) { const u = await db.get(`user:${t.uid}`); if (u) { u.families = u.families.filter((f) => f !== fam.fid); await db.put(`user:${u.uid}`, u); } }
       return json({ ok: true });
     }
@@ -1476,8 +1453,10 @@ export async function familyApi(req, env, path, ctx = null) {
     }
   }
 
+  // ---- 🏠 Home: requests and groceries ----
+  { const r = await homeRoutes({ path, method, body, db, user, loadFamily, meIn, sealed, clean, randomId, tell, json }); if (r) return r; }
   // ---- 📖 threads ----
-  { const r = await threadRoutes({ path, method, body, db, user, saveUser, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
+  { const r = await threadRoutes({ path, method, body, db, user, saveUser, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url: () => url(req), blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 📷 albums (family only) ----
   { const r = await albumRoutes({ path, method, body, db, loadFamily, meIn, sealed, clean, randomId, json, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 🛒 the Market (family, and friends' families by default) ----
@@ -1809,8 +1788,9 @@ export function petNames(people) {
   if (other && unset === 1) return [...set, other];
   return [...set.filter((x) => !['mom', 'dad'].includes(x.toLowerCase())), 'Mom', 'Dad'];
 }
-// The dogs' thank-you post for a golden day (once per day; the family can turn it off).
-async function goldenDayPost(db, fam, date, list) {
+// The dogs' thank-you for a golden day (once per day; the family can turn it off). It's the
+// notification and the cheer on the phone that logged it; since 2.0 nothing goes on the old feed.
+async function goldenDay(db, fam, date, list) {
   if (fam.goldenPosts === false || !(fam.modules || MODULES).includes('dogs')) return null;
   const dogs = fam.members.filter((x) => x.kind === 'pet' && x.species === 'dog');
   if (!dogs.length || (await db.get(`goldenpost:${fam.fid}:${date}`))) return null;
@@ -1822,13 +1802,7 @@ async function goldenDayPost(db, fam, date, list) {
   const { text, used } = goldenMessage({ pets: dogs.map((d) => d.name), people, day: dayHighlights(list), recent });
   await db.put(`goldenmsg:${fam.fid}`, [used, ...recent].slice(0, 4));
   const names = dogs.map((d) => d.name);
-  const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: dogs[0].id, byUid: null, fromPets: dogs.map((d) => d.id), golden: date,
-    byName: names.length > 1 ? `${names.slice(0, -1).join(', ')} & ${names.at(-1)}` : names[0], byAvatar: dogs[0].avatar || '', text, photo: '',
-    tags: dogs.map((d) => d.id), tagNames: Object.fromEntries(dogs.map((d) => [d.id, d.name])), tagKinds: Object.fromEntries(dogs.map((d) => [d.id, 'pet'])),
-    audience: 'family', likes: [], comments: [], at: Date.now() };
-  await db.put(`post:${fam.fid}:${post.id}`, post);
-  await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
-  return post;
+  return { golden: date, byName: names.length > 1 ? `${names.slice(0, -1).join(', ')} & ${names.at(-1)}` : names[0], fromPets: dogs.map((d) => d.id), text };
 }
 const shiftDay = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const validTz = (tz) => { if (typeof tz !== 'string' || tz.length > 64) return false; try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; } };
@@ -1885,7 +1859,18 @@ async function forgetInChats(db, fid, memberId, all) {
   const r = await chatHub(db, fid).call('forget', { member: memberId, all }).catch(() => null);
   for (const id of r?.files || []) await deletePhoto(db.blobs, fid, id, db).catch(() => {});
 }
-async function removeMember(db, fam, t, { keepPosts = true } = {}) {
+// The families someone can still reach after leaving one: those they're in, and the families
+// those are connected to. What they wrote there stays.
+async function stillReaches(db, uid, leaving) {
+  const out = new Set();
+  for (const f of ((await db.get(`user:${uid}`))?.families || [])) {
+    if (f === leaving) continue;
+    out.add(f);
+    for (const c of (await db.get(`family:${f}`))?.connections || []) out.add(c);
+  }
+  return out;
+}
+async function removeMember(db, fam, t, { keepPosts = true, reach = null } = {}) {
   fam.members = fam.members.filter((x) => x.id !== t.id);
   for (const x of fam.members) x.shareWith = (x.shareWith || []).filter((id) => id !== t.id);
   await db.put(`family:${fam.fid}`, fam);
@@ -1894,6 +1879,9 @@ async function removeMember(db, fam, t, { keepPosts = true } = {}) {
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) await db.del(`bingocard:${fam.fid}:${g.id}:${t.id}`);
   for (const s of (await db.get(`picks:${fam.fid}`)) || []) await db.del(`pickcard:${fam.fid}:${s.id}:${t.id}`);
   if (t.uid) await forgetInChats(db, fam.fid, t.id, !keepPosts);
+  // However they leave, their requests go and what they'd taken is open again; things they put on the shared grocery list stay (the household's list).
+  const reqs = (await db.get(`requests:${fam.fid}`)) || [];
+  if (reqs.some((r) => r.by === t.id || r.claimedBy === t.id)) await db.put(`requests:${fam.fid}`, reqs.filter((r) => r.by !== t.id).map((r) => (r.claimedBy === t.id ? { ...r, status: r.status === 'claimed' ? 'open' : r.status, claimedBy: '', claimedName: '' } : r)));
   if (keepPosts || !t.uid) return;
   // The family keeps its dog-care log, without their name on it.
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) {
@@ -1906,7 +1894,42 @@ async function removeMember(db, fam, t, { keepPosts = true } = {}) {
     }));
   }
   await scrubPosts(db, fam.fid, t.uid, t.id);
-  for (const c of fam.connections || []) await scrubPosts(db, c, t.uid, null);
+  await scrubThreads(db, fam.fid, t.uid, t.id);
+  // Friends' families: their comments and replies there go — unless they can still reach that
+  // family another way (they're in it, or in another family connected to it).
+  const reached = reach || (await stillReaches(db, t.uid, fam.fid));
+  for (const c of fam.connections || []) if (!reached.has(c)) { await scrubPosts(db, c, t.uid, null); await scrubThreads(db, c, t.uid, null); }
+}
+// Removes one person's threads (with their screenshots, PDFs and reports) and their replies,
+// votes, ▲s, tags, reads and follows from a family's threads.
+async function scrubThreads(db, fid, uid, memberId) {
+  const ids = (await db.get(`threads:${fid}`)) || [];
+  const keep = [];
+  for (const id of ids) {
+    const t = await db.get(`thread:${fid}:${id}`);
+    if (!t) continue;
+    if (t.byUid === uid) {
+      for (const x of [...(t.shots || []), ...(t.docs || []), ...t.replies.flatMap((r) => r.shots || [])]) await deletePhoto(db.blobs, fid, x.id, db).catch(() => {});
+      await db.del(`thread:${fid}:${id}`);
+      await db.del(`report:${fid}:thread:${id}`);
+      continue;
+    }
+    keep.push(id);
+    const before = JSON.stringify(t);
+    const gone = new Set(t.replies.filter((r) => r.uid === uid).map((r) => r.id));
+    for (const r of t.replies) if (gone.has(r.id)) for (const x of r.shots || []) await deletePhoto(db.blobs, fid, x.id, db).catch(() => {});
+    t.replies = t.replies.filter((r) => !gone.has(r.id)).map((r) => ((r.ups || []).includes(uid) ? { ...r, ups: r.ups.filter((u) => u !== uid) } : r));
+    if (gone.has(t.best)) t.best = null;
+    if (t.reads?.[uid]) { t.reads = { ...t.reads }; delete t.reads[uid]; }
+    t.followers = (t.followers || []).filter((u) => u !== uid);
+    t.to = (t.to || []).filter((u) => u !== uid);
+    if (t.tagUids?.includes(uid)) { t.tagUids = t.tagUids.filter((u) => u !== uid); t.tags = (t.tags || []).filter((m) => m !== memberId); }
+    if (t.poll?.votes?.[uid] != null) { t.poll = { ...t.poll, votes: { ...t.poll.votes } }; delete t.poll.votes[uid]; }
+    // "Last reply by" no longer names them.
+    if (gone.size && t.lastByUid === uid) { const last = t.replies.at(-1); Object.assign(t, last ? { lastAt: last.at, lastByUid: last.uid, lastByName: last.name } : { lastAt: t.at, lastByUid: t.byUid, lastByName: t.byName }); }
+    if (JSON.stringify(t) !== before) await db.put(`thread:${fid}:${id}`, t);
+  }
+  if (keep.length !== ids.length) await db.put(`threads:${fid}`, keep);
 }
 // Removes one person's posts (by member id) and comments / likes (by account) from a family's feed.
 async function scrubPosts(db, fid, uid, memberId) {
@@ -1922,10 +1945,16 @@ async function scrubPosts(db, fid, uid, memberId) {
   }
   if (keep.length !== ids.length) await db.put(`feed:${fid}`, keep);
 }
-// Everything a family has: posts, member data, the care log, and its links to other families.
+// Everything a family has: posts, threads, member data, the care log, and its links to other families.
 async function deleteFamily(db, fam) {
   for (const id of (await db.get(`feed:${fam.fid}`)) || []) { await db.del(`post:${fam.fid}:${id}`); await db.del(`report:${fam.fid}:${id}`); }
   await db.del(`feed:${fam.fid}`);
+  for (const id of (await db.get(`threads:${fam.fid}`)) || []) { await db.del(`thread:${fam.fid}:${id}`); await db.del(`report:${fam.fid}:thread:${id}`); }
+  await db.del(`requests:${fam.fid}`);
+  await db.del(`groceries:${fam.fid}`);
+  await db.del(`threads:${fam.fid}`);
+  // Who uploaded each file goes with the files.
+  for (const o of (await db.blobs?.list(`f/${fam.fid}/`).catch(() => [])) || []) { const pid = o.key.split('/')[2]?.replace(/-(full|thumb|doc)$/, ''); if (pid) await db.del(blobMetaKey(fam.fid, pid)); }
   await deleteFamilyPhotos(db.blobs, fam.fid).catch(() => {});
   for (const x of fam.members) { await db.del(`data:${fam.fid}:${x.id}`); await db.del(`dataprev:${fam.fid}:${x.id}`); }
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) await db.del(`care:${fam.fid}:${d}`);
@@ -1966,10 +1995,14 @@ export async function deleteAccount(db, user) {
     if (!me) continue;
     if (me.role === 'owner') {
       const next = fam.members.find((x) => x.kind === 'person' && x.uid && x.uid !== user.uid && x.relation !== 'child');
-      if (!next) { await deleteFamily(db, fam); summary.familiesDeleted.push(fam.name); continue; }
+      if (!next) {
+        // The family goes; what they wrote in friends' families goes too.
+        for (const c of fam.connections || []) { await scrubPosts(db, c, user.uid, null); await scrubThreads(db, c, user.uid, null); }
+        await deleteFamily(db, fam); summary.familiesDeleted.push(fam.name); continue;
+      }
       next.role = 'owner'; summary.familiesHandedOver.push({ family: fam.name, to: next.name });
     } else summary.familiesLeft.push(fam.name);
-    await removeMember(db, fam, me, { keepPosts: false });
+    await removeMember(db, fam, me, { keepPosts: false, reach: new Set() }); // the whole account goes
   }
   for (const x of user.sessions || []) await db.del(`session:${x.t}`);
   await db.del(`keybackup:${user.uid}`);

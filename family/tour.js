@@ -12,15 +12,16 @@ export const SLIDES = [
   ] },
   { id: 'home', eyebrow: '🏠 Home', title: 'What the household needs today', go: 'home', cards: [
     ['✨', 'Next up', 'The one thing to do next and when: a walk, a run, calling Mom, a new episode.'],
-    ['☀️', 'Your day and today', 'The best windows for a run or a walk, and what’s happening at home today.'],
+    ['🔔', 'Needs you', 'A hand someone asked for, a ride nobody’s driving, a thread you’re tagged in — and 🙋 Ask for a hand.'],
+    ['🛒', 'Groceries', 'One list the whole household shares: add, tick, clear.'],
     ['🏆', 'The house', 'The Gold Card chore race, and cooking, dishes and laundry: log it for you, your partner or both.'],
-    ['🐾', 'The dogs', 'Fed, walked, park, treats, meds, and appointments with who drives.'],
+    ['🐾', 'The dogs', 'Fed, walked, park, treats, meds; appointments, vaccines and more under More about the dogs.'],
   ] },
   { id: 'threads', eyebrow: '📖 Threads', title: 'Longer conversations, and your photos', go: 'threads', cards: [
     ['📚', 'Write it up', 'Learned, Talk, How-to, ❓ Ask or 📊 Poll — for just you two, the family, or friends’ families.'],
     ['📷', 'Screenshots and 📎 PDFs', 'Add plan comparisons, tables or a whole deck as a PDF: pick, paste or drag them in.'],
     ['🏷️', 'Tag people', 'Tap a face or type @. They get a notification, and you see when they’ve seen it.'],
-    ['🗂', 'Boards', 'Move a thread to another board any time, or add your own, like 🎓 School.'],
+    ['🔎', 'Search and ★ Saved', 'Find anything said in a thread — searched on your phone. ☆ Save the ones you’ll want again.'],
     ['📷', 'Photos', 'Your albums: link a Google Photos album, or copy favorites in. Only the family sees them.'],
   ] },
   { id: 'chats', eyebrow: '💬 Chats', title: 'Message the grown-ups', go: 'chats', cards: [
@@ -38,7 +39,7 @@ export const SLIDES = [
   { id: 'calendar', eyebrow: 'Calendar and 🍿 Watch', title: 'Your days, and your shows', go: 'calendar', cards: [
     ['📅', 'One family calendar', 'Everyone’s events, ⭐ golden days, ❤️ dates, 🐾 appointments, linked phone calendars.'],
     ['👔', 'Dress for the day', 'What each of you should wear, from the weather where you’ll be.'],
-    ['🍿', 'Watch', 'Where you’re up to, 🆕 new episodes, 🕐 up next, bingo and couples picks.'],
+    ['🍿', 'Watch', 'In 💞 Us: where you’re up to, 🆕 new episodes, 🕐 up next, bingo and couples picks.'],
   ] },
   { id: 'me', eyebrow: 'Health and Me', title: 'Each person’s own', go: 'me', cards: [
     ['🥗', 'Health', 'Diet (meal plans, logging, groceries) and fitness (lifting, runs, rides). Private until you share.'],
@@ -59,17 +60,17 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-11a',
-  title: 'New: a simpler OurPawmily',
-  text: 'Five places along the bottom: Home, Us, Calendar, Threads and Health',
+  id: '2026-11b',
+  title: 'New on Home: Needs you and Groceries',
+  text: 'Ask the family for a hand, share one grocery list, and search your threads',
   slides: ['new', 'help'],
 };
 SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'A simpler OurPawmily', cards: [
-  ['🏠', 'Home', 'Today, the house and the dogs on one screen: Next up, your day, chores and the Gold Card, the dogs.'],
-  ['📖', 'Threads, and 📷 Photos', 'Threads have their own place at the bottom, with your albums under Photos.'],
-  ['💪', 'Health', 'Diet and fitness, where Trackers used to be.'],
-  ['🗂', 'Moments and the news are gone', 'Your old posts are kept, not deleted. The health meter is retired.'],
-  ['🚩', 'Report and block', 'On a thread, a reply or a chat message someone else wrote: tap ⋯ or the message.'],
+  ['🔔', 'Needs you, on Home', '🙋 Ask for a hand (a ride, pet sitting, a meal…), see who can help, and the rides nobody’s driving yet.'],
+  ['🛒', 'Groceries', 'One list the household shares on Home. Type “milk, eggs” to add both.'],
+  ['🔎', 'Search and ★ Save threads', 'Search every thread on your phone, save the ones to find again, edit your replies and add pictures to them.'],
+  ['🏠', 'Home', 'Next up, what needs you, groceries, chores and the Gold Card, the dogs — dog details under More about the dogs.'],
+  ['🗂', 'Five places along the bottom', 'Home · Us · Calendar · Threads (with 📷 Photos) · Health. Old posts are kept, not deleted.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);

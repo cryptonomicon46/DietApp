@@ -78,9 +78,11 @@ npx wrangler deploy
 
 ## Dog documents (vaccine records, PDFs, photos)
 
-(Legacy storage: moves to the family's file store in a later phase.)
+Signed in, the trackers store dog documents and adoption-board screenshots in the family's
+file store (R2, `/v2/families/:fid/photos/:id?size=doc`), locked with the family key.
 
-The app stores dog documents in the same HOUSEHOLD KV namespace, under
+(Legacy storage, read only for files shared before 2.0 and by phones that still share through a
+code without an account:) the HOUSEHOLD KV namespace, under
 `/household/<code>/file/<id>` (PDF or image, up to 10 MB each). This needs the
 updated worker. Deploy it once:
 
@@ -105,9 +107,10 @@ updating, and a private family subscription link will replace it later.
 
 ## Linked calendars
 
-The update also adds `GET /ics?code=<household>&url=<calendar link>`, which fetches a
-public iCloud (`*.icloud.com`), Google (`calendar.google.com`) or Outlook calendar for
-a known household — phones can't fetch those directly because of browser rules.
+The connector fetches a linked iCloud (`*.icloud.com`), Google (`calendar.google.com`) or
+Outlook calendar for the app — phones can't fetch those directly because of browser rules.
+The secret calendar link is sent in the request body (`POST /v2/ics {url}`; the older trackers
+use `POST /ics {code, url}`), never in a URL.
 
 ## OurPawmily Families (preview): Google sign-in
 

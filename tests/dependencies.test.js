@@ -10,8 +10,10 @@ const files = (dir, ext = '.js') => readdirSync(new URL(`../${dir}`, import.meta
 
 test('the legacy household code is used only where the migration list says', () => {
   const uses = [...files('js'), ...files('family')].filter((f) => /\/household\/|sync\.settings\(\)|sync\.household\(\)|sync\.ensure\(\)/.test(read(f))).sort();
+  // 2.0 Phase 2: nothing creates a household code any more.
+  assert.doesNotMatch(read('js/sync.js'), /ensure\(|newHouseholdCode|async join\(|async rotate\(/, 'no code is ever created, joined or changed');
   assert.deepEqual(uses, [
-    'js/app.js', //     sync.ensure() at start-up (new codes: Phase 2), the legacy assistant route
+    'js/app.js', //     the legacy assistant route for phones still sharing through a code
     'js/calTab.js', //  linked calendars through the connector; the old subscribe link (not shown)
     'js/dogs.js', //    dog documents and adoption photos (move to the family file store: Phase 2)
     'js/recover.js', // 🛟 Recover reads old shared copies

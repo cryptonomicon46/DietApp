@@ -100,4 +100,6 @@ This is the revised roadmap, not an automatically authorized queue. The source's
 
 Phase 1 removes Connector URL, server/README instructions, WHOOP/Garmin CSV import and household-code controls from normal Devices UI. Do not pretend unsupported integrations are connected. Later integration work must verify official provider terms; proposal API pricing/eligibility claims are not approved facts. Do not build password-based Garmin scrapers or assume Strava satisfies household sharing/AI requirements.
 
+**Status (2026-10-28):** Phases 0 and 1 are built, reviewed and merged to `main`; the Worker deploy is pending. Two Phase 0–1 items remain open — relabeling Thread notifications that still use the `feed` kind, and the linked-calendar secret sent in a URL (audit S1) — plus the performance gaps listed in BUILD_PROGRESS.md. Evidence and the full gap list are in BUILD_PROGRESS.md.
+
 At the Phase 0–1 review gate report exact commits/files, security fixes, actual test results, navigation evidence, every removed code surface, remaining backend dependencies, before/after network measurements, regressions and implications for Phase 2. Do not deploy without approval.
