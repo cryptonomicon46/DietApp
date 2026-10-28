@@ -50,6 +50,7 @@ import { DEFAULT_AREA, areaKey, scoutArea } from './scout.js';
 import { planOuting, swapStop } from './outing.js';
 import { checkLinks } from './links.js';
 import { threadRoutes } from './threads.js';
+import { homeRoutes } from './home.js';
 import { nudgeRoutes } from './nudges.js';
 import { tvRoutes } from './tv.js';
 import { movieRoutes } from './movies.js';
@@ -1477,6 +1478,8 @@ export async function familyApi(req, env, path, ctx = null) {
     }
   }
 
+  // ---- 🏠 Home: requests and groceries ----
+  { const r = await homeRoutes({ path, method, body, db, user, loadFamily, meIn, sealed, clean, randomId, tell, json }); if (r) return r; }
   // ---- 📖 threads ----
   { const r = await threadRoutes({ path, method, body, db, user, saveUser, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url: () => url(req), blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 📷 albums (family only) ----
@@ -1908,6 +1911,9 @@ async function removeMember(db, fam, t, { keepPosts = true } = {}) {
   }
   await scrubPosts(db, fam.fid, t.uid, t.id);
   await scrubThreads(db, fam.fid, t.uid, t.id);
+  // Their requests go; things they put on the shared grocery list stay (the household's list).
+  const reqs = (await db.get(`requests:${fam.fid}`)) || [];
+  if (reqs.some((r) => r.by === t.id)) await db.put(`requests:${fam.fid}`, reqs.filter((r) => r.by !== t.id).map((r) => (r.claimedBy === t.id ? { ...r, status: r.status === 'claimed' ? 'open' : r.status, claimedBy: '', claimedName: '' } : r)));
   for (const c of fam.connections || []) { await scrubPosts(db, c, t.uid, null); await scrubThreads(db, c, t.uid, null); }
 }
 // Removes one person's threads (with their screenshots, PDFs and reports) and their replies,
@@ -1958,6 +1964,8 @@ async function deleteFamily(db, fam) {
   for (const id of (await db.get(`feed:${fam.fid}`)) || []) { await db.del(`post:${fam.fid}:${id}`); await db.del(`report:${fam.fid}:${id}`); }
   await db.del(`feed:${fam.fid}`);
   for (const id of (await db.get(`threads:${fam.fid}`)) || []) { await db.del(`thread:${fam.fid}:${id}`); await db.del(`report:${fam.fid}:thread:${id}`); }
+  await db.del(`requests:${fam.fid}`);
+  await db.del(`groceries:${fam.fid}`);
   await db.del(`threads:${fam.fid}`);
   // Who uploaded each file goes with the files.
   for (const o of (await db.blobs?.list(`f/${fam.fid}/`).catch(() => [])) || []) { const pid = o.key.split('/')[2]?.replace(/-(full|thumb|doc)$/, ''); if (pid) await db.del(blobMetaKey(fam.fid, pid)); }

@@ -19,6 +19,7 @@ export const NOTIFY_KINDS = {
   chat: '💬 Messages from your family',
   us: '💞 Plans, answers and notes',
   appts: '🐾 Dog appointments and vaccines',
+  requests: '🙋 Requests for a hand',
   events: '📅 Calendar reminders',
   // Still stored as 'feed' (the old Moments setting), so everyone keeps the choice they made.
   feed: '📖 Threads: tags and replies',
