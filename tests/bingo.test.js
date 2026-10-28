@@ -28,7 +28,7 @@ test('each card has 24 different squares around a free middle; lines include the
   assert.equal(bingoLines(marks).length, 2);
 });
 
-test('a game: a set, everyone\'s own card, bingo goes on the feed once, nobody outside sees it', async () => {
+test('a game: a set, everyone\'s own card, bingo is told once, never posted to the old feed, nobody outside sees it', async () => {
   const m = new Map();
   const env = { DEMO: true, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
   const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path); return { status: r.status, ...r.data }; };
@@ -66,7 +66,7 @@ test('a game: a set, everyone\'s own card, bingo goes on the feed once, nobody o
   await call(`${B}/games/${game.id}/mark`, sam, 'POST', { i: 14 });
   assert.equal((await call(`${B}/games/${game.id}/mark`, sam, 'POST', { i: 14 })).bingo, null);
   const feed = await call('/feed', pat);
-  assert.equal(feed.posts.filter((p) => /BINGO/.test(p.text)).length, 1);
+  assert.equal(feed.posts.filter((p) => /BINGO/.test(p.text)).length, 0, 'nothing goes on the old feed (2.0)');
   assert.equal((await call(`${B}/games/${game.id}/mark`, sam, 'POST', { i: 12 })).status, 400, 'the free square is always on');
 
   // The family's creator (or whoever started it) can end it; then nobody can mark.

@@ -1,4 +1,4 @@
-// 💑 Couples picks: private picks that lock and reveal, scoring, endings on the feed.
+// 💑 Couples picks: private picks that lock and reveal, scoring, endings (no longer posted to the old feed).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { familyApi, TERMS_VERSION } from '../server/family.js';
@@ -14,7 +14,7 @@ test('couples from a pasted list; scoring rewards calls and punishes picking eve
   assert.equal(locked(season, 'c2'), false);
 });
 
-test('a season: picks stay private until something happens, then lock; the ending goes on the feed', async () => {
+test('a season: picks stay private until something happens, then lock; the ending is not posted to the old feed', async () => {
   const m = new Map();
   const env = { DEMO: true, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
   const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path); return { status: r.status, ...r.data }; };
@@ -46,5 +46,5 @@ test('a season: picks stay private until something happens, then lock; the endin
   assert.equal(board.sam, 2 - 1 + 5, 'fight +2, cry never happened −1, called the ending +5');
   assert.equal(board.Pat, -1);
   const feed = await call('/feed', pat);
-  assert.match(feed.posts[0].text, /Al & Bo.*Called it: sam/);
+  assert.equal(feed.posts.length, 0, 'nothing goes on the old feed (2.0)');
 });

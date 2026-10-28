@@ -365,32 +365,150 @@ WIDE?.addEventListener?.('change', () => {
   ({ home: homeView, threads: threadsPage, calendar: calendarView })[state.view]?.();
 });
 
-// 🏠 Home: what the household needs to know or do today — Next up, your day, today, then the
-// house (chores, the Gold Card) and the dogs.
+// 🏠 Home: what the household needs to know or do — Next up, 🙋 what needs you (a hand someone
+// asked for, a ride without a driver, a thread you're tagged in), the shared 🛒 groceries, the
+// house and the dogs' care, and pinned threads. Dog details wait behind "More about the dogs".
 async function homeView() {
   const { house, dogPart, fame } = petsParts();
   const h = new Date().getHours(), first = esc((me()?.name || state.user?.name || '').split(' ')[0]);
   const top = `<h1 class="home-hi">${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}. Here’s your ${esc(new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))}.</h1>
-    <div id="hello"></div><section class="nextup" id="nextUp" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section><div id="digest"></div>
-    <section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>
-    <section class="card today" id="today"><div class="skeleton line"></div></section>
+    <div id="hello"></div><section class="nextup" id="nextUp" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section>
+    <section class="card attn" id="attn" aria-labelledby="attnH" style="${homeH('attn')}"><div class="skeleton line"></div></section>
+    <section class="card groc" id="groc" aria-labelledby="grocH" style="${homeH('groc')}"><div class="skeleton line"></div></section>
     <div id="goldNews"></div><section class="card movies" id="moviesCard" hidden></section>`;
-  // 🖥 Wide: today and the house on one side, the dogs on the other.
-  $('#view').innerHTML = `${demoBanner()}${wide() && dogPart
-    ? `<div class="wide2 pets"><div class="col-main">${top}${house}${fame}</div><div class="col-main">${dogPart}</div></div>`
-    : `${top}${house}${dogPart}${fame}`}`;
+  const pins = '<section class="card pins" id="pins" hidden></section>';
+  // 🖥 Wide: what needs doing on one side, the house and the dogs on the other.
+  $('#view').innerHTML = `${demoBanner()}${wide() && (house || dogPart)
+    ? `<div class="wide2 pets"><div class="col-main">${top}${pins}</div><div class="col-main">${house}${dogPart}${fame}</div></div>`
+    : `${top}${house}${dogPart}${pins}${fame}`}`;
   goldNews();
-  renderYourDay();
   renderMovies().catch(() => {});
   helloCard();
   renderNextUp().catch(() => { const el = $('#nextUp'); if (el?.querySelector('.skeleton')) el.hidden = true; });
   later(() => importUs().catch(() => {}), 10000); // once per family on this phone
+  later(() => syncVaxDue().catch(() => {}), 8000); // the dogs' vaccine dates, for the 9 AM reminders
   const dogsDone = petsFill();
-  await Promise.all([loadAppts(), loadUs(), loadThreads().catch(() => {})]);
+  // The badges' reads can be two minutes old here: coming back to the app refreshes them anyway.
+  await Promise.all([loadHome(), loadAppts(), loadUs(120000), loadThreads(120000).catch(() => {})]);
   if (state.view !== 'home') return;
-  renderToday(); usBadge(); famBadge();
-  if ($('#digest')) $('#digest').innerHTML = digestCard();
+  renderAttn(); renderGroc(); renderPins(); usBadge(); famBadge();
   await dogsDone;
+}
+
+// ---------- 🙋 requests and 🛒 groceries: what each says is locked with the family key ----------
+const home = { requests: [], groceries: [], all: false, loaded: false, at: 0 };
+const REQ_KINDS = { ride: '🚗 A ride', petsit: '🐾 Pet sitting', walk: '🦮 A dog walk', babysit: '🧸 Babysitting', meal: '🍲 A meal', errand: '🛒 An errand', other: '🙋 A hand' };
+// The cards' last height on this phone (a number, nothing they said): the space is kept while they load.
+const homeHKey = () => `fam.homeH.${state.fid}`;
+const homeH = (id) => { let h = 0; try { h = JSON.parse(LS.get(homeHKey()) || '{}')[id]; } catch { /* none */ } return `min-height:${Math.min(h || { attn: 140, groc: 330 }[id], 900)}px`; };
+function keepH(el) {
+  el.style.minHeight = '';
+  try { const all = JSON.parse(LS.get(homeHKey()) || '{}'); all[el.id] = Math.round(el.getBoundingClientRect().height); LS.set(homeHKey(), JSON.stringify(all)); } catch { /* none */ }
+}
+const openBox = async (v) => (await tryOpen(fk(), v, null)) ?? (isSealed(v) ? '🔒' : v || '');
+const lockBox = (text) => (fk() ? seal(fk(), text) : text);
+async function setHome(r) {
+  if (r.requests) home.requests = await Promise.all(r.requests.map(async (x) => ({ ...x, text: await openBox(x.box) })));
+  if (r.groceries) home.groceries = await Promise.all(r.groceries.map(async (x) => ({ ...x, text: await openBox(x.box) })));
+  if (r.request) {
+    const x = { ...r.request, text: await openBox(r.request.box) };
+    const i = home.requests.findIndex((y) => y.id === x.id);
+    if (i >= 0) home.requests[i] = x; else home.requests.push(x);
+  }
+  home.loaded = true; home.at = Date.now();
+}
+async function loadHome() {
+  const r = await shared(`/families/${state.fid}/home`).catch(() => null);
+  if (r) await setHome(r);
+}
+// 🔔 Needs you: a hand someone asked for, one you said you'd give, a ride without a driver this
+// week, a thread you're tagged in. Then your own requests, and "Ask for a hand".
+function renderAttn() {
+  const el = $('#attn');
+  if (!el) return;
+  const meId = fam().me, kid = me()?.relation === 'child', today = isoLocal(), week = shiftLocal(today, 7);
+  const when = (x) => [x.day ? dayText(x.day) : '', x.time].filter(Boolean).join(' · ');
+  const reqLine = (x, head, btns) => `<li class="attn-row"><span class="grow"><b>${head}</b><small>${esc(x.text)}</small>${when(x) ? `<small class="muted">${esc(when(x))}</small>` : ''}</span><span class="attn-acts">${btns}</span></li>`;
+  const rows = [];
+  for (const x of home.requests) {
+    if (x.status === 'open' && !x.mine && !kid) rows.push(reqLine(x, `🙋 ${esc(x.byName)} could use ${esc((REQ_KINDS[x.kind] || REQ_KINDS.other).replace(/^\S+ /, '').toLowerCase())}`, `<button type="button" class="small" data-req="claim:${x.id}">I can help</button>`));
+    else if (x.status === 'claimed' && x.claimedByMe) rows.push(reqLine(x, `💛 You’re helping ${esc(x.byName)}`, `<button type="button" class="small" data-req="done:${x.id}">✓ Done</button><button type="button" class="ghost small" data-req="claim:${x.id}">Can’t now</button>`));
+  }
+  for (const a of dogsHub.appts) {
+    if (a.status === 'done') continue;
+    for (const k of ['drop', 'pick']) {
+      const at = a[`${k}At`];
+      if (!at || a[`${k}By`] || at.slice(0, 10) < today || at.slice(0, 10) > week) continue;
+      const pets = a.pets.map((id) => member(id)?.name).filter(Boolean).join(' & ');
+      rows.push(`<li class="attn-row"><span class="grow"><b>🚗 ${esc(pets)} needs a ${k === 'drop' ? 'drop-off' : 'pick-up'}</b><small class="muted">${esc((APPT[a.type] || APPT.other)[1])} · ${esc(whenText(at))}</small></span><span class="attn-acts"><button type="button" class="small" data-claim="${k}" data-appt="${a.id}">I’ll drive</button></span></li>`);
+    }
+  }
+  for (const t of th.list.filter((x) => x.tagged && x.unread && x.aud !== 'us').slice(0, 3)) rows.push(`<li class="attn-row"><button type="button" class="attn-go" data-thread="${t.fid}:${t.id}"><b>🏷️ ${esc(t.lastAt > t.at && t.lastByName ? t.lastByName : t.byName)} tagged you</b><small>${esc(t.title)}</small></button></li>`);
+  const mine = home.requests.filter((x) => x.mine || (x.status !== 'open' && !x.claimedByMe));
+  const status = (x) => (x.status === 'done' ? 'Sorted ✓' : x.status === 'claimed' ? `${x.claimedByMe ? 'You' : esc(x.claimedName)} ${x.claimedByMe ? 'are' : 'is'} on it 💛` : 'Waiting for a hand');
+  const own = mine.map((x) => `<li class="attn-row ${x.status === 'done' ? 'done' : ''}"><span class="grow"><b>${esc(REQ_KINDS[x.kind] || REQ_KINDS.other)}${x.mine ? '' : ` · ${esc(x.byName)}`}</b><small>${esc(x.text)}</small><small class="muted">${[esc(when(x)), status(x)].filter(Boolean).join(' · ')}</small></span>
+    <span class="attn-acts">${x.mine && x.status !== 'done' ? `<button type="button" class="ghost small" data-req="done:${x.id}">✓ Sorted</button>` : ''}${x.mine || me()?.role === 'owner' ? `<button type="button" class="icon-btn" data-req="del:${x.id}" aria-label="Remove this request">✕</button>` : ''}</span></li>`).join('');
+  el.innerHTML = `<div class="row between"><h2 class="card-h" id="attnH">🔔 Needs you</h2>${kid ? '' : '<button type="button" class="small" data-act="asknew">🙋 Ask for a hand</button>'}</div>
+    ${rows.length ? `<ul class="attn-list">${rows.join('')}</ul>` : `<p class="small muted">${home.loaded ? 'Nothing needs you right now 🙌' : 'Couldn’t check just now.'}</p>`}
+    ${own ? `<h3 class="attn-sub">🙋 Requests</h3><ul class="attn-list">${own}</ul>` : ''}`;
+  keepH(el);
+}
+function askSheet() {
+  if (lockedHere()) return toast('🔒 Unlock the family on this phone first');
+  openSheet(`<div class="row between"><h2>🙋 Ask for a hand</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <form id="reqForm" class="stack">
+      <fieldset class="chips plain"><legend>What do you need?</legend>${Object.entries(REQ_KINDS).map(([k, l], i) => `<label class="chipcheck"><input type="radio" name="kind" value="${k}" ${i ? '' : 'checked'}><span>${l}</span></label>`).join('')}</fieldset>
+      <label>A few words<textarea name="text" rows="3" maxlength="300" required placeholder="e.g. A ride to the airport, my flight's at 9"></textarea></label>
+      <div class="two"><label>Day <small class="muted">(optional)</small><input type="date" name="day" min="${isoLocal()}"></label><label>Time <small class="muted">(optional)</small><input name="time" maxlength="20" placeholder="e.g. 7 AM"></label></div>
+      <p class="tiny muted">The grown-ups in ${esc(fam().name)} get a notification. ${fam().e2ee ? 'What you write is locked on this phone.' : ''}</p>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Ask</button></div>
+    </form>`);
+}
+async function sendAsk(f) {
+  const v = Object.fromEntries(new FormData(f));
+  const text = (v.text || '').trim();
+  if (!text) return;
+  f.querySelector('button:last-child').disabled = true;
+  await setHome(await api.post(`/families/${state.fid}/requests`, { kind: v.kind, day: v.day, time: v.time, box: await lockBox(text) }));
+  closeSheet(); renderAttn(); toast('🙋 Asked — the family will see it');
+}
+async function reqAct(what, id) {
+  if (what === 'del') {
+    if (!confirm('Remove this request?')) return;
+    await api.del(`/families/${state.fid}/requests/${id}`);
+    home.requests = home.requests.filter((x) => x.id !== id);
+  } else await setHome(await api.post(`/families/${state.fid}/requests/${id}/${what}`));
+  renderAttn();
+}
+// 🛒 One list for the household: add, tick, clear what's in the cart.
+function renderGroc() {
+  const el = $('#groc');
+  if (!el) return;
+  const left = home.groceries.filter((x) => !x.done), got = home.groceries.filter((x) => x.done);
+  const show = home.all ? left : left.slice(0, 8);
+  const item = (x) => `<li class="gi ${x.done ? 'got' : ''}"><button type="button" class="gtick" role="checkbox" aria-checked="${!!x.done}" data-groc="${x.id}"><i aria-hidden="true">${x.done ? '✓' : ''}</i><span>${esc(x.text)}</span></button><button type="button" class="icon-btn" data-grocdel="${x.id}" aria-label="Remove ${esc(x.text)}">✕</button></li>`;
+  el.innerHTML = `<div class="row between"><h2 class="card-h" id="grocH">🛒 Groceries</h2>${left.length ? `<span class="small muted">${left.length} to get</span>` : ''}</div>
+    ${lockedHere() ? '<p class="small muted">🔒 Unlock the family on this phone to see the list.</p>' : `<form id="grocForm" class="grocadd"><input name="item" maxlength="120" placeholder="Add milk, eggs…" aria-label="Add to the grocery list" autocomplete="off" enterkeyhint="done"><button>Add</button></form>`}
+    ${left.length ? `<ul class="glist">${show.map(item).join('')}</ul>${left.length > show.length ? `<button type="button" class="linkish small" data-act="grocall">Show all ${left.length}</button>` : ''}` : home.loaded ? '<p class="small muted">Nothing on the list. Add something and everyone sees it.</p>' : ''}
+    ${got.length ? `<details class="ggot"><summary class="small">${got.length} in the cart</summary><ul class="glist">${got.map(item).join('')}</ul><button type="button" class="linkish small" data-act="grocclear">Clear ${got.length === 1 ? 'it' : 'them'}</button></details>` : ''}`;
+  keepH(el);
+}
+async function grocAdd(f) {
+  // "milk, eggs, bread" adds three.
+  const items = f.item.value.split(/[,\n]/).map((x) => x.trim()).filter(Boolean).slice(0, 30);
+  if (!items.length) return;
+  f.item.value = '';
+  await setHome(await api.post(`/families/${state.fid}/groceries`, { items: await Promise.all(items.map(lockBox)) }));
+  renderGroc(); $('#grocForm input')?.focus();
+}
+async function grocAct(fn) { await setHome(await fn()); renderGroc(); }
+// 📌 Pinned threads, under the house and the dogs.
+function renderPins() {
+  const el = $('#pins');
+  if (!el) return;
+  const list = th.list.filter((t) => t.pinned && t.aud !== 'us' && t.own).slice(0, 4);
+  el.hidden = !list.length;
+  el.innerHTML = `<h2 class="card-h">📌 Pinned</h2>${list.map((t) => `<button type="button" class="nbrow" data-thread="${t.fid}:${t.id}"><span class="fp-i">${(THREAD_CATS[t.cat] || THREAD_CATS.learned)[0]}</span><span class="grow"><b>${t.unread ? '<i class="dot"></i>' : ''}${esc(t.title)}</b><small class="muted">${esc(boardName(t.board))} · ${ago(t.lastAt)}</small></span></button>`).join('')}`;
 }
 // 📖 Threads: the family's write-ups and questions, and its 📷 Photos (albums).
 function threadsPage() {
@@ -440,7 +558,7 @@ async function feedView() {
   renderPosts();
   later(() => moveOldPhotos().catch(() => {}), 15000); // once per family on this phone
 }
-// The first week of a month: last month's Gold Card winner tops the feed.
+// The first week of a month: last month's Gold Card winner, on Home.
 async function goldNews() {
   if (!(fam().modules || []).some((x) => x === 'dogs' || x === 'chores')) return;
   const today = isoLocal();
@@ -478,17 +596,21 @@ async function recordVaccine(a, given, due) {
     prof.vaccines = vax; prof.times = { ...(prof.times || {}), vaccines: now }; prof.updatedAt = now;
     await api.put(`/families/${state.fid}/members/${pid}/data`, { data: await sealData({ ...data, profile: prof }) });
   }
+  LS.set(`fam.vaxCheck.${state.fid}`, null);
+  syncVaxDue().catch(() => {});
 }
 // After any change to an appointment: refresh whichever screen shows them.
 async function apptChanged() {
   await loadAppts();
   if (state.view === 'home') {
-    renderComing(); renderVax(); renderSpend();
+    renderAttn(); renderComing(); renderSpend();
     // A finished vaccination changes the dog's record: show the new due date.
-    for (const p of dogsOf()) dogsHub.profiles[p.id] = (await openData(await memberData(p.id).catch(() => null)))?.profile || dogsHub.profiles[p.id];
-    renderVax();
-    const cards = $('#dogcards');
-    if (cards) cards.innerHTML = dogsOf().map((p) => dogCard(p)).join('');
+    if ($('#dogcards')) {
+      await loadDogProfiles();
+      renderVax();
+      const cards = $('#dogcards');
+      if (cards) cards.innerHTML = dogsOf().map((p) => dogCard(p)).join('');
+    }
   }
 }
 // A dog appointment someone added: live, so whoever's free can take the open leg from here.
@@ -715,28 +837,45 @@ function petsParts() {
   if (!dogs && !chores) return { house: '', dogPart: '', fame: '' };
   const house = `<section class="card gold" id="race"><div class="skeleton line"></div></section>
     ${chores ? `<h3 class="grp-h">🏠 The house</h3><section class="card care" id="careHouse"><div class="skeleton line"></div></section>` : ''}`;
+  // Each dog's page is a tap away; vaccines, appointments, spending and how happy wait behind "More".
   const dogPart = dogs ? `<h3 class="grp-h">🐾 The dogs</h3><section class="card care" id="careDogs"><div class="skeleton line"></div></section>
     <section class="card walkcard" id="walk"><div class="skeleton line"></div></section>
-    <section class="card" id="coming"><div class="skeleton line"></div></section>
-    <section class="card" id="vax" hidden></section>
-    <section class="card"><b class="small">😊 How happy are the dogs</b><div id="happy"><div class="skeleton line"></div></div></section>
-    <div class="dogcards" id="dogcards">${dogsOf().map((p) => dogCard(p)).join('')}</div>
-    <button type="button" class="ghost wide" data-act="addpet">＋ Add a pet</button>
-    <section class="card" id="spend" hidden></section>` : '';
+    <div class="dogrow">${dogsOf().map((p) => `<button type="button" class="dogchip" data-member="${p.id}">${avatar(p, 48)}<span>${esc(p.name)}</span></button>`).join('')}<button type="button" class="dogchip add" data-act="addpet"><span class="addav" aria-hidden="true">＋</span><span>Add a pet</span></button></div>
+    <details class="card dogmore" id="dogMore"><summary><b>More about the dogs</b><small class="muted">Vaccines, appointments, spending, how happy</small></summary><div id="dogMoreBody"></div></details>` : '';
   return { house, dogPart, fame: '<section id="fame"></section>' };
 }
 async function petsFill() {
   const mods = fam().modules || [];
   if (!mods.includes('dogs') && !mods.includes('chores')) return;
   renderCare(); renderRace();
-  if (!mods.includes('dogs')) return;
-  renderWalk();
+  if (mods.includes('dogs')) renderWalk();
+}
+// "More about the dogs", opened: their profiles, then vaccines, appointments, cards, spending.
+async function dogMore() {
+  const el = $('#dogMoreBody');
+  if (!el || el.dataset.on) return;
+  el.dataset.on = '1';
+  el.innerHTML = `<section id="vax" hidden></section><div id="coming"><div class="skeleton line"></div></div>
+    <div class="dogmore-h"><b class="small">😊 How happy are the dogs</b></div><div id="happy"><div class="skeleton line"></div></div>
+    <div class="dogcards" id="dogcards">${dogsOf().map((p) => dogCard(p)).join('')}</div><section id="spend" hidden></section>`;
   await loadAppts();
   renderComing();
-  await Promise.all(dogsOf().map(async (p) => { dogsHub.profiles[p.id] = (await openData(await memberData(p.id).catch(() => null)))?.profile || {}; }));
+  await loadDogProfiles();
   const cards = $('#dogcards');
   if (cards) cards.innerHTML = dogsOf().map((p) => dogCard(p)).join('');
   renderVax(); renderSpend(); renderHappy();
+}
+const loadDogProfiles = () => Promise.all(dogsOf().map(async (p) => { dogsHub.profiles[p.id] = (await openData(await memberData(p.id).catch(() => null)))?.profile || {}; }));
+// The vaccine due dates (just pet and day) go to the connector for the 9 AM "due next week"
+// reminders: checked once a day per phone, after start-up, and whenever "More" shows vaccines.
+async function syncVaxDue(force = false) {
+  if (!dogsOf().length || !(fam().modules || []).includes('dogs') || lockedHere()) return;
+  const flag = `fam.vaxCheck.${state.fid}`;
+  if (!force && LS.get(flag) === isoLocal()) return;
+  if (!force) await loadDogProfiles();
+  const due = dogsOf().flatMap((p) => (dogsHub.profiles[p.id]?.vaccines || []).filter((v) => /^\d{4}-\d{2}-\d{2}$/.test(v.due || '')).map((v) => ({ pet: p.id, due: v.due }))).sort((a, b) => (a.pet + a.due).localeCompare(b.pet + b.due));
+  if (JSON.stringify(due) !== LS.get(`fam.vaxdue.${state.fid}`)) await api.put(`/families/${state.fid}/vaxdue`, { due }).then(() => LS.set(`fam.vaxdue.${state.fid}`, JSON.stringify(due)));
+  LS.set(flag, isoLocal());
 }
 function dogCard(p) {
   const d = dogsHub.profiles[p.id] || {};
@@ -787,7 +926,7 @@ const dogCal = { list: [] };
 async function dogCalSuggestions() {
   const el = $('#dogCal');
   if (!el) return;
-  if (!calm.feeds.length && !dogCal.loaded) { dogCal.loaded = true; await loadCal().catch(() => {}); }
+  if (!calm.feeds.length && !dogCal.loaded) { dogCal.loaded = true; await loadCal({ golden: false }).catch(() => {}); }
   const { dogEvent } = await import('../js/dogcal.js');
   const cache = feedCache(), marks = dogCalMarks(), today = isoLocal(), until = shiftLocal(today, 45);
   const dogs = dogsOf().map((p) => ({ id: p.id, name: p.name }));
@@ -822,9 +961,7 @@ function renderVax() {
       rows.push([n, `<li>${avatar(p, 24)} <b>${esc(p.name)}</b> · <span class="tone-warn">${esc(v.name)} ${n < 0 ? 'overdue' : `due in ${n} day${n === 1 ? '' : 's'}`}</span> ${booked ? '<span class="muted">· booked ✓</span>' : `<button type="button" class="ghost small" data-book="${p.id}" data-vaccine="${esc(v.name)}">📅 Book it</button>`}</li>`]);
     }
   }
-  // The dates (just pet and day) go to the connector for the 9 AM "due next week" reminders.
-  const due = dogsOf().flatMap((p) => (dogsHub.profiles[p.id]?.vaccines || []).filter((v) => /^\d{4}-\d{2}-\d{2}$/.test(v.due || '')).map((v) => ({ pet: p.id, due: v.due }))).sort((a, b) => (a.pet + a.due).localeCompare(b.pet + b.due));
-  if (JSON.stringify(due) !== LS.get(`fam.vaxdue.${state.fid}`)) api.put(`/families/${state.fid}/vaxdue`, { due }).then(() => LS.set(`fam.vaxdue.${state.fid}`, JSON.stringify(due))).catch(() => {});
+  syncVaxDue(true).catch(() => {});
   el.hidden = !rows.length;
   el.innerHTML = `<b>💉 Vaccines</b><ul class="list vaxlist">${rows.sort((a, b) => a[0] - b[0]).map((r) => r[1]).join('')}</ul>`;
 }
@@ -950,7 +1087,7 @@ function apptSheet(a = null, pre = {}) {
       <div class="two"><label>🏁 Pick-up<input type="datetime-local" name="pickAt" value="${esc(v.pickAt || '')}"></label><label>Driver<select name="pickBy">${drivers(v.pickBy)}</select></label></div>
       <label>Repeat<select name="repeatWeeks">${[[0, 'Never'], [4, 'Every 4 weeks'], [6, 'Every 6 weeks'], [8, 'Every 8 weeks'], [12, 'Every 3 months']].map(([n, t]) => `<option value="${n}" ${+v.repeatWeeks === n ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
       <label>Notes<textarea name="notes" rows="2" maxlength="300">${esc(v.notes || '')}</textarea></label>
-      <p class="tiny muted">On the family 📅 calendar (drop-off and pick-up) and the feed. Only your family sees it. Leave a driver as "Anyone" and whoever's free taps to take it.</p>
+      <p class="tiny muted">On the family 📅 calendar (drop-off and pick-up), and a ride nobody's taken shows under 🔔 Needs you on Home. Only your family sees it. Leave a driver as "Anyone" and whoever's free taps to take it.</p>
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>${a ? 'Save' : 'Add'}</button></div>
     </form>`);
 }
@@ -1203,8 +1340,8 @@ function planDayOf(when, made, day) {
   return isoLocal(d);
 }
 const us = { plans: [], notes: [], partner: null, streak: 0, theirStreak: 0 };
-async function loadUs() {
-  const r = await shared(`/families/${state.fid}/us?today=${isoLocal()}`).catch(() => null);
+async function loadUs(maxAge) {
+  const r = await shared(`/families/${state.fid}/us?today=${isoLocal()}`, maxAge).catch(() => null);
   if (!r) return;
   // 🔐 Unlocked here: what it is, where, when, the note.
   us.plans = await Promise.all(r.plans.map(async (p) => ({ ...p, ...((await unlock(p.body)) || { kind: 'other', what: '🔒', locked: true }) })));
@@ -1407,6 +1544,7 @@ function plusMenu() {
   const fam4 = [
     ['writeup', '📖', 'Write it up'],
     ['eventnew', '📅', 'Event'],
+    ...(me()?.relation === 'child' ? [] : [['asknew', '🙋', 'Ask for a hand']]),
     ...((fam().modules || []).includes('dogs') ? [['apptnew', '🐾', 'Dog appt']] : []),
   ];
   openSheet(`<div class="row between"><h2>Create</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
@@ -2062,8 +2200,8 @@ async function openThreadText(t, k) {
     shots: Array.isArray(t.shots) ? await Promise.all(t.shots.map(async (x) => ({ ...x, cap: await o(x.cap) }))) : [],
     docs: Array.isArray(t.docs) ? await Promise.all(t.docs.map(async (x) => { let m = isSealed(x.meta) ? await tryOpen(k, x.meta, null) : x.meta; if (typeof m === 'string') { try { m = JSON.parse(m); } catch { m = null; } } return { ...x, name: m?.name || '🔒 PDF', pages: m?.pages || 0 }; })) : [] };
 }
-async function loadThreads() {
-  const r = await shared('/threads').catch(() => null);
+async function loadThreads(maxAge) {
+  const r = await shared('/threads', maxAge).catch(() => null);
   if (!r) return th.list;
   th.list = await Promise.all(r.threads.map(async (t) => openThreadText(t, await threadKey(t))));
   th.loaded = Date.now();
@@ -2090,6 +2228,8 @@ function threadBanner() {
   setTimeout(() => el.classList.add('out'), 7000); setTimeout(() => el.remove(), 7600);
 }
 // Coming back to the app (or a notification arriving while it's open): one quick check.
+// Back on Home after a while: the lists may have changed on someone else's phone.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.view === 'home' && home.loaded && Date.now() - home.at > 60000) loadHome().then(() => { if (state.view === 'home') { renderAttn(); renderGroc(); } }).catch(() => {}); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.family && Date.now() - th.loaded > 60000) loadThreads().then(() => { if (state.view === 'threads' && state.famTab === 'threads') threadsView(); }).catch(() => {}); });
 const unreadThreads = (us = false) => th.list.filter((t) => t.unread && (us ? t.aud === 'us' : t.aud !== 'us'));
 function famBadge() {
@@ -2575,7 +2715,7 @@ async function nextUpCtx() {
   const now = new Date(), today = isoLocal(), tomorrow = shiftLocal(today, 1);
   const wx = await walkWeather().catch(() => null);
   const hours = wx ? wx.hourly.filter((h) => h.time > now && h.time - now < 30 * NU_H) : [];
-  if (!calm.nuLoaded) { calm.nuLoaded = true; await loadCal().catch(() => {}); }
+  if (!calm.nuLoaded) { calm.nuLoaded = true; await loadCal({ golden: false }).catch(() => {}); }
   const p = partnerMember();
   const days = await Promise.all([today, tomorrow].map(async (d) => ({ d, list: await dayEntries(d).catch(() => []) })));
   const busyFor = (pid) => days.flatMap(({ d, list }) => list.filter((e) => e.time && !e.allDay && (e.who === 'both' || e.who === pid)).map((e) => {
@@ -2710,16 +2850,17 @@ async function usChanged(r) {
 // ---------- 📅 the family calendar (family only; titles, places and notes end-to-end encrypted) ----------
 const calm = { month: null, day: null, events: [], feeds: [], golden: [], rhythm: null, C: null };
 const calModule = () => import('../js/calendar.js');
-async function loadCal() {
+// Next up needs only the events; the golden days are for the calendar's month view.
+async function loadCal({ golden = true } = {}) {
   calm.C ||= await calModule();
   const [r, stats] = await Promise.all([
     shared(`/families/${state.fid}/events`).catch(() => ({ events: [], feeds: [] })),
-    (fam().modules || []).includes('dogs') ? shared(`/families/${state.fid}/dogstats?today=${isoLocal()}`).catch(() => null) : null,
+    golden && (fam().modules || []).includes('dogs') ? shared(`/families/${state.fid}/dogstats?today=${isoLocal()}`).catch(() => null) : null,
     loadAppts(), loadUs(),
   ]);
   calm.events = await Promise.all(r.events.map(async (e) => ({ ...e, ...((await unlock(e.body)) || { title: '🔒 Locked', locked: true }) })));
   calm.feeds = (await Promise.all(r.feeds.map(async (f) => ({ ...f, ...((await unlock(f.body)) || {}) })))).filter((f) => f.url);
-  calm.golden = stats?.goldenDays || [];
+  if (golden) calm.golden = stats?.goldenDays || [];
   refreshFeeds().catch(() => {});
 }
 // Linked calendars (iCloud, Google): fetched through the connector, kept on this device for 30 minutes.
@@ -3641,7 +3782,7 @@ function helpView() {
 function renderChat() {
   const log = $('#chatLog');
   if (!log) return;
-  const hello = `Hi${state.user ? ` ${esc(state.user.name.split(' ')[0])}` : ''}! I can explain how OurPawmily works — families, invites, chores, the feed and the diet app${state.user ? ' — check your account, resend an invite, or pass a problem to the maintainer' : ', help with signing in, or pass a problem to the maintainer'}.`;
+  const hello = `Hi${state.user ? ` ${esc(state.user.name.split(' ')[0])}` : ''}! I can explain how OurPawmily works — families, invites, chores, Threads and the diet app${state.user ? ' — check your account, resend an invite, or pass a problem to the maintainer' : ', help with signing in, or pass a problem to the maintainer'}.`;
   log.innerHTML = `<div class="bubble bot">${hello}</div>${chat.messages.map((m) => `<div class="bubble ${m.role === 'user' ? 'me' : 'bot'}">${m.role === 'user' ? esc(m.text) : rich(m.text)}${m.invite ? `<button type="button" class="ghost small" data-chatinvite="${m.invite.code}">💌 Share ${esc(m.invite.name)}'s invite</button>` : ''}${m.filed ? `<small class="muted">📮 Sent to the maintainer · #${esc(m.filed)}</small>` : ''}</div>`).join('')}${chat.busy ? '<div class="bubble bot typing"><i></i><i></i><i></i></div>' : ''}`;
   $('#chatChips').hidden = chat.messages.length > 0;
   log.scrollTop = log.scrollHeight;
@@ -3989,7 +4130,7 @@ document.addEventListener('click', (e) => {
     return act(async () => {
       const r = await api.post(`/families/${state.fid}/care`, { kind: d.care, date: isoLocal(), by: careWho });
       renderCare(); renderRace();
-      if (r.golden) { state.feed = [r.golden, ...state.feed]; setTimeout(() => toast('⭐ Golden day! Every chore done today'), 1600); }
+      if (r.golden) setTimeout(() => toast(`⭐ Golden day! ${r.golden.byName}: ${r.golden.text}`), 1600);
     });
   }
   if (d.carewho) {
@@ -4007,6 +4148,9 @@ document.addEventListener('click', (e) => {
   });
   if (d.careundo) return act(async () => { await api.del(`/families/${state.fid}/care/${isoLocal()}/${d.careundo}`); renderCare(); renderRace(); });
   if (d.unblock) return act(async () => { await api.del(`/account/blocks/${d.unblock}`); state.user.blocked = state.user.blocked.filter((b) => b.id !== d.unblock); meView(); });
+  if (d.req) { const [what, id] = d.req.split(':'); t.disabled = true; return act(() => reqAct(what, id)).finally(() => { t.disabled = false; }); }
+  if (d.groc) { const x = home.groceries.find((g) => g.id === d.groc); return x && act(() => grocAct(() => api.patch(`/families/${state.fid}/groceries/${x.id}`, { done: !x.done }))); }
+  if (d.grocdel) return act(() => grocAct(() => api.del(`/families/${state.fid}/groceries/${d.grocdel}`)));
   if (d.claim && d.appt) return act(async () => { await api.patch(`/families/${state.fid}/appts/${d.appt}`, { claim: d.claim, release: !!d.release }); await apptChanged(); toast(d.release ? 'Given up — it\'s open again' : `You've got the ${d.claim === 'drop' ? 'drop-off' : 'pick-up'} 🚗`); });
   if (d.apptopen) { const a = dogsHub.appts.find((x) => x.id === d.apptopen); return a ? apptDetail(a) : null; }
   if (d.apptedit) return apptSheet(dogsHub.appts.find((x) => x.id === d.apptedit));
@@ -4267,6 +4411,9 @@ document.addEventListener('click', (e) => {
     case 'phrase': return phraseSheet();
     case 'keylink': return keyLinkSheet();
     case 'keyrestore': return keyRestoreSheet();
+    case 'asknew': return askSheet();
+    case 'grocall': home.all = true; return renderGroc();
+    case 'grocclear': return act(() => grocAct(() => api.post(`/families/${state.fid}/groceries/clear`)));
     case 'apptnew': return apptSheet();
     case 'bingonew': return bingoNew();
     case 'games': bingo.game = null; bingo.season = null; return show('bingo');
@@ -4543,6 +4690,8 @@ document.addEventListener('submit', (e) => {
     return ask(v.text || '');
   }
   if (f.id === 'habitForm') { e.preventDefault(); return act(() => saveHabits(f)); }
+  if (f.id === 'reqForm') { e.preventDefault(); return act(() => sendAsk(f)).finally(() => { const b = f.querySelector('button:last-child'); if (b) b.disabled = false; }); }
+  if (f.id === 'grocForm') { e.preventDefault(); return act(() => grocAdd(f)); }
   if (f.id === 'callForm') { e.preventDefault(); return act(async () => { const r = await api.put(`/account/nudges/callmom?today=${isoLocal()}`, { every: +v.every, last: v.last || undefined }); setNudges(r); closeSheet(); renderToday(); toast('Saved'); }); }
   if (f.id === 'writeForm') { e.preventDefault(); return act(() => (f.dataset.edit ? saveThreadEdit(f) : postThread(f))); }
   if (f.id === 'thReplyForm') {
@@ -4937,5 +5086,6 @@ const wantHelp = new URLSearchParams(location.search).has('help');
 if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
 boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; });
 document.addEventListener('toggle', (e) => {
+  if (e.target.id === 'dogMore' && e.target.open) { dogMore().catch(() => {}); return; }
   if (e.target.matches?.('details[data-house]')) { LS.set(`fam.${e.target.dataset.house || 'house'}Open`, e.target.open ? '1' : '0'); const f = e.target.querySelector('.fold'); if (f) f.textContent = e.target.open ? 'Hide' : 'Show'; return; } const c = e.target.closest?.('[data-couple]'); if (c && e.target === c) bingo.open[c.dataset.couple] = c.open; }, true);
 document.addEventListener('input', (e) => { if (e.target.name === 'body' && e.target.closest?.('#writeForm')) atSuggest(e.target); if (e.target.dataset?.wcap) { const x = ws.shots[+e.target.dataset.wcap]; if (x) x.cap = e.target.value; return; } if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); if (e.target.closest?.('#writeForm')) { clearTimeout(saveDraft.t); saveDraft.t = setTimeout(saveDraft, 400); } });

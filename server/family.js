@@ -529,10 +529,10 @@ export async function familyApi(req, env, path, ctx = null) {
       await db.put(`care:${fam.fid}:${date}`, list);
       const idx = (await db.get(`careidx:${fam.fid}`)) || [];
       if (!idx.includes(date)) await db.put(`careidx:${fam.fid}`, [...idx, date].slice(-800));
-      // ⭐ The day just turned golden: the dogs say thank you on the feed.
-      const golden = ['walk', 'park', 'treat'].includes(entry.kind) && !isGolden(list.slice(0, -1)) && isGolden(list) ? await goldenDayPost(db, fam, date, list) : null;
-      if (golden) await tell(adultsOf(fam, user.uid), 'fun', { title: '⭐ A golden day!', body: `${golden.byName} wrote you a thank-you`, url: 'family/#feed', tag: `golden-${date}` });
-      return json({ entry, ...(golden ? { golden: postOut(golden, user, { own: true, familyName: fam.name }) } : {}) });
+      // ⭐ The day just turned golden: the dogs say thank you.
+      const golden = ['walk', 'park', 'treat'].includes(entry.kind) && !isGolden(list.slice(0, -1)) && isGolden(list) ? await goldenDay(db, fam, date, list) : null;
+      if (golden) await tell(adultsOf(fam, user.uid), 'fun', { title: `⭐ A golden day! — ${golden.byName}`, body: golden.text, url: 'family/#home', tag: `golden-${date}` });
+      return json({ entry, ...(golden ? { golden } : {}) });
     }
     // Bringing over the current app's history: replaces what an earlier import added, day by day.
     if (method === 'PUT' && !m[2]) {
@@ -966,16 +966,10 @@ export async function familyApi(req, env, path, ctx = null) {
       if (!a.pets.length) return json({ error: 'which dog is going?' }, 400);
       if (!a.dropAt && !a.pickAt) return json({ error: 'when is it?' }, 400);
       await save([...list, a]);
-      // It goes on the feed, so the other driver can take the open leg from there.
-      const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '',
-        text: '', photo: '', appt: a.id, tags: a.pets, tagNames: Object.fromEntries(a.pets.map((id) => [id, fam.members.find((x) => x.id === id)?.name || ''])), tagKinds: Object.fromEntries(a.pets.map((id) => [id, 'pet'])),
-        audience: 'family', likes: [], comments: [], at: Date.now() };
-      await db.put(`post:${fam.fid}:${post.id}`, post);
-      await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
       const open = (a.dropAt && !a.dropBy) || (a.pickAt && !a.pickBy);
       const start = startOf(a);
       await tell(adultsOf(fam, user.uid), 'appts', { title: `${APPT_TYPES[a.type].icon} ${me.name} booked ${APPT_TYPES[a.type].label.toLowerCase()} for ${a.pets.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ')}`,
-        body: `${new Date(`${start.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}${open ? ' — can you drive?' : ''}`, url: 'family/#dogs', tag: `appt-${a.id}` });
+        body: `${new Date(`${start.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}${open ? ' — can you drive?' : ''}`, url: 'family/#home', tag: `appt-${a.id}` });
       return json({ appt: a });
     }
     const a = list.find((x) => x.id === m[2]);
@@ -986,7 +980,7 @@ export async function familyApi(req, env, path, ctx = null) {
       if (body.claim === 'drop' || body.claim === 'pick') {
         a[`${body.claim}By`] = body.release ? '' : me.id;
         await tell(adultsOf(fam, user.uid), 'appts', { title: body.release ? `🚗 ${me.name} can't do the ${body.claim === 'drop' ? 'drop-off' : 'pick-up'} after all` : `🚗 ${me.name} will do the ${body.claim === 'drop' ? 'drop-off' : 'pick-up'}`,
-          body: `${APPT_TYPES[a.type].label} for ${a.pets.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ')}`, url: 'family/#dogs', tag: `appt-${a.id}` });
+          body: `${APPT_TYPES[a.type].label} for ${a.pets.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ')}`, url: 'family/#home', tag: `appt-${a.id}` });
       }
       if (body.edit) Object.assign(a, cleanAppt({ ...a, ...body.edit }, ctx));
       let next = null;
@@ -1115,7 +1109,7 @@ export async function familyApi(req, env, path, ctx = null) {
       // One live game at a time per set: starting again ends the old one.
       const rest = games.map((x) => (x.packId === p.id && x.status === 'live' ? { ...x, status: 'done' } : x));
       await db.put(`bingogames:${fam.fid}`, [g, ...rest].slice(0, 20));
-      await tell(adultsOf(fam, user.uid), 'fun', { title: `🎲 ${me.name} started ${g.title} bingo`, body: 'Grab your card', url: 'family/#feed', tag: `bingo-${g.id}` });
+      await tell(adultsOf(fam, user.uid), 'fun', { title: `🎲 ${me.name} started ${g.title} bingo`, body: 'Grab your card', url: 'family/#bingo', tag: `bingo-${g.id}` });
       return json({ game: gameOut(g) });
     }
     const g = what === 'games' && id ? games.find((x) => x.id === id) : null;
@@ -1142,7 +1136,7 @@ export async function familyApi(req, env, path, ctx = null) {
       const now = bingoLines(c.marks).length;
       let bingo = null;
       if (now > had && !g.winners.some((w) => w.id === me.id)) {
-        // BINGO: you're on the winners list, and it goes on the feed.
+        // BINGO: you're on the winners list, and the grown-ups hear about it.
         const fresh = (await db.get(`bingogames:${fam.fid}`)) || [];
         const live = fresh.find((x) => x.id === g.id);
         if (live) {
@@ -1150,12 +1144,8 @@ export async function familyApi(req, env, path, ctx = null) {
           live.winners.push({ id: me.id, name: me.name, at: Date.now() });
           g.winners = live.winners;
           await db.put(`bingogames:${fam.fid}`, fresh);
-          const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '',
-            text: `🎉 BINGO! ${first ? 'First to win' : `Bingo #${live.winners.length}`} at ${g.title} bingo 🎲`, photo: '', tags: [], tagNames: {}, tagKinds: {}, audience: 'family', likes: [], comments: [], at: Date.now(), bingo: g.id };
-          await db.put(`post:${fam.fid}:${post.id}`, post);
-          await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
           bingo = { first };
-          await tell(adultsOf(fam, user.uid), 'fun', { title: `🎉 BINGO! ${me.name} ${first ? 'won' : 'got one too'}`, body: `${g.title} bingo`, url: 'family/#feed', tag: `bingo-${g.id}` });
+          await tell(adultsOf(fam, user.uid), 'fun', { title: `🎉 BINGO! ${me.name} ${first ? 'won' : 'got one too'}`, body: `${g.title} bingo`, url: 'family/#bingo', tag: `bingo-${g.id}` });
         }
       }
       return json({ ...(await view(c)), bingo });
@@ -1229,20 +1219,9 @@ export async function familyApi(req, env, path, ctx = null) {
       return json(await view());
     }
     if (act === '/outcome' && method === 'POST') {
-      const had = s.outcome[c.id];
       if (body.outcome && !OUTCOMES[body.outcome]) return json({ error: 'how did it end?' }, 400);
       if (body.outcome) s.outcome[c.id] = body.outcome; else delete s.outcome[c.id];
       await save(seasons);
-      // The ending goes on the feed, with who called it.
-      if (body.outcome && body.outcome !== had) {
-        const called = [];
-        for (const x of players) if (((await db.get(cardKey(x.id))) || {})[c.id]?.outcome === body.outcome) called.push(x.name);
-        const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '',
-          text: `${OUTCOMES[body.outcome]} — ${c.a} & ${c.b} (${s.title}). ${called.length ? `🔮 Called it: ${called.join(', ')}!` : 'Nobody saw that coming! 😱'}`,
-          photo: '', tags: [], tagNames: {}, tagKinds: {}, audience: 'family', likes: [], comments: [], at: Date.now() };
-        await db.put(`post:${fam.fid}:${post.id}`, post);
-        await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
-      }
       return json(await view());
     }
     return json({ error: 'not found' }, 404);
@@ -1813,8 +1792,9 @@ export function petNames(people) {
   if (other && unset === 1) return [...set, other];
   return [...set.filter((x) => !['mom', 'dad'].includes(x.toLowerCase())), 'Mom', 'Dad'];
 }
-// The dogs' thank-you post for a golden day (once per day; the family can turn it off).
-async function goldenDayPost(db, fam, date, list) {
+// The dogs' thank-you for a golden day (once per day; the family can turn it off). It's the
+// notification and the cheer on the phone that logged it; since 2.0 nothing goes on the old feed.
+async function goldenDay(db, fam, date, list) {
   if (fam.goldenPosts === false || !(fam.modules || MODULES).includes('dogs')) return null;
   const dogs = fam.members.filter((x) => x.kind === 'pet' && x.species === 'dog');
   if (!dogs.length || (await db.get(`goldenpost:${fam.fid}:${date}`))) return null;
@@ -1826,13 +1806,7 @@ async function goldenDayPost(db, fam, date, list) {
   const { text, used } = goldenMessage({ pets: dogs.map((d) => d.name), people, day: dayHighlights(list), recent });
   await db.put(`goldenmsg:${fam.fid}`, [used, ...recent].slice(0, 4));
   const names = dogs.map((d) => d.name);
-  const post = { id: `${(1e13 - Date.now()).toString(36)}${randomId(3)}`, fid: fam.fid, by: dogs[0].id, byUid: null, fromPets: dogs.map((d) => d.id), golden: date,
-    byName: names.length > 1 ? `${names.slice(0, -1).join(', ')} & ${names.at(-1)}` : names[0], byAvatar: dogs[0].avatar || '', text, photo: '',
-    tags: dogs.map((d) => d.id), tagNames: Object.fromEntries(dogs.map((d) => [d.id, d.name])), tagKinds: Object.fromEntries(dogs.map((d) => [d.id, 'pet'])),
-    audience: 'family', likes: [], comments: [], at: Date.now() };
-  await db.put(`post:${fam.fid}:${post.id}`, post);
-  await db.put(`feed:${fam.fid}`, [post.id, ...((await db.get(`feed:${fam.fid}`)) || [])].slice(0, 300));
-  return post;
+  return { golden: date, byName: names.length > 1 ? `${names.slice(0, -1).join(', ')} & ${names.at(-1)}` : names[0], fromPets: dogs.map((d) => d.id), text };
 }
 const shiftDay = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const validTz = (tz) => { if (typeof tz !== 'string' || tz.length > 64) return false; try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; } };

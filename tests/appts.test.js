@@ -13,7 +13,7 @@ test('vaccine due dates, repeats and spending', () => {
     { total: 200.5, byType: { vet: 120, groom: 80.5 } });
 });
 
-test('an appointment: on the feed, drivers claim legs, a vaccination updates the dog, grooming repeats', async () => {
+test('an appointment: not on the old feed, drivers claim legs, a vaccination updates the dog, grooming repeats', async () => {
   const m = new Map();
   const env = { DEMO: true, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
   const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path.split("?")[0]); return { status: r.status, ...r.data }; };
@@ -33,8 +33,8 @@ test('an appointment: on the feed, drivers claim legs, a vaccination updates the
   assert.equal(g.dropBy, me);
   assert.equal(g.pickBy, '');
   const feed = await call('/feed', pat);
-  assert.equal(feed.posts[0].appt, g.id, 'the appointment is on the feed');
-  // Pat takes the pick-up from the feed.
+  assert.ok(!feed.posts.some((p) => p.appt), 'nothing goes on the old feed (2.0)');
+  // Pat takes the pick-up (on Home, under Needs you).
   const claimed = (await call(`${A}/${g.id}`, pat, 'PATCH', { claim: 'pick' })).appt;
   assert.equal(claimed.pickBy, add.member.id);
   // Done: the next one six weeks later, with nobody driving yet.
