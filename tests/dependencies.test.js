@@ -15,7 +15,8 @@ test('the legacy household code is used only where the migration list says', () 
   assert.deepEqual(uses, [
     'js/app.js', //     the legacy assistant route for phones still sharing through a code
     'js/calTab.js', //  linked calendars through the connector; the old subscribe link (not shown)
-    'js/dogs.js', //    dog documents and adoption photos (move to the family file store: Phase 2)
+    'js/dogs.js', //    old dog files: read, then copied into the family file store (Phase 10), and deleted
+    'js/household.js', // tells a phone that isn't signed in that it still shares the old way (Phase 10)
     'js/recover.js', // 🛟 Recover reads old shared copies
     'js/sync.js', //    the sync itself
   ]);

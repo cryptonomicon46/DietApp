@@ -12,7 +12,17 @@ Last update: 2026-10-28 — Phases 4–11 authorized (master build authorization
 - **Phase 7 — Fitness:** done; Checkpoint C below.
 - **Phase 8 — AI privacy gateway + 💬 Describe it:** done; details below.
 - **Phase 9 — 📷 Photo → Today's Workout:** done; Checkpoint D below.
-- **Next:** Phase 10 — legacy household-code migration.
+- **Phase 10 — legacy household-code migration:** done; details below.
+- **Next:** Phase 11 — Devices / WHOOP / Garmin (Checkpoint E).
+
+### Phase 10 — Legacy household-code migration
+- **Privacy fix found while auditing:** before this phase, a signed-in phone kept uploading its *full* tracker copy (Diet, Fitness and Us together) to the household code until both partners shared everything both ways (`householdOff`). With Phase 6's per-part sharing, a Diet-only or private choice was therefore not binding on the old path. Now `sync.household()` (uploads) is false whenever `account.active()`; only phones that aren't signed in still upload the old way, unchanged.
+- **Reads:** `householdReads()` keeps reading a partner who hasn't moved; `movedToAccount(profile)` skips anyone whose trackers are on their account in the family (their data comes only per their sharing). Both moved and sharing → the code isn't read at all (as before).
+- **Dog files:** a file found only under the code is copied into the family file store (sealed with the family key) the first time a signed-in phone opens it; the old copy is kept until the person deletes the file.
+- **Linked calendars (trackers):** signed in → `account.ics(url)` → `POST /v2/ics` (secret link in the body, account auth, 30/min); otherwise the legacy `/ics {code,url}`. Before, a signed-in phone without a code couldn't refresh linked calendars in the trackers at all.
+- **Kept on purpose (not deleted):** the old copies under the code (readable with that code and by 🛟 Recover), the legacy endpoints, the legacy assistant route for signed-out phones. Signed-out phones: honest Privacy text "Still shared the old way… sign in to choose".
+- **Tests:** `tests/legacy.test.js` (4: signed-out upload unchanged; signed in → no household PUT, old copy untouched, account updated, unmoved partner still read, moved partner never read even with a newer stale copy; dog file copied and old copy kept; calendars via account with the link in the body). `tests/account.test.js` updated to the stricter rule (no uploads while signed in, whatever is shared). `tests/dependencies.test.js` list: + `js/household.js` (reads the legacy state only to tell a signed-out phone). `npm test`: 326 pass.
+- **Browser (trackers, both seed people, a legacy code set):** Sam's phone made 0 household writes and 1 read (Pat's old copy, before Pat connected); Pat's phone made 0 household requests. No errors.
 
 ### Phase 9 — Photo/screenshot → Today's Workout (Checkpoint D)
 - **Flow:** Fitness › ＋ Add Workout › 📷 **Photo** → *Choose a photo or screenshot* → the picture is redrawn on the phone (canvas → JPEG, long edge ≤ 1600 px, orientation applied; EXIF/GPS/camera data gone) and shown → **Read it** (the only thing that sends) → "Reading… usually 5–20 seconds" → **Review Workout** (title "Read from your photo", ⚠️ "N things to check", unsure fields outlined amber, "Not placed: …") → correct → **Add to Today's Workout** → logger opens on round 1. Same model, same editor as Build/Describe.
@@ -244,9 +254,10 @@ Privacy review of Phase 3 features: request and grocery text sealed with the fam
 
 ## Remaining household-code dependencies
 
-Pinned by `tests/dependencies.test.js`. Phase 2 removed every way to create, join or change a code. Still reading through an existing code (for phones that already shared one, until their move to the family): the trackers' sync (`js/sync.js` `follow`, push/pull), dog files shared earlier (`js/dogs.js` legacy URL, read and delete only), linked calendars of the trackers (`js/calTab.js`, `POST /ics {code,url}`), Recover's old copies (`js/recover.js`), and the legacy assistant route for people not signed in.
+Pinned by `tests/dependencies.test.js`. **After Phase 10:** signed-in phones never write to the code; they read only partners who haven't moved; old dog files move to the family store on first open; trackers' linked calendars use the account. What's left uses the code only for signed-out phones (sync, files, calendars, assistant) and 🛟 Recover. Removing the old copies and endpoints is a decision (below). Phase 2 removed every way to create, join or change a code. Still reading through an existing code (for phones that already shared one, until their move to the family): the trackers' sync (`js/sync.js` `follow`, push/pull), dog files shared earlier (`js/dogs.js` legacy URL, read and delete only), linked calendars of the trackers (`js/calTab.js`, `POST /ics {code,url}`), Recover's old copies (`js/recover.js`), and the legacy assistant route for people not signed in.
 
 ## Decisions needed
+- **Old household copies (Phase 10):** the last tracker copies and dog files stored under household codes are still on the connector (readable by anyone with that code, and by 🛟 Recover). Options: keep until every phone has signed in (current), or delete them after a date you choose. Deleting is irreversible, so it waits for your approval.
 
 - Deployment of `v2/phase-2-3` (Worker via `pawdeploy`, then merge to `main`).
 - Authorization for Phase 4 (not started).

@@ -5,9 +5,11 @@ import { account } from './account.js';
 // Each phone uploads its owner's data and downloads everyone else's to view.
 // settings = {url, code}: connector URL and shared household code. The phone's owner
 // (storage.ownerId) is the one whose data this phone uploads.
-// Signed in to the family app (account.js)? Then your data is also saved to your OurPawmily
-// account, and your partner's comes from there when they share it with you; the household code
-// carries on alongside until both of you have moved over (and share with each other), then stops.
+// Signed in to the family app (account.js)? Then your data is saved to your OurPawmily account
+// only, and who sees it is what you chose there (Diet and Fitness, person by person) — this phone
+// stops uploading to the household code (2.0 Phase 10). Until your partner moves over too, their
+// copy is still read from the code; once they're in the family with their trackers, only what they
+// share with you comes, from their account. Old copies stay on the connector for 🛟 Recover.
 
 export const sync = {
   settings: () => global.get('sync', null),
@@ -44,7 +46,12 @@ export const sync = {
     return moved;
   },
   save(s) { global.set('sync', s); },
-  household() { const s = this.settings(); return !!(s?.url && s?.code && !s.moved && ownerId() && !account.get()?.householdOff); },
+  // Reading partners who haven't moved yet.
+  householdReads() { const s = this.settings(); return !!(s?.url && s?.code && !s.moved && ownerId() && !account.get()?.householdOff); },
+  // Uploading this phone's copy: only a phone that isn't signed in to the family.
+  household() { return this.householdReads() && !account.active(); },
+  // Someone in your family who has their trackers on their account: never read from the code.
+  movedToAccount(profileId) { return !!(account.active() && account.get()?.members?.[profileId]); },
   enabled() { return this.household() || account.active(); },
   // Only the phone's owner can edit; anyone else's profile is view-only.
   readOnly() { return !!ownerId() && activeProfile().id !== ownerId(); },
@@ -77,11 +84,13 @@ export const sync = {
     if (token() && !account.active()) await account.connect().catch(() => null);
     if (account.active()) ({ changed, got } = await account.pull());
     const s = this.settings();
-    if (!this.household()) { global.set('pulledAt', Date.now()); return changed; }
-    const followed = await this.follow();
-    if (followed === 'moved') return true;
-    if (followed) await this.push();
-    for (const p of PROFILES.filter((x) => x.id !== ownerId() && !got.includes(x.id))) {
+    if (!this.householdReads()) { global.set('pulledAt', Date.now()); return changed; }
+    if (this.household()) {
+      const followed = await this.follow();
+      if (followed === 'moved') return true;
+      if (followed) await this.push();
+    }
+    for (const p of PROFILES.filter((x) => x.id !== ownerId() && !got.includes(x.id) && !this.movedToAccount(x.id))) {
       const res = await fetch(`${s.url}/household/${encodeURIComponent(this.settings().code)}/${p.id}`);
       if (res.status === 404) continue;
       if (!res.ok) throw new Error(`download failed (${res.status})`);

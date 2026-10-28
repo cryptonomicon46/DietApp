@@ -136,6 +136,12 @@ export const account = {
     if (a?.me) await fetch(`${connector()}/v2/families/${a.fid}/photos/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token()}` } }).catch(() => {});
   },
 
+  // 📲 A linked calendar's events, fetched by the connector for you (the secret link goes in the body).
+  async ics(url) {
+    const r = await call('POST', '/ics', { url }, 20000);
+    return { ok: r.status === 200, status: r.status, text: r.data.ics || '', error: r.data.error };
+  },
+
   // 🤖 Ask Claude for a tracker command, through your account (no household code needed).
   async assist(text, context) {
     const r = await call('POST', '/assistant', { text, context }, 30000);
