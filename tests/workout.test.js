@@ -1,0 +1,133 @@
+// 🏋️ Checkpoint C — one workout model for every real workout: straight sets, supersets, circuits,
+// rounds, different reps or weights per set, bodyweight, timed and cardio — and nothing invented.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { normalize, makeBlock, uncertain, problems, setRounds, editSet, renameItem, logSet, unlogSet, complete, repeatOf, summary, describe, itemText, fromLiftSession, fromDeviceWorkout } from '../js/workout.js';
+
+const reps = (...r) => r.map((n) => ({ reps: n }));
+
+test('a conventional strength workout: straight sets, a different weight on each set', () => {
+  const w = normalize({ title: 'Lower', blocks: [
+    { items: [{ name: 'Squat', sets: [{ reps: 5, weight: 165 }, { reps: 5, weight: 175 }, { reps: 5, weight: 185 }] }] },
+    { items: [{ name: 'Romanian deadlift', sets: [{ reps: 8, weight: 135 }, { reps: 8, weight: 135 }, { reps: 8, weight: 135 }] }] },
+  ] });
+  assert.equal(w.blocks[0].kind, 'straight'); assert.equal(w.blocks[0].rounds, 3);
+  assert.deepEqual(w.blocks[0].items[0].sets.map((s) => s.weight), [165, 175, 185]);
+  assert.equal(itemText(w.blocks[0].items[0]), 'Squat 5 / 5 / 5 @ 165 / 175 / 185 lb');
+  assert.equal(itemText(w.blocks[1].items[0]), 'Romanian deadlift 8 / 8 / 8 @ 135 lb');
+  assert.deepEqual(uncertain(w), []); assert.deepEqual(problems(w), []);
+});
+
+test('the 4-round circuit and the 3-round superset, rep for rep', () => {
+  const w = normalize({ blocks: [
+    { rounds: 4, items: [
+      { name: 'Overhead Press', sets: reps(12, 12, 11, 11) }, { name: 'Bent-over Row', sets: reps(12, 13, 14, 13) },
+      { name: 'Squat', sets: reps(10, 11, 11, 11) }, { name: 'Chest Press', sets: reps(12, 11, 11, 11) }, { name: 'Bicycle Crunch', sets: reps(26, 24, 22, 24).map((s) => ({ ...s, bw: true })) },
+    ] },
+    { rounds: 3, items: [
+      { name: 'Alternating Reverse Lunge', sets: reps(14, 14, 14).map((s) => ({ ...s, weight: 40 })) },
+      { name: 'Lateral Raise', sets: reps(11, 12, 9).map((s) => ({ ...s, weight: 20 })) },
+    ] },
+  ] });
+  const [a, b] = w.blocks;
+  assert.deepEqual([a.kind, a.rounds, a.items.length], ['circuit', 4, 5]);
+  assert.deepEqual(a.items.map((it) => it.sets.map((s) => s.reps)), [[12, 12, 11, 11], [12, 13, 14, 13], [10, 11, 11, 11], [12, 11, 11, 11], [26, 24, 22, 24]]);
+  assert.deepEqual([b.kind, b.rounds], ['superset', 3]);
+  assert.deepEqual(b.items.map((it) => it.sets.map((s) => [s.reps, s.weight])), [[[14, 40], [14, 40], [14, 40]], [[11, 20], [12, 20], [9, 20]]]);
+  assert.deepEqual(describe(w), [
+    '4 rounds (circuit): Overhead Press 12 / 12 / 11 / 11 · Bent-over Row 12 / 13 / 14 / 13 · Squat 10 / 11 / 11 / 11 · Chest Press 12 / 11 / 11 / 11 · Bicycle Crunch 26 / 24 / 22 / 24 @ bodyweight',
+    '3 rounds (superset): Alternating Reverse Lunge 14 / 14 / 14 @ 40 lb · Lateral Raise 11 / 12 / 9 @ 20 lb',
+  ]);
+});
+
+test('supersets with their own weights, bodyweight, timed and cardio', () => {
+  const w = normalize({ blocks: [
+    { rounds: 3, items: [{ name: 'Squat', sets: Array(3).fill({ reps: 8, weight: 165 }) }, { name: 'RDL', sets: Array(3).fill({ reps: 10, weight: 55 }) }] },
+    { rounds: 3, items: [{ name: 'Push-up', sets: Array(3).fill({ reps: 15, bw: true }) }, { name: 'Plank', sets: Array(3).fill({ time: 45 }) }] },
+    { items: [{ name: 'Row erg', sets: [{ distance: 500, distUnit: 'm', time: 110 }] }] },
+  ], activity: { kind: 'Run', minutes: 30, distance: 3.1, distUnit: 'mi' } });
+  assert.equal(itemText(w.blocks[0].items[1]), 'RDL 10 / 10 / 10 @ 55 lb');
+  assert.equal(itemText(w.blocks[1].items[0]), 'Push-up 15 / 15 / 15 @ bodyweight');
+  assert.equal(itemText(w.blocks[1].items[1]), 'Plank 45s / 45s / 45s');
+  assert.equal(itemText(w.blocks[2].items[0]), 'Row erg 1:50 · 500 m');
+  assert.deepEqual(w.activity, { kind: 'Run', minutes: 30, distance: 3.1, distUnit: 'mi', kcal: null });
+  assert.equal(normalize({ blocks: [{ kind: 'circuit', rounds: 2, items: [{ name: 'A', sets: reps(1, 1) }, { name: 'B', sets: reps(1, 1) }] }] }).blocks[0].kind, 'circuit', 'a two-exercise circuit stays a circuit');
+});
+
+test('nothing is invented: missing values stay empty and marked; problems block saving', () => {
+  const w = normalize({ blocks: [{ items: [{ name: 'Lunge', sets: reps(12, 12) }, { name: '', sets: reps(10) }] }] });
+  const b = w.blocks[0];
+  assert.equal(b.rounds, 2);
+  assert.ok(b.uncertain.includes('rounds'), 'a superset without a stated round count is unsure');
+  assert.equal(b.items[1].sets[1].reps, null, 'a missing set is blank, not copied');
+  assert.deepEqual(b.items[1].sets[1].uncertain, ['reps']);
+  assert.deepEqual(uncertain(w).map((u) => u.field).sort(), ['name', 'reps', 'rounds']);
+  assert.equal(problems(w).length, 1);
+  assert.equal(b.items[0].sets[0].weight, null, 'no weight given: none');
+  // Garbage in: clamped or dropped, never a crash.
+  const g = normalize({ blocks: [{ items: [{ name: 'X'.repeat(500), sets: [{ reps: -3, weight: 'heavy', unit: 'stone' }] }] }], status: 'hacked' });
+  assert.deepEqual([g.blocks[0].items[0].name.length, g.blocks[0].items[0].sets[0].reps, g.blocks[0].items[0].sets[0].weight, g.blocks[0].items[0].sets[0].unit, g.status], [80, null, null, 'lb', 'planned']);
+});
+
+test('editing settles what was unsure; rounds can grow; logging, completing, repeating', () => {
+  let w = normalize({ blocks: [{ items: [{ name: '', sets: reps(10) }, { name: 'Row', sets: reps(12) }] }] });
+  w = renameItem(w, 0, 0, 'Lunge');
+  w = setRounds(w, 0, 3);
+  assert.deepEqual(w.blocks[0].items[1].sets.map((s) => s.reps), [12, 12, 12]);
+  assert.equal(w.blocks[0].uncertain, undefined);
+  w = editSet(w, 0, 0, 0, { weight: 40 });
+  assert.equal(uncertain(w).length, 0);
+  w = logSet(w, 0, 0, 0, { reps: 9 });
+  assert.equal(w.status, 'active');
+  assert.deepEqual(w.blocks[0].items[0].sets[0].got, { reps: 9, weight: 40, time: null, distance: null });
+  w = logSet(w, 0, 1, 0);
+  w = unlogSet(w, 0, 1, 0);
+  assert.equal(w.blocks[0].items[1].sets[0].done, false);
+  w = logSet(w, 0, 1, 0, { weight: 50 });
+  const s = summary(w);
+  assert.deepEqual([s.exercises, s.sets, s.done, s.volume], [2, 6, 2, 9 * 40 + 12 * 50]);
+  w = complete(w, 1000);
+  assert.equal(w.status, 'done');
+  const again = repeatOf(w, '2026-11-01');
+  assert.equal(again.status, 'planned'); assert.equal(again.date, '2026-11-01'); assert.notEqual(again.id, w.id);
+  assert.equal(again.blocks[0].items[0].sets[0].reps, 9, 'what you actually did becomes the next target');
+  assert.ok(again.blocks.every((b) => b.items.every((it) => it.sets.every((x) => !x.done && !x.got))));
+});
+
+test('older records read as workouts, untouched', () => {
+  const old = { date: '2026-09-01', block: 1, week: 2, day: 1, entries: [{ slot: 's1', exercise: 'backSquat', sets: [{ w: 185, r: 5 }, { w: 185, r: 5 }] }, { slot: 's2', exercise: 'pullup', sets: [{ w: 0, r: 8, bw: true }] }] };
+  const copy = JSON.stringify(old);
+  const w = fromLiftSession(old, { backSquat: 'Back squat', pullup: 'Pull-up' });
+  assert.equal(JSON.stringify(old), copy, 'not modified');
+  assert.deepEqual(describe(w), ['Back squat 5 / 5 @ 185 lb', 'Pull-up 8 @ bodyweight']);
+  assert.equal(w.status, 'done');
+  const d = fromDeviceWorkout({ id: 'whoop:1', name: 'Running', start: '2026-10-20T07:00:00Z', minutes: 32, kcal: 350 });
+  assert.deepEqual([d.title, d.date, d.activity.minutes, d.blocks.length], ['Running', '2026-10-20', 32, 0]);
+  assert.equal(makeBlock({ items: [] }).items.length, 0);
+});
+
+test("server: Today's Workout and history are yours to write, readable with Fitness sharing, never overwritten by an older copy", async () => {
+  const { familyApi, TERMS_VERSION } = await import('../server/family.js');
+  const m = new Map();
+  const env = { DEMO: true, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
+  const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path); return { status: r.status, ...(r.data || {}) }; };
+  const signIn = async (email) => { const { token } = await call('/auth/demo', null, 'POST', { email }); await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true }); return token; };
+  const sam = await signIn('sam@example.com'), pat = await signIn('pat@example.com');
+  const { family } = await call('/families', sam, 'POST', { name: 'Fam' });
+  const add = await call(`/families/${family.fid}/members`, sam, 'POST', { kind: 'person', name: 'Pat', relation: 'spouse', email: 'pat@example.com' });
+  const inv = await call(`/families/${family.fid}/invites`, sam, 'POST', { kind: 'member', memberId: add.member.id });
+  await call(`/invites/${inv.invite.code}/accept`, pat, 'POST');
+  const P = `/families/${family.fid}/members/${add.member.id}/workouts`;
+  const w = normalize({ title: 'Legs', blocks: [{ items: [{ name: 'Squat', sets: [{ reps: 5, weight: 185 }] }] }] });
+  const r1 = await call(`${P}/today`, pat, 'PUT', { data: { today: w, templates: [] }, base: 0 });
+  assert.equal(r1.ok, true);
+  assert.equal((await call(`${P}/today`, sam, 'PUT', { data: {} })).status, 403, 'nobody writes yours');
+  assert.equal((await call(`${P}/today`, sam)).status, 403, 'private until Fitness is shared');
+  await call(`/families/${family.fid}/members/${add.member.id}`, pat, 'PATCH', { share: { diet: [], fitness: [family.members[0].id] } });
+  assert.equal((await call(`${P}/today`, sam)).data.today.title, 'Legs');
+  // An older copy (another phone that hadn't seen the last save) is refused, not merged blindly.
+  assert.equal((await call(`${P}/today`, pat, 'PUT', { data: { today: null }, base: r1.savedAt - 1 })).status, 409);
+  assert.equal((await call(`${P}/log`, pat, 'PUT', { data: { log: [w] }, base: 0 })).ok, true);
+  await call(`/families/${family.fid}/leave`, pat, 'POST');
+  assert.ok(![...m.keys()].some((k) => k.includes(`workouts:${family.fid}:${add.member.id}`)), 'leaving deletes them');
+});

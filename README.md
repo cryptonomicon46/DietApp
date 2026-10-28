@@ -49,7 +49,11 @@ First in 💞 Us: "2 watching · 3 want to watch", the shows that matter tonight
 ### 💪 Health
 Your own screen, private unless you share it:
 - **🥗 Diet:** your phase (Cut, Diet break, Maintenance, Lean gain) and week, your goal, today's calories and protein against your targets (and the carbs and fat left), your weight with its trend, and **"5 of the last 7 days on target"** (a day counts once its meals are logged; it's on target within 10% of the day's calories). **Log food** and **Plan & weight ›** open the detailed screens.
-- **🏋️ Fitness:** your workouts this week and **Training ›**.
+- **🏋️ Fitness:** **Today's Workout** (Start / Continue), **＋ Add Workout**, and your last workout; *All workouts and history ›* opens Fitness:
+  - **Add Workout:** ✍️ **Build it** — exercises with a set for each round, each with its own reps and weight (12 / 12 / 11 / 11 reps, or 40 / 45 / 50 lb), straight sets, 🔗 supersets and 🔁 circuits with any number of rounds, bodyweight, timed (plank 45 s) or distance (row 500 m); then **Add to Today's Workout**. Saved workouts (from history, *Save it*) are one tap away.
+  - **Logging:** Today's Workout goes round by round. Tap ✓ to log a set as planned, or change the numbers first; a finished round folds into one line (*undo* is there). **Finish workout** puts it in your history.
+  - **History:** finished workouts (with your lifting program's sessions and device workouts, read as they were), each with **🔁 Do it again today** (what you actually did becomes the new target) and *Save it*.
+  - Your workouts are locked on your phone and stored as two records of yours — Today's Workout (with saved ones) and your history — readable only by you and whoever you share your Fitness with. Saving on two phones at once never overwrites a newer copy.
 - **Who can see it:** the line under the title (*🔒 Private*, or *Shared: Diet with Pat*) opens two switches for each person — **Diet** and **Fitness**, separately. Only you can change them.
 
 The detailed screens are each person's **🍽 Food** (meal plans with exact portions, logging, weekly check-ins, groceries, barcode scan) and **🏋︎ Train** (lifting program, runs, rides, climbing, WHOOP). Details in *The trackers, in detail* below.

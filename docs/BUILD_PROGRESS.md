@@ -9,7 +9,19 @@ Last update: 2026-10-28 — Phases 4–11 authorized (master build authorization
 - **Phase 4 — Us / Watch:** done, Checkpoint A passed (below).
 - **Phase 5 — Health + Diet:** done (below).
 - **Phase 6 — Family permissions:** done; Checkpoint B below.
-- **Next:** Phase 7 — Fitness.
+- **Phase 7 — Fitness:** done; Checkpoint C below.
+- **Next:** Phase 8 — AI privacy gateway + natural-language workout parsing.
+
+### Phase 7 — Fitness (Checkpoint C)
+
+- **One workout model** (`js/workout.js`): Workout → blocks (straight / superset / circuit, rounds) → items → one set per round (reps, weight + unit, bodyweight, time, distance; planned target + what you did; `uncertain` field lists for parsers). Never invents: missing values stay empty and are marked; a superset with no stated round count is marked unsure.
+- **Checkpoint C tests** (`tests/workout.test.js`, 7): conventional strength with a different weight per set; the 4-round circuit (12/12/11/11 · 12/13/14/13 · 10/11/11/11 · 12/11/11/11 · 26/24/22/24) and 3-round superset (lunge 40 lb 14/14/14 · lateral raise 20 lb 11/12/9) reproduced exactly; supersets with different weights; bodyweight; timed (plank); distance (row erg); cardio/activity; garbage input; editing, rounds, logging, completing, repeating; older lifting sessions and device workouts read unchanged; server records (owner-only writes, Fitness-sharing reads, stale copy refused, deleted on leave).
+- **Today's Workout:** Health's Fitness card (Start / Continue, ＋ Add Workout, last workout) → Fitness: Today's Workout, Add Workout (✍️ Build it; 💬 Describe and 📷 Photo arrive in Phases 8–9), saved workouts, history with 🔁 Do it again today / Save it.
+- **Builder / Review** (the same editor; AI-read workouts will open here with uncertain fields highlighted): name, parts with − / ＋ rounds, exercise names, per-round reps and weight (or bodyweight / time / distance), add exercise / superset / circuit; Add is enabled once nothing is missing.
+- **Logging:** round by round, ✓ per set (with the numbers editable first), finished rounds fold (undo), Finish workout → history.
+- **Storage:** two sealed records per person (`workouts:…:today`, `…:log`), owner writes with stale-copy protection (409), Fitness-sharing reads; batched saves (1.2 s, flushed when the app goes to the background).
+- **Browser (390 px):** Build a 3-round superset with per-round reps/weights → Add to Today's Workout → log round 1 and a changed set → Finish → history, persisted across a reload. Found and fixed: Add stayed disabled after typing names; long names were cut off; ✓ wrapped below the inputs.
+- **Performance:** Fitness is lazy (`family/fitness.js` 6.7 KB + `js/workout.js` 4.3 KB gzipped, loaded on Health/Fitness only). Start-up: 14 requests, 0 duplicates, CLS 0.007, paint ~1.31–1.33 s, script 181 KB (+1 KB wiring).
 
 ### Phase 6 — Family permissions (Checkpoint B)
 

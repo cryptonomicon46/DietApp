@@ -1053,3 +1053,49 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .share-sw { display: grid; place-items: center; min-width: 52px; min-height: 44px; position: relative; }
 .share-sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
 .share-sw input:focus-visible + .switch { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* 🏋️ Fitness: Today's Workout, three ways to add one, the editor and round-by-round logging */
+.fx-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 4px 4px 10px; }
+.fx-head h2 { margin: 0; }
+.fx-today { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--brand-soft); color: var(--ink); border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line)); border-radius: 14px; padding: 10px 12px; font-weight: 400; min-height: 52px; }
+.fx-today b, .fx-today small { display: block; }
+.fx-today .go { color: var(--brand); font-weight: 700; white-space: nowrap; }
+.fx-paths { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin-top: 8px; }
+.fx-paths button { display: grid; justify-items: center; gap: 4px; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; padding: 14px 6px; font-weight: 700; font-size: .85rem; min-height: 72px; }
+.fx-paths button b { font-size: 1.4rem; }
+.fx-hist { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; color: var(--ink); font-weight: 400; }
+.fx-hist b, .fx-hist small { display: block; }
+.fx-title { display: grid; gap: 4px; margin: 0 4px 10px; }
+.fx-block { display: grid; gap: 10px; }
+.fx-rounds { display: inline-flex; align-items: center; gap: 4px; font-size: .9rem; }
+.fx-rounds .icon-btn, .fx-block .icon-btn { min-width: 44px; min-height: 44px; }
+.fx-item { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.fx-item:first-of-type { border-top: 0; padding-top: 0; }
+.fx-item .row { gap: 6px; }
+.fx-name { flex: 1; min-width: 0; font-weight: 700; }
+.fx-item select { max-width: 132px; font-size: .8rem; }
+.fx-sets { display: flex; flex-wrap: wrap; gap: 6px; }
+.fx-set { display: grid; gap: 3px; width: 64px; }
+.fx-set small { color: var(--muted); font-size: .7rem; text-align: center; }
+.fx-set input { width: 100%; padding: 8px 4px; text-align: center; min-height: 40px; }
+.unsure { outline: 2px solid #e0a000; outline-offset: 1px; background: color-mix(in srgb, #ffcc33 18%, var(--card)); }
+.unsure-t { color: #b07800; }
+.unsure-t::after { content: ' ⚠️'; }
+.fx-add { gap: 8px; margin: 6px 4px 14px; }
+.fx-foot { position: sticky; bottom: calc(var(--nav-h, 64px) + 8px); display: flex; gap: 8px; justify-content: flex-end; padding: 10px 4px; background: linear-gradient(to top, var(--bg) 70%, transparent); }
+.fx-foot button { min-height: 48px; }
+.fx-foot button:last-child { flex: 1; }
+.fx-progress { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; margin: 0 4px 12px; }
+.fx-progress i { display: block; height: 100%; background: var(--brand); }
+.fx-round { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid var(--line); }
+.fx-logrow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; }
+.fx-logrow .grow { min-width: 0; overflow-wrap: anywhere; }
+.fx-in { display: flex; gap: 4px; }
+.fx-logrow b, .fx-logrow small { display: block; }
+.fx-logrow input { width: 56px; padding: 8px 4px; text-align: center; min-height: 44px; }
+.fx-check { min-width: 48px; min-height: 48px; border-radius: 50%; font-size: 1.2rem; }
+.fx-logrow.done { opacity: .7; }
+.fx-rdone { margin: 4px 0; }
+.fx-measure { justify-self: start; font-size: .8rem; padding: 6px 8px; }
+.fx-lab { width: 34px; }
+.fx-lab span { font-size: .7rem; color: var(--muted); min-height: 40px; display: grid; place-items: center; }

@@ -371,22 +371,46 @@ function show(view, extra) {
   if (view === 'member') state.memberId = extra;
   if (view === 'compose') { state.view = state.prevView || 'home'; return plusMenu(); }
   chrome(true);
-  const lit = view === 'member' || view === 'family' ? 'me' : view === 'watch' || view === 'bingo' ? 'us' : view;
+  const lit = view === 'member' || view === 'family' ? 'me' : view === 'watch' || view === 'bingo' ? 'us' : view === 'fitness' ? 'health' : view;
   document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === lit));
   window.scrollTo(0, 0);
   if (view !== 'bingo') clearInterval(bingo.timer);
   $('#chatTop')?.classList.toggle('on', view === 'chats' || view === 'chat');
   if (view === 'chats' || view === 'chat') return dms().then((d) => (view === 'chat' ? d.convView(extra) : d.listView())).catch((e) => toast(e.message));
-  ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, us: usView, health: healthView })[view]?.();
+  ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, us: usView, health: healthView, fitness: fitnessView })[view]?.();
 }
 // 💪 Health: your own Diet and Fitness (family/health.js, loaded when you open it).
 async function healthView() {
   $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div><div class="skeleton card"></div>`;
-  const [H, rec] = await Promise.all([import(`./health.js?v=${VERSION}`), memberData().catch(() => null)]);
+  const [H, rec, F] = await Promise.all([import(`./health.js?v=${VERSION}`), memberData().catch(() => null), fit().catch(() => null)]);
   if (state.view !== 'health') return;
   const data = await openData(rec);
   if (data.locked) { $('#view').innerHTML = `${demoBanner()}<section class="card"><b>🔒 Locked on this device</b><p class="small muted">This device needs the family key to show your Health. Me › 🔐 Encryption.</p></section>`; return; }
-  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), sharing: sharingLine() })}</div>`;
+  if (F) F.setLegacy(data, LIFT_NAMES);
+  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), sharing: sharingLine(), fitness: F ? F.card(esc) : undefined })}</div>`;
+}
+// 🏋️ Fitness (family/fitness.js): loaded with your workouts the first time it's needed.
+let fitMod = null;
+const LIFT_NAMES = {};
+function fit() {
+  fitMod ||= (async () => {
+    const F = await import(`./fitness.js?v=${VERSION}`);
+    await F.load({
+      api, fid: state.fid, me: fam().me, esc, toast, openSheet, closeSheet, iso: () => isoLocal(), confirm: (q) => confirm(q),
+      lock: async (v) => (fk() ? { enc: await seal(fk(), v) } : v), unlock: async (v) => (isSealed(v) ? tryOpen(fk(), v, null) : v),
+      el: () => (state.view === 'fitness' ? $('#view') : null), show: () => (state.view === 'fitness' ? F.render() : show('fitness')),
+      extra: {},
+    });
+    return F;
+  })().catch((e) => { fitMod = null; throw e; });
+  return fitMod;
+}
+async function fitnessView() {
+  $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div>`;
+  const F = await act(fit);
+  if (!F || state.view !== 'fitness') return;
+  if (!F.state.legacy.length) F.setLegacy(await openData(await memberData().catch(() => null)), LIFT_NAMES);
+  F.render();
 }
 // 💪 Who sees my Diet and my Fitness: two switches per person, private by default. Only you can
 // change these (nobody can share someone else's with themselves).
@@ -4475,6 +4499,7 @@ document.addEventListener('click', (e) => {
   if (d.watchtab) { watch.tab = d.watchtab; return renderWatch(); }
   if (d.watchone) { t.disabled = true; return act(() => watchOne(d.watchone)).finally(() => { t.disabled = false; }); }
   if (d.watchopen) return watchDetail(d.watchopen);
+  if (d.fx) return act(async () => { const F = await fit(); if (['open', 'main', 'add'].includes(d.fx) && state.view !== 'fitness') { F.state.view = d.fx === 'open' ? 'log' : 'main'; return show('fitness'); } return F.onClick(t); });
   if (d.discuss) return act(() => discuss(d.discuss, d.dtitle || '💬', d.dbody || ''));
   if (d.watchlife) {
     const [id, st] = d.watchlife.split(':');
@@ -5291,3 +5316,5 @@ document.addEventListener('toggle', (e) => {
   if (e.target.id === 'dogMore' && e.target.open) { dogMore().catch(() => {}); return; }
   if (e.target.matches?.('details[data-house]')) { LS.set(`fam.${e.target.dataset.house || 'house'}Open`, e.target.open ? '1' : '0'); const f = e.target.querySelector('.fold'); if (f) f.textContent = e.target.open ? 'Hide' : 'Show'; return; } const c = e.target.closest?.('[data-couple]'); if (c && e.target === c) bingo.open[c.dataset.couple] = c.open; }, true);
 document.addEventListener('input', (e) => { if (e.target.name === 'body' && e.target.closest?.('#writeForm')) atSuggest(e.target); if (e.target.dataset?.wcap) { const x = ws.shots[+e.target.dataset.wcap]; if (x) x.cap = e.target.value; return; } if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); if (e.target.closest?.('#writeForm')) { clearTimeout(saveDraft.t); saveDraft.t = setTimeout(saveDraft, 400); } });
+// 🏋️ The workout editor follows what you type.
+document.addEventListener('input', (e) => { if (e.target.dataset?.fxe && fitMod) fitMod.then((F) => F.onInput(e.target)).catch(() => {}); });
