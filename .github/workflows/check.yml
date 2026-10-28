@@ -32,3 +32,33 @@ jobs:
         with:
           name: link-report
           path: link-report/
+  # ⚡ Start-up stays within scripts/perf/budget.json: API requests, no duplicates, layout shift,
+  # script size. Against the real Worker (wrangler dev, demo sign-in) and a synthetic family.
+  perf:
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 15
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm i --no-save playwright@1.56.1 && npx playwright install --with-deps chromium
+      - run: cd server && npm ci
+      - name: Start the Worker and a Pages-like server
+        run: |
+          (node scripts/perf/pages.mjs > pages.log 2>&1 &)
+          (cd server && npx -y wrangler@4.40.0 dev --port 8787 --var DEMO:1 --var APP_ORIGIN:http://localhost:8098/DietApp/ > ../wrangler.log 2>&1 &)
+          for i in $(seq 90); do curl -sf localhost:8787/v2/config > /dev/null && break; sleep 2; done
+          curl -sf localhost:8787/v2/config
+      - run: node scripts/perf/seed.mjs
+      - run: node scripts/perf/budget.mjs
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: perf-report
+          path: |
+            perf-report/
+            wrangler.log

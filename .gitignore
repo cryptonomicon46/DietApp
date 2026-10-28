@@ -23,3 +23,5 @@ lean-plate-*.json
 *.jpg
 *.jpeg
 link-report/
+scripts/perf/.seeded.json
+perf-report/
