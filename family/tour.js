@@ -32,6 +32,7 @@ export const SLIDES = [
   ] },
   { id: 'us', eyebrow: '💞 Us', title: 'Just the two of you', go: 'us', cards: [
     ['📺', 'Watch', 'What you’re watching and what’s next. ＋ Episode logs tonight; Want to Watch → Watching → Watched.'],
+    ['📚', 'Read', 'What each of you is reading or listening to. ＋ Book, pick it, 📖 Reading or 🎧 Listening — done.'],
     ['❤️', 'Dates', 'Plans you answer 🙌 / 🤔 / ⏰, 🧭 Plan an outing, and the 2-2-2-2 rhythm.'],
     ['✨', 'Ideas for Us', 'A few movies, new restaurants and events. 💗 privately, 💬 discuss, and a match becomes a plan.'],
     ['💌', 'Notes', 'Little notes just for the two of you.'],
@@ -61,14 +62,14 @@ export const SLIDES = [
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
   id: '2026-12a',
-  title: 'New: Watch, Health and Fitness',
-  text: 'Watch first on Us, your Diet and workouts in Health, workouts from words or a photo, and WHOOP',
+  title: 'New: Watch, Read, Health and Fitness',
+  text: 'Watch and Read on Us, your Diet and workouts in Health, workouts from words or a photo, and WHOOP',
   slides: ['new', 'help'],
 };
 SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'Watch, Health and Fitness', cards: [
   ['📺', 'Watch, first on Us', 'Want to Watch → Watching → Watched, one tap to log an episode, and Discuss opens a thread.'],
-  ['💪', 'Health', 'Your Diet on one calm screen: today, your weight trend and how many of the last 7 days were on target.'],
-  ['🏋️', 'Fitness', 'Today’s Workout, logged round by round — build it, 💬 describe it in your own words, or 📷 snap a photo or screenshot of it. You check it before it’s added.'],
+  ['📚', 'Read, right under it', 'What each of you is reading or listening to, Want to Read and Finished. ＋ Book takes a few taps.'],
+  ['💪', 'Health and Fitness', 'Your Diet on one calm screen, and Today’s Workout logged round by round — build it, 💬 describe it, or 📷 snap a photo of it. You check it before it’s added.'],
   ['⌚', 'WHOOP in Devices', 'Health › Devices brings in your workouts and calories burned. Connecting shares nothing by itself.'],
   ['🔑', 'Who sees what', 'Diet and Fitness are private until you share each one, person by person. The family’s creator chooses who uses Home, Calendar and Threads.'],
 ] });
@@ -76,4 +77,4 @@ SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'Watch, Health and 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);
 export const slide = (id) => SLIDES.find((s) => s.id === id) || null;
 // The tour page for the screen you're on.
-export const SCREEN = { home: 'home', threads: 'threads', us: 'us', watch: 'us', calendar: 'calendar', me: 'me', family: 'me', member: 'me', chats: 'chats', chat: 'chats' };
+export const SCREEN = { home: 'home', threads: 'threads', us: 'us', watch: 'us', read: 'us', calendar: 'calendar', me: 'me', family: 'me', member: 'me', chats: 'chats', chat: 'chats' };

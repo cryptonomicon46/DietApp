@@ -61,6 +61,7 @@ import { chatRoutes, ChatCore, runOp, PAGE as CHAT_PAGE } from './chat.js';
 import { askClaude } from './scout.js';
 import { aiCall, GatewayError } from './aiGateway.js';
 import { readWorkout } from './workoutAi.js';
+import { bookRoutes, bookLookupRoutes, bookCover, forgetReader } from './books.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
@@ -188,6 +189,9 @@ export async function familyApi(req, env, path, ctx = null) {
   if (path === '/config') return json({ googleClientId: env.GOOGLE_CLIENT_ID || '', ready: !!env.GOOGLE_CLIENT_ID, supportEmail: env.SUPPORT_EMAIL || '', termsVersion: TERMS_VERSION, photos: !!blobStore(env),
     // 🔌 Which device connections are set up here (only whether; never the keys), so the app never offers a Connect that can't work.
     devices: { whoop: !!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET) }, ai: aiReady(env) });
+
+  // 📚 A book cover (an image tag, so no sign-in): passed through from Open Library and cached.
+  if (path.startsWith('/books/cover/') && method === 'GET') { const r = await bookCover({ path, env }); if (r) return r; }
 
   // ---- sign in ----
   if (path === '/auth/google' && method === 'POST') {
@@ -353,6 +357,10 @@ export async function familyApi(req, env, path, ctx = null) {
     const context = body.context && typeof body.context === 'object' ? { day: body.context.day, exercises: body.context.exercises } : {};
     return json(await aiCall({ db, purpose: 'tracker.command', input: { text, context } }, (p) => assist(env, { text: p.text, context: p.context || {} })));
   }
+
+  // ---- 📚 Read: book lookups (public details) and the family's books ----
+  { const r = await bookLookupRoutes({ path, method, env, json, url, req, user, underLimit, db }); if (r) return r; }
+  { const r = await bookRoutes({ path, method, body, db, loadFamily, meIn, isCouple, sealed, randomId, json }); if (r) return r; }
 
   // ---- 💬📷 Read a workout with Claude ("Describe it" when the phone couldn't, "From a photo") ----
   // Through the AI gateway: only the words or the one image and the weight unit go out; nothing is
@@ -2031,6 +2039,7 @@ async function removeMember(db, fam, t, { keepPosts = true, reach = null } = {})
   await db.del(`data:${fam.fid}:${t.id}`);
   for (const part of HEALTH_PARTS) await db.del(`health:${fam.fid}:${t.id}:${part}`);
   for (const w of ['today', 'log']) await db.del(`workouts:${fam.fid}:${t.id}:${w}`);
+  await forgetReader(db, fam.fid, t.id);
   await db.del(`dataprev:${fam.fid}:${t.id}`);
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) await db.del(`bingocard:${fam.fid}:${g.id}:${t.id}`);
   for (const s of (await db.get(`picks:${fam.fid}`)) || []) await db.del(`pickcard:${fam.fid}:${s.id}:${t.id}`);
@@ -2113,6 +2122,7 @@ async function deleteFamily(db, fam) {
   for (const o of (await db.blobs?.list(`f/${fam.fid}/`).catch(() => [])) || []) { const pid = o.key.split('/')[2]?.replace(/-(full|thumb|doc)$/, ''); if (pid) await db.del(blobMetaKey(fam.fid, pid)); }
   await deleteFamilyPhotos(db.blobs, fam.fid).catch(() => {});
   for (const x of fam.members) { await db.del(`data:${fam.fid}:${x.id}`); await db.del(`dataprev:${fam.fid}:${x.id}`); for (const part of HEALTH_PARTS) await db.del(`health:${fam.fid}:${x.id}:${part}`); for (const w of ['today', 'log']) await db.del(`workouts:${fam.fid}:${x.id}:${w}`); }
+  await db.del(`books:${fam.fid}`);
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) await db.del(`care:${fam.fid}:${d}`);
   await db.del(`careidx:${fam.fid}`);
   await db.del(`goldenmsg:${fam.fid}`);

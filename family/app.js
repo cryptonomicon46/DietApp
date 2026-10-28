@@ -375,13 +375,13 @@ function show(view, extra) {
   if (view === 'member') state.memberId = extra;
   if (view === 'compose') { state.view = state.prevView || 'home'; return plusMenu(); }
   chrome(true);
-  const lit = view === 'member' || view === 'family' ? 'me' : view === 'watch' || view === 'bingo' ? 'us' : view === 'fitness' ? 'health' : view;
+  const lit = view === 'member' || view === 'family' ? 'me' : view === 'watch' || view === 'read' || view === 'bingo' ? 'us' : view === 'fitness' ? 'health' : view;
   document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === lit));
   window.scrollTo(0, 0);
   if (view !== 'bingo') clearInterval(bingo.timer);
   $('#chatTop')?.classList.toggle('on', view === 'chats' || view === 'chat');
   if (view === 'chats' || view === 'chat') return dms().then((d) => (view === 'chat' ? d.convView(extra) : d.listView())).catch((e) => toast(e.message));
-  ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, us: usView, health: healthView, fitness: fitnessView })[view]?.();
+  ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, read: () => RM().then((R) => R.readView()), us: usView, health: healthView, fitness: fitnessView })[view]?.();
 }
 // 💪 Health: your own Diet and Fitness (family/health.js, loaded when you open it).
 async function healthView() {
@@ -1719,12 +1719,15 @@ async function usView() {
   $('#view').innerHTML = `${demoBanner()}<div class="us-page">
     <div class="us-title"><h2>💞 ${esc(me().name)} &amp; ${esc(p.name)}</h2><span class="small muted" id="usSub">🔒 Just you two</span></div>
     <section class="card us-watch" id="usWatch" aria-labelledby="usWatchH"><h2 class="card-h" id="usWatchH">📺 Watch</h2><div class="skeleton line"></div><div class="skeleton line"></div></section>
+    <section class="card us-read" id="usRead" aria-labelledby="usReadH"><h2 class="card-h" id="usReadH">📚 Read</h2><div class="skeleton line"></div><div class="skeleton line"></div></section>
     <section id="usFor"></section>
     <section class="card" id="usDatesC"></section>
     <section class="card" id="usIdeasC" hidden></section>
     <section class="card" id="usNotesC"><div class="skeleton line"></div></section>
     <div id="usBook"></div></div>`;
   importUs().catch(() => {});
+  // Read draws as soon as its books are in (its own request; covers aren't on this card).
+  RM().then((R) => R.loadBooks().then(() => { if (state.view === 'us') R.renderUsRead(); })).catch(() => { const el = $('#usRead'); if (el) el.innerHTML = '<h2 class="card-h">📚 Read</h2><p class="small muted">Couldn\'t load your books — pull to refresh.</p>'; });
   // Watch draws as soon as it's in; the rest when everything has arrived.
   const w = loadWatch().then(() => { if (state.view === 'us') renderUsWatch(); }).catch(() => { const el = $('#usWatch'); if (el) el.innerHTML = '<h2 class="card-h">📺 Watch</h2><p class="small muted">Couldn\'t load the watchlist just now.</p><button type="button" class="ghost wide" data-view="watch">Open Watchlist →</button>'; });
   await Promise.all([loadUs(), loadRhythm().then((r) => { calm.rhythm = r; }).catch(() => {}), w, loadIdeas().catch(() => {}), loadThreads().catch(() => {})]);
@@ -1738,6 +1741,7 @@ async function usView() {
 function renderUs() {
   if (!$('#usNotesC')) return;
   renderUsWatch();
+  if (readMod) readMod.then((R) => { if (R.rd.fid === state.fid) R.renderUsRead(); }).catch(() => {});
   const meId = fam().me, f = forYou(), pName = partnerName();
   const wn = (p) => (KINDS[p.kind] || KINDS.other);
   $('#usSub').textContent = `🔒 Just you two${us.streak > 1 ? ` · 💌 ${us.streak}-day note streak` : ''}`;
@@ -3343,6 +3347,9 @@ async function saveFeeds(list) {
 // Titles and services are end-to-end encrypted; the merging and the recap are the trackers' own
 // (js/showsCore.js), run over everyone in the family.
 const watch = { data: null, shows: [], tab: '', S: null, adding: { kind: 'show', service: 'netflix', status: 'want' } };
+// 📚 Read's screens (family/read.js) load the first time Us or Books needs them.
+let readMod = null;
+const RM = () => (readMod ||= import(`./read.js?v=${VERSION}`).then((m) => { m.init({ $, api, state, fam, me, member, partnerMember, esc, openSheet, closeSheet, toast, act, show, unlock, lock, discuss, isoLocal, demoBanner, lockedHere, LOCKED_MSG }); return m; }).catch((e) => { readMod = null; throw e; }));
 // 📺 Watch's screens (family/watch.js) load the first time Us or Watch needs them.
 let watchMod = null;
 const WM = () => (watchMod ||= import(`./watch.js?v=${VERSION}`).then((m) => { m.init({ $, LS, act, api, bingo, bingoNew, can, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide }); return m; }).catch((e) => { watchMod = null; throw e; }));
@@ -4299,6 +4306,7 @@ document.addEventListener('click', (e) => {
   if (d.watchtab) { watch.tab = d.watchtab; return renderWatch(); }
   if (d.watchone) { t.disabled = true; return act(() => watchOne(d.watchone)).finally(() => { t.disabled = false; }); }
   if (d.watchopen) return watchDetail(d.watchopen);
+  if (d.rd) return act(async () => (await RM()).onClick(t));
   if (d.fx) return act(async () => { const F = await fit(); if (['open', 'main', 'add'].includes(d.fx) && state.view !== 'fitness') { F.state.view = d.fx === 'open' ? 'log' : 'main'; return show('fitness'); } return F.onClick(t); });
   if (d.discuss) return act(() => discuss(d.discuss, d.dtitle || '💬', d.dbody || ''));
   if (d.watchlife) {
@@ -4706,6 +4714,7 @@ document.addEventListener('change', async (e) => {
 
 document.addEventListener('submit', (e) => {
   const f = e.target;
+  if (['rdManual', 'rdProg', 'rdEdit'].includes(f.id)) { e.preventDefault(); return act(async () => { const R = await RM(); if (!R.onSubmit(f)) await R.onSubmitAsync(f); }); }
   const v = Object.fromEntries(new FormData(f));
   if (f.id === 'chatForm') {
     e.preventDefault();
@@ -5120,4 +5129,5 @@ document.addEventListener('toggle', (e) => {
 document.addEventListener('input', (e) => { if (e.target.name === 'body' && e.target.closest?.('#writeForm')) atSuggest(e.target); if (e.target.dataset?.wcap) { const x = ws.shots[+e.target.dataset.wcap]; if (x) x.cap = e.target.value; return; } if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); if (e.target.closest?.('#writeForm')) { clearTimeout(saveDraft.t); saveDraft.t = setTimeout(saveDraft, 400); } });
 // 🏋️ The workout editor follows what you type.
 document.addEventListener('change', (e) => { if (e.target.dataset?.fxpick != null && fitMod) fitMod.then((F) => F.onPick(e.target)).catch(() => {}); });
+document.addEventListener('input', (e) => { if (e.target.dataset?.rdq != null) RM().then((R) => R.onInput(e.target)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.fxe && fitMod) fitMod.then((F) => F.onInput(e.target)).catch(() => {}); });

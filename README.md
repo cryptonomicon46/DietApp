@@ -38,13 +38,19 @@ A greeting with today's date on top (*Good afternoon, Sam. Here's your Wednesday
 **Gone in 2.0:** the Moments feed (old posts are kept on the server, not deleted; a read-only *Settings › Old posts* comes later), 📰 News and 🐶 Rescue news (hidden), and the ❤️ health meter (retired; what people saved is untouched). A calm diet consistency view (like *5 of 7 days on target*) is planned for 💪 Health.
 
 ### 💞 Us (just the two of you)
-Top to bottom: **📺 Watch** (what you're watching and what's next, one tap to log an episode), what's waiting for your answer, **❤️ Dates** (plans you answer 🙌 / 🤔 / ⏰, the 2-2-2-2 rhythm, ✨ Suggest, 🧭 Plan an outing, ❤️ Log a date), **✨ Ideas for Us** (a few curated movies, new restaurants and events — 💗 privately, matches become plans, 💬 Discuss any of them), **💌 Notes**, and a link to 📓 your notebook in Threads.
+Top to bottom: **📺 Watch** (what you're watching and what's next, one tap to log an episode), **📚 Read** (what each of you is reading or listening to right now), what's waiting for your answer, **❤️ Dates** (plans you answer 🙌 / 🤔 / ⏰, the 2-2-2-2 rhythm, ✨ Suggest, 🧭 Plan an outing, ❤️ Log a date), **✨ Ideas for Us** (a few curated movies, new restaurants and events — 💗 privately, matches become plans, 💬 Discuss any of them), **💌 Notes**, and a link to 📓 your notebook in Threads.
 
 ### 📅 Calendar
 A shared month view with everyone's events, ⭐ golden days, ❤️ dates, 🐾 appointments and 💞 plans; repeating events; linked iCloud / Google calendars (read-only); 👔 dress for the day for both of you; reminders.
 
 ### 📺 Watch
 First in 💞 Us: "2 watching · 3 want to watch", the shows that matter tonight (🆕 new episodes first, then what you're watching, then ⭐ Up Next), each with one button — **＋ Episode** (or **✓ Watched** for a movie) — and **Open Watchlist →**. Every show is in one of three places: **Want to Watch → Watching → Watched**. ⭐ Up Next just puts something first in Want to Watch. Tap a show for its details: where you're up to, your ★ rating, history, 💬 Discuss, 🎲 Bingo, and under *More*: share or keep private, ✋ Drop, delete.
+
+### 📚 Read
+Second in 💞 Us, right under Watch: for each of you, what you're reading or listening to right now (*🎧 Fourth Wing · 63%*, *📖 Project Hail Mary*), your **Want to Read** count, **Open Books →** and **＋ Book**.
+- **＋ Book:** type a title, author or ISBN, pick the book, then **📖 Reading**, **🎧 Listening** or **Want to Read** (or *Already finished it*). Details (author, cover, series and its number, genres) come from Open Library — nothing to type. Can't find it? *Add it by hand* (title and author).
+- **One book, each of you your own way:** the same book can be 🎧 Listening · 63% for Pat and 📖 Reading · 28% for Sam; nobody's status or progress changes anyone else's. Progress is optional — a %, page, chapter, or minutes into an audiobook.
+- **Books** (*Open Books →*): **Reading** (by person), **Want to Read** (yours first) and **Finished** (by year; ✋ Dropped tucked underneath). Tap a book: your status (Want to Read · Reading · Finished), 📖 / 🎧 / both, how far, ★ when finished, and **💬 Discuss** — one just-you-two thread per book, reopened every time. **⋯** has ✋ Dropped, who sees it (**Only me · Us two · Family** — the two of you by default; it can change only while nobody else has the book on their list), series / narrator / audiobook length, *Take off my list* and delete.
 
 ### 💪 Health
 Your own screen, private unless you share it:

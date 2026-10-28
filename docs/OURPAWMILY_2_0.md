@@ -13,7 +13,7 @@ Exactly five primary tabs, in order: **Home · Us · Calendar · Threads · Heal
 | Destination | Responsibility |
 | --- | --- |
 | Home | Needs attention/Requests, one Now line, shared Groceries, chores and dog care, pinned Threads. Requests replace feed help asks. |
-| Us | Tonight, This week, three curated Ideas, Watch. Distinguish planned viewing from what was actually watched, changed or skipped. Date discussion uses Threads; agreed plans lead to Calendar. |
+| Us | 📺 Watch, then 📚 Read (amendment 2026-10-28: core Read is approved — Want to Read → Reading → Finished, Dropped in details; one book per title with each member's own state and 📖/🎧 format; series, authors and genres kept as structure for a later Scout; Discuss → one Thread per book), Tonight, This week, three curated Ideas. Distinguish planned viewing from what was actually watched, changed or skipped. Date discussion uses Threads; agreed plans lead to Calendar. |
 | Calendar | Existing month/day views, plans and dog appointments; retain private subscription capability. |
 | Threads | Household discussion/reference memory, search, pins/favourites, boards and App feedback; Photos/Albums under Threads → Photos. Search encrypted content locally in memory. |
 | Health | Personal Diet and Fitness inside the Family app, private by default; consolidate the separate tracker experience without losing history. |
@@ -89,7 +89,7 @@ This is the revised roadmap, not an automatically authorized queue. The source's
 | 1 — Navigation and simplification | Five tabs; feed hidden; household codes out of normal UX; independent server configuration; Devices cleanup. Health may open existing trackers until its migration. |
 | 2 — No new codes | Remove new-family code creation after encrypted dog-file upload dependencies are resolved. |
 | 3 — Home & Threads | Requests, shared Groceries, chores/dog care, search, favourites, reply images/editing and App feedback; preserve encrypted content. |
-| 4 — Us | Tonight / This week / Ideas / Watch, planned versus actual outcomes, date Discuss → Thread → Calendar. |
+| 4 — Us | Tonight / This week / Ideas / Watch, planned versus actual outcomes, date Discuss → Thread → Calendar. **Amendment:** core Read (tracking, per-member state, series/author/genre metadata, Discuss, Scout-ready signals) is authorized in Phase 4; the personalized Scout/Discover engine is not. |
 | 5 — Health shell & Diet | Diet/Fitness split into separate encrypted records; preserve originals and existing targets/history; calm consistency UI. |
 | 6 — Family permissions | After Phase 5 split: member areas, per-person Diet/Fitness sharing and server authorization matrix. |
 | 7 — Fitness | Blocks/rounds for straight sets, supersets, circuits and intervals; manual builder, repeat/templates, history/progress; adapt old sessions without rewriting them. Never invent missing workout values. |

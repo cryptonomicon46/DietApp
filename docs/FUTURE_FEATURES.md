@@ -6,6 +6,8 @@ Prepared 2026-10-28 from the future amendments in “Review app code options.”
 
 ## Read + Watch + Discover inside Us
 
+**Status (2026-10-28 amendment):** core **Read is now approved and built** (Phase 4 amendment — see docs/BUILD_PROGRESS.md): Want to Read → Reading → Finished (Dropped in details), one book per title with each member's own 📖/🎧 state and optional progress, Open Library metadata incl. series/authors/genres, Discuss → one Thread per book, and per-member signals with structured reasons (`js/books.js`). **Still design only:** the personalized Scout/Discover engine (updates and recommendations), release/announcement fetching, author/series follow UI, adaptation discovery, notifications. The notes below remain the design for those.
+
 Explore a lightweight shared culture experience within Us, without another bottom tab or a return to generic News. Keep Tonight, This week, Ideas and Watch understandable; introduce Read/Discover through calm progressive disclosure rather than six permanent large cards.
 
 Read mirrors Watch:
