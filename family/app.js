@@ -399,7 +399,7 @@ function fit() {
       api, fid: state.fid, me: fam().me, esc, toast, openSheet, closeSheet, iso: () => isoLocal(), confirm: (q) => confirm(q),
       lock: async (v) => (fk() ? { enc: await seal(fk(), v) } : v), unlock: async (v) => (isSealed(v) ? tryOpen(fk(), v, null) : v),
       el: () => (state.view === 'fitness' ? $('#view') : null), show: () => (state.view === 'fitness' ? F.render() : show('fitness')),
-      extra: {},
+      aiReady: async () => !!(await api.liveConfig()).ai,
     });
     return F;
   })().catch((e) => { fitMod = null; throw e; });

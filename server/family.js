@@ -59,6 +59,8 @@ import { albumRoutes } from './albums.js';
 import { marketRoutes } from './market.js';
 import { chatRoutes, ChatCore, runOp, PAGE as CHAT_PAGE } from './chat.js';
 import { askClaude } from './scout.js';
+import { aiCall, GatewayError } from './aiGateway.js';
+import { readWorkout } from './workoutAi.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
@@ -185,7 +187,7 @@ export async function familyApi(req, env, path, ctx = null) {
 
   if (path === '/config') return json({ googleClientId: env.GOOGLE_CLIENT_ID || '', ready: !!env.GOOGLE_CLIENT_ID, supportEmail: env.SUPPORT_EMAIL || '', termsVersion: TERMS_VERSION, photos: !!blobStore(env),
     // 🔌 Which device connections are set up here (only whether; never the keys), so the app never offers a Connect that can't work.
-    devices: { whoop: !!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET) } });
+    devices: { whoop: !!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET) }, ai: aiReady(env) });
 
   // ---- sign in ----
   if (path === '/auth/google' && method === 'POST') {
@@ -232,7 +234,7 @@ export async function familyApi(req, env, path, ctx = null) {
       let client = env.__anthropic;
       if (!client) { const { default: Anthropic } = await import('@anthropic-ai/sdk'); client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }); }
       try {
-        const r = await runHelpAgent({ client, messages, run, tools: user ? ACCOUNT_TOOLS : GUEST_TOOLS, system: helpSystem({ signedIn: !!user, name: user?.name, supportEmail }) });
+        const r = await aiCall({ db, purpose: 'help.chat', input: { messages } }, (p) => runHelpAgent({ client, messages: p.messages, run, tools: user ? ACCOUNT_TOOLS : GUEST_TOOLS, system: helpSystem({ signedIn: !!user, name: user?.name, supportEmail }) }));
         return json({ reply: r.reply, ...extra });
       } catch {
         return json({ ...offlineAnswer(messages.at(-1).content, { supportEmail }), note: 'The assistant is unavailable right now, so here is the guide.' });
@@ -348,7 +350,29 @@ export async function familyApi(req, env, path, ctx = null) {
     if (!text || text.length > 500) return json({ error: 'say a short command' }, 400);
     if (!(await underLimit(db, `rate:${user.uid}:assist:${new Date().toISOString().slice(0, 10)}`, 150, 86400 * 2))) return json({ error: "that's a lot of commands today — try again tomorrow" }, 429);
     const assist = env.__assist || (await import('./assistant.js')).assist;
-    return json(await assist(env, { text, context: body.context && typeof body.context === 'object' ? body.context : {} }));
+    const context = body.context && typeof body.context === 'object' ? { day: body.context.day, exercises: body.context.exercises } : {};
+    return json(await aiCall({ db, purpose: 'tracker.command', input: { text, context } }, (p) => assist(env, { text: p.text, context: p.context || {} })));
+  }
+
+  // ---- 💬📷 Read a workout with Claude ("Describe it" when the phone couldn't, "From a photo") ----
+  // Through the AI gateway: only the words or the one image and the weight unit go out; nothing is
+  // kept here — the answer goes back to the phone's "Review Workout", which saves only when asked.
+  if (path === '/ai/workout' && method === 'POST') {
+    if (!aiReady(env)) return json({ error: 'reading workouts needs Claude on the connector', off: true }, 501);
+    const photo = body.image != null;
+    if (photo && !['image/jpeg', 'image/png', 'image/webp'].includes(body.mime)) return json({ error: 'a JPEG, PNG or WebP photo' }, 400);
+    if (photo && !/^[A-Za-z0-9+/]+={0,2}$/.test(String(body.image).slice(-4096))) return json({ error: 'that photo didn\'t arrive whole' }, 400);
+    if (!photo && String(body.text || '').trim().length < 3) return json({ error: 'describe the workout first' }, 400);
+    const unit = body.unit === 'kg' ? 'kg' : 'lb';
+    const input = photo ? { image: String(body.image), mime: body.mime, unit } : { text: String(body.text).trim(), unit };
+    try {
+      const out = await aiCall({ db, purpose: photo ? 'workout.photo' : 'workout.text', input, who: user.uid, underLimit },
+        async (payload) => readWorkout(await claude(env), payload, { model: env.PARSE_MODEL || 'claude-sonnet-5-5', today: /^\d{4}-\d{2}-\d{2}$/.test(body.today || '') ? body.today : '' }));
+      return json(out);
+    } catch (e) {
+      if (e instanceof GatewayError) return json({ error: e.status === 413 ? (photo ? 'that photo is too large' : 'that\'s a lot of words — try a shorter description') : e.message }, e.status);
+      return json({ error: photo ? "Couldn't read that photo — try a clearer one, or type it" : "Couldn't read that — try saying it another way" }, 502);
+    }
   }
 
   // ---- the maintainer's desk: problems people filed, app glitches, the nightly check ----
@@ -910,7 +934,8 @@ export async function familyApi(req, env, path, ctx = null) {
     const job = /^[a-z0-9]{8,40}$/.test(body.job || '') ? body.job : null;
     if (job) { const done = await db.get(jkey(job)); if (done) return json({ ...done, cached: true }); }
     const work = (async () => {
-      const r = await (swap ? swapStop : planOuting)(env, db, fam, body, (fam.ideas?.label || DEFAULT_AREA.label));
+      const { job: _, ...asked } = body;
+      const r = await aiCall({ db, purpose: swap ? 'outing.swap' : 'outing.plan', input: asked, who: user.uid }, (p) => (swap ? swapStop : planOuting)(env, db, fam, p, (fam.ideas?.label || DEFAULT_AREA.label)));
       if (job && !r.error && !r.demo) {
         await db.put(jkey(job), { ...r, at: Date.now() }, 86400);
         const n = await db.get(`jobnotify:${fam.fid}:${job}`);
@@ -919,7 +944,7 @@ export async function familyApi(req, env, path, ctx = null) {
       return r;
     })();
     ctx?.waitUntil?.(work.catch(() => {}));
-    const r = await work;
+    const r = await work.catch((e) => { if (e instanceof GatewayError) return { error: e.status === 413 ? 'that\'s a lot — say it more briefly' : e.message }; throw e; });
     return json(r, r.error ? 400 : 200);
   }
 
@@ -1121,8 +1146,8 @@ export async function familyApi(req, env, path, ctx = null) {
       let client = env.__anthropic;
       if (!client) { const { default: Anthropic } = await import('@anthropic-ai/sdk'); client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }); }
       try {
-        const res = await client.beta.messages.create({ model: 'claude-opus-5-5', max_tokens: 2000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'low' },
-          system: 'You write playful, family-friendly bingo squares for couples watching TV together.', messages: [{ role: 'user', content: bingoPrompt(show) }] });
+        const res = await aiCall({ db, purpose: 'bingo.squares', input: { show }, who: user.uid }, (p) => client.beta.messages.create({ model: 'claude-opus-5-5', max_tokens: 2000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'low' },
+          system: 'You write playful, family-friendly bingo squares for couples watching TV together.', messages: [{ role: 'user', content: bingoPrompt(p.show) }] }));
         const squares = parseSquares((res.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n'));
         if (squares.length < NEED) return json({ error: 'Claude came back with too few squares — try again', prompt: bingoPrompt(show) }, 502);
         return json({ squares });
@@ -1597,7 +1622,7 @@ export async function familyApi(req, env, path, ctx = null) {
     const month = new Date().toISOString().slice(0, 7), key = `tidyruns:${fam.fid}:${month}`;
     const n = (await db.get(key)) || 0;
     if (n >= Math.max(1, +env.TIDY_MAX_RUNS || 60)) return json({ error: "that's a lot of tidying this month — more next month" }, 400);
-    const { text } = await askClaude(env, `Tidy up these rough notes someone wrote to share with their family. Keep their words, facts, numbers and links exactly; don't add anything new or give advice. Fix typos, group related points under short "## " headings, and use "- " bullets. Plain text only (no bold, no tables). Answer with only the tidied notes.\n\n${raw}`, { search: false, maxTokens: 3000, model: env.TIDY_MODEL || 'claude-haiku-5-5' });
+    const { text } = await aiCall({ db, purpose: 'thread.tidy', input: { text: raw }, who: user.uid }, (p) => askClaude(env, `Tidy up these rough notes someone wrote to share with their family. Keep their words, facts, numbers and links exactly; don't add anything new or give advice. Fix typos, group related points under short "## " headings, and use "- " bullets. Plain text only (no bold, no tables). Answer with only the tidied notes.\n\n${p.text}`, { search: false, maxTokens: 3000, model: env.TIDY_MODEL || 'claude-haiku-5-5' }));
     await db.put(key, n + 1, 62 * 86400);
     return json({ text: String(text || '').trim().slice(0, 12000) });
   }
@@ -2137,6 +2162,14 @@ export async function deleteAccount(db, user) {
   await db.del(`pushsub:${user.uid}`);
   await db.del(`user:${user.uid}`);
   return { deleted: true, ...summary };
+}
+
+// ---------- 🤖 Claude ----------
+const aiReady = (env) => !!(env.__anthropic || (env.ANTHROPIC_API_KEY && !env.DEMO));
+async function claude(env) {
+  if (env.__anthropic) return env.__anthropic;
+  const { default: Anthropic } = await import('@anthropic-ai/sdk');
+  return new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 }
 
 // ---------- help desk ----------

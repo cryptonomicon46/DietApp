@@ -4,10 +4,10 @@
 // records of yours: Today's Workout (with saved workouts) and the history.
 import * as W from '../js/workout.js';
 
-const fx = { c: null, today: null, templates: [], log: [], todayAt: 0, logAt: 0, loaded: false, draft: null, draftFrom: null, legacy: [], timer: null, view: 'main' };
+const fx = { c: null, today: null, templates: [], log: [], todayAt: 0, logAt: 0, loaded: false, draft: null, draftFrom: null, legacy: [], timer: null, view: 'main', said: null, unread: [], reading: false, ai: null };
 export const state = fx;
 
-// ctx: { api, fid, me, lock, unlock, esc, toast, openSheet, closeSheet, confirm, iso, el: () => #view, show, extra: { describe, photo } }
+// ctx: { api, fid, me, lock, unlock, esc, toast, openSheet, closeSheet, confirm, iso, el: () => #view, show, aiReady: () => Promise<bool> }
 export async function load(c) {
   fx.c = c;
   const P = `/families/${c.fid}/members/${c.me}/workouts`;
@@ -68,6 +68,7 @@ export function render() {
   const el = fx.c?.el();
   if (!el) return;
   if (fx.view === 'edit' && fx.draft) el.innerHTML = editorHtml();
+  else if (fx.view === 'describe') el.innerHTML = describeHtml();
   else if (fx.view === 'log' && fx.today) el.innerHTML = loggerHtml();
   else { fx.view = 'main'; el.innerHTML = mainHtml(); }
 }
@@ -78,11 +79,49 @@ function mainHtml() {
     ${t ? `<section class="card fx-todaycard"><div class="eyebrow">Today's Workout</div><h3>${E(t.title)}</h3>${W.describe(t).map((l) => `<p class="small">${E(l)}</p>`).join('')}
       <div class="row"><button type="button" class="grow" data-fx="open">${t.status === 'active' ? 'Continue' : 'Start'} ›</button><button type="button" class="ghost" data-fx="edittoday">Edit</button></div></section>` : ''}
     <section class="card"><h3 class="card-h">＋ Add Workout</h3>
-      <div class="fx-paths"><button type="button" data-fx="build"><b>✍️</b>Build it</button>${fx.c.extra?.describe ? '<button type="button" data-fx="describe"><b>💬</b>Describe it</button>' : ''}${fx.c.extra?.photo ? '<button type="button" data-fx="photo"><b>📷</b>From a photo</button>' : ''}</div>
+      <div class="fx-paths"><button type="button" data-fx="build"><b>✍️</b>Build it</button><button type="button" data-fx="describe"><b>💬</b>Describe it</button></div>
       ${fx.templates.length ? `<p class="small muted">Saved: ${fx.templates.slice(0, 6).map((w, i) => `<button type="button" class="linkish small" data-fx="tpl:${i}">${E(w.title)}</button>`).join(' · ')}</p>` : ''}</section>
     <h3 class="wl-h">History</h3>
     ${h.length ? h.map((w) => { const s = W.summary(w); return `<button type="button" class="card fx-hist" data-fx="hist:${E(w.id)}"><span class="grow"><b>${E(w.title)}</b><small class="muted">${E(w.date || '')}${w.source === 'device' ? ` · ${w.activity?.minutes ?? '?'} min` : ` · ${s.exercises} exercise${s.exercises === 1 ? '' : 's'} · ${s.done || s.sets} sets`}</small></span><span class="go">›</span></button>`; }).join('') : '<p class="small muted pad">Finished workouts show here.</p>'}`;
 }
+// 💬 Describe it: type it the way you'd text it. Your phone reads it first; only if it can't place
+// something does it offer Claude — and only when you tap, with only the words you typed.
+function describeHtml() {
+  const d = fx.said || { text: '' };
+  const got = d.local ? W.summary(d.local.workout).exercises : 0;
+  return `<section class="fx-head"><h2><button type="button" class="linkish" data-fx="main" aria-label="Back to Fitness">‹</button> 💬 Describe it</h2></section>
+    <section class="card"><label for="fxSaid" class="small">Your workout, the way you'd text it</label>
+      <textarea id="fxSaid" rows="6" maxlength="1500" placeholder="Bench 3x10 @ 135, then pull-ups 3x8\n4 rounds: overhead press 12/12/11/11, row 12/13/14/13">${E(d.text)}</textarea>
+      <button type="button" class="wide" data-fx="read">Read it</button></section>
+    ${d.local ? `<section class="card" role="status"><p class="small">${got ? `Read ${got} exercise${got === 1 ? '' : 's'}.` : 'Couldn\'t read a workout in that yet.'}${d.local.unread.length ? ` Couldn't place: ${d.local.unread.map((x) => `“${E(x)}”`).join(', ')}.` : ''}</p>
+      <div class="row wrap">${got ? '<button type="button" class="grow" data-fx="reviewlocal">Review it</button>' : ''}${fx.ai !== false ? `<button type="button" class="${got ? 'ghost ' : ''}grow" data-fx="readai" ${fx.reading ? 'disabled' : ''}>${fx.reading ? 'Reading…' : 'Read it with Claude'}</button>` : ''}</div>
+      ${fx.ai !== false ? '<p class="tiny muted">Sends only the words above to Claude (Anthropic) to read them — nothing else goes with them. We don\'t keep them; Anthropic doesn\'t train on them and deletes them after a short safety check period.</p>' : '<p class="tiny muted">Fix what wasn\'t placed in the review, or say it another way.</p>'}</section>` : ''}`;
+}
+async function readSaid() {
+  const text = (document.getElementById('fxSaid')?.value || '').trim();
+  if (!text) return fx.c.toast('Type your workout first');
+  const T = await import('../js/workoutText.js');
+  const local = T.parseWorkout(text, { today: fx.c.iso() });
+  if (!T.needsHelp(local)) { fx.said = null; fx.unread = []; return edit(local.workout); }
+  fx.said = { text, local };
+  if (fx.ai == null) fx.ai = await fx.c.aiReady().catch(() => false);
+  return render();
+}
+async function readWithClaude() {
+  const c = fx.c, text = fx.said?.text;
+  if (!text || fx.reading) return;
+  fx.reading = true; render();
+  try {
+    const r = await c.api.post('/ai/workout', { text, unit: 'lb', today: c.iso() });
+    fx.said = null; fx.unread = r.unread || [];
+    return edit(r.workout);
+  } catch (e) {
+    if (e.status === 501) fx.ai = false;
+    c.toast(e.status === 501 ? 'Reading with Claude isn\'t set up here — review what your phone read' : e.message);
+    return render();
+  } finally { fx.reading = false; }
+}
+
 // The editor — for building a workout, and for reviewing one read from words or a photo.
 const measureOf = (it) => (it.sets.some((s) => s.time != null) ? 'time' : it.sets.some((s) => s.distance != null) ? 'distance' : it.sets.every((s) => s.bw) ? 'bw' : 'reps');
 const unsure = (o, f) => (o?.uncertain || []).includes(f);
@@ -95,6 +134,7 @@ function editorHtml() {
   const fromAi = w.source === 'text' || w.source === 'photo';
   return `<section class="fx-head"><h2><button type="button" class="linkish" data-fx="cancel" aria-label="Back">‹</button> ${fromAi ? 'Review Workout' : fx.draftFrom === 'today' ? 'Edit workout' : 'Build a workout'}</h2></section>
     ${fromAi ? `<p class="small muted pad">${w.source === 'photo' ? 'Read from your photo' : 'Read from what you wrote'}. Check it before adding — nothing is saved until you tap Add.</p>` : ''}
+    ${fromAi && fx.unread.length ? `<p class="small pad">Not placed: ${fx.unread.map((x) => `“${E(x)}”`).join(', ')}</p>` : ''}
     ${u.length ? `<div class="note warn" role="status">⚠️ ${u.length} thing${u.length === 1 ? '' : 's'} to check — highlighted below.</div>` : ''}
     <label class="fx-title">Name<input data-fxe="title" value="${E(w.title)}" maxlength="80"></label>
     ${w.blocks.map((b, bi) => `<section class="card fx-block">
@@ -156,14 +196,16 @@ export async function onClick(t) {
     case 'open': fx.view = 'log'; return c.show();
     case 'add': fx.view = 'main'; return c.show();
     case 'build': return edit({ title: 'Workout', blocks: [blank(1)] });
-    case 'describe': return c.extra.describe();
-    case 'photo': return c.extra.photo();
+    case 'describe': fx.said = null; fx.view = 'describe'; render(); return document.getElementById('fxSaid')?.focus();
+    case 'read': return readSaid();
+    case 'reviewlocal': { const w = fx.said?.local?.workout; fx.unread = fx.said?.local?.unread || []; fx.said = null; return w && edit(w); }
+    case 'readai': return readWithClaude();
     case 'tpl': return startWith(fx.templates[n[0]], 'repeat');
     case 'hist': return histSheet(r.join(':'));
     case 'repeat': { const w = history().find((x) => x.id === r.join(':')); c.closeSheet(); return w && startWith(W.repeatOf(w, c.iso()), 'repeat'); }
     case 'savetpl': { const w = history().find((x) => x.id === r.join(':')); if (!w) return; fx.templates = [W.repeatOf(w, ''), ...fx.templates.filter((x) => x.title !== w.title)].slice(0, 30); await saveToday(true); c.closeSheet(); return c.toast(`Saved "${w.title}" — find it under Add Workout`); }
     case 'edittoday': return edit(fx.today, 'today');
-    case 'cancel': fx.draft = null; fx.view = fx.draftFrom === 'today' ? 'log' : 'main'; return render();
+    case 'cancel': fx.draft = null; fx.unread = []; fx.view = fx.draftFrom === 'today' ? 'log' : 'main'; return render();
     case 'rounds': fx.draft = W.setRounds(fx.draft, n[0], fx.draft.blocks[n[0]].rounds + n[1]); return render();
     case 'delblock': fx.draft.blocks.splice(n[0], 1); return render();
     case 'delitem': { const b = fx.draft.blocks[n[0]]; b.items.splice(n[1], 1); if (!b.items.length) fx.draft.blocks.splice(n[0], 1); else b.kind = W.kindFor(b.items.length); return render(); }
@@ -173,7 +215,7 @@ export async function onClick(t) {
       const w = W.normalize(fx.draft);
       if (W.problems(w).length) return render();
       if (fx.draftFrom === 'today') { fx.today = { ...w, status: fx.today?.status || 'planned', startedAt: fx.today?.startedAt }; fx.draft = null; await saveToday(true); fx.view = 'log'; return render(); }
-      fx.draft = null;
+      fx.draft = null; fx.unread = [];
       return startWith(w, w.source === 'text' || w.source === 'photo' ? w.source : 'manual');
     }
     case 'log': {
