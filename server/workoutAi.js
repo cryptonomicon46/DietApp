@@ -52,7 +52,8 @@ export async function readWorkout(client, payload, { model = 'claude-sonnet-5-5'
   const content = photo
     ? [{ type: 'image', source: { type: 'base64', media_type: payload.mime, data: payload.image } }, { type: 'text', text: INSTRUCTIONS(payload.unit, true) }]
     : [{ type: 'text', text: `${INSTRUCTIONS(payload.unit, false)}\n\n<workout>\n${payload.text}\n</workout>` }];
-  const res = await client.messages.create({ model, max_tokens: 6000, output_config: { format: { type: 'json_schema', schema: SCHEMA } }, messages: [{ role: 'user', content }] });
+  // Reading a photo gets a little more thought (handwriting); typed words need little.
+  const res = await client.messages.create({ model, max_tokens: 12000, output_config: { effort: photo ? 'medium' : 'low', format: { type: 'json_schema', schema: SCHEMA } }, messages: [{ role: 'user', content }] });
   if (res.stop_reason === 'refusal' || res.stop_reason === 'max_tokens') throw Object.assign(new Error(res.stop_reason), { status: 502 });
   const text = (res.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
   let j;

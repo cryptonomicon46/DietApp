@@ -4,7 +4,7 @@
 // records of yours: Today's Workout (with saved workouts) and the history.
 import * as W from '../js/workout.js';
 
-const fx = { c: null, today: null, templates: [], log: [], todayAt: 0, logAt: 0, loaded: false, draft: null, draftFrom: null, legacy: [], timer: null, view: 'main', said: null, unread: [], reading: false, ai: null };
+const fx = { c: null, today: null, templates: [], log: [], todayAt: 0, logAt: 0, loaded: false, draft: null, draftFrom: null, legacy: [], timer: null, view: 'main', said: null, unread: [], reading: false, ai: null, pic: null };
 export const state = fx;
 
 // ctx: { api, fid, me, lock, unlock, esc, toast, openSheet, closeSheet, confirm, iso, el: () => #view, show, aiReady: () => Promise<bool> }
@@ -69,6 +69,7 @@ export function render() {
   if (!el) return;
   if (fx.view === 'edit' && fx.draft) el.innerHTML = editorHtml();
   else if (fx.view === 'describe') el.innerHTML = describeHtml();
+  else if (fx.view === 'photo') el.innerHTML = photoHtml();
   else if (fx.view === 'log' && fx.today) el.innerHTML = loggerHtml();
   else { fx.view = 'main'; el.innerHTML = mainHtml(); }
 }
@@ -79,7 +80,7 @@ function mainHtml() {
     ${t ? `<section class="card fx-todaycard"><div class="eyebrow">Today's Workout</div><h3>${E(t.title)}</h3>${W.describe(t).map((l) => `<p class="small">${E(l)}</p>`).join('')}
       <div class="row"><button type="button" class="grow" data-fx="open">${t.status === 'active' ? 'Continue' : 'Start'} ›</button><button type="button" class="ghost" data-fx="edittoday">Edit</button></div></section>` : ''}
     <section class="card"><h3 class="card-h">＋ Add Workout</h3>
-      <div class="fx-paths"><button type="button" data-fx="build"><b>✍️</b>Build it</button><button type="button" data-fx="describe"><b>💬</b>Describe it</button></div>
+      <div class="fx-paths"><button type="button" data-fx="build"><b>✍️</b>Build it</button><button type="button" data-fx="describe"><b>💬</b>Describe it</button>${fx.ai !== false ? '<button type="button" data-fx="photo"><b>📷</b>Photo</button>' : ''}</div>
       ${fx.templates.length ? `<p class="small muted">Saved: ${fx.templates.slice(0, 6).map((w, i) => `<button type="button" class="linkish small" data-fx="tpl:${i}">${E(w.title)}</button>`).join(' · ')}</p>` : ''}</section>
     <h3 class="wl-h">History</h3>
     ${h.length ? h.map((w) => { const s = W.summary(w); return `<button type="button" class="card fx-hist" data-fx="hist:${E(w.id)}"><span class="grow"><b>${E(w.title)}</b><small class="muted">${E(w.date || '')}${w.source === 'device' ? ` · ${w.activity?.minutes ?? '?'} min` : ` · ${s.exercises} exercise${s.exercises === 1 ? '' : 's'} · ${s.done || s.sets} sets`}</small></span><span class="go">›</span></button>`; }).join('') : '<p class="small muted pad">Finished workouts show here.</p>'}`;
@@ -120,6 +121,64 @@ async function readWithClaude() {
     c.toast(e.status === 501 ? 'Reading with Claude isn\'t set up here — review what your phone read' : e.message);
     return render();
   } finally { fx.reading = false; }
+}
+
+// 📷 From a photo: a handwritten plan, a whiteboard or a screenshot. Nothing leaves the phone until
+// you tap Read it; then only this one picture goes — redrawn first, so it carries no location or
+// camera details — and it isn't kept anywhere: not on the connector, not in your workouts.
+function photoHtml() {
+  const p = fx.pic;
+  if (fx.ai === false) return `<section class="fx-head"><h2><button type="button" class="linkish" data-fx="main" aria-label="Back to Fitness">‹</button> 📷 From a photo</h2></section>
+    <section class="card"><p class="small">Reading photos isn't set up here yet. 💬 Describe it or ✍️ Build it work the same way.</p><div class="row"><button type="button" class="grow" data-fx="describe">💬 Describe it</button><button type="button" class="ghost grow" data-fx="build">✍️ Build it</button></div></section>`;
+  return `<section class="fx-head"><h2><button type="button" class="linkish" data-fx="main" aria-label="Back to Fitness">‹</button> 📷 From a photo</h2></section>
+    <section class="card">
+      ${p?.url ? `<img class="fx-pic" src="${p.url}" alt="The photo you chose">` : '<p class="small">A photo or screenshot of a workout — handwritten, on a whiteboard, or from an app or a message.</p>'}
+      <input type="file" accept="image/*" data-fxpick hidden><button type="button" class="wide ${p?.url ? 'ghost' : ''}" data-fx="pickpic">${p?.url ? 'Choose another' : 'Choose a photo or screenshot'}</button>
+      ${p?.url ? `<button type="button" class="wide" data-fx="readpic" ${fx.reading ? 'disabled' : ''}>${fx.reading ? 'Reading… usually 5–20 seconds' : 'Read it'}</button>` : ''}
+      ${p?.error ? `<p class="small" role="alert">${E(p.error)}</p>` : ''}
+      <p class="tiny muted">Read it sends only this picture — redrawn on your phone first, so no location or camera details — to Claude (Anthropic) to read the workout. It isn't kept: not by us, not in your workouts. Anthropic doesn't train on it and deletes it after a short safety check period.</p></section>`;
+}
+// Redraw the picture (drops location/camera data and shrinks it to what's needed to read text).
+async function redraw(file) {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close?.();
+  const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.85));
+  if (!blob) throw new Error('no picture');
+  const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
+  return { blob, b64 };
+}
+export async function onPick(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  if (fx.pic?.url) URL.revokeObjectURL(fx.pic.url);
+  try {
+    const { blob, b64 } = await redraw(file);
+    fx.pic = { url: URL.createObjectURL(blob), b64 };
+  } catch { fx.pic = { error: "Couldn't open that picture — try a screenshot, or a JPEG or PNG." }; }
+  input.value = '';
+  render();
+}
+function dropPic() { if (fx.pic?.url) URL.revokeObjectURL(fx.pic.url); fx.pic = null; }
+async function readPic() {
+  const c = fx.c, p = fx.pic;
+  if (!p?.b64 || fx.reading) return;
+  fx.reading = true; render();
+  const asked = p;
+  try {
+    const r = await c.api.post('/ai/workout', { image: p.b64, mime: 'image/jpeg', unit: 'lb', today: c.iso() });
+    if (fx.pic !== asked || fx.view !== 'photo') return null; // left or chose another meanwhile
+    dropPic(); fx.unread = r.unread || [];
+    if (!r.workout?.blocks?.length) { fx.pic = null; fx.said = { text: '' }; c.toast("Couldn't find a workout in that picture"); return null; }
+    return edit(r.workout);
+  } catch (e) {
+    if (e.status === 501) fx.ai = false;
+    if (fx.pic === asked) asked.error = e.status === 501 ? '' : e.status === 429 ? e.message : !navigator.onLine ? "You're offline — try again when you're connected." : e.message || "Couldn't read that photo — try a clearer one, or type it.";
+    return render();
+  } finally { fx.reading = false; if (fx.view === 'photo') render(); }
 }
 
 // The editor — for building a workout, and for reviewing one read from words or a photo.
@@ -192,7 +251,7 @@ export async function onClick(t) {
   const [a, ...r] = t.dataset.fx.split(':'), n = r.map(Number);
   const c = fx.c;
   switch (a) {
-    case 'main': fx.view = 'main'; return c.show();
+    case 'main': dropPic(); fx.view = 'main'; return c.show();
     case 'open': fx.view = 'log'; return c.show();
     case 'add': fx.view = 'main'; return c.show();
     case 'build': return edit({ title: 'Workout', blocks: [blank(1)] });
@@ -200,6 +259,9 @@ export async function onClick(t) {
     case 'read': return readSaid();
     case 'reviewlocal': { const w = fx.said?.local?.workout; fx.unread = fx.said?.local?.unread || []; fx.said = null; return w && edit(w); }
     case 'readai': return readWithClaude();
+    case 'photo': dropPic(); fx.view = 'photo'; render(); if (fx.ai == null) { fx.ai = await c.aiReady().catch(() => false); render(); } return null;
+    case 'readpic': return readPic();
+    case 'pickpic': return document.querySelector('[data-fxpick]')?.click();
     case 'tpl': return startWith(fx.templates[n[0]], 'repeat');
     case 'hist': return histSheet(r.join(':'));
     case 'repeat': { const w = history().find((x) => x.id === r.join(':')); c.closeSheet(); return w && startWith(W.repeatOf(w, c.iso()), 'repeat'); }
