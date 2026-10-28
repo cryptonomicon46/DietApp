@@ -311,7 +311,9 @@ function actions(s) {
     <div class="stack">
       <button type="button" class="ghost" data-dm="reply" data-s="${s}">↩︎ Reply</button>
       ${S.plain.get(`${S.cur}:${s}`) ? `<button type="button" class="ghost" data-dm="copy" data-s="${s}">Copy text</button>` : ''}
-      ${mine ? `<button type="button" class="ghost danger" data-dm="unsend" data-s="${s}">Unsend</button>` : ''}
+      ${mine ? `<button type="button" class="ghost danger" data-dm="unsend" data-s="${s}">Unsend</button>`
+    : `<button type="button" class="ghost" data-dm="report" data-s="${s}">🚩 Report…</button>
+      <button type="button" class="ghost danger" data-dm="block" data-by="${m.by}">⛔ Block ${C.esc(nameOf(m.by))}</button>`}
       <button type="button" class="ghost" data-act="close">Close</button>
     </div></div>`);
 }
@@ -345,6 +347,18 @@ document.addEventListener('click', async (e) => {
     case 'noreply': S.reply = null; return drawExtras();
     case 'copy': C.closeSheet(); return navigator.clipboard?.writeText(S.plain.get(`${id}:${d.s}`) || '').then(() => C.toast('Copied')).catch(() => {});
     case 'unsend': C.closeSheet(); return C.api.del(`/families/${S.fid}/chats/${id}/${d.s}`).then((r) => { merge(id, [r.message]); draw(id); }).catch((err) => C.toast(err.message));
+    case 'report': {
+      const reason = prompt("What's wrong with this message? (It stays encrypted; only that it was reported is kept.)", '');
+      if (reason == null) return;
+      C.closeSheet();
+      return C.api.post(`/families/${S.fid}/chats/${id}/report`, { s: +d.s, reason }).then(() => C.toast('Reported — you can also block them')).catch((err) => C.toast(err.message));
+    }
+    case 'block': {
+      const name = nameOf(d.by);
+      if (!confirm(`Block ${name}? Your chats with them, and their threads and replies, disappear for you. You can unblock them in Me › Blocked.`)) return;
+      C.closeSheet();
+      return C.api.post(`/families/${S.fid}/members/${d.by}/block`).then(async (r) => { if (C.state.user) C.state.user.blocked = r.blocked; C.toast(`${name} is blocked`); await loadList(); C.show('chats'); }).catch((err) => C.toast(err.message));
+    }
     case 'attach': $('#dmEmojis').hidden = true; $('#dmAttach').hidden = !$('#dmAttach').hidden; return;
     case 'emojis': $('#dmAttach').hidden = true; $('#dmEmojis').hidden = !$('#dmEmojis').hidden; return;
     case 'emoji': { const ta = $('#dmForm textarea'); if (!ta) return; const at = ta.selectionStart ?? ta.value.length; ta.value = ta.value.slice(0, at) + d.e + ta.value.slice(ta.selectionEnd ?? at); ta.selectionStart = ta.selectionEnd = at + d.e.length; grow(ta); return; }

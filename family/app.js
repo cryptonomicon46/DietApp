@@ -2258,7 +2258,7 @@ function renderThread() {
       ${r.quote != null && !letter ? `<div class="quote">❝ ${esc(typeof r.quote === 'number' ? (blocks[r.quote] ? blockText(blocks[r.quote]).slice(0, 140) : '') : r.quote)} ❞</div>` : ''}
       <div class="t">${linkify(r.text)}</div>
       <div class="ractions">${t.cat === 'ask' ? `<button type="button" class="linkish tiny" data-thup="${r.id}">▲ ${r.ups}${r.upped ? ' · you' : ''}</button>` : ''}${t.cat === 'ask' && t.mine ? `<button type="button" class="linkish tiny" data-thbest="${r.id}">${t.bestId === r.id ? 'Unmark best' : '✓ Best answer'}</button>` : ''}
-        <button type="button" class="linkish tiny" data-thquote="r:${r.id}">❝ Quote</button>${r.mine ? `<button type="button" class="linkish tiny" data-thrdel="${r.id}">Delete</button>` : ''}</div></div></div>`;
+        <button type="button" class="linkish tiny" data-thquote="r:${r.id}">❝ Quote</button>${r.mine ? `<button type="button" class="linkish tiny" data-thrdel="${r.id}">Delete</button>` : `<button type="button" class="linkish tiny" data-thmenu="${r.id}" aria-label="Report or block ${esc(r.name)}">⋯</button>`}</div></div></div>`;
   const pollHtml = t.poll ? `<div class="poll">${t.poll.opts.map((o, i) => { const total = t.poll.counts.reduce((a, b) => a + b, 0) || 1; return `<button type="button" class="${t.poll.mine === i ? 'on' : ''}" data-thvote="${i}"><i style="width:${Math.round((t.poll.counts[i] / total) * 100)}%"></i><span>${t.poll.mine === i ? '✓ ' : ''}${esc(o)} · ${t.poll.counts[i]}</span></button>`; }).join('')}
     <p class="tiny muted">${t.poll.closes ? `Closes ${esc(dayText(t.poll.closes).replace(/ ·.*/, ''))} · ` : ''}tap to vote, tap another to change</p></div>` : '';
   const seen = !t.mine ? '' : letter ? (t.readers.length ? `✓ Read by ${esc(partnerName())} ${ago(Math.max(...t.readers))}` : `Not read yet by ${esc(partnerName())}`) : t.readCount && !(t.seen || []).length ? `Seen by ${t.readCount}` : '';
@@ -2282,7 +2282,7 @@ function renderThread() {
   const sorted = t.cat === 'ask' ? [...replies].sort((a, b) => (b.id === t.bestId) - (a.id === t.bestId) || b.ups - a.ups || a.at - b.at) : replies;
   $('#view').innerHTML = `${demoBanner()}<div class="thread-page">
     <div class="row between"><button type="button" class="linkish" data-thback="1">‹ ${letter ? 'Us' : 'Threads'}</button>
-      <span class="row">${t.own && t.aud !== 'connections' ? '<button type="button" class="linkish small" data-thmove="1">🗂 Move</button>' : ''}<button type="button" class="linkish small" data-thfollow="1">${t.following ? '🔔 Following' : '🔕 Follow'}</button>${t.mine ? ` <button type="button" class="linkish small" data-thedit="1">Edit</button>` : ''}${t.mine || fam()?.members.find((x) => x.id === meId)?.role === 'owner' ? ` <button type="button" class="linkish small" data-thpin="1">${t.pinned ? 'Unpin' : '📌 Pin'}</button> <button type="button" class="linkish small danger" data-thdel="1">Delete</button>` : ''}</span></div>
+      <span class="row">${t.own && t.aud !== 'connections' ? '<button type="button" class="linkish small" data-thmove="1">🗂 Move</button>' : ''}<button type="button" class="linkish small" data-thfollow="1">${t.following ? '🔔 Following' : '🔕 Follow'}</button>${t.mine ? '' : ` <button type="button" class="linkish small" data-thmenu="" aria-label="Report or block">⋯</button>`}${t.mine ? ` <button type="button" class="linkish small" data-thedit="1">Edit</button>` : ''}${t.mine || fam()?.members.find((x) => x.id === meId)?.role === 'owner' ? ` <button type="button" class="linkish small" data-thpin="1">${t.pinned ? 'Unpin' : '📌 Pin'}</button> <button type="button" class="linkish small danger" data-thdel="1">Delete</button>` : ''}</span></div>
     ${body}
     ${docsHtml}
     ${shotsHtml}
@@ -2292,6 +2292,33 @@ function renderThread() {
     <form id="thReplyForm" class="stack reply-box">${th.quote ? `<div class="quote">❝ ${esc(th.quote.label)} ❞ <button type="button" class="linkish tiny" data-thquote="x">✕</button></div>` : ''}
       <textarea name="text" rows="2" maxlength="4000" placeholder="${letter ? 'Write a note…' : t.cat === 'ask' ? 'Your answer…' : 'Reply…'}" required></textarea><div class="row end"><button>${letter ? 'Add note' : 'Reply'}</button></div></form>
   </div>`;
+}
+// ⚑ Report or 🚫 block, for a thread or one reply someone else wrote (rid: the reply, or '' for the thread).
+function threadMenu(rid) {
+  const t = th.cur, r = rid ? t.replies.find((x) => x.id === rid) : null;
+  openSheet(`<div class="menu"><button type="button" class="ghost" data-threport="${rid}">🚩 Report ${r ? 'this reply' : 'this thread'}…</button>
+    <button type="button" class="ghost danger" data-thblock="${rid}">⛔ Block ${esc(r ? r.name : t.byName)}</button>
+    <button type="button" data-act="close">Cancel</button></div>`);
+}
+async function threadReport(rid, block) {
+  const t = th.cur, r = rid ? t.replies.find((x) => x.id === rid) : null, name = r ? r.name : t.byName;
+  const base = `/families/${t.fid}/threads/${t.id}`;
+  if (block) {
+    if (!confirm(`Block ${name}? You won't see their threads, replies or chats. You can unblock them in Me › Blocked.`)) return;
+    const b = await api.post(`${base}/block${rid ? `/${rid}` : ''}`);
+    if (b.blocked) state.user.blocked = b.blocked;
+    toast(`${name} is blocked`);
+  } else {
+    const reason = prompt(`What's wrong with ${r ? 'this reply' : 'this thread'}? It's hidden for you, and the family's creator sees that it was reported.`, '');
+    if (reason == null) return;
+    await api.post(`${base}/report${rid ? `/${rid}` : ''}`, { reason });
+    toast('Reported — thanks for letting us know');
+  }
+  closeSheet();
+  th.loaded = 0;
+  if (rid && !block) return threadAct(() => api.get(base));
+  th.cur = null; th.quote = null;
+  return show(state.view === 'us' ? 'us' : 'feed');
 }
 // ✍️ Write it up: for just the two of you, the family, or friends' families. Drafts keep themselves.
 const draftKey = () => `fam.threadDraft.${state.fid}`;
@@ -4027,6 +4054,9 @@ document.addEventListener('click', (e) => {
   if (d.board) { th.board = d.board; return threadsView(); }
   if (d.thread) { const [f, id] = d.thread.split(':'); th.quote = null; return act(() => threadView(f, id)); }
   if (d.thback) { th.cur = null; th.quote = null; return show(state.view === 'us' ? 'us' : 'feed'); }
+  if (d.thmenu != null) return threadMenu(d.thmenu);
+  if (d.threport != null) return act(() => threadReport(d.threport, false));
+  if (d.thblock != null) return act(() => threadReport(d.thblock, true));
   if (d.thfollow) return act(async () => { const r = await api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/follow`); th.cur.following = r.following; renderThread(); toast(r.following ? '🔔 You\'ll hear about new replies' : '🔕 No more replies from this one'); });
   if (d.thpin) return act(() => threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}`, { pinned: !th.cur.pinned })));
   if (d.thdel) { if (!confirm('Delete this thread and its replies?')) return; return act(async () => { await api.del(`/families/${th.cur.fid}/threads/${th.cur.id}`); th.loaded = 0; th.list = th.list.filter((x) => x.id !== th.cur.id); th.cur = null; toast('Deleted'); show('feed'); }); }

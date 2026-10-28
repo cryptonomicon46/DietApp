@@ -410,6 +410,16 @@ export async function familyApi(req, env, path, ctx = null) {
       return json({ ok: true });
     }
   }
+  // 🚫 Blocking someone in your family (from a chat): their chats, threads and replies disappear for you.
+  m = path.match(/^\/families\/([a-z0-9]+)\/members\/([a-z0-9]+)\/block$/);
+  if (m && method === 'POST') {
+    const fam = await loadFamily(m[1]);
+    const t = fam?.members.find((x) => x.id === m[2]);
+    if (!t) return json({ error: 'not found' }, 404);
+    if (!t.uid || t.uid === user.uid) return json({ error: "can't block that" }, 400);
+    user.blocked = [...(user.blocked || []).filter((b) => b.uid !== t.uid), { id: randomId(8), uid: t.uid, name: t.name }].slice(-200); await saveUser();
+    return json({ blocked: blockedOut(user) });
+  }
   m = path.match(/^\/account\/blocks\/([a-z0-9]+)$/);
   if (m && method === 'DELETE') {
     user.blocked = (user.blocked || []).filter((b) => b.id !== m[1] && b.uid !== m[1]); await saveUser();
@@ -1465,12 +1475,12 @@ export async function familyApi(req, env, path, ctx = null) {
   }
 
   // ---- 📖 threads ----
-  { const r = await threadRoutes({ path, method, body, db, user, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
+  { const r = await threadRoutes({ path, method, body, db, user, saveUser, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 📷 albums (family only) ----
   { const r = await albumRoutes({ path, method, body, db, loadFamily, meIn, sealed, clean, randomId, json, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 🛒 the Market (family, and friends' families by default) ----
   // ---- 💬 chats between the grown-ups ----
-  { const r = await chatRoutes({ path, method, body, user, loadFamily, meIn, tell, json, url: () => url(req), hub: (fid) => chatHub(db, fid), blobs: blobStore(env), deletePhoto: (b, f, id) => deletePhoto(b, f, id, db), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
+  { const r = await chatRoutes({ path, method, body, db, user, loadFamily, meIn, tell, json, url: () => url(req), hub: (fid) => chatHub(db, fid), blobs: blobStore(env), deletePhoto: (b, f, id) => deletePhoto(b, f, id, db), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   { const r = await marketRoutes({ path, method, body, db, user, families, loadFamily, meIn, sealed, clean, randomId, tell, json, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ✨ Tidy it up: rough notes into headings and bullets. Only the text you tap it on is sent.
   m = path.match(/^\/families\/([a-z0-9]+)\/tidy$/);

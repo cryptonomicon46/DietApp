@@ -34,7 +34,8 @@ export async function threadRoutes(c) {
     .map((x) => ({ id: x.id, aspect: Math.min(4, Math.max(0.2, +x.aspect || 1)), cap: (x.cap && text(fam, x.cap, 80)) || '' }));
   const text = (fam, v, max) => sealed(v, max * 3 + 200) ?? (fam.e2ee ? null : typeof v === 'string' ? String(v).replace(/[\u0000-\u0009\u000b-\u001f]/g, ' ').trim().slice(0, max) : null);
   const visible = (t, own) => (t.aud === 'us' ? (t.to || []).includes(user.uid) : own || t.aud === 'connections');
-  const blocked = new Set((user.blocked || []).map((b) => b.uid));
+  const blocked = new Set((user.blocked || []).map((b) => b.uid)), hidden = new Set(user.hidden || []);
+  const saveUser = c.saveUser || (async () => {});
   // A family's thread you can see: your own family's, or a friends' family's shared with friends.
   const access = async (fid) => {
     const fam = await loadFamily(fid);
@@ -45,14 +46,16 @@ export async function threadRoutes(c) {
   };
   const summary = (t, own, famName) => ({
     id: t.id, fid: t.fid, aud: t.aud, board: t.board, movedBy: t.movedBy || '', cat: t.cat, title: t.title, by: t.by, byName: t.byName, byAvatar: t.byAvatar, mine: t.byUid === user.uid,
-    at: t.at, lastAt: t.lastAt, lastByName: t.lastByName, replies: t.replies.filter((r) => !blocked.has(r.uid)).length, mins: t.mins || 1, pinned: !!t.pinned, shotCount: (t.shots || []).length, docCount: (t.docs || []).length, tagged: (t.tagUids || []).includes(user.uid),
+    at: t.at, lastAt: t.lastAt, lastByName: t.lastByName, replies: t.replies.filter((r) => !blocked.has(r.uid) && !hidden.has(r.id)).length, mins: t.mins || 1, pinned: !!t.pinned, shotCount: (t.shots || []).length, docCount: (t.docs || []).length, tagged: (t.tagUids || []).includes(user.uid),
     unread: (t.reads?.[user.uid] || 0) < t.lastAt && t.lastByUid !== user.uid, following: (t.followers || []).includes(user.uid), own, familyName: famName,
     best: !!t.best, poll: t.poll ? { closes: t.poll.closes, voted: t.poll.votes?.[user.uid] != null, n: Object.keys(t.poll.votes || {}).length } : null, ...(t.pk ? { pk: t.pk } : {}),
   });
   const full = (t, own, fam) => ({
     ...summary(t, own, fam?.name || ''), body: t.body, editedAt: t.editedAt || null, shots: t.shots || [], docs: t.docs || [], tags: t.tags || [],
-    replies: t.replies.filter((r) => !blocked.has(r.uid)).map((r) => ({ id: r.id, name: r.name, text: r.text, quote: r.quote ?? null, at: r.at, mine: r.uid === user.uid, ups: (r.ups || []).length, upped: (r.ups || []).includes(user.uid) })),
+    replies: t.replies.filter((r) => !blocked.has(r.uid) && !hidden.has(r.id)).map((r) => ({ id: r.id, name: r.name, text: r.text, quote: r.quote ?? null, at: r.at, mine: r.uid === user.uid, ups: (r.ups || []).length, upped: (r.ups || []).includes(user.uid) })),
     bestId: t.best || null,
+    // ⚑ How many reports it has: for the family's creator only.
+    reports: own && fam?.members && meIn(fam)?.role === 'owner' ? t.reports || 0 : 0,
     poll: t.poll ? { opts: t.poll.opts, closes: t.poll.closes, counts: t.poll.opts.map((_, i) => Object.values(t.poll.votes || {}).filter((v) => v === i).length), mine: t.poll.votes?.[user.uid] ?? null } : null,
     // Who's read it (for a just-us thread, when; for others, how many).
     readers: t.aud === 'us' ? Object.entries(t.reads || {}).filter(([u]) => u !== t.byUid).map(([, at]) => at) : [],
@@ -72,7 +75,7 @@ export async function threadRoutes(c) {
       const fam = s.fam || await db.get(`family:${s.fid}`);
       for (const id of ((await db.get(`threads:${s.fid}`)) || []).slice(0, 80)) {
         const t = await db.get(`thread:${s.fid}:${id}`);
-        if (!t || !visible(t, s.own) || blocked.has(t.byUid)) continue;
+        if (!t || !visible(t, s.own) || blocked.has(t.byUid) || hidden.has(t.id)) continue;
         out.push(summary(t, s.own, fam?.name || ''));
       }
     }
@@ -108,7 +111,7 @@ export async function threadRoutes(c) {
     return json({ error: 'not found' }, 404);
   }
 
-  let m = path.match(/^\/families\/([a-z0-9]+)\/threads(?:\/([a-z0-9]+)(?:\/(replies|vote|best|follow|up|move)(?:\/([a-z0-9]+))?)?)?$/);
+  let m = path.match(/^\/families\/([a-z0-9]+)\/threads(?:\/([a-z0-9]+)(?:\/(replies|vote|best|follow|up|move|report|block)(?:\/([a-z0-9]+))?)?)?$/);
   if (!m) return null;
   const [, fid, id, action, sub] = m;
   if (!id && method === 'POST') {
@@ -199,6 +202,7 @@ export async function threadRoutes(c) {
     if (t.byUid !== user.uid && !owner) return json({ error: 'only who wrote it can delete it' }, 403);
     for (const x of [...(t.shots || []), ...(t.docs || [])]) await deletePhoto(blobs, fid, x.id, db).catch(() => {});
     await db.del(key);
+    await db.del(`report:${fid}:thread:${id}`);
     await db.put(`threads:${fid}`, ((await db.get(`threads:${fid}`)) || []).filter((x) => x !== id));
     return json({ ok: true });
   }
@@ -223,6 +227,31 @@ export async function threadRoutes(c) {
     if (t.best === sub) t.best = null;
     await save();
     return json({ thread: full(t, a.own, a.fam) });
+  }
+  // ⚑ Reporting a thread, or one reply: it's hidden for you, and the family's creator sees how
+  // many reports it has. What it says goes nowhere (it's end-to-end encrypted).
+  if (action === 'report' && method === 'POST') {
+    const r = sub ? t.replies.find((x) => x.id === sub) : null;
+    if (sub && !r) return json({ error: 'not found' }, 404);
+    if ((r ? r.uid : t.byUid) === user.uid) return json({ error: "that's yours" }, 400);
+    const rk = `report:${fid}:thread:${id}`, list = (await db.get(rk)) || [];
+    if (!list.some((x) => x.uid === user.uid && x.reply === (sub || ''))) list.push({ uid: user.uid, reply: sub || '', reason: clean(body.reason, 200), at: Date.now() });
+    await db.put(rk, list.slice(-100));
+    t.reports = list.length;
+    await save();
+    user.hidden = [...new Set([sub || id, ...(user.hidden || [])])].slice(0, 500);
+    await saveUser();
+    return json({ ok: true });
+  }
+  // 🚫 Blocking whoever wrote it (or one reply): their threads, replies and chats disappear for you.
+  if (action === 'block' && method === 'POST') {
+    const r = sub ? t.replies.find((x) => x.id === sub) : null;
+    if (sub && !r) return json({ error: 'not found' }, 404);
+    const uid = r ? r.uid : t.byUid;
+    if (!uid || uid === user.uid) return json({ error: "can't block that" }, 400);
+    user.blocked = [...(user.blocked || []).filter((b) => b.uid !== uid), { id: randomId(8), uid, name: r ? r.name : t.byName }].slice(-200);
+    await saveUser();
+    return json({ ok: true, blocked: user.blocked.filter((b) => b.id).map((b) => ({ id: b.id, name: b.name })) });
   }
   if (action === 'up' && sub && method === 'POST') {
     const r = t.replies.find((x) => x.id === sub);

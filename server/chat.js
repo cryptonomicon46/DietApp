@@ -210,7 +210,7 @@ export async function runOp(core, op, a) {
 export async function chatRoutes(c) {
   const { path, method, body, user, loadFamily, meIn, tell, json, url, hub, blobs, deletePhoto } = c;
   const owns = c.owns || (async () => true);
-  const m = path.match(/^\/families\/([a-z0-9]+)\/chats(?:\/(ticket|[a-z0-9_]+)(?:\/(react|read|\d+))?)?$/);
+  const m = path.match(/^\/families\/([a-z0-9]+)\/chats(?:\/(ticket|[a-z0-9_]+)(?:\/(react|read|report|\d+))?)?$/);
   if (!m) return null;
   const [, fid, cid, action] = m;
   const fam = await loadFamily(fid);
@@ -254,6 +254,16 @@ export async function chatRoutes(c) {
     return r.error ? json(r, 404) : json(r);
   }
   if (action === 'read' && method === 'POST') return json(await call('read', { chat, s: body.s }));
+  // ⚑ Reporting a message: kept with who reported which message and why (the message itself stays
+  // end-to-end encrypted and isn't sent anywhere). Blocking is /families/:fid/members/:id/block.
+  if (action === 'report' && method === 'POST') {
+    const s = Math.round(+body.s || 0);
+    if (!(s > 0) || !c.db) return json({ error: 'which message?' }, 400);
+    const rk = `report:${fid}:chat:${chat.id}`, list = (await c.db.get(rk)) || [];
+    if (!list.some((x) => x.uid === user.uid && x.s === s)) list.push({ uid: user.uid, s, reason: String(body.reason || '').slice(0, 200), at: Date.now() });
+    await c.db.put(rk, list.slice(-100));
+    return json({ ok: true });
+  }
   if (/^\d+$/.test(action || '') && method === 'DELETE') {
     const r = await call('remove', { chat, s: +action });
     if (r.error) return json(r, 404);
