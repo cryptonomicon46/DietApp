@@ -192,11 +192,37 @@ async function loadFamily(early = null) {
 }
 // Once the family is encrypted: lock anything of yours still stored readable (e.g. data saved
 // before this device had the key).
+// 💪 Your own copy, saved together with its Diet / Fitness / Us parts (each part only when it
+// changed) — the parts are what the family can be given, separately.
+const HP = () => import('../js/healthParts.js');
+async function saveMine(data) {
+  await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData(data) });
+  const { splitHealth, sigOf, PART_NAMES } = await HP();
+  const parts = splitHealth(data);
+  for (const part of PART_NAMES) {
+    const k = `fam.partSig.${state.fid}.${part}`, sig = sigOf(parts[part]);
+    if (LS.get(k) === sig) continue;
+    await api.put(`/families/${state.fid}/members/${fam().me}/health/${part}`, { data: await sealData(parts[part]) }).then(() => LS.set(k, sig), () => {});
+  }
+}
+// Someone's parts that they share with you (their partner also gets Us). Before their phone has
+// split them: their full copy, if you could see it before. null when nothing's shared.
+async function theirParts(id, parts) {
+  const got = await Promise.all(parts.map((part) => shared(`/families/${state.fid}/members/${id}/health/${part}`).catch((e) => (e.status === 403 || e.status === 404 ? null : Promise.reject(e)))));
+  const ok = got.filter((r) => r && !r.none);
+  if (ok.length) {
+    const { joinParts } = await HP();
+    const opened = await Promise.all(ok.map((r) => openData(r)));
+    return { data: opened.some((x) => x.locked) ? { locked: true } : joinParts(...opened), savedAt: Math.max(...ok.map((r) => r.savedAt || 0)) };
+  }
+  const full = await memberData(id).catch(() => null);
+  return full ? { data: await openData(full), savedAt: full.savedAt } : null;
+}
 async function lockMyData() {
   if (!fam().e2ee || !fk() || state.lockedMine === state.fid) return;
   state.lockedMine = state.fid;
   const rec = await memberData().catch(() => null);
-  if (rec?.data && rec.data.enc == null && Object.keys(rec.data).length) await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData(rec.data) });
+  if (rec?.data && rec.data.enc == null && Object.keys(rec.data).length) await saveMine(rec.data);
 }
 function chrome(on) {
   $('#bar').hidden = !on; $('#nav').hidden = !on;
@@ -343,7 +369,33 @@ function show(view, extra) {
   if (view !== 'bingo') clearInterval(bingo.timer);
   $('#chatTop')?.classList.toggle('on', view === 'chats' || view === 'chat');
   if (view === 'chats' || view === 'chat') return dms().then((d) => (view === 'chat' ? d.convView(extra) : d.listView())).catch((e) => toast(e.message));
-  ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, us: usView })[view]?.();
+  ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, us: usView, health: healthView })[view]?.();
+}
+// 💪 Health: your own Diet and Fitness (family/health.js, loaded when you open it).
+async function healthView() {
+  $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div><div class="skeleton card"></div>`;
+  const [H, rec] = await Promise.all([import(`./health.js?v=${VERSION}`), memberData().catch(() => null)]);
+  if (state.view !== 'health') return;
+  const data = await openData(rec);
+  if (data.locked) { $('#view').innerHTML = `${demoBanner()}<section class="card"><b>🔒 Locked on this device</b><p class="small muted">This device needs the family key to show your Health. Me › 🔐 Encryption.</p></section>`; return; }
+  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), sharing: sharingLine() })}</div>`;
+}
+// 💪 Who sees my Diet and my Fitness: two switches per person, private by default. Only you can
+// change these (nobody can share someone else's with themselves).
+function sharingHtml() {
+  const s = me()?.share || { diet: [], fitness: [] };
+  const others = fam().members.filter((o) => o.kind === 'person' && o.id !== fam().me && o.status === 'active');
+  if (!others.length) return '<p class="small muted">Private. Once someone accepts their invite, you can choose here.</p>';
+  const sw = (part, o) => `<label class="share-sw"><input type="checkbox" data-sharepart="${part}:${o.id}" ${s[part].includes(o.id) ? 'checked' : ''} aria-label="Share my ${part === 'diet' ? 'Diet' : 'Fitness'} with ${esc(o.name)}"><i class="switch"></i></label>`;
+  return `<p class="small muted">Private until you turn it on — for each person, Diet and Fitness separately.</p>
+    <div class="share-grid" role="group" aria-label="Who can see my Diet and Fitness"><span></span><b class="tiny">🥗 Diet</b><b class="tiny">🏋️ Fitness</b>
+    ${others.map((o) => `<span class="share-who">${avatar(o, 28)}<span>${esc(o.name)}<small class="muted"> ${esc(relLabel(o))}</small></span></span>${sw('diet', o)}${sw('fitness', o)}`).join('')}</div>
+    <p class="tiny muted">Diet: your goal, meals, macros and weight. Fitness: your workouts and activity. Connecting a device never shares anything by itself.</p>`;
+}
+// "🔒 Private" or "Shared: Diet with Pat · Fitness with Pat".
+function sharingLine() {
+  const s = me()?.share || { diet: [], fitness: [] }, n = (ids) => ids.map((id) => member(id)?.name).filter(Boolean).join(', ');
+  return !s.diet.length && !s.fitness.length ? '🔒 Private' : `Shared: ${[s.diet.length ? `Diet with ${n(s.diet)}` : '', s.fitness.length ? `Fitness with ${n(s.fitness)}` : ''].filter(Boolean).join(' · ')}`;
 }
 // 💬 Chats (chat.js): loaded once the app is on screen, so it never slows the start.
 let dmMod = null;
@@ -1222,8 +1274,10 @@ async function memberView() {
     ${!self && m.role !== 'owner' && (me().role === 'owner' || m.status !== 'active') ? `<button type="button" class="danger linkish small pad" data-act="removemember" data-id="${m.id}">Remove ${esc(m.name)} from ${esc(fam().name)}</button>` : ''}`;
   const el = $('#memberData');
   try {
-    const rec = await api.get(`/families/${state.fid}/members/${m.id}/data`);
-    const data = await openData(rec), savedAt = rec.savedAt;
+    // Someone else's: only the Diet / Fitness they share with you (your own and a pet's: the whole copy).
+    let data, savedAt;
+    if (self || m.kind === 'pet') { const rec = await api.get(`/families/${state.fid}/members/${m.id}/data`); data = await openData(rec); savedAt = rec.savedAt; }
+    else { const r = await theirParts(m.id, ['diet', 'fitness']); if (!r) throw Object.assign(new Error('private'), { data: { locked: true } }); ({ data, savedAt } = r); }
     el.innerHTML = data.locked ? '<div class="locked">🔒 <b>Locked on this device</b><p class="small muted">This device needs the family key to show it.</p></div>'
       : m.kind === 'pet' ? petDetails(m, data) : healthCard(m, data, savedAt, self);
   } catch (err) {
@@ -1274,9 +1328,7 @@ function meView() {
       <div class="chips">${['Dad', 'Mom'].map((x) => `<button type="button" class="chip" data-petcalls="${x}">${x}</button>`).join('')}</div>
       <p class="tiny muted">Used when the dogs thank you for a ⭐ golden day. Until you choose, they write to "Mom &amp; Dad".</p></section>` : ''}
     <h3>Privacy</h3>
-    <section class="card"><b>Who can see my diet & fitness</b><p class="small muted">Weight, meals and training. Off for everyone until you turn it on.</p>
-      ${others.length ? `<ul class="list toggles">${others.map((o) => `<li><label class="switch-row">${avatar(o, 32)}<span>${esc(o.name)} <small class="muted">${esc(relLabel(o))}</small></span><input type="checkbox" data-share="${o.id}" ${(my.shareWith || []).includes(o.id) ? 'checked' : ''}><i class="switch"></i></label></li>`).join('')}</ul>`
-        : '<p class="small muted">Once someone accepts their invite, you can choose here.</p>'}
+    <section class="card" id="shareCard"><b>💪 Who can see my Health</b>${sharingHtml()}
       <p class="tiny muted">Pets, family threads and the calendar are seen by your whole family. Threads you share with connected families are also seen by them.</p></section>
     ${hasLegacy ? `<h3>Your data</h3><section class="card"><b>Bring over the current app</b><p class="small muted">Copies everything from the current app on this phone into ${esc(f.name)}: your meals, weigh-ins, training and dog duties, your partner's shared data, and your dogs. Nothing is removed from the current app, and you can run it again to refresh.</p>
       <div class="row wrap"><button type="button" data-act="import">Bring it over</button><button type="button" class="ghost" data-act="backup">Download a backup</button></div><div id="importLog" class="small"></div></section>` : ''}
@@ -3131,7 +3183,7 @@ async function renderCalDress(date) {
 async function loadRhythm() {
   const R = await import('../js/rhythm.js');
   const partner = us.partner;
-  const [mine, theirs] = await Promise.all([myTrackers(), partner ? memberData(partner.id).then(openData).catch(() => null) : null]);
+  const [mine, theirs] = await Promise.all([myTrackers(), partner ? theirParts(partner.id, ['us']).then((r) => r?.data || null).catch(() => null) : null]);
   calm.R = R;
   calm.myRatings = mine?.taste?.ratings || [];
   calm.ratings = [...calm.myRatings, ...(theirs && !theirs.locked ? theirs.taste?.ratings || [] : [])];
@@ -3183,7 +3235,7 @@ async function saveRhythm(change, changeData = null) {
   change(r);
   data.rhythm = { entries: r.entries.slice(-400), removed: [...new Set(r.removed)].slice(-400) };
   if (changeData) changeData(data);
-  await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData(data) });
+  await saveMine(data);
   mineCache = null;
 }
 function eventSheet(ev = null, day = calm.day || isoLocal()) {
@@ -4522,6 +4574,7 @@ document.addEventListener('click', (e) => {
     case 'asknew': return askSheet();
     case 'grocall': home.all = true; return renderGroc();
     case 'grocclear': return act(() => grocAct(() => api.post(`/families/${state.fid}/groceries/clear`)));
+    case 'healthshare': return openSheet(`<div class="row between"><h2>💪 Who can see my Health</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>${sharingHtml()}`);
     case 'apptnew': return apptSheet();
     case 'bingonew': return bingoNew();
     case 'games': bingo.game = null; bingo.season = null; return show('bingo');
@@ -4779,9 +4832,15 @@ document.addEventListener('change', async (e) => {
     const share = { kids: !!document.querySelector('[data-sharewhat=kids]')?.checked, pets: !!document.querySelector('[data-sharewhat=pets]')?.checked };
     return act(async () => { await api.patch(`/families/${state.fid}`, { share }); await loadFamily(); toast(`Friends' families ${share.kids ? 'can' : "can't"} see the kids, ${share.pets ? 'can' : "can't"} see the pets`); });
   }
-  if (t.dataset.share) {
-    const ids = [...document.querySelectorAll('[data-share]')].filter((x) => x.checked).map((x) => x.dataset.share);
-    return act(async () => { await api.patch(`/families/${state.fid}/members/${fam().me}`, { shareWith: ids }); await loadFamily(); toast(ids.length ? 'Sharing updated' : 'Your diet & fitness is private'); });
+  if (t.dataset.sharepart) {
+    const box = t.closest('.share-grid'), share = { diet: [], fitness: [] };
+    for (const x of box.querySelectorAll('[data-sharepart]')) if (x.checked) { const [part, id] = x.dataset.sharepart.split(':'); share[part].push(id); }
+    const [part, id] = t.dataset.sharepart.split(':');
+    return act(async () => {
+      await api.patch(`/families/${state.fid}/members/${fam().me}`, { share }); await loadFamily();
+      toast(`${t.checked ? '✓' : '🔒'} ${member(id)?.name || ''} ${t.checked ? 'can now see' : 'no longer sees'} your ${part === 'diet' ? 'Diet' : 'Fitness'}`);
+      if (state.view === 'health') healthView();
+    });
   }
   if (t.name === 'fid' && t.form?.id === 'connectForm') {
     const nf = t.form.querySelector('[data-newfam]');

@@ -10,6 +10,7 @@
 import { serverUrl } from './server.js';
 import { PROFILES, global, ownerId, setOwner, exportProfile, importProfile } from './storage.js';
 import { keys, seal, tryOpen, checkKey, sealBytes, openBytes } from '../family/crypto.js';
+import { splitHealth, joinParts, sigOf, PART_NAMES } from './healthParts.js';
 
 // 🔐 An end-to-end encrypted family: this device's family key (the family app keeps it), checked.
 // Locked copies are {enc: "e1:…"}; without the key they can't be read, so they're left alone.
@@ -76,20 +77,34 @@ export const account = {
 
   // Your profile → your account. Never before this device has read the account once, so a new
   // device can't overwrite your data with an empty profile.
-  async push() {
+  // One upload at a time: a second call waits, then finds nothing changed (no duplicate writes).
+  push() { this._q = (this._q || Promise.resolve()).catch(() => {}).then(() => this._push()); return this._q; },
+  async _push() {
     const a = this.get();
     if (a?.e2ee && !(await familyKey(a))) throw new Error('This device needs the family key — open OurPawmily › Me › 🔐 Encryption');
     if (!a || !global.get('account.pulled', false)) return;
     // Nothing changed since the last upload: no write (the free plan allows 1,000 a day).
     const mine = exportProfile(a.profile, { shared: true });
     const sig = `${a.fid}:${a.me}:${hashOf(JSON.stringify(mine))}`;
-    if (sig === global.get('account.sentSig', '')) { await this.pushDogs(a).catch(() => {}); return; }
+    if (sig === global.get('account.sentSig', '')) { await this.pushParts(a, mine).catch(() => {}); await this.pushDogs(a).catch(() => {}); return; }
     const r = await call('PUT', `/families/${a.fid}/members/${a.me}/data`, { data: await lockData(a, mine) });
     if (r.status !== 200) throw new Error(r.data.error || `account upload failed (${r.status})`);
     global.set('account.sentSig', sig);
     global.set('account.mineAt', r.data.savedAt || Date.now());
     global.set('pushedAt', Date.now());
+    await this.pushParts(a, mine).catch(() => {});
     await this.pushDogs(a).catch(() => {});
+  },
+  // 💪 The same profile as Diet, Fitness and Us parts — what the family can be given separately.
+  // Each goes up only when it changed.
+  async pushParts(a, mine) {
+    const parts = splitHealth(mine);
+    for (const part of PART_NAMES) {
+      const sig = `${a.fid}:${a.me}:${sigOf(parts[part])}`;
+      if (global.get(`account.partSig.${part}`, '') === sig) continue;
+      const r = await call('PUT', `/families/${a.fid}/members/${a.me}/health/${part}`, { data: await lockData(a, parts[part]) });
+      if (r.status === 200) global.set(`account.partSig.${part}`, sig);
+    }
   },
 
   // 📎 Family files — dog documents and adoption photos: locked on this device with the family key
@@ -223,13 +238,24 @@ export const account = {
     for (const p of PROFILES.filter((x) => x.id !== a.profile)) {
       const id = a.members[p.id];
       if (!id) continue;
-      const r = await call('GET', `/families/${a.fid}/members/${id}/data`);
-      if (r.status !== 200) continue; // not shared with you (or not there): the household code may still have it
+      // What they share with you: their Diet / Fitness parts (and Us, as their partner). Before
+      // their phone has split them, their full copy — if you could see it before.
+      const parts = await Promise.all(PART_NAMES.map((part) => call('GET', `/families/${a.fid}/members/${id}/health/${part}`)));
+      const ok = parts.filter((r) => r.status === 200 && !r.data.none);
+      let theirData = null, savedAt = 0;
+      if (ok.length) {
+        const opened = await Promise.all(ok.map((r) => openData(a, r.data.data)));
+        if (opened.some((x) => x == null)) continue; // locked on this device
+        theirData = joinParts(...opened); savedAt = Math.max(...ok.map((r) => r.data.savedAt || 0));
+      } else {
+        const r = await call('GET', `/families/${a.fid}/members/${id}/data`);
+        if (r.status !== 200) continue; // not shared with you (or not there): the household code may still have it
+        theirData = await openData(a, r.data.data); savedAt = r.data.savedAt || 0;
+      }
       out.got.push(p.id);
-      const theirData = await openData(a, r.data.data);
-      if (theirData && (r.data.savedAt || 0) > global.get(`seen.${p.id}`, 0) && Object.keys(theirData).length) {
+      if (theirData && savedAt > global.get(`seen.${p.id}`, 0) && Object.keys(theirData).length) {
         importProfile(p.id, theirData);
-        global.set(`seen.${p.id}`, r.data.savedAt);
+        global.set(`seen.${p.id}`, savedAt);
         out.changed = true;
       }
     }

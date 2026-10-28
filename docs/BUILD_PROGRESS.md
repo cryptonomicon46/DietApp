@@ -7,7 +7,18 @@ Last update: 2026-10-28 — Phases 4–11 authorized (master build authorization
 - **Session authorization (2026-10-28, second):** Phases 4–11 (Us/Watch, Health/Diet, permissions, Fitness, AI gateway + text parsing, photo → workout, legacy-code migration, Devices), with checkpoints A–E, then a full-product review and STOP. No deploy, no merge to `main`, no Read/Discover. Branch: `v2/phase-4-11` (from `main` at `510eacc`).
 - **Phases 0–3:** merged to `main` (PR #1, `510eacc`) and deployed (reported by the user).
 - **Phase 4 — Us / Watch:** done, Checkpoint A passed (below).
-- **Next:** Phase 5 — Health shell + Diet.
+- **Phase 5 — Health + Diet:** done (below).
+- **Next:** Phase 6 — Family permissions (Checkpoint B).
+
+### Phase 5 — Health and Diet
+
+- **Health tab** (`family/health.js`, lazy): 💪 Health in the bottom bar now opens a screen in the family app (before: a link to the trackers). 🥗 Diet: phase + week, goal and lb to go, today's kcal and protein against targets (from today's tracker record, else the plan's own `dailyTargets`), carbs/fat left, weight (one decimal) with a 90-day line and lb/week trend for the current phase, **"N of the last 7 days on target"** with 7 dots. 🏋️ Fitness: workouts in the last 7 days and Training › (Phase 7 replaces this card). *Log food* / *Plan & weight ›* open the trackers' screens directly (`../#today`, `#weight`, `#lift`… new hash routes).
+- **Calm feedback replaces the coin economy:** one rule (`js/dietDays.js`): a day counts once its meals are logged (3, or ≥60% of target); on target within ±10% of that day's calories (≥150 kcal). The trackers' 🪙 / 🍪 / 🔥 bar, coin totals, "earn 🪙" lines, badges and coin icons are gone (✓ marks a day that finished where the plan wanted); saved coin data is untouched (still in `days.csv`).
+- **Diet / Fitness / Us split** (`js/healthParts.js`): each phone saves its tracker copy as three sealed parts (sent only when changed; uploads queued so two syncs don't write twice). Readers use the parts: the trackers' partner view (`account.pull`), the family app's person page (Diet + Fitness) and Us' 2-2-2-2 / ratings (partner's **Us** part — before, the rhythm only merged if the partner shared all their diet & fitness). Full copy becomes owner-only once parts exist; until then a member who could see everything still can (no one gains access). Data migration: none destructive; original record kept and still written.
+- **Sharing UI:** two switches per person (🥗 Diet, 🏋️ Fitness) in Me › 💪 Who can see my Health and from the Health title line (Phase 6 enforcement in the server already, tests in Checkpoint B).
+- Tests: `tests/health.test.js` (on-target rule, 7-day count, summary incl. not-set-up, no coins, escaping), `tests/healthparts.test.js` (split, legacy list until split, Diet-only, Us partner-only, no self-grant, no foreign writes).
+- Browser (390 px): Health renders for Sam (Cut · week 3 of 8 · goal; 4 of 7 dots), sharing sheet with two switches per person; Health tab made **0 extra requests** (reuses Home's cached copy); trackers food screen shows "✓ 4 of the last 7 days on target", no coins; Sam's phone wrote the three parts once; Pat's phone read Sam's parts (not the full copy).
+- Performance (fresh seed, 3 runs): start-up 14 requests, 0 duplicates, CLS 0.007, cold paint 1.32–1.43 s, **script 180 KB** (+4 KB since Phase 3 — new code in `app.js`; Phases 7+ go in lazy modules and Watch moves out of `app.js` in the final review).
 
 ### Phase 4 — Us and Watch (Checkpoint A)
 

@@ -42,7 +42,7 @@ export const SLIDES = [
     ['❤️', 'Plans and dates', 'A plan you both said yes to goes on both your calendars.'],
   ] },
   { id: 'me', eyebrow: 'Health and Me', title: 'Each person’s own', go: 'me', cards: [
-    ['🥗', 'Health', 'Diet (meal plans, logging, groceries) and fitness (lifting, runs, rides). Private until you share.'],
+    ['💪', 'Health', 'Your Diet (today, weight trend, 5 of 7 days on target) and Fitness. Private; share each part separately.'],
     ['👤', 'Me', 'Your family, people and pets, notifications, light or dark, and your account.'],
     ['🔑', 'Recovery phrase', 'Write it down: it unlocks your family on a new phone if you lose this one.'],
   ] },

@@ -133,11 +133,22 @@ const store = (kv) => ({
   del: (k) => kv.delete(`v2:${k}`),
 });
 
+// 💪 Who sees a person's Diet and Fitness: two lists they set themselves (private by default).
+// Before 2.0 there was one list ("shareWith"); it counts for both until they change either.
+export const shareOf = (m) => ({ diet: m.share?.diet ?? m.shareWith ?? [], fitness: m.share?.fitness ?? m.shareWith ?? [] });
+// Can `viewer` read `owner`'s part ('diet' | 'fitness' | 'us')? 'us' is the partner's alone.
+export function canSeePart(fam, owner, viewer, part) {
+  if (!owner || !viewer || owner.kind !== 'person') return false;
+  if (owner.id === viewer.id) return true;
+  if (part === 'us') return partnerOf(fam, owner)?.id === viewer.id;
+  return (part === 'diet' || part === 'fitness') && shareOf(owner)[part].includes(viewer.id);
+}
+const HEALTH_PARTS = ['diet', 'fitness', 'us'];
 // What a member looks like to someone else (no emails for people outside the family).
 const memberView = (m, inside) => ({
   id: m.id, kind: m.kind, name: m.name, relation: m.relation, species: m.species, breed: m.breed, born: m.born,
   avatar: m.avatar, status: m.uid ? 'active' : m.email ? 'invited' : 'managed', role: m.role,
-  ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], legacyId: m.legacyId || '', petCalls: m.petCalls || '', ...(m.kind === 'pet' ? { editedAt: m.editedAt || m.addedAt || 0 } : {}) } : {}),
+  ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], share: m.kind === 'person' ? shareOf(m) : undefined, legacyId: m.legacyId || '', petCalls: m.petCalls || '', ...(m.kind === 'pet' ? { editedAt: m.editedAt || m.addedAt || 0 } : {}) } : {}),
 });
 
 export async function familyApi(req, env, path, ctx = null) {
@@ -1331,8 +1342,17 @@ export async function familyApi(req, env, path, ctx = null) {
       if (body.breed != null) t.breed = clean(body.breed, 40);
       if (body.born != null && /^(\d{4}-\d{2}-\d{2})?$/.test(body.born)) t.born = body.born;
     } else if (body.relation != null && !self && RELATIONS.includes(body.relation)) t.relation = body.relation;
-    // Only you decide who sees your diet & fitness.
-    if (self && Array.isArray(body.shareWith)) t.shareWith = body.shareWith.filter((id) => fam.members.some((x) => x.id === id && x.kind === 'person' && x.id !== me.id));
+    // Only you decide who sees your Diet and your Fitness — separately. (Nobody can grant
+    // themselves someone else's: only the person's own PATCH changes these lists.)
+    const people = (ids) => (Array.isArray(ids) ? [...new Set(ids)].filter((id) => fam.members.some((x) => x.id === id && x.kind === 'person' && x.id !== t.id)) : null);
+    if (self && body.share && typeof body.share === 'object') {
+      const cur = shareOf(t), diet = people(body.share.diet) ?? cur.diet, fitness = people(body.share.fitness) ?? cur.fitness;
+      t.share = { diet, fitness };
+      t.shareWith = diet.filter((id) => fitness.includes(id)); // older apps: "both" is what they understand
+    } else if (self && Array.isArray(body.shareWith)) {
+      // An older app's single list: both parts, as before.
+      t.shareWith = people(body.shareWith); t.share = { diet: t.shareWith, fitness: t.shareWith };
+    }
     await db.put(`family:${fam.fid}`, fam);
     return json({ member: memberView(t, true) });
   }
@@ -1358,8 +1378,12 @@ export async function familyApi(req, env, path, ctx = null) {
     const self = t.id === me.id;
     if (method === 'GET') {
       // Not joined yet: whoever added them (and brought their data over) holds it until they do.
-      const can = self || t.kind === 'pet' || (t.shareWith || []).includes(me.id) || (!t.uid && t.addedBy === me.id);
-      if (!can) return json({ error: `${t.name} hasn't shared this with you`, locked: true }, 403);
+      // Someone else's full copy only until their phone has split it into Diet / Fitness / Us
+      // (then those parts are what's shared), and only for who could see both before.
+      const sh = shareOf(t);
+      const legacy = !t.healthSplit && sh.diet.includes(me.id) && sh.fitness.includes(me.id);
+      const can = self || t.kind === 'pet' || legacy || (!t.uid && t.addedBy === me.id);
+      if (!can) return json({ error: `${t.name} hasn't shared this with you`, locked: true, ...(t.healthSplit ? { parts: true } : {}) }, 403);
       return json((await db.get(`data:${fam.fid}:${t.id}`)) || { savedAt: 0, data: {} });
     }
     if (method === 'PUT') {
@@ -1374,6 +1398,34 @@ export async function familyApi(req, env, path, ctx = null) {
       const size = (x) => JSON.stringify(x || {}).length;
       if (old && size(old.data) > 500 && size(body.data) < size(old.data) * 0.7) await db.put(`dataprev:${fam.fid}:${t.id}`, old, 90 * 86400);
       await db.put(`data:${fam.fid}:${t.id}`, { savedAt, data: body.data });
+      return json({ ok: true, savedAt });
+    }
+  }
+
+  // ---- 💪 a person's Diet, Fitness and Us parts, each shared on its own ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/members\/([a-z0-9]+)\/health\/(diet|fitness|us)$/);
+  if (m) {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const me = meIn(fam), part = m[3];
+    const t = fam.members.find((x) => x.id === m[2] && x.kind === 'person');
+    if (!t) return json({ error: 'not found' }, 404);
+    const key = `health:${fam.fid}:${t.id}:${part}`;
+    const holder = !t.uid && t.addedBy === me.id;
+    if (method === 'GET') {
+      if (!canSeePart(fam, t, me, part) && !holder) return json({ error: part === 'us' ? 'just for their partner' : `${t.name} hasn't shared their ${part === 'diet' ? 'Diet' : 'Fitness'} with you`, locked: true }, 403);
+      return json((await db.get(key)) || { savedAt: 0, data: {}, none: true });
+    }
+    if (method === 'PUT') {
+      if (!(t.id === me.id || holder)) return json({ error: 'not allowed' }, 403);
+      if (!body || typeof body.data !== 'object' || body.data === null) return json({ error: 'expected {data}' }, 400);
+      if (body.data.enc != null && (!sealed(body.data.enc, 6_000_000) || Object.keys(body.data).length !== 1)) return json({ error: 'expected {data: {enc}}' }, 400);
+      if (fam.e2ee && body.data.enc == null) return json({ error: 'this family is end-to-end encrypted — update the app and try again' }, 400);
+      if (body.data.enc == null && JSON.stringify(body.data).length > 4_000_000) return json({ error: 'too big' }, 413);
+      const savedAt = Date.now();
+      await db.put(key, { savedAt, data: body.data });
+      // From now on others read these parts, never the full copy.
+      if (!t.healthSplit) { t.healthSplit = savedAt; await db.put(`family:${fam.fid}`, fam); }
       return json({ ok: true, savedAt });
     }
   }
@@ -1879,9 +1931,13 @@ async function stillReaches(db, uid, leaving) {
 }
 async function removeMember(db, fam, t, { keepPosts = true, reach = null } = {}) {
   fam.members = fam.members.filter((x) => x.id !== t.id);
-  for (const x of fam.members) x.shareWith = (x.shareWith || []).filter((id) => id !== t.id);
+  for (const x of fam.members) {
+    x.shareWith = (x.shareWith || []).filter((id) => id !== t.id);
+    if (x.share) x.share = { diet: x.share.diet.filter((id) => id !== t.id), fitness: x.share.fitness.filter((id) => id !== t.id) };
+  }
   await db.put(`family:${fam.fid}`, fam);
   await db.del(`data:${fam.fid}:${t.id}`);
+  for (const part of HEALTH_PARTS) await db.del(`health:${fam.fid}:${t.id}:${part}`);
   await db.del(`dataprev:${fam.fid}:${t.id}`);
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) await db.del(`bingocard:${fam.fid}:${g.id}:${t.id}`);
   for (const s of (await db.get(`picks:${fam.fid}`)) || []) await db.del(`pickcard:${fam.fid}:${s.id}:${t.id}`);
@@ -1963,7 +2019,7 @@ async function deleteFamily(db, fam) {
   // Who uploaded each file goes with the files.
   for (const o of (await db.blobs?.list(`f/${fam.fid}/`).catch(() => [])) || []) { const pid = o.key.split('/')[2]?.replace(/-(full|thumb|doc)$/, ''); if (pid) await db.del(blobMetaKey(fam.fid, pid)); }
   await deleteFamilyPhotos(db.blobs, fam.fid).catch(() => {});
-  for (const x of fam.members) { await db.del(`data:${fam.fid}:${x.id}`); await db.del(`dataprev:${fam.fid}:${x.id}`); }
+  for (const x of fam.members) { await db.del(`data:${fam.fid}:${x.id}`); await db.del(`dataprev:${fam.fid}:${x.id}`); for (const part of HEALTH_PARTS) await db.del(`health:${fam.fid}:${x.id}:${part}`); }
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) await db.del(`care:${fam.fid}:${d}`);
   await db.del(`careidx:${fam.fid}`);
   await db.del(`goldenmsg:${fam.fid}`);
