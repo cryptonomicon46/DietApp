@@ -28,7 +28,9 @@ test('requests: ask, someone claims it (one helper at a time), done; only the fa
   assert.ok(!told.some((x) => /Drop Rex/.test(x.title)), 'the notification never says what');
   assert.equal((await call(`${F}/requests/${r.id}/claim`, sam, 'POST')).status, 400, 'not your own');
   assert.equal((await call(`${F}/requests/${r.id}/claim`, pat, 'POST')).request.claimedName, 'Pat');
-  assert.equal((await call(`${F}/requests/${r.id}/claim`, kid, 'POST')).status, 409, 'Pat is already on it');
+  assert.equal((await call(`${F}/requests/${r.id}/claim`, kid, 'POST')).status, 403, 'kids neither see nor take requests');
+  assert.deepEqual((await call(`${F}/home`, kid)).requests, []);
+  assert.equal((await call(`${F}/requests`, kid, 'POST', { kind: 'ride', box: 'x' })).status, 403);
   assert.ok(told.some((x) => x.to === 'sam-phone' && /Pat can help/.test(x.title)));
   assert.equal((await call(`${F}/requests/${r.id}/done`, kid, 'POST')).status, 403);
   assert.equal((await call(`${F}/requests/${r.id}/done`, pat, 'POST')).request.status, 'done');
@@ -60,4 +62,15 @@ test('in an encrypted family the lists only take sealed text', async () => {
   assert.equal((await call(`${F}/requests`, sam, 'POST', { kind: 'meal', box: 'Soup please' })).status, 400);
   assert.equal((await call(`${F}/groceries`, sam, 'POST', { box: 'e1:AAAABBBBCCCCDDDDEEEEFFFF' })).status, 200);
   assert.ok(!JSON.stringify(m.get(`v2:groceries:${fid}`)).includes('Milk'));
+});
+
+test('requests: when someone leaves, their requests go and what they took is open again', async () => {
+  const { call, sam, pat, F, fid } = await setup();
+  const mine = (await call(`${F}/requests`, sam, 'POST', { kind: 'meal', box: 'Soup on Tuesday?' })).request;
+  await call(`${F}/requests`, pat, 'POST', { kind: 'walk', box: 'Walk Rex at noon' });
+  await call(`${F}/requests/${mine.id}/claim`, pat, 'POST');
+  const patId = (await call('/me', pat)).families.find((f) => f.fid === fid).me;
+  assert.equal((await call(`${F}/members/${patId}`, pat, 'DELETE')).status, 200, 'Pat leaves');
+  const left = (await call(`${F}/home`, sam)).requests;
+  assert.deepEqual(left.map((x) => [x.id, x.status, x.claimedBy]), [[mine.id, 'open', '']]);
 });

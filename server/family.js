@@ -1310,12 +1310,8 @@ export async function familyApi(req, env, path, ctx = null) {
     if (method === 'DELETE') {
       if (t.role === 'owner') return json({ error: "the family's creator can't be removed" }, 400);
       if (!(me.role === 'owner' || self || !t.uid)) return json({ error: 'not allowed' }, 403);
-      fam.members = fam.members.filter((x) => x.id !== t.id);
-      for (const x of fam.members) x.shareWith = (x.shareWith || []).filter((id) => id !== t.id);
-      await db.put(`family:${fam.fid}`, fam);
-      await db.del(`data:${fam.fid}:${t.id}`);
-      await db.del(`dataprev:${fam.fid}:${t.id}`);
-      if (t.uid) await forgetInChats(db, fam.fid, t.id, false);
+      // Removing yourself is leaving: the same clean-up as /leave.
+      await removeMember(db, fam, t, { keepPosts: !self });
       if (t.uid) { const u = await db.get(`user:${t.uid}`); if (u) { u.families = u.families.filter((f) => f !== fam.fid); await db.put(`user:${u.uid}`, u); } }
       return json({ ok: true });
     }
@@ -1872,6 +1868,9 @@ async function removeMember(db, fam, t, { keepPosts = true } = {}) {
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) await db.del(`bingocard:${fam.fid}:${g.id}:${t.id}`);
   for (const s of (await db.get(`picks:${fam.fid}`)) || []) await db.del(`pickcard:${fam.fid}:${s.id}:${t.id}`);
   if (t.uid) await forgetInChats(db, fam.fid, t.id, !keepPosts);
+  // However they leave, their requests go and what they'd taken is open again; things they put on the shared grocery list stay (the household's list).
+  const reqs = (await db.get(`requests:${fam.fid}`)) || [];
+  if (reqs.some((r) => r.by === t.id || r.claimedBy === t.id)) await db.put(`requests:${fam.fid}`, reqs.filter((r) => r.by !== t.id).map((r) => (r.claimedBy === t.id ? { ...r, status: r.status === 'claimed' ? 'open' : r.status, claimedBy: '', claimedName: '' } : r)));
   if (keepPosts || !t.uid) return;
   // The family keeps its dog-care log, without their name on it.
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) {
@@ -1885,9 +1884,6 @@ async function removeMember(db, fam, t, { keepPosts = true } = {}) {
   }
   await scrubPosts(db, fam.fid, t.uid, t.id);
   await scrubThreads(db, fam.fid, t.uid, t.id);
-  // Their requests go; things they put on the shared grocery list stay (the household's list).
-  const reqs = (await db.get(`requests:${fam.fid}`)) || [];
-  if (reqs.some((r) => r.by === t.id)) await db.put(`requests:${fam.fid}`, reqs.filter((r) => r.by !== t.id).map((r) => (r.claimedBy === t.id ? { ...r, status: r.status === 'claimed' ? 'open' : r.status, claimedBy: '', claimedName: '' } : r)));
   for (const c of fam.connections || []) { await scrubPosts(db, c, t.uid, null); await scrubThreads(db, c, t.uid, null); }
 }
 // Removes one person's threads (with their screenshots, PDFs and reports) and their replies,

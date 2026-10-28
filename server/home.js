@@ -16,6 +16,8 @@ export async function homeRoutes(c) {
   const fam = await loadFamily(fid);
   if (!fam) return json({ error: 'not found' }, 404);
   const me = meIn(fam);
+  // 🙋 Requests are between the grown-ups: kids neither see, ask nor offer.
+  const kid = me.relation === 'child';
   // A sealed box, or (a family not yet encrypted) plain text, cleaned.
   const boxOf = (v, max) => sealed(v, max * 3 + 200) ?? (fam.e2ee || typeof v !== 'string' ? null : clean(v, max) || null);
   const blocked = new Set((user.blocked || []).map((b) => b.uid));
@@ -27,11 +29,12 @@ export async function homeRoutes(c) {
 
   // Both lists in one round trip, for Home.
   if (what === 'home' && !id && method === 'GET') {
-    const [r, g] = await Promise.all([requests(), groceries()]);
+    const [r, g] = await Promise.all([kid ? [] : requests(), groceries()]);
     return json({ requests: r.map(reqOut), groceries: g });
   }
 
   if (what === 'requests') {
+    if (kid) return json({ error: 'ask a grown-up' }, 403);
     const key = `requests:${fid}`;
     const all = (await db.get(key)) || [];
     if (!id && method === 'GET') return json({ requests: (await requests()).map(reqOut) });

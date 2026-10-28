@@ -1285,8 +1285,10 @@ function meView() {
     <h3>🌗 Appearance</h3>
     <section class="card stack"><div class="seg theme-seg">${[['auto', '📱 Automatic'], ['light', '☀️ Light'], ['dark', '🌙 Dark']].map(([k, l]) => `<label class="segopt"><input type="radio" name="theme" value="${k}" ${(LS.get('pawmily.theme') || 'auto') === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
       <p class="tiny muted">Automatic follows your phone — on iPhone, Settings › Display &amp; Brightness › Automatic switches to dark at sunset. Applies to OurPawmily and your trackers on this device.</p></section>
+    <h3>✨ Next up &amp; reminders</h3>
+    <section class="card stack"><button type="button" class="ghost wide" data-act="nuknows">✨ Next up: what it knows, show or hide it</button><button type="button" class="ghost wide" data-act="habits">🔁 Run, ride and hot yoga reminders</button></section>
     <h3>🎬 Movies</h3>
-    <section class="card stack" id="moviePrefs"><label class="switch-row"><span>🎬 Movie releases &amp; reviews<small class="muted">A card in Moments: what's in theaters with critic and audience scores, what's coming, where it's streaming, and 🔔 alerts for the ones you're waiting for. Just for you.</small></span><input type="checkbox" data-moviesonoff="1" ${mv.prefs?.on ? 'checked' : ''}><i class="switch"></i></label></section>
+    <section class="card stack" id="moviePrefs"><label class="switch-row"><span>🎬 Movie releases &amp; reviews<small class="muted">A card on 🏠 Home: what's in theaters with critic and audience scores, what's coming, where it's streaming, and 🔔 alerts for the ones you're waiting for. Just for you.</small></span><input type="checkbox" data-moviesonoff="1" ${mv.prefs?.on ? 'checked' : ''}><i class="switch"></i></label></section>
     <h3>🔔 Notifications</h3>
     <section class="card stack" id="notifyCard"><div class="skeleton line"></div></section>
     <h3>🔐 Encryption</h3>
@@ -1522,7 +1524,7 @@ async function callNudgeAct(what, t) {
       <p class="tiny muted">When it's due, you get one notification a day at the start of a good time to call (her morning or evening) until you tick it off. Turn these off in Me › 🔔 Notifications › Check-in reminders.</p>
       <div class="row between"><button type="button" class="ghost danger" data-callnudge="off">Stop reminding me</button><button>Save</button></div></form>`);
   } else if (what === 'off') { setNudges(await api.del(`${P}?today=${isoLocal()}`)); closeSheet(); toast('Reminders stopped'); }
-  renderToday();
+  renderToday(); renderNextUp().catch(() => {});
 }
 
 // 📅 Coming up (one line): the next dog appointment (and an open leg), and the next agreed plan.
@@ -2747,13 +2749,16 @@ async function renderNextUp() {
   nu.ctx = ctx; nu.res = N.plan(ctx);
   if (!$('#nextUp')) return;
   const [top, ...alts] = nu.res.picks;
-  if (!top) { el.hidden = false; el.innerHTML = `<div class="nu-k">✨ Next up</div><p class="small muted">Nothing due right now. ${Object.keys(callNudge.all || {}).length ? '' : '<button type="button" class="linkish small" data-act="habits">🔁 Set up runs, rides or hot yoga</button>'}</p>`; return; }
+  // 📞 The call line (only for whoever it's set up for) sits at the bottom of Next up.
+  const call = await callLine().catch(() => '');
+  if (!$('#nextUp')) return;
+  if (!top) { el.hidden = false; el.innerHTML = `<div class="nu-k">✨ Next up</div><p class="small muted">Nothing due right now. ${Object.keys(callNudge.all || {}).length ? '' : '<button type="button" class="linkish small" data-act="habits">🔁 Set up runs, rides or hot yoga</button>'}</p>${call}`; return; }
   el.hidden = false;
   el.innerHTML = `<div class="row between"><span class="nu-k">✨ Next up · ${esc(top.when)}</span><span><button type="button" class="linkish tiny" data-act="nuplan">📅 Today's plan</button> <button type="button" class="linkish tiny" data-act="nuknows" aria-label="What Next up knows">⋯</button></span></div>
     <h3 class="nu-t">${top.icon} ${esc(top.title)}</h3>
     <p class="nu-why">${top.why.map(esc).join(' · ')}</p>
     <div class="row wrap nu-acts"><button type="button" class="small" data-nu="done:0">✓ Done</button><button type="button" class="ghost small" data-nu="later:0">⏰ Later</button><button type="button" class="ghost small" data-nu="skip:0">✕ Not today</button><button type="button" class="linkish small" data-nu="why:0">Why?</button></div>
-    ${alts.map((a, i) => `<div class="nu-alt"><span>${a.icon}</span><span class="grow"><b>${esc(a.title)}</b> <small class="muted">${esc(a.when)} · ${esc(a.why[0] || '')}</small></span><button type="button" class="linkish tiny" data-nu="done:${i + 1}">✓</button><button type="button" class="linkish tiny" data-nu="skip:${i + 1}">✕</button></div>`).join('')}`;
+    ${alts.map((a, i) => `<div class="nu-alt"><span>${a.icon}</span><span class="grow"><b>${esc(a.title)}</b> <small class="muted">${esc(a.when)} · ${esc(a.why[0] || '')}</small></span><button type="button" class="linkish tiny" data-nu="done:${i + 1}">✓</button><button type="button" class="linkish tiny" data-nu="skip:${i + 1}">✕</button></div>`).join('')}${call}`;
   nuSendNudge(top);
 }
 // 🔔 Optional: a notification 30 minutes before the top pick (sent by the connector).
@@ -2817,7 +2822,8 @@ async function nuKnows() {
     ${took + skipped ? `<p class="small">Took ${took} of ${took + skipped} suggestions.</p>` : ''}
     <div class="grp">Settings</div>
     <label class="switch-row"><span>🔔 Nudge me 30 minutes before<small class="muted">A notification for the top pick, if it's still the plan</small></span><input type="checkbox" data-nuset="nudge" ${st.nudge ? 'checked' : ''}><i class="switch"></i></label>
-    <label class="switch-row"><span>✨ Show Next up<small class="muted">The bubble at the top of Moments</small></span><input type="checkbox" data-nuset="show" ${st.off ? '' : 'checked'}><i class="switch"></i></label>
+    <label class="switch-row"><span>✨ Show Next up<small class="muted">The bubble near the top of 🏠 Home</small></span><input type="checkbox" data-nuset="show" ${st.off ? '' : 'checked'}><i class="switch"></i></label>
+    <button type="button" class="ghost wide" data-act="habits">🔁 Run, ride and hot yoga reminders</button>
     <button type="button" class="linkish small danger" data-act="nureset">Forget what it learned</button>
     <p class="tiny muted">Worked out on this phone from your reminders, workouts, calendar, the weather, class times and your Watch list. Nothing extra leaves the phone (the 30-minute nudge sends just that one suggestion to the connector so it can notify you).</p>`);
 }
@@ -4634,7 +4640,7 @@ document.addEventListener('change', async (e) => {
     else st.off = !t.checked;
     LS.set('fam.nextupSet', JSON.stringify(st)); toast('Saved'); return renderNextUp();
   }
-  if (t.dataset.moviesonoff) return act(async () => { mv.prefs = (await api.put('/account/movies', { on: t.checked })).movies; toast(t.checked ? '🎬 Movies are on — see Family › Moments' : 'Movies are off'); });
+  if (t.dataset.moviesonoff) return act(async () => { mv.prefs = (await api.put('/account/movies', { on: t.checked })).movies; toast(t.checked ? '🎬 Movies are on — see 🏠 Home' : 'Movies are off'); });
   if (t.dataset.nudgedone && t.checked) {
     const k = t.dataset.nudgedone; t.disabled = true; t.closest('.habit')?.classList.add('done');
     return act(async () => { await new Promise((r) => setTimeout(r, 400)); setNudges(await api.post(`/account/nudges/${k}/done?today=${isoLocal()}`, { date: isoLocal() })); toast(`✓ ${MOVE_NUDGES[k][1]} done — next ${new Date(`${callNudge.all[k].next}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })}`); renderYourDay(); });
@@ -4692,7 +4698,7 @@ document.addEventListener('submit', (e) => {
   if (f.id === 'habitForm') { e.preventDefault(); return act(() => saveHabits(f)); }
   if (f.id === 'reqForm') { e.preventDefault(); return act(() => sendAsk(f)).finally(() => { const b = f.querySelector('button:last-child'); if (b) b.disabled = false; }); }
   if (f.id === 'grocForm') { e.preventDefault(); return act(() => grocAdd(f)); }
-  if (f.id === 'callForm') { e.preventDefault(); return act(async () => { const r = await api.put(`/account/nudges/callmom?today=${isoLocal()}`, { every: +v.every, last: v.last || undefined }); setNudges(r); closeSheet(); renderToday(); toast('Saved'); }); }
+  if (f.id === 'callForm') { e.preventDefault(); return act(async () => { const r = await api.put(`/account/nudges/callmom?today=${isoLocal()}`, { every: +v.every, last: v.last || undefined }); setNudges(r); closeSheet(); renderToday(); renderNextUp().catch(() => {}); toast('Saved'); }); }
   if (f.id === 'writeForm') { e.preventDefault(); return act(() => (f.dataset.edit ? saveThreadEdit(f) : postThread(f))); }
   if (f.id === 'thReplyForm') {
     e.preventDefault();
