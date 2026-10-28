@@ -1,7 +1,7 @@
 import './accountBoot.js'; // first: a new device loads your trackers from your OurPawmily account
 import { FOODS, STORES, FOOD_GROUPS, addScannedFoods, addMyFoods, makeMyFood, guessCategory, MY_CATS, netCarbs } from './foods.js';
 import {
-  ACTIVITY, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList, lowCarbTarget,
+  ACTIVITY, activityOf, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList, lowCarbTarget,
   weeklyTrend, suggestAdjustment, fitScore,
   FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek, checkinWindow, isCheckinDue, weeklyReview, deltaMacros,
   EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE, DRINKS, drinksTotals, fitItems, labelKcal,
@@ -126,7 +126,7 @@ function burnedToday() {
   const typed = state.whoopTotal[today];
   if (typed) return { kcal: typed, source: 'WHOOP (you entered)' };
   const base = baseTargets();
-  if (!ACTIVITY[state.profile.activity].tracked) return { kcal: base.tdee, source: 'estimate from your activity level' };
+  if (!activityOf(state.profile).tracked) return { kcal: base.tdee, source: 'estimate from your activity level' };
   const day = todaysTraining();
   const exercise = day.sessions.reduce((a, w) => a + Math.max((w.kcal || 0) - (base.bmr / 1440) * w.minutes, 0), 0);
   return { kcal: Math.round(base.tdee + exercise), source: 'estimate: daily life + your activities' };
@@ -254,7 +254,7 @@ function todaysTraining() {
   return trainingDay(workouts, manual, {
     bmr: base.bmr,
     weightKg: currentWeight() / 2.20462,
-    tracked: !!ACTIVITY[state.profile.activity].tracked,
+    tracked: !!activityOf(state.profile).tracked,
   });
 }
 
@@ -1950,7 +1950,7 @@ $('#checkinNow').onclick = openCheckin;
 // ---------- TRAINING ----------
 function renderTraining(t) {
   const day = todaysTraining();
-  const tracked = ACTIVITY[state.profile.activity].tracked;
+  const tracked = activityOf(state.profile).tracked;
   const today = isoDate();
   const connected = ['whoop', 'strava'].filter((p) => devices.get()[p]);
   const short = (type) => SESSION_TYPES[type]?.label.split(' (')[0] || '';
@@ -3181,7 +3181,6 @@ function takeHash() {
 takeHash();
 window.addEventListener('hashchange', takeHash);
 global.set('pendingLink', null);
-sync.ensure(); // household sharing is on by default
 renderWho();
 renderViewOnly();
 if (!ownerId()) openOwnerPicker();

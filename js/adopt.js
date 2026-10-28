@@ -6,7 +6,7 @@
 // both partners' edits survive, and each partner's own reaction lives in their own copy.
 import { PROFILES, ownerId, profileStore, seenItems } from './storage.js';
 import { pushNow } from './sync.js';
-import { idb, uploadFile, getFile, fileUrl } from './dogs.js';
+import { idb, uploadFile, getFile, deleteFile } from './dogs.js';
 
 export const ADOPT_FIELDS = ['url', 'name', 'age', 'breed', 'sex', 'size', 'where', 'notes', 'status', 'photo', 'deleted'];
 export const STATUSES = {
@@ -110,7 +110,7 @@ async function fillPhotos(el) {
   for (const img of el.querySelectorAll('img[data-photo]')) {
     const id = img.dataset.photo;
     if (!thumbs.has(id)) {
-      const blob = await getFile(id).catch(() => null);
+      const blob = await getFile(id, 'image/jpeg').catch(() => null);
       if (!blob) { img.closest('.adopt-photo')?.classList.add('missing'); continue; }
       thumbs.set(id, URL.createObjectURL(blob));
     }
@@ -234,7 +234,7 @@ export function initAdopt(root) {
     } else if (ds.adoptdel) {
       if (!confirm(`Remove ${draft?.name || 'this dog'} from the board?`)) return;
       saveAdopt({ ...draft, deleted: true });
-      if (draft.photo) { idb('readwrite', (st) => st.delete(draft.photo.id)).catch(() => {}); const u = fileUrl(draft.photo.id); if (u) fetch(u, { method: 'DELETE' }).catch(() => {}); }
+      if (draft.photo) deleteFile(draft.photo.id);
       draft = null; renderAdopt();
     } else if (ds.adoptvote) {
       const [id, v] = ds.adoptvote.split(':');
@@ -242,7 +242,7 @@ export function initAdopt(root) {
       saveAdopt(d, d.votes[ownerId()] === v ? null : v);
       renderAdopt();
     } else if (ds.adoptphoto) {
-      const blob = await getFile(ds.adoptphoto).catch(() => null);
+      const blob = await getFile(ds.adoptphoto, 'image/jpeg').catch(() => null);
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank') || (location.href = url);
@@ -281,7 +281,7 @@ export function initAdopt(root) {
       const shared = await uploadFile(id, blob).catch(() => false);
       if (dog.photo) idb('readwrite', (st) => st.delete(dog.photo.id)).catch(() => {});
       dog.photo = { id, by: ownerId(), shared };
-      note = shared ? '' : 'Screenshot saved on this phone; it will reach your partner once the connector stores files (see README).';
+      note = shared ? '' : 'Screenshot saved on this phone; it reaches your family once you’re signed in to OurPawmily and online.';
     } else note = '';
     saveAdopt({ ...dog, addedAt: dog.addedAt || Date.now(), addedBy: dog.addedBy || ownerId(), status: dog.status || 'new' });
     draft = null; showPast = false;

@@ -12,6 +12,9 @@ export const ACTIVITY = {
   moderate:  { label: 'Moderate (3–5 workouts/week)', factor: 1.55 },
   very:      { label: 'Very active (6–7 workouts/week)', factor: 1.725 },
 };
+// A profile saved without an activity level (an older copy, or one brought over from an account)
+// counts as tracking workouts, the recommended default.
+export const activityOf = (profile) => ACTIVITY[profile?.activity] || ACTIVITY.tracked;
 
 // Weekly loss as a % of body weight. 0.5–1%/week preserves lean mass
 // (Helms et al. 2014; Garthe et al. 2011 found 0.7%/wk beat 1.4%/wk).
@@ -44,12 +47,12 @@ export const PHASES = {
 
 export function dailyTargets(profile, weightLb, adjust = 0) {
   const base = bmr({ ...profile, weightLb });
-  const tdee = base * ACTIVITY[profile.activity].factor;
+  const tdee = base * activityOf(profile).factor;
   const phase = PHASES[profile.phase] ? profile.phase : 'cut';
 
   // Cut: lose at the chosen pace until the goal; at or below goal, eat at maintenance.
   const toGo = Math.max(weightLb - (profile.goalLb || 0), 0);
-  const lbPerWeek = phase === 'cut' && toGo > 0 ? Math.min(weightLb * PACE[profile.pace].pct, 2) : 0;
+  const lbPerWeek = phase === 'cut' && toGo > 0 ? Math.min(weightLb * (PACE[profile.pace] || PACE.steady).pct, 2) : 0;
   // Never cut more than 25% below maintenance.
   let deficit = Math.min((lbPerWeek * KCAL_PER_LB_FAT) / 7, tdee * 0.25);
   // Lean gain: a surplus of at most 15% above maintenance.
@@ -89,7 +92,7 @@ export function goalProjection(profile, weightLb, from = new Date(), rate = null
   }
   let w = weightLb, weeks = 0;
   while (w > goal && weeks < 520) {
-    const step = Math.min(w * PACE[profile.pace].pct, 2);
+    const step = Math.min(w * (PACE[profile.pace] || PACE.steady).pct, 2);
     if (w - step <= goal) { weeks += (w - goal) / step; break; }
     w -= step; weeks++;
   }

@@ -223,7 +223,7 @@ async function signIn() {
         <p class="tiny muted">The demo keeps everything on this phone, so you can try families, invites and threads before anything goes live.</p>
       </div>
       <button type="button" class="linkish small" data-act="help">💬 Trouble signing in? Get help</button>
-      <a class="small" href="../">🥗 Just the trackers? Open them without signing in ›</a>
+      <a class="small" href="../">🥗 Just your own diet &amp; fitness, on this phone? Open them without signing in ›</a>
     </section>`;
   if (cfg.ready) loadGoogle(cfg.googleClientId);
 }

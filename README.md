@@ -91,7 +91,7 @@ Most features work as soon as the connector (a small Cloudflare Worker) is deplo
 
 The trackers still open without signing in (*Just the trackers?* on the sign-in screen), but then they stay on that phone. Sharing happens only through an OurPawmily family: Google sign-in, family membership, and each person choosing whether to share diet and fitness. Signed out, the trackers' 🔐 Privacy shows *Share through your family* with a link to OurPawmily.
 
-Before accounts, two phones could share through a household code. The code no longer appears anywhere in the app. Phones that already shared that way keep syncing quietly in the background until they move over (a later phase), and 🛟 Recover can still read those older shared copies. Nothing stored was deleted.
+Before accounts, two phones could share through a household code. No new code is ever made now, and the code no longer appears anywhere in the app. Phones that already shared that way keep syncing quietly in the background until they move over (a later phase), and 🛟 Recover can still read those older shared copies. Nothing stored was deleted.
 
 ---
 
@@ -178,7 +178,7 @@ Everything at `/family/`, feature by feature.
 - **🔔 Notifications** (Me › 🔔 Notifications, once per device): a nudge when your partner sends a plan, answers yours or leaves a note; when someone books the dogs in or takes a drop-off or pick-up; when the dogs have a ⭐ golden day or someone starts or wins bingo; and when someone replies to or tags you in a thread. Reminders come the day before and an hour before an appointment, at an event's reminder time, and at 9 AM a week before and on the day a vaccine is due. Turn each kind on or off, send a test, or turn it off for one device. On iPhone, add the app to the Home Screen first (Share › Add to Home Screen) and turn them on from there. Notifications say who did what, never what an encrypted note, plan or event says.
 - **🍿 Watch** (🍿 at the top, or ＋ › Add to Watch): the shows and movies you watch together. **Now** has what you're watching, each with where you're up to (S2 · E5, ＋ Episode), 📺 *We watched tonight*, everyone's ★ ratings, ▶️ / 🎉 / ✋ status, and 🎲 *Bingo* (starts that show's game from its card set, or makes one). **By month** and the **year recap** (nights, shows, movies, finished, most watched, your favourite, which service) work as they did in the trackers, whose 📺 Watching list comes over the first time. Titles and services are end-to-end encrypted. **🎲 Bingo & 💑 picks ›** opens the games.
 - **One app:** the Home Screen icon opens OurPawmily, and 💪 Health in its bottom bar opens food, macros and training (the sign-in screen also has *Just the trackers? Open them without signing in*, which keeps them on that phone only — sharing happens only through a family). Once you're signed in, the trackers are just **🍽 Food** and **🏋︎ Train** (add more trackers later as you need them): Home, Calendar, 🐕 Dogs and 💞 Us live in OurPawmily, and 🔐 Privacy (with 🛟 Recover and Devices) is the 🔐 button at the top. **🏃 Your day** on Home shows the best run and ride windows, dog walks, your Movement classes (added under Train › Movement) and links to both gyms' live yoga and fitness schedules. A pet's page in OurPawmily has *✎ Edit in 🥗 Trackers › Dogs* for food, meds, vaccines and the vet. *Ask Claude* in the trackers goes through your account.
-- **No household code:** it no longer appears anywhere — no code in 🔐 Privacy, no *Link phones*, no one-tap link, no sharing section in Devices, no calendar subscribe link. Phones that already shared through a code keep syncing quietly in the background until their move to the family (a later phase), and 🛟 Recover can still read those older shared copies. Nothing stored was deleted.
+- **No household code:** no new code is ever made, and it no longer appears anywhere — no code in 🔐 Privacy, no *Link phones*, no one-tap link, no sharing section in Devices, no calendar subscribe link. Phones that already shared through a code keep syncing quietly in the background until their move to the family (a later phase), and 🛟 Recover can still read those older shared copies. Nothing stored was deleted.
 
 # The trackers, in detail
 
@@ -222,7 +222,7 @@ The trackers are the food, training, dogs and calendar screens that came before 
   - Medications and prescriptions: dose, schedule, prescribing vet, refill date.
   - Vaccines, given and next due, marked Current / Due soon / Overdue.
   - Vet, microchip, notes.
-  - **Documents:** vaccine certificates and vet records as PDFs or photos (up to 10 MB), opened with one tap on either phone.
+  - **Documents:** vaccine certificates and vet records as PDFs or photos (up to 10 MB), opened with one tap on any phone in the family. Signed in, each one is locked with your family's key and kept in the family's file store (as are adoption-board screenshots); documents shared earlier through a household code still open.
   - Overdue vaccines and refills due within a week show here and on Home.
 - **🏆 Dog duty:** who did the feedings, walks and park trips, for Today, this Month or this Year, with the leader crowned 👑. Each month's leader wins a **🪙 gold coin** (ties get none), and the year's coins and each month's winner are listed.
 - **🏡 Dogs up for adoption** (bottom): a shared board of adoption ads.

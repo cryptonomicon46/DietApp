@@ -9,7 +9,7 @@
 // The household code keeps working alongside while a partner hasn't moved over yet.
 import { serverUrl } from './server.js';
 import { PROFILES, global, ownerId, setOwner, exportProfile, importProfile } from './storage.js';
-import { keys, seal, tryOpen, checkKey } from '../family/crypto.js';
+import { keys, seal, tryOpen, checkKey, sealBytes, openBytes } from '../family/crypto.js';
 
 // 🔐 An end-to-end encrypted family: this device's family key (the family app keeps it), checked.
 // Locked copies are {enc: "e1:…"}; without the key they can't be read, so they're left alone.
@@ -90,6 +90,33 @@ export const account = {
     global.set('account.mineAt', r.data.savedAt || Date.now());
     global.set('pushedAt', Date.now());
     await this.pushDogs(a).catch(() => {});
+  },
+
+  // 📎 Family files — dog documents and adoption photos: locked on this device with the family key
+  // and kept in the family's file store, like thread files. Each returns false / null when there's
+  // no account here (or an encrypted family without its key on this device), so callers can fall back.
+  async putFile(id, blob) {
+    const a = this.get();
+    if (!a?.me) return false;
+    const k = await familyKey(a);
+    if (a.e2ee && !k) return false;
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const res = await fetch(`${connector()}/v2/families/${a.fid}/photos/${id}?size=doc`, { method: 'PUT', headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/octet-stream' }, body: k ? await sealBytes(k, bytes) : bytes }).catch(() => null);
+    return !!res?.ok;
+  },
+  async getFile(id, type = '') {
+    const a = this.get();
+    if (!a?.me) return null;
+    const res = await fetch(`${connector()}/v2/families/${a.fid}/photos/${id}?size=doc`, { headers: { Authorization: `Bearer ${token()}` } }).catch(() => null);
+    if (!res?.ok) return null;
+    const k = await familyKey(a);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const plain = k ? await openBytes(k, bytes).catch(() => null) : bytes;
+    return plain ? new Blob([plain], { type: type || 'application/octet-stream' }) : null;
+  },
+  async delFile(id) {
+    const a = this.get();
+    if (a?.me) await fetch(`${connector()}/v2/families/${a.fid}/photos/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token()}` } }).catch(() => {});
   },
 
   // 🤖 Ask Claude for a tracker command, through your account (no household code needed).

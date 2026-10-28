@@ -78,9 +78,11 @@ npx wrangler deploy
 
 ## Dog documents (vaccine records, PDFs, photos)
 
-(Legacy storage: moves to the family's file store in a later phase.)
+Signed in, the trackers store dog documents and adoption-board screenshots in the family's
+file store (R2, `/v2/families/:fid/photos/:id?size=doc`), locked with the family key.
 
-The app stores dog documents in the same HOUSEHOLD KV namespace, under
+(Legacy storage, read only for files shared before 2.0 and by phones that still share through a
+code without an account:) the HOUSEHOLD KV namespace, under
 `/household/<code>/file/<id>` (PDF or image, up to 10 MB each). This needs the
 updated worker. Deploy it once:
 

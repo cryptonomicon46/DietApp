@@ -115,7 +115,7 @@ Security items previously under review — all **FIXED in 2.0 Phase 0**:
 
 **FUTURE SECURITY PROJECT: Per-person/per-area cryptographic isolation for Diet and Fitness.** Today every family member holds the same family key, so Family membership permissions (household areas, Diet/Fitness sharing) are enforced by the server, not cryptographically isolated between family members. Acceptable for the beta; before a commercial or external-family launch this will be separately designed and audited (whether personal Health areas need separate encryption keys). Not part of Phase 0 or 1; the key architecture is unchanged.
 
-Household-code migration (open): the remaining household-code dependencies are listed in `tests/dependencies.test.js` — `sync.ensure` creating codes, dog documents and adoption photos stored under the code, the old calendar subscription link, 🛟 Recover's old copies, linked calendars in the trackers going through the code, and the legacy assistant route. They are to be migrated in Phase 2/10.
+Household-code migration (open): since 2.0 Phase 2 no code is created, joined or changed (`sync.ensure`, `join`, `rotate` removed), and signed-in phones store dog documents and adoption photos in the family file store (`account.putFile` → `/v2/families/:fid/photos/:id?size=doc`, sealed with the family key). The remaining dependencies are listed in `tests/dependencies.test.js` — existing phones' background sync, reading files shared earlier under a code, the old calendar subscription link, 🛟 Recover's old copies, linked calendars in the trackers, and the legacy assistant route — to be migrated in Phase 10.
 
 Design items deferred to the security redesign:
 - **Invite and device links carry the key**, so the key ends up in email and messaging histories.

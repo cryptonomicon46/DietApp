@@ -1,10 +1,11 @@
 // 🐶 Dog profiles: food, supplements, medications, vaccines, vet, and documents (vaccine
 // certificates as PDFs or photos). Each phone keeps its own edits as {dogId: dog} in its
 // profile; household sync carries them over and the newest edit of each dog wins.
-// Documents are files, too big for sync: they live in this phone's IndexedDB and go to the
-// household connector's file store (when it has one), so the other phone can open them too.
+// Documents are files, too big for sync: they live in this phone's IndexedDB and go to your
+// family's file store (locked with the family key) so everyone in the family can open them.
 import { PROFILES, ownerId, profileStore, global } from './storage.js';
 import { sync, pushNow } from './sync.js';
+import { account } from './account.js';
 
 export const VACCINES = ['Rabies', 'DHPP', 'Bordetella', 'Leptospirosis', 'Canine influenza', 'Lyme'];
 export const FOOD_TYPES = { dry: 'Dry kibble', wet: 'Wet / canned', fresh: 'Fresh / cooked', raw: 'Raw', mixed: 'Mixed' };
@@ -93,7 +94,9 @@ function saveDog(dog) {
   pushNow().catch(() => {});
 }
 
-// Files: IndexedDB on the phone + the connector's household file store.
+// Files: IndexedDB on the phone, then your family's file store (signed in: locked with the family
+// key). Files shared before 2.0 through a household code are still read (and removed) there, and a
+// phone that still shares that way without an account keeps using it until it moves to a family.
 let dbp = null;
 const db = () => (dbp ||= new Promise((res, rej) => {
   const r = indexedDB.open('pawmily-files', 1);
@@ -102,23 +105,28 @@ const db = () => (dbp ||= new Promise((res, rej) => {
   r.onerror = () => rej(r.error);
 }));
 export const idb = async (mode, fn) => { const d = await db(); return new Promise((res, rej) => { const tx = d.transaction('files', mode); const q = fn(tx.objectStore('files')); tx.oncomplete = () => res(q?.result); tx.onerror = () => rej(tx.error); }); };
-export const fileUrl = (id) => { const s = sync.settings(); return s?.url && s?.code ? `${s.url}/household/${encodeURIComponent(s.code)}/file/${id}` : null; };
+const legacyUrl = (id) => { const s = sync.settings(); return s?.url && s?.code ? `${s.url}/household/${encodeURIComponent(s.code)}/file/${id}` : null; };
 export async function uploadFile(id, blob) {
-  const url = fileUrl(id);
+  if (account.active()) return account.putFile(id, blob);
+  const url = legacyUrl(id);
   if (!url) return false;
   const res = await fetch(url, { method: 'PUT', body: blob, headers: { 'Content-Type': blob.type || 'application/octet-stream' } });
   return res.ok;
 }
-export async function getFile(id) {
+export async function getFile(id, type = '') {
   const local = await idb('readonly', (st) => st.get(id)).catch(() => null);
   if (local) return local;
-  const url = fileUrl(id);
-  if (!url) return null;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const blob = await res.blob();
-  await idb('readwrite', (st) => st.put(blob, id)).catch(() => {});
+  let blob = account.active() ? await account.getFile(id, type).catch(() => null) : null;
+  const url = !blob && legacyUrl(id);
+  if (url) { const res = await fetch(url).catch(() => null); if (res?.ok) blob = await res.blob(); }
+  if (blob) await idb('readwrite', (st) => st.put(blob, id)).catch(() => {});
   return blob;
+}
+export async function deleteFile(id) {
+  await idb('readwrite', (st) => st.delete(id)).catch(() => {});
+  if (account.active()) await account.delFile(id);
+  const url = legacyUrl(id);
+  if (url) await fetch(url, { method: 'DELETE' }).catch(() => {});
 }
 // Files added while the connector couldn't take them get another try later.
 export async function retryUploads() {
@@ -256,8 +264,9 @@ export function initDogs(root) {
       if (!confirm(`Remove ${draft?.name || 'this dog'} and its records?`)) return;
       saveDog({ ...draft, deleted: true }); draft = null; openDog = null; renderDogs();
     } else if (t.dataset.dogdoc) {
-      const blob = await getFile(t.dataset.dogdoc).catch(() => null);
-      if (!blob) { note = 'That file is only on the other phone. It will open here once the connector can store files (see README).'; renderDogs(); return; }
+      const doc = allDogs().flatMap((x) => x.docs || []).find((f) => f.id === t.dataset.dogdoc);
+      const blob = await getFile(t.dataset.dogdoc, doc?.type).catch(() => null);
+      if (!blob) { note = "That file is only on the phone that added it so far. It opens here once that phone is back online."; renderDogs(); return; }
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank') || (location.href = url);
       setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -266,9 +275,7 @@ export function initDogs(root) {
       if (!confirm('Remove this document?')) return;
       const d = allDogs().find((x) => x.id === dogId);
       saveDog({ ...d, docs: (d.docs || []).filter((f) => f.id !== fid), removedDocs: [...(d.removedDocs || []), fid] });
-      idb('readwrite', (st) => st.delete(fid)).catch(() => {});
-      const url = fileUrl(fid);
-      if (url) fetch(url, { method: 'DELETE' }).catch(() => {});
+      deleteFile(fid);
       renderDogs();
     }
   });
@@ -295,7 +302,7 @@ export function initDogs(root) {
     const shared = await uploadFile(id, file).catch(() => false);
     const d = allDogs().find((x) => x.id === dogId);
     saveDog({ ...d, docs: [...(d.docs || []), { id, name: file.name, type: file.type, size: file.size, date: isoDate(), by: ownerId(), shared }] });
-    note = shared ? 'Saved — your partner can open it too.' : 'Saved on this phone. It will be shared once the connector is updated to store files (see README).';
+    note = shared ? 'Saved — your family can open it too.' : account.active() ? "Saved on this phone. It's shared with your family next time you're online." : 'Saved on this phone. Sign in to OurPawmily to share it with your family.';
     renderDogs();
   });
 }

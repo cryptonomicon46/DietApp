@@ -344,3 +344,11 @@ test('low-carb meal for a rest day: same protein, ~10% carbs, some fat back, a b
   const lowBreakfast = planForDay(day, new Date('2026-10-24T12:00:00'), { breakfast: { lowCarb: true } });
   assert.equal(lowBreakfast.breakfast.template, 'eggs');
 });
+
+test('a profile without an activity level or pace still gets targets (tracked, steady)', async () => {
+  const { dailyTargets, activityOf, ACTIVITY } = await import('../js/plan.js');
+  assert.equal(activityOf({}), ACTIVITY.tracked);
+  assert.equal(activityOf({ activity: 'moderate' }), ACTIVITY.moderate);
+  const t = dailyTargets({ sex: 'female', age: 35, heightIn: 65, goalLb: 140 }, 160);
+  assert.ok(t.kcal > 1000 && t.kcal < 3000, String(t.kcal));
+});
