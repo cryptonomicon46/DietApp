@@ -7,7 +7,7 @@
 // your own full copy, which only you read. Each part is locked with the family key like the rest.
 export const PARTS = {
   diet: ['profile', 'weights', 'weighModes', 'days', 'eaten', 'mealLog', 'dailyMeals', 'planned', 'combos', 'custom', 'customGrocery', 'scannedFoods', 'preparedMeals', 'myFoods', 'macroAdjust', 'adjust', 'adjustAppliedOn', 'checkins', 'checkinSnooze', 'checked', 'prefs', 'dexa'],
-  fitness: ['workouts', 'workoutHistory', 'lift', 'activities', 'whoopTotal', 'gymClasses', 'training'],
+  fitness: ['workouts', 'workoutHistory', 'lift', 'activities', 'whoopTotal', 'deviceTotal', 'gymClasses', 'training'],
   us: ['rhythm', 'taste', 'plans', 'planReplies', 'notes', 'noteHearts', 'noteDays', 'shows', 'showStatus', 'showRatings', 'showNights', 'dogTreats', 'dogFed', 'dogProfiles', 'dogWalked', 'dogToys', 'dogPark', 'adoptDogs'],
 };
 export const PART_NAMES = Object.keys(PARTS);

@@ -179,6 +179,8 @@ export function fromLiftSession(s, names = {}) {
   });
 }
 // A workout from a device (WHOOP, Strava…): an activity, no sets.
+// "functional-fitness" → "Functional fitness" (devices send their own sport ids).
+const sportName = (n) => String(n || 'Workout').replace(/[-_]+/g, ' ').trim().replace(/^./, (c) => c.toUpperCase());
 export function fromDeviceWorkout(x) {
-  return normalize({ id: `dev${String(x.id || x.start).replace(/[^a-z0-9]/gi, '')}`.slice(0, 16), title: x.name || 'Workout', date: String(x.start || x.date || '').slice(0, 10), status: 'done', source: 'device', activity: { kind: x.name || 'Workout', minutes: x.minutes, kcal: x.kcal } });
+  return normalize({ id: `dev${String(x.id || x.start).replace(/[^a-z0-9]/gi, '')}`.slice(0, 16), title: sportName(x.name), date: String(x.start || x.date || '').slice(0, 10), status: 'done', source: 'device', activity: { kind: sportName(x.name), minutes: x.minutes, kcal: x.kcal } });
 }

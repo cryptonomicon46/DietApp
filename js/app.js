@@ -10,7 +10,7 @@ import {
   SESSION_TYPES, SPORTS, INTENSITY, trainingDay, applyTraining,
   sportStats, estimateActivity, sessionType,
 } from './activity.js';
-import { devices } from './devices.js';
+import { devices, syncOwner } from './devices.js';
 import { RESEARCH } from './research.js';
 import { initNotes, renderNotes, updateNotesBadge, openUs, homeUs } from './notes.js';
 import { syncLine } from './plans.js';
@@ -126,6 +126,8 @@ function burnedToday() {
   const today = isoDate();
   const typed = state.whoopTotal[today];
   if (typed) return { kcal: typed, source: 'WHOOP (you entered)' };
+  const synced = store.get('deviceTotal', {})[today];
+  if (synced) return { kcal: synced, source: 'WHOOP (so far today)' };
   const base = baseTargets();
   if (!activityOf(state.profile).tracked) return { kcal: base.tdee, source: 'estimate from your activity level' };
   const day = todaysTraining();
@@ -2079,35 +2081,18 @@ function renderTraining(t) {
   };
 }
 
-// Keep a compact copy of every imported workout to learn your burn rate per sport.
-function addHistory(list) {
-  const byId = new Map(state.history.map((w) => [w.id, w]));
-  for (const w of list) byId.set(w.id, { id: w.id, name: w.name, start: w.start, minutes: w.minutes, kcal: w.kcal, strain: w.strain ?? null });
-  state.history = [...byId.values()];
-  store.set('workoutHistory', state.history);
-}
 
-function mergeWorkouts(list) {
-  addHistory(list);
-  const cutoff = Date.now() - 14 * 86400000;
-  const byId = new Map(state.workouts.map((w) => [w.id, w]));
-  for (const w of list) byId.set(w.id, w);
-  state.workouts = [...byId.values()].filter((w) => new Date(w.start).getTime() > cutoff)
-    .sort((a, b) => a.start.localeCompare(b.start));
-  store.set('workouts', state.workouts);
-}
-
+// Your connected devices → your trackers (only on your own profile; the sign-in stays on this device).
 async function syncDevices(manual = false) {
   const d = devices.get();
-  if (!d.server || (!d.whoop && !d.strava)) return;
+  if (sync.readOnly() || (!d.whoop && !d.strava)) return;
   const status = $('#syncStatus');
   if (manual && status) status.textContent = 'Syncing…';
-  const start = new Date(); start.setDate(start.getDate() - 2); start.setHours(0, 0, 0, 0);
-  const { workouts, errors } = await devices.sync(start);
-  mergeWorkouts(workouts);
-  store.set('lastSync', Date.now());
+  const { errors } = await syncOwner(3);
+  state.history = store.get('workoutHistory', []);
+  state.workouts = store.get('workouts', []);
   renderAll();
-  if (errors.length) $('#syncStatus').textContent = `Sync problem — ${errors.join('; ')}`;
+  if (errors.length && $('#syncStatus')) $('#syncStatus').textContent = errors.map((e) => e.message).join('; ');
 }
 
 // ---------- DEVICES ----------
@@ -2115,10 +2100,10 @@ async function syncDevices(manual = false) {
 // existing link. The connector's address is built in (js/server.js); no URL, CSV or code here.
 const devDialog = $('#devicesDialog');
 async function openDevices() {
-  const d = devices.get();
-  $('#whoopStatus').textContent = d.whoop ? 'Connected' : 'Checking…';
+  const d = devices.get(), st = devices.status('whoop');
+  $('#whoopStatus').textContent = d.whoop ? st.text : 'Checking…';
   $('#whoopConnect').hidden = !d.whoop;
-  $('#whoopConnect').textContent = d.whoop ? 'Disconnect' : 'Connect';
+  $('#whoopConnect').textContent = st.needsReconnect ? 'Reconnect' : d.whoop ? 'Disconnect' : 'Connect';
   $('#stravaRow').hidden = !d.strava;
   $('#stravaStatus').textContent = d.strava ? 'Connected (no longer offered — you can disconnect it)' : '';
   devDialog.showModal();
@@ -2129,7 +2114,8 @@ async function openDevices() {
 }
 for (const p of ['whoop', 'strava']) {
   $(`#${p}Connect`).onclick = () => {
-    if (devices.get()[p]) { devices.disconnect(p); openDevices(); renderAll(); return; }
+    if (p === 'whoop' && devices.status('whoop').needsReconnect) { location.href = devices.connectUrl(p); return; }
+    if (devices.get()[p]) { devices.disconnect(p).finally(() => { openDevices(); renderAll(); }); return; }
     if (p === 'whoop') location.href = devices.connectUrl(p);
   };
 }
@@ -3169,7 +3155,9 @@ window.addEventListener('lp:assistant', async (e) => {
 });
 $('#dayBar').onclick = () => { document.querySelector('[data-tab=today]').click(); };
 $('#weighDate').value = isoDate();
-const justConnected = devices.takeRedirect();
+const connected = devices.takeRedirect();
+const justConnected = connected?.ok;
+if (connected?.error) setTimeout(() => alert(connected.error === 'denied' ? 'WHOOP wasn\'t connected — you said no on WHOOP\'s page.' : connected.error === 'state' ? 'WHOOP wasn\'t connected — that sign-in didn\'t start on this device. Try Connect again.' : 'WHOOP wasn\'t connected — something went wrong on WHOOP\'s side. Try again.'), 300);
 // #dogs opens the Dogs tab. An old one-tap link (#link=…) no longer links phones: sharing is
 // through your OurPawmily family now, so it's just cleared from the address bar.
 function takeHash() {

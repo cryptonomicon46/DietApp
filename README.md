@@ -344,9 +344,10 @@ The trackers are the food, training, dogs and calendar screens that came before 
     - Anything it can't parse can go to **Claude** through the connector (optional).
     - Every command has **Undo**.
 - **Recent workouts** and the **Exercise library** fold away (tap the title: Show ▾ / Hide ▴), closed by default and remembered on each phone.
-- **Devices** (🔐 Privacy › Devices): nothing to paste or set up.
-  - **WHOOP:** *Connect* when the connector has WHOOP set up; otherwise *Not available yet*. Workouts then sync automatically.
-  - **Garmin:** coming later. **Apple Health:** needs the iPhone app, not available yet.
+- **Devices** (💪 Health › *Devices ›* in OurPawmily, or 🔐 Privacy › Devices here): nothing to paste or set up.
+  - **WHOOP:** *Connect WHOOP* when the connector has WHOOP set up (otherwise *Not available yet*) → WHOOP's own sign-in page → back to 💪 Health, where your last two weeks of workouts come in. After that they sync on their own when you open the trackers, or with *Sync now*. WHOOP is asked only for workouts and each day's calories burned (not sleep, recovery or body data). Workouts show in 🏋️ Fitness history and count toward today's calories; the day's total burn (*WHOOP (so far today)*) replaces the estimate unless you typed one. If WHOOP stops sharing (you removed access in WHOOP, or the sign-in ran out) Devices says *reconnect*; if WHOOP is down it says so and tries next time. The same workout never comes in twice. *Disconnect* asks WHOOP to remove OurPawmily's access and keeps the workouts already brought in.
+  - **Connecting shares nothing:** the WHOOP sign-in stays on the device you connected on (never in your account copy or with anyone), and what it brings in is part of your Fitness — seen only by the people you share your Fitness with.
+  - **Garmin:** not available. Garmin only opens its data to approved companies (its developer program doesn't take personal apps), so there's no direct connection, and none is pretended. **Apple Health:** needs an iPhone app, not available yet.
   - **Strava** shows only if it was already connected, so you can disconnect it.
 
 ## 📅 Calendar

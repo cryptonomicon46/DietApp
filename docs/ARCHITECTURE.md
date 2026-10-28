@@ -102,7 +102,7 @@ Usage is counted per provider in KV (`searchruns:<month>`, `scoutruns:…`, `out
 | TMDB, OMDb, JustWatch (via TMDB) | Shows, movies, scores, where to watch | Titles and IDs |
 | Ticketmaster, SeatGeek | Events for the scout | Area, dates |
 | Public RSS feeds | News (only with `NEWS_ON`) | — (fetch only) |
-| WHOOP, Strava | Workout import (trackers; WHOOP only when its secrets are set, Strava only to disconnect an existing link) | OAuth tokens (kept on the phone, excluded from sync) |
+| WHOOP, Strava | Workout import and each day's total burn (`js/devices.js`, used by the trackers and by 💪 Health › Devices; WHOOP only when its secrets are set, Strava only to disconnect an existing link). Scopes `offline read:workout read:cycles`; OAuth `state` made and checked on the phone (sessionStorage), `.f` suffix returns to `family/`; workouts and cycles paged (`nextToken`, ≤ 8 pages); results merged by device id into the owner's `workoutHistory` / `workouts` / `deviceTotal` (Fitness part); refresh refused → `problem: 'reconnect'`, 5xx/offline → `'unavailable'`; disconnect → `/whoop/revoke`. Garmin: no integration (Garmin's developer program is for approved businesses); Strava's 2026 terms (single-athlete mode, paid developer tier, no showing one athlete's data to others) rule out a Garmin-through-Strava path for family sharing | OAuth tokens: kept on the phone under the owner's profile (`lp.p.<owner>.devices`), excluded from sync and from every Health part; never stored on the connector |
 
 ## 8. Tests and CI
 

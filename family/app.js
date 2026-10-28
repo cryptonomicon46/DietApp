@@ -174,9 +174,13 @@ async function boot() {
   if (!state.families.some((f) => f.fid === state.fid)) state.fid = state.families[0].fid;
   await loadFamily(famEarly?.fid === state.fid ? famEarly.p : null);
   // Older links (#feed, #dogs, notifications sent before 2.0) open Home.
-  const hv = location.hash.match(/^#(home|feed|dogs|calendar|me|us|threads|chats|chat=[a-z0-9_]+)$/)?.[1];
+  const hv = location.hash.match(/^#(home|feed|dogs|calendar|me|us|threads|chats|health|chat=[a-z0-9_]+)$/)?.[1];
   if (hv) { state.view = hv; history.replaceState(null, '', location.pathname + location.search); }
+  // ⌚ Back from connecting WHOOP (Health › Devices): open Health and finish there.
+  const connecting = /^#connect=/.test(location.hash);
+  if (connecting) state.view = 'health';
   show(state.view === 'member' && !member(state.memberId) ? 'home' : state.view === 'us' && !partnerMember() ? 'home' : state.view === 'chat' ? 'chats' : state.view);
+  if (connecting) devices().then((D) => D.back()).catch(() => {});
   refreshPush();
   startChats();
   if (partnerMember() && state.view !== 'us') loadUs().then(usBadge).catch(() => {});
@@ -387,7 +391,18 @@ async function healthView() {
   const data = await openData(rec);
   if (data.locked) { $('#view').innerHTML = `${demoBanner()}<section class="card"><b>🔒 Locked on this device</b><p class="small muted">This device needs the family key to show your Health. Me › 🔐 Encryption.</p></section>`; return; }
   if (F) F.setLegacy(data, LIFT_NAMES);
-  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), sharing: sharingLine(), fitness: F ? F.card(esc) : undefined })}</div>`;
+  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), sharing: sharingLine(), fitness: F ? F.card(esc) : undefined, devices: devicesLine() })}</div>`;
+}
+// ⌚ Devices (Health › Devices): family/deviceScreen.js, loaded when you open Devices or come back
+// from connecting WHOOP.
+let devUi = null;
+const devices = () => (devUi ||= import(`./deviceScreen.js?v=${VERSION}`).then((m) => { m.init({ esc, openSheet, toast, api, VERSION, state, clearShared: () => shared.clear(), refresh: () => state.view === 'health' && healthView(), $ }); return m; }).catch((e) => { devUi = null; throw e; }));
+// The Health card's line, without loading anything: what this device knows about its connection.
+function devicesLine() {
+  let w = null;
+  try { const owner = JSON.parse(localStorage.getItem('lp.g.owner')); w = owner && JSON.parse(localStorage.getItem(`lp.p.${owner}.devices`))?.whoop; } catch { /* none */ }
+  const line = !w ? 'No device connected' : w.problem === 'reconnect' ? '⚠️ WHOOP needs reconnecting' : `WHOOP connected${w.lastSync ? ` · synced ${new Date(w.lastSync).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : ''}`;
+  return `<button type="button" class="hl-row" data-act="devices"><span class="grow">${esc(line)}</span><span class="go">Devices ›</span></button>`;
 }
 // 🏋️ Fitness (family/fitness.js): loaded with your workouts the first time it's needed.
 let fitMod = null;
@@ -467,7 +482,7 @@ async function homeView() {
   const { house, dogPart, fame } = petsParts();
   const h = new Date().getHours(), first = esc((me()?.name || state.user?.name || '').split(' ')[0]);
   const top = `<h1 class="home-hi">${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}. Here’s your ${esc(new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))}.</h1>
-    <div id="hello"></div><section class="nextup" id="nextUp" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section>
+    <div id="hello"></div><section class="nextup" id="nextUp" style="${homeH('nextUp')}" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section>
     <section class="card attn" id="attn" aria-labelledby="attnH" style="${homeH('attn')}"><div class="skeleton line"></div></section>
     <section class="card groc" id="groc" aria-labelledby="grocH" style="${homeH('groc')}"><div class="skeleton line"></div></section>
     <div id="goldNews"></div><section class="card movies" id="moviesCard" hidden></section>`;
@@ -504,7 +519,7 @@ const home = { requests: [], groceries: [], all: false, loaded: false, at: 0 };
 const REQ_KINDS = { ride: '🚗 A ride', petsit: '🐾 Pet sitting', walk: '🦮 A dog walk', babysit: '🧸 Babysitting', meal: '🍲 A meal', errand: '🛒 An errand', other: '🙋 A hand' };
 // The cards' last height on this phone (a number, nothing they said): the space is kept while they load.
 const homeHKey = () => `fam.homeH.${state.fid}`;
-const homeH = (id) => { let h = 0; try { h = JSON.parse(LS.get(homeHKey()) || '{}')[id]; } catch { /* none */ } return `min-height:${Math.min(h || { attn: 140, groc: 330 }[id], 900)}px`; };
+const homeH = (id) => { let h = 0; try { h = JSON.parse(LS.get(homeHKey()) || '{}')[id]; } catch { /* none */ } return `min-height:${Math.min(h || { attn: 140, groc: 330, nextUp: 131 }[id], 900)}px`; };
 function keepH(el) {
   el.style.minHeight = '';
   try { const all = JSON.parse(LS.get(homeHKey()) || '{}'); all[el.id] = Math.round(el.getBoundingClientRect().height); LS.set(homeHKey(), JSON.stringify(all)); } catch { /* none */ }
@@ -2879,13 +2894,14 @@ async function renderNextUp() {
   // 📞 The call line (only for whoever it's set up for) sits at the bottom of Next up.
   const call = await callLine().catch(() => '');
   if (!$('#nextUp')) return;
-  if (!top) { el.hidden = false; el.innerHTML = `<div class="nu-k">✨ Next up</div><p class="small muted">Nothing due right now. ${Object.keys(callNudge.all || {}).length ? '' : '<button type="button" class="linkish small" data-act="habits">🔁 Set up runs, rides or hot yoga</button>'}</p>${call}`; return; }
+  if (!top) { el.hidden = false; el.innerHTML = `<div class="nu-k">✨ Next up</div><p class="small muted">Nothing due right now. ${Object.keys(callNudge.all || {}).length ? '' : '<button type="button" class="linkish small" data-act="habits">🔁 Set up runs, rides or hot yoga</button>'}</p>${call}`; keepH(el); return; }
   el.hidden = false;
   el.innerHTML = `<div class="row between"><span class="nu-k">✨ Next up · ${esc(top.when)}</span><span><button type="button" class="linkish tiny" data-act="nuplan">📅 Today's plan</button> <button type="button" class="linkish tiny" data-act="nuknows" aria-label="What Next up knows">⋯</button></span></div>
     <h3 class="nu-t">${top.icon} ${esc(top.title)}</h3>
     <p class="nu-why">${top.why.map(esc).join(' · ')}</p>
     <div class="row wrap nu-acts"><button type="button" class="small" data-nu="done:0">✓ Done</button><button type="button" class="ghost small" data-nu="later:0">⏰ Later</button><button type="button" class="ghost small" data-nu="skip:0">✕ Not today</button><button type="button" class="linkish small" data-nu="why:0">Why?</button></div>
     ${alts.map((a, i) => `<div class="nu-alt"><span>${a.icon}</span><span class="grow"><b>${esc(a.title)}</b> <small class="muted">${esc(a.when)} · ${esc(a.why[0] || '')}</small></span><button type="button" class="linkish tiny" data-nu="done:${i + 1}">✓</button><button type="button" class="linkish tiny" data-nu="skip:${i + 1}">✕</button></div>`).join('')}${call}`;
+  keepH(el);
   nuSendNudge(top);
 }
 // 🔔 Optional: a notification 30 minutes before the top pick (sent by the connector).
@@ -4623,6 +4639,8 @@ document.addEventListener('click', (e) => {
     case 'asknew': return askSheet();
     case 'grocall': home.all = true; return renderGroc();
     case 'grocclear': return act(() => grocAct(() => api.post(`/families/${state.fid}/groceries/clear`)));
+    case 'devices': return act(async () => (await devices()).sheet());
+    case 'devconnect': case 'devsync': case 'devoff': case 'devoffstrava': return act(async () => (await devices()).onAct(d.act, t));
     case 'healthshare': return openSheet(`<div class="row between"><h2>💪 Who can see my Health</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>${sharingHtml()}`);
     case 'apptnew': return apptSheet();
     case 'bingonew': return bingoNew();

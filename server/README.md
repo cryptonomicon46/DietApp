@@ -26,7 +26,8 @@ and 🛟 Recover can still read those copies. The `/household/…` routes stay f
 
 1. **Create the apps**
    - WHOOP: <https://developer-dashboard.whoop.com> → create app. Scopes:
-     `read:workout`, `read:cycles`, `read:recovery`, `offline`.
+     `read:workout`, `read:cycles`, `offline` (the app asks for no more; `read:recovery` is no longer
+     needed and can be unticked).
      Redirect URL: `https://<your-worker>.workers.dev/whoop/callback`
    - Strava (legacy, only for phones already connected): <https://www.strava.com/settings/api> → create app.
      Authorization Callback Domain: `<your-worker>.workers.dev`
@@ -46,7 +47,11 @@ and 🛟 Recover can still read those copies. The `/household/…` routes stay f
 3. **Household sharing** (legacy): nothing to set up. New phones don't use it; phones that
    already shared through a code keep syncing until their migration.
 4. **WHOOP (optional):** once the two WHOOP secrets are set, **Devices** shows **Connect WHOOP**
-   on every phone — no URL to paste. The STRAVA secrets only matter for phones that already
+   on every phone — no URL to paste. Routes: `/whoop/login?state=` (the phone's state; ending `.f`
+   returns to `family/`), `/whoop/callback` (tokens back in the URL fragment with the state; a "no"
+   on WHOOP's page comes back as an error), `/whoop/refresh` (401 when WHOOP refuses: reconnect),
+   `/whoop/workouts` and `/whoop/cycles` (one page of 25, `nextToken`), `/whoop/revoke` (POST →
+   WHOOP `DELETE /v2/user/access`). The connector stores nothing for WHOOP. The STRAVA secrets only matter for phones that already
    connected Strava.
 
 ## Ask Claude (optional)
