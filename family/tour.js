@@ -39,7 +39,7 @@ export const SLIDES = [
   { id: 'calendar', eyebrow: 'Calendar and 🍿 Watch', title: 'Your days, and your shows', go: 'calendar', cards: [
     ['📅', 'One family calendar', 'Everyone’s events, ⭐ golden days, ❤️ dates, 🐾 appointments, linked phone calendars.'],
     ['👔', 'Dress for the day', 'What each of you should wear, from the weather where you’ll be.'],
-    ['🍿', 'Watch', 'Where you’re up to, 🆕 new episodes, 🕐 up next, bingo and couples picks.'],
+    ['🍿', 'Watch', 'In 💞 Us: where you’re up to, 🆕 new episodes, 🕐 up next, bingo and couples picks.'],
   ] },
   { id: 'me', eyebrow: 'Health and Me', title: 'Each person’s own', go: 'me', cards: [
     ['🥗', 'Health', 'Diet (meal plans, logging, groceries) and fitness (lifting, runs, rides). Private until you share.'],

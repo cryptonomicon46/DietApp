@@ -1509,7 +1509,7 @@ function habitsSheet() {
   openSheet(`<h2>🔁 Remind me</h2><form id="habitForm" class="stack">
     ${Object.entries(MOVE_NUDGES).map(([k, [ico, label, every]]) => `<div class="habit-row"><label class="switch-row"><span>${ico} ${label}</span><input type="checkbox" name="on_${k}" ${all[k] ? 'checked' : ''}><i class="switch"></i></label>
       <select name="every_${k}" aria-label="How often: ${label}">${opts(all[k]?.every || every)}</select></div>`).join('')}
-    <p class="tiny muted">It stays quiet until it's been that long since the last one. Then it shows a box to tick in Your day, and a 7 AM notification lists what's due. A run or ride from WHOOP or Strava — or anything you log in the trackers — ticks it off by itself. Turn the notifications off in Me › 🔔 Notifications › Check-in reminders.</p>
+    <p class="tiny muted">It stays quiet until it's been that long since the last one. Then ✨ Next up on Home suggests it (tap ✓ Done), and a 7 AM notification lists what's due. A run or ride from WHOOP or Strava — or anything you log in the trackers — ticks it off by itself. Turn the notifications off in Me › 🔔 Notifications › Check-in reminders.</p>
     <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save</button></div></form>`);
 }
 async function saveHabits(f) {
