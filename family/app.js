@@ -1359,16 +1359,26 @@ async function habitsLine(mine) {
   if (!on.length) return '<p class="small habits-setup"><button type="button" class="linkish small" data-act="habits">🔁 Remind me to run, ride or do hot yoga every few days</button></p>';
   // A run or ride from WHOOP / Strava (or logged in the trackers) ticks it off by itself.
   const last = await lastWorkouts(mine).catch(() => ({}));
-  for (const k of on) {
-    const d = last[MOVE_NUDGES[k][3]];
-    if (d && d <= isoLocal() && (!all[k].last || d > all[k].last)) setNudges(await api.post(`/account/nudges/${k}/done?today=${isoLocal()}`, { date: d }));
-  }
+  // A workout newer than the last tick is saved after drawing, then Your day is redrawn.
+  const ticks = on.map((k) => [k, last[MOVE_NUDGES[k][3]]]).filter(([k, d]) => d && d <= isoLocal() && (!all[k].last || d > all[k].last));
+  if (ticks.length) setTimeout(() => tickHabits(ticks), 0);
   const short = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' });
   return `<div class="habits">${on.map((k) => {
     const n = callNudge.all[k], [ico, label] = MOVE_NUDGES[k];
     if (n.due) return `<label class="habit due"><input type="checkbox" data-nudgedone="${k}"><span class="hc"></span>${ico} <b>${label}</b><small>${n.last ? `${Math.round((Date.parse(isoLocal()) - Date.parse(n.last)) / 864e5)} days` : 'due'}</small></label>`;
     return `<span class="habit">${ico} ${label} <small>✓ ${n.last === isoLocal() ? 'today' : short(n.last)} · next ${short(n.next)}</small>${n.canUndo && n.last === isoLocal() ? ` <button type="button" class="linkish tiny" data-nudgeundo="${k}">Undo</button>` : ''}</span>`;
   }).join('')}<button type="button" class="linkish tiny" data-act="habits" aria-label="Reminder settings">⋯</button></div>`;
+}
+let ticking = false;
+const ticked = new Set(); // tried this visit: never sent twice, even if it failed
+async function tickHabits(ticks) {
+  ticks = ticks.filter(([k, d]) => !ticked.has(`${k}:${d}`));
+  if (ticking || !ticks.length) return;
+  ticking = true;
+  for (const [k, d] of ticks) ticked.add(`${k}:${d}`);
+  try { for (const [k, d] of ticks) setNudges(await api.post(`/account/nudges/${k}/done?today=${isoLocal()}`, { date: d })); }
+  catch { /* tried again next time */ } finally { ticking = false; }
+  renderYourDay();
 }
 function habitsSheet() {
   const all = callNudge.all || {};
@@ -2511,7 +2521,7 @@ async function saveThreadEdit(f) {
   closeSheet();
   return threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}`, patch));
 }
-async function threadAct(fn) { const r = await fn(); if (r?.thread) { const k = th.cur._key; th.cur = await openThreadText(r.thread, k); th.cur._key = k; const s = th.list.find((x) => x.id === r.thread.id); if (s) s.shotCount = (r.thread.shots || []).length; s.docCount = (r.thread.docs || []).length; renderThread(); } return r; }
+async function threadAct(fn) { const r = await fn(); if (r?.thread) { const k = th.cur._key; th.cur = await openThreadText(r.thread, k); th.cur._key = k; const s = th.list.find((x) => x.id === r.thread.id); if (s) { s.shotCount = (r.thread.shots || []).length; s.docCount = (r.thread.docs || []).length; } renderThread(); } return r; }
 
 // ---------- ✨ Next up: what to do next, and when (worked out on this phone) ----------
 const nu = { res: null, ctx: null, watchKick: false };
@@ -3919,7 +3929,7 @@ async function postAction(kind, { fid, pid }) {
       if (!confirm(`Block ${name}? You won't see their posts or comments. You can unblock them in Me.`)) return;
       const r = await api.post(`/posts/${fid}/${pid}/block`);
       state.user.blocked = r.blocked; closeSheet(); toast(`${name} is blocked`);
-      const f = await api.get('/feed'); state.feed = f.posts; renderPosts();
+      const f = await api.get('/feed'); state.feed = await Promise.all(f.posts.map(openPost)); renderPosts();
     }
   });
 }
