@@ -22,7 +22,7 @@ export async function threadRoutes(c) {
   // 🏷️ Who's tagged: grown-ups and kids with accounts in your own family who can see the thread
   // (a just-us thread: only your partner). Stored as member ids; their accounts stay on the server.
   const tagsOf = (fam, me, aud, ids) => {
-    const ok = fam.members.filter((x) => x.kind === 'person' && x.uid && x.id !== me.id && (aud !== 'us' || x.id === partnerOf(fam, me)?.id));
+    const ok = fam.members.filter((x) => x.kind === 'person' && x.uid && x.id !== me.id && (c.hasArea ? c.hasArea(x, 'threads') : true) && (aud !== 'us' || x.id === partnerOf(fam, me)?.id));
     const pick = [...new Set(Array.isArray(ids) ? ids : [])].map((id) => ok.find((x) => x.id === id)).filter(Boolean).slice(0, 20);
     return { tags: pick.map((x) => x.id), uids: pick.map((x) => x.uid) };
   };
@@ -36,11 +36,15 @@ export async function threadRoutes(c) {
   const visible = (t, own) => (t.aud === 'us' ? (t.to || []).includes(user.uid) : own || t.aud === 'connections');
   const blocked = new Set((user.blocked || []).map((b) => b.uid)), hidden = new Set(user.hidden || []), favs = new Set(user.favThreads || []);
   const saveUser = c.saveUser || (async () => {});
-  // A family's thread you can see: your own family's, or a friends' family's shared with friends.
+  // 🔑 Families where you have the Threads area (the family's creator chooses; all by default).
+  const hasArea = c.hasArea || (() => true);
+  const threadFamilies = async () => (await families()).filter((f) => hasArea(meIn(f), 'threads'));
+  // A family's thread you can see: your own family's, or a friends' family's shared with friends
+  // (reached through one of your families where you have Threads).
   const access = async (fid) => {
     const fam = await loadFamily(fid);
-    if (fam) return { fam, own: true };
-    const fams = await families();
+    if (fam) return hasArea(meIn(fam), 'threads') ? { fam, own: true } : null;
+    const fams = await threadFamilies();
     if (fams.some((f) => (f.connections || []).includes(fid))) return { fam: await db.get(`family:${fid}`), own: false };
     return null;
   };
@@ -69,7 +73,7 @@ export async function threadRoutes(c) {
   // searches them in memory. Doesn't count as reading them.
   if (path === '/threads' && method === 'GET') {
     const withAll = url().searchParams.get('full') === '1';
-    const fams = await families();
+    const fams = await threadFamilies();
     const mine = new Set(fams.map((f) => f.fid));
     const sources = fams.map((f) => ({ fid: f.fid, own: true, fam: f }));
     for (const f of fams) for (const x of f.connections || []) if (!mine.has(x) && !sources.some((s) => s.fid === x)) sources.push({ fid: x, own: false });

@@ -224,6 +224,10 @@ async function lockMyData() {
   const rec = await memberData().catch(() => null);
   if (rec?.data && rec.data.enc == null && Object.keys(rec.data).length) await saveMine(rec.data);
 }
+// 🔑 Household areas the family's creator gave you (Home, Calendar, Threads; all unless chosen).
+// The server enforces them; this only keeps the screens tidy.
+const AREAS = { home: '🏠 Home', calendar: '📅 Calendar', threads: '📖 Threads' };
+const can = (area) => { const m = me(); return !m || m.role === 'owner' || !Array.isArray(m.access) || m.access.includes(area); };
 function chrome(on) {
   $('#bar').hidden = !on; $('#nav').hidden = !on;
   const lb = $('#lockBanner');
@@ -237,6 +241,8 @@ function chrome(on) {
   if (on) {
     $('#navMe').hidden = !$('#navTrackers').hidden;
     document.querySelector('#nav [data-view=us]').hidden = !partnerMember();
+    document.querySelector('#nav [data-view=calendar]').hidden = !can('calendar');
+    document.querySelector('#nav [data-view=threads]').hidden = !can('threads');
     const m = me(), pic = m?.avatar?.startsWith('data:') || m?.avatar?.startsWith('http') ? m.avatar : state.user?.picture;
     $('#meTop').innerHTML = pic ? `<img src="${esc(pic)}" alt="">` : esc((m?.name || '?')[0]);
   }
@@ -358,6 +364,8 @@ function show(view, extra) {
   if (view !== 'chat' && view !== 'chats') dmMod?.leave();
   // 2.0: the feed is retired (its posts are kept) and Dogs & chores is part of Home.
   if (view === 'feed' || view === 'pets' || view === 'dogs' || !view) view = 'home';
+  // A part of the family you haven't been given: Home instead.
+  if ((view === 'calendar' && !can('calendar')) || (view === 'threads' && !can('threads'))) view = 'home';
   if (view !== 'compose') state.prevView = view;
   state.view = view;
   if (view === 'member') state.memberId = extra;
@@ -431,6 +439,7 @@ WIDE?.addEventListener?.('change', () => {
 // asked for, a ride without a driver, a thread you're tagged in), the shared 🛒 groceries, the
 // house and the dogs' care, and pinned threads. Dog details wait behind "More about the dogs".
 async function homeView() {
+  if (!can('home')) return homeOwnView();
   const { house, dogPart, fame } = petsParts();
   const h = new Date().getHours(), first = esc((me()?.name || state.user?.name || '').split(' ')[0]);
   const top = `<h1 class="home-hi">${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}. Here’s your ${esc(new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))}.</h1>
@@ -457,6 +466,15 @@ async function homeView() {
   await dogsDone;
 }
 
+// Home without the household's lists (the family's creator didn't give you Home): your own day.
+function homeOwnView() {
+  const h = new Date().getHours(), first = esc((me()?.name || state.user?.name || '').split(' ')[0]);
+  $('#view').innerHTML = `${demoBanner()}<h1 class="home-hi">${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}.</h1>
+    <div id="hello"></div><section class="nextup" id="nextUp" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section>
+    <section class="card"><p class="small muted">The household's lists, chores and the dogs are in Home for the people ${esc(fam().name)}'s creator chose. Ask them if you'd like to see it.</p></section>`;
+  helloCard();
+  renderNextUp().catch(() => { const el = $('#nextUp'); if (el?.querySelector('.skeleton')) el.hidden = true; });
+}
 // ---------- 🙋 requests and 🛒 groceries: what each says is locked with the family key ----------
 const home = { requests: [], groceries: [], all: false, loaded: false, at: 0 };
 const REQ_KINDS = { ride: '🚗 A ride', petsit: '🐾 Pet sitting', walk: '🦮 A dog walk', babysit: '🧸 Babysitting', meal: '🍲 A meal', errand: '🛒 An errand', other: '🙋 A hand' };
@@ -888,6 +906,7 @@ const timeText = (at) => (at && at.length > 10 ? new Date(at).toLocaleTimeString
 const who = (id) => (id === fam().me ? 'You' : member(id)?.name || '');
 const daysTo = (d) => Math.round((Date.parse(`${d}T12:00:00`) - Date.parse(`${isoLocal()}T12:00:00`)) / 864e5);
 async function loadAppts() {
+  if (!can('home')) return dogsHub.appts; // the dogs are part of Home
   const r = await shared(`/families/${state.fid}/appts?today=${isoLocal()}`).catch(() => null);
   if (r) { dogsHub.appts = await Promise.all(r.appts.map(openAppt)); dogsHub.spending = r.spending; }
   return dogsHub.appts;
@@ -1269,6 +1288,9 @@ async function memberView() {
       ${m.status === 'invited' ? `<p class="small">💌 Invited (${esc(m.email)}) <button type="button" class="linkish" data-act="reinvite" data-id="${m.id}">Send the invite again</button></p>` : ''}
       ${m.status === 'managed' && m.kind === 'person' ? `<p class="small muted">No account yet. <button type="button" class="linkish" data-act="reinvite" data-id="${m.id}">Invite by email</button> — or keep managing them here (kids).</p>` : ''}
     </section>
+    ${!self && m.kind === 'person' && m.role !== 'owner' && me().role === 'owner' ? `<section class="card areas-card"><b>🔑 What ${esc(m.name)} can use</b>
+      <ul class="list toggles">${Object.entries(AREAS).map(([k, l]) => `<li><label class="switch-row"><span>${l}</span><input type="checkbox" data-access="${k}:${m.id}" ${(m.access || Object.keys(AREAS)).includes(k) ? 'checked' : ''}><i class="switch"></i></label></li>`).join('')}</ul>
+      <p class="tiny muted">You choose these as the family's creator. ${esc(m.name)}'s 💪 Health is theirs to share, and 💞 Us is just for a couple.</p></section>` : ''}
     <section class="card" id="memberData"><div class="skeleton line"></div></section>
     ${theirPosts.length ? `<h3>Posts</h3><div class="grid">${theirPosts.map((p) => (p.photoId ? photoBox(p, 'grid') : `<img src="${p.photo}" alt="" loading="lazy">`)).join('')}</div>` : ''}
     ${!self && m.role !== 'owner' && (me().role === 'owner' || m.status !== 'active') ? `<button type="button" class="danger linkish small pad" data-act="removemember" data-id="${m.id}">Remove ${esc(m.name)} from ${esc(fam().name)}</button>` : ''}`;
@@ -2811,7 +2833,7 @@ async function nextUpCtx() {
     .filter((c) => c.type === 'yoga').map((c) => ({ at: new Date(`${d}T${c.time}`), label: c.name || 'Yoga class', place: B.GYMS[c.gym]?.short || '' })));
   const callWindows = me()?.legacyId && B.CALL.who === me().legacyId ? [...B.callWindows(today), ...B.callWindows(tomorrow)] : [];
   let dogs = null;
-  if ((fam().modules || []).includes('dogs') && dogsOf().length) {
+  if ((fam().modules || []).includes('dogs') && dogsOf().length && can('home')) {
     const c = await shared(`/families/${state.fid}/care?to=${today}&days=1`).catch(() => null);
     dogs = { enabled: true, walkedToday: (c?.days?.[today] || []).some((e) => e.kind === 'walk' || e.kind === 'park') };
   }
@@ -2942,7 +2964,7 @@ async function loadCal({ golden = true } = {}) {
   calm.C ||= await calModule();
   const [r, stats] = await Promise.all([
     shared(`/families/${state.fid}/events`).catch(() => ({ events: [], feeds: [] })),
-    golden && (fam().modules || []).includes('dogs') ? shared(`/families/${state.fid}/dogstats?today=${isoLocal()}`).catch(() => null) : null,
+    golden && (fam().modules || []).includes('dogs') && can('home') ? shared(`/families/${state.fid}/dogstats?today=${isoLocal()}`).catch(() => null) : null,
     loadAppts(), loadUs(),
   ]);
   calm.events = await Promise.all(r.events.map(async (e) => ({ ...e, ...((await unlock(e.body)) || { title: '🔒 Locked', locked: true }) })));
@@ -4174,6 +4196,8 @@ function addPerson() {
       <label>Name<input name="name" required maxlength="40"></label>
       <label>They are your…<select name="relation">${['spouse', 'partner', 'child', 'parent', 'sibling', 'grandparent', 'relative', 'friend'].map((r) => `<option value="${r}">${RELATION[r].toLowerCase()}</option>`).join('')}</select></label>
       <label>Email for their invite <small class="muted">(their Google account)</small><input name="email" type="email" maxlength="120" placeholder="Leave empty for a young child you manage"></label>
+      ${me()?.role === 'owner' ? `<fieldset class="chips plain"><legend>What they can use</legend>${Object.entries(AREAS).map(([k, l]) => `<label class="chipcheck"><input type="checkbox" name="area" value="${k}" checked><span>${l}</span></label>`).join('')}
+        <p class="tiny muted">💪 Health stays each person's own (they choose who sees it), and 💞 Us is just for a couple.</p></fieldset>` : ''}
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Add</button></div>
     </form>`);
 }
@@ -4832,6 +4856,11 @@ document.addEventListener('change', async (e) => {
     const share = { kids: !!document.querySelector('[data-sharewhat=kids]')?.checked, pets: !!document.querySelector('[data-sharewhat=pets]')?.checked };
     return act(async () => { await api.patch(`/families/${state.fid}`, { share }); await loadFamily(); toast(`Friends' families ${share.kids ? 'can' : "can't"} see the kids, ${share.pets ? 'can' : "can't"} see the pets`); });
   }
+  if (t.dataset.access) {
+    const [, id] = t.dataset.access.split(':');
+    const access = [...t.closest('.areas-card').querySelectorAll('[data-access]')].filter((x) => x.checked).map((x) => x.dataset.access.split(':')[0]);
+    return act(async () => { await api.patch(`/families/${state.fid}/members/${id}`, { access }); await loadFamily(); toast(`${member(id)?.name || ''} can use: ${access.map((a) => AREAS[a]).join(', ') || 'only their own Health and Us'}`); });
+  }
   if (t.dataset.sharepart) {
     const box = t.closest('.share-grid'), share = { diet: [], fitness: [] };
     for (const x of box.querySelectorAll('[data-sharepart]')) if (x.checked) { const [part, id] = x.dataset.sharepart.split(':'); share[part].push(id); }
@@ -5122,7 +5151,9 @@ document.addEventListener('submit', (e) => {
   if (f.id === 'personForm') {
     e.preventDefault();
     return act(async () => {
-      const r = await api.post(`/families/${state.fid}/members`, { kind: 'person', ...v });
+      const areas = new FormData(f).getAll('area');
+      delete v.area;
+      const r = await api.post(`/families/${state.fid}/members`, { kind: 'person', ...v, ...(me()?.role === 'owner' ? { access: areas } : {}) });
       await loadFamily(); show('family');
       if (r.invite) inviteSheet(r.invite, v.name); else { closeSheet(); toast(`${v.name} added`); }
     });

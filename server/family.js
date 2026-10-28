@@ -144,11 +144,19 @@ export function canSeePart(fam, owner, viewer, part) {
   return (part === 'diet' || part === 'fitness') && shareOf(owner)[part].includes(viewer.id);
 }
 const HEALTH_PARTS = ['diet', 'fitness', 'us'];
+// 🔑 Household areas (2.0 Phase 6): which parts of the family each member can use, chosen by the
+// family's creator. No list = all of them (everyone who joined before keeps what they had); the
+// creator always has all. Us stays the couple's, Health stays each person's own (above).
+export const AREAS = ['home', 'calendar', 'threads'];
+export const hasArea = (m, area) => !!m && (m.role === 'owner' || !Array.isArray(m.access) || m.access.includes(area));
+const accessOf = (v) => (Array.isArray(v) ? AREAS.filter((a) => v.includes(a)) : null);
+// The family routes each area covers.
+const AREA_OF = { home: 'home', requests: 'home', groceries: 'home', chores: 'home', care: 'home', appts: 'home', dogstats: 'home', vaxdue: 'home', tidy: 'home', events: 'calendar', calfeeds: 'calendar', threads: 'threads', boards: 'threads', albums: 'threads' };
 // What a member looks like to someone else (no emails for people outside the family).
 const memberView = (m, inside) => ({
   id: m.id, kind: m.kind, name: m.name, relation: m.relation, species: m.species, breed: m.breed, born: m.born,
   avatar: m.avatar, status: m.uid ? 'active' : m.email ? 'invited' : 'managed', role: m.role,
-  ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], share: m.kind === 'person' ? shareOf(m) : undefined, legacyId: m.legacyId || '', petCalls: m.petCalls || '', ...(m.kind === 'pet' ? { editedAt: m.editedAt || m.addedAt || 0 } : {}) } : {}),
+  ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], share: m.kind === 'person' ? shareOf(m) : undefined, access: m.kind === 'person' ? AREAS.filter((a) => hasArea(m, a)) : undefined, legacyId: m.legacyId || '', petCalls: m.petCalls || '', ...(m.kind === 'pet' ? { editedAt: m.editedAt || m.addedAt || 0 } : {}) } : {}),
 });
 
 export async function familyApi(req, env, path, ctx = null) {
@@ -267,7 +275,8 @@ export async function familyApi(req, env, path, ctx = null) {
   // families are still connected, not from someone you blocked, and not tagging anyone kept private.
   const sharedFile = async (fid, pid, ref) => {
     const [, kind, id] = /^(post|thread):([a-z0-9]{4,40})$/.exec(ref || '') || [];
-    if (!kind || !/^[a-z0-9]{6,24}$/.test(fid) || !(await families()).some((f) => (f.connections || []).includes(fid))) return false;
+    // Reached through one of your families where you have Threads (the old feed's posts: any of them).
+    if (!kind || !/^[a-z0-9]{6,24}$/.test(fid) || !(await families()).some((f) => (f.connections || []).includes(fid) && (kind === 'post' || hasArea(meIn(f), 'threads')))) return false;
     const blocked = new Set((user.blocked || []).map((b) => b.uid));
     if (kind === 'post') {
       const [p, owner] = await Promise.all([db.get(`post:${fid}:${id}`), db.get(`family:${fid}`)]);
@@ -281,6 +290,14 @@ export async function familyApi(req, env, path, ctx = null) {
     const fam = /^[a-z0-9]{6,24}$/.test(fid) ? await db.get(`family:${fid}`) : null;
     return fam && meIn(fam) ? fam : null;
   };
+  // 🔑 One check for every route of a household area (not just hidden buttons).
+  {
+    const am = path.match(/^\/families\/([a-z0-9]+)\/([a-z]+)/);
+    if (am && AREA_OF[am[2]]) {
+      const fam = await loadFamily(am[1]);
+      if (fam && !hasArea(meIn(fam), AREA_OF[am[2]])) return json({ error: "The family's creator hasn't given you this part of the family.", area: AREA_OF[am[2]] }, 403);
+    }
+  }
 
   if (path === '/me' && method === 'GET') {
     const fams = await families();
@@ -1308,6 +1325,8 @@ export async function familyApi(req, env, path, ctx = null) {
       relation: kind === 'pet' ? 'pet' : RELATIONS.includes(body.relation) ? body.relation : 'other',
       ...(kind === 'pet' ? { species: SPECIES.includes(body.species) ? body.species : 'dog', breed: clean(body.breed, 40), born: /^\d{4}-\d{2}-\d{2}$/.test(body.born || '') ? body.born : '' } : {}),
       ...(email ? { email } : {}), legacyId: clean(body.legacyId, 40), avatar: avatarOf(body.avatar), shareWith: [], addedBy: me.id, addedAt: Date.now(),
+      // Only the family's creator chooses areas when adding someone (everyone else adds with all).
+      ...(kind === 'person' && me.role === 'owner' && accessOf(body.access) && accessOf(body.access).length < AREAS.length ? { access: accessOf(body.access) } : {}),
     };
     fam.members.push(member);
     await db.put(`family:${fam.fid}`, fam);
@@ -1322,6 +1341,16 @@ export async function familyApi(req, env, path, ctx = null) {
     const t = fam.members.find((x) => x.id === m[2]);
     if (!t) return json({ error: 'not found' }, 404);
     const self = t.id === me.id;
+    // 🔑 The family's creator chooses each person's household areas (never their own, never the
+    // creator's); nobody else can, and it changes nothing about their Health sharing.
+    if (method === 'PATCH' && body.access !== undefined) {
+      if (me.role !== 'owner' || t.kind !== 'person' || t.role === 'owner') return json({ error: "only the family's creator chooses this" }, 403);
+      const a = accessOf(body.access);
+      if (!a) return json({ error: 'expected a list of areas' }, 400);
+      if (a.length === AREAS.length) delete t.access; else t.access = a;
+      await db.put(`family:${fam.fid}`, fam);
+      return json({ member: memberView(t, true) });
+    }
     // You edit yourself; grown-ups edit pets, kids and people who haven't joined yet.
     const canEdit = self || (me.relation !== 'child' && (t.kind === 'pet' || !t.uid));
     if (!canEdit) return json({ error: 'only they can change that' }, 403);
@@ -1513,9 +1542,9 @@ export async function familyApi(req, env, path, ctx = null) {
   }
 
   // ---- 🏠 Home: requests and groceries ----
-  { const r = await homeRoutes({ path, method, body, db, user, loadFamily, meIn, sealed, clean, randomId, tell, json }); if (r) return r; }
+  { const r = await homeRoutes({ path, method, body, db, user, loadFamily, meIn, sealed, clean, randomId, tell, json, hasArea }); if (r) return r; }
   // ---- 📖 threads ----
-  { const r = await threadRoutes({ path, method, body, db, user, saveUser, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url: () => url(req), blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
+  { const r = await threadRoutes({ path, method, body, db, user, saveUser, families, loadFamily, meIn, partnerOf, hasArea, sealed, clean, randomId, tell, json, url: () => url(req), blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 📷 albums (family only) ----
   { const r = await albumRoutes({ path, method, body, db, loadFamily, meIn, sealed, clean, randomId, json, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 🛒 the Market (family, and friends' families by default) ----

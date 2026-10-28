@@ -8,7 +8,35 @@ Last update: 2026-10-28 — Phases 4–11 authorized (master build authorization
 - **Phases 0–3:** merged to `main` (PR #1, `510eacc`) and deployed (reported by the user).
 - **Phase 4 — Us / Watch:** done, Checkpoint A passed (below).
 - **Phase 5 — Health + Diet:** done (below).
-- **Next:** Phase 6 — Family permissions (Checkpoint B).
+- **Phase 6 — Family permissions:** done; Checkpoint B below.
+- **Next:** Phase 7 — Fitness.
+
+### Phase 6 — Family permissions (Checkpoint B)
+
+Model: Google account → Family → Membership → Permissions. No household code anywhere in signed-in use.
+- **Household areas** (`member.access`, creator only): Home, Calendar, Threads; absent = all (every pre-2.0 member keeps everything). Chosen when the creator adds a person and on each person's page (🔑 What Pat can use). Server: one guard for all area routes, plus thread list / connected threads / tagging / shared-file / request-notification checks. Client: hidden tabs, Home shows only your own day without Home, no requests for dogs data without Home.
+- **Diet / Fitness** (Phase 5 parts): private by default; each person sets two lists; legacy `shareWith` copied into both until changed; nobody (creator, inviter, partner) can grant themselves another person's Health; Us part partner-only.
+- **Limitation (documented, ARCHITECTURE §9):** permissions are server-enforced; every device holding the family key could decrypt ciphertext it obtained. Per-person/per-area keys are a future security project — the frozen key architecture is unchanged.
+
+Checkpoint B matrix (`tests/permissions.test.js`, `tests/healthparts.test.js`, `tests/home.test.js`):
+
+| Case | Result |
+| --- | --- |
+| Diet only / Fitness only / both / neither (Pat, Mom, a kid) | each part follows its own list; private by default |
+| Full copy after split | owner only (403 for others) |
+| Creator / inviter / partner granting themselves Health | 403 |
+| Writing someone else's parts | 403 |
+| Us part | partner 200, everyone else 403 |
+| Stranger / another family's address | 404 |
+| Old records (no `access`, single `shareWith`, not split) | all areas; full copy readable as before |
+| Areas: ordinary member or self changing access; shrinking the creator | 403 |
+| Area excluded (Home, Threads) | 403 on home, requests, groceries, chores, care, appts, dogstats, threads POST, albums; `/threads` list empty; not taggable; Calendar allowed |
+| Areas vs Health | independent |
+| Restoring all areas | `access` removed (= everyone else) |
+| Member who left | 404, removed from everyone's lists, parts deleted |
+| Child | no requests; nothing of others' Health unless shared |
+
+Browser (390 px): creator toggled Pat's Home and Threads off on Pat's page → Pat's bar: Home · Us · Calendar · Health; Home shows only Next up and a short note; Calendar works; no 403s at start-up (dog data isn't requested without Home). Security review: see Security findings.
 
 ### Phase 5 — Health and Diet
 

@@ -25,8 +25,9 @@ export const GUIDE = [
 - "This invite is for someone else": the person is signed in with a different Google account — sign out and sign in with the email the invite was sent to.
 - "Expired or already used": open their profile (Me › your family › Manage) and tap Send the invite again (or ask me to resend it).
 - A friend's family: Me › your family › Manage › 💌 Invite a friend's family. They create their own family (or use one they run) and the two families connect.` },
-  { id: 'privacy', title: 'Privacy', keys: 'privacy private who can see share diet fitness kids private pets private connected families friends leak',
+  { id: 'privacy', title: 'Privacy', keys: 'privacy private who can see share diet fitness areas access home calendar threads what can they use creator kids private pets private connected families friends leak',
     text: `- Only people in your family see it. Outsiders get nothing — not even that it exists.
+- The family's creator chooses what each person can use: 🏠 Home, 📅 Calendar and 📖 Threads (everyone has all three unless turned off — on the person's page, 🔑 What they can use, or when adding them). It's checked by the server, not just hidden. It never changes anyone's 💪 Health or 💞 Us.
 - Your Diet (goal, meals, macros, weight) and your Fitness (workouts, activity) are private until you share them — separately, person by person: 💪 Health › the sharing line under the title (or Me › 💪 Who can see my Health). Nobody can turn it on for you. Your partner also gets your 2-2-2-2 and date ratings; nobody else does. Connecting a device never shares anything.
 - Friends' families (connected families) see only threads you share with 🤝 friends' families, and never emails. They can open a photo or PDF only through the shared thread it's on, never one that tags someone your family keeps private, and nothing once the families disconnect. Me › your family › Manage › What friends' families can see: kids are private by default (anything tagging a private kid stays in the family), pets are shared unless you turn them off.
 - Each photo or PDF remembers who added it: only that person or the family's creator can replace or delete it.
