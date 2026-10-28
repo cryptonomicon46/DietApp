@@ -17,7 +17,7 @@ Last update: 2026-10-28, Phase 3 implemented; second-pass review of Phases 0–3
   - Home client (`3d38ca0`): greeting, Next up, 🔔 Needs you (requests, rides without a driver this week, threads you're tagged in, your own requests, Ask for a hand), 🛒 Groceries, house, dogs' care + walk, dog row, *More about the dogs* (lazy), 📌 Pinned. Today / Your day / digest cards removed from Home. ＋ › Ask for a hand.
   - No more hidden-feed writes (`3d38ca0`): golden days (now a notification with the dogs' note), new dog appointments, bingo wins, picks endings.
   - Fixes and docs (`29b6939`, `34de25a`): kids can't see/ask/take requests (server); leaving always releases claimed requests; `DELETE /members/<self>` does the `/leave` clean-up; call-Mom line moved into Next up; run/ride/hot-yoga reminders reachable from Me and Next up's ⋯; README, help guide, tour (What's new `2026-11b`), privacy, delete-account page, ARCHITECTURE.
-- **Second-pass review (QA, security/privacy, performance, mobile UX, accessibility):** in progress.
+- **Second-pass review (QA, security/privacy, performance, mobile UX, accessibility):** done (`03cbd76`). Two independent code reviews (server security/privacy; client QA) plus browser checks; every verified finding fixed with tests where testable — see *Security findings* and *Review fixes* below. **STOP: Phase 4 is not authorized.**
 
 ## Last safe commit, deployment and rollback
 
@@ -67,44 +67,64 @@ Last update: 2026-10-28, Phase 3 implemented; second-pass review of Phases 0–3
 
 Household-code surfaces removed: trackers Privacy code card (show/send/change); "partner changed the code" pop-up; code-sharing advice; partner "Link phones" box and banner links; `#link=` one-tap joining; Devices household sharing section, connector URL and README text; calendar subscribe link (it carried the code); code wording in Recover, the assistant tip and the calendar error; README mentions on the family sign-in and Google Photos messages.
 
+### Review fixes (`03cbd76`)
+
+| Finding | Fix | Evidence |
+| --- | --- | --- |
+| Leaving a family deleted your threads/posts in another family you still belong to, when the two were connected | Connected families are cleaned only if you can no longer reach them (`stillReaches`) | `tests/deletion.test.js` (fails on the old code) |
+| Account deletion with your own family deleted left your replies/comments in friends' families | Clean connected families before `deleteFamily`; full clean on account deletion | `tests/deletion.test.js` (fails on the old code) |
+| Request "time" stored as free plain text in encrypted families | `HH:MM` only; time picker | `tests/home.test.js` |
+| Kids could see/claim requests (server) | 403 / empty list for kids | `tests/home.test.js` |
+| Leaving released claimed requests only if you had your own; `DELETE /members/<self>` skipped clean-up | Always released; self-removal = `/leave` | `tests/home.test.js` |
+| "Last reply by" kept a removed person's name | Recomputed | `tests/deletion.test.js` |
+| Dog files opened (and were cached) as locked bytes on a device without the key | `account.getFile` returns nothing there | code review |
+| Reply images uploaded unlocked from a device without the key | Reply/edit refused there | code review |
+| Double-send of reply / edit / feedback / Ask | Button disabled while sending (`busy`) | browser |
+| Search of only spaces looped; highlight broke `&amp;` | Trimmed check; highlight before escaping | browser |
+| 💡 App feedback board couldn't receive threads | Board in composer and Move; composer defaults to the open board | browser |
+| Next up didn't refresh after reminder changes; call-Mom line and reminder settings lost with the Today / Your day cards | `refreshDay`; call line in Next up; Me › ✨ Next up & reminders | browser |
+| 320 px: page scrolled sideways (care log); ✕ buttons 36 px; reply image picker not keyboard-reachable | Wrap; 44 px; visually-hidden input | browser (`a11y3.mjs`: no overflow at 320/1280, no unnamed or < 40 px controls on Home) |
+
 ## Tests
 
-- 2026-10-28, `npm test` at `e374c81`: **261 tests, 261 pass, 0 fail, 0 skipped** (62 files).
-- CI Check on `main` at `f4896ca` and `e374c81`: test, links and perf jobs green.
-- Authorization matrix covered: file uploader/creator/other member/child/connected family/stranger/after disconnect; thread and chat report/block. Household-area and Diet/Fitness permission tests: NOT STARTED (Phase 6).
-- Mobile checks done: 390 px Home, Threads, Photos, Calendar, thread report menu, chat report sheet, trackers Privacy and Devices. NOT VERIFIED: keyboard-only navigation, screen reader, dark mode on the new Home greeting.
+- 2026-10-28, `npm test` at `03cbd76`: **277 tests, 277 pass, 0 fail** (66 files). Earlier: 261/261 at `e374c81`.
+- CI Check green on `main` (`f4896ca`, `e374c81`) and on `v2/phase-2-3` at `87452a5`, `29d83da`, `29b6939` (test, links, perf). `03cbd76`: green too.
+- Authorization matrix covered: file uploader/creator/other member/child/connected family/stranger/after disconnect; thread and chat report/block. Requests: cross-family 404, kids 403, author/helper/owner rules, leaving. Household-area and Diet/Fitness permission tests: NOT STARTED (Phase 6).
+- Mobile checks done: 390 px Home, Threads, Photos, Calendar, thread report menu, chat report sheet, trackers Privacy and Devices. Phase 3: Home at 390 px light and dark, 320 px and 1280 px (no sideways scroll), ask sheet, Needs you as helper, More about the dogs; keyboard: grocery add with Enter, Tab to the first tick. NOT VERIFIED: a real screen reader (VoiceOver/TalkBack), real iPhone/Android devices.
 
 ## Performance
 
 Method: `scripts/perf/budget.mjs` — synthetic family (`scripts/perf/seed.mjs`) on `wrangler dev` (demo sign-in), Pages-like server, 390 × 844 phone, 4× CPU, 120 ms latency, 6 Mbps; requests in the first 6 s (photo files counted separately); medians of 3–5 runs on the same cloud machine, same session.
 
-| Metric | `main` before 2.0 (`0c35063`) | After Phase 0–1 |
-| --- | --- | --- |
-| Start-up API requests (cold) | 18 | 17 (18 on a phone's first run: one-time vaccine list `PUT`) |
-| Duplicate requests | 0 | 0 |
-| Cold first / largest paint | 1.33 s / 1.33 s | 1.34 s / 1.34 s |
-| Warm first paint | 1.06 s | ~1.06 s |
-| Layout shift | 0.035 | 0.005 |
-| Long tasks (cold) | ~490 ms | ~540 ms |
-| Start-up script (gzipped) | 174 KB | 174 KB |
+| Metric | `main` before 2.0 (`0c35063`) | After Phase 0–1 | After Phase 3 + review (`03cbd76`) |
+| --- | --- | --- | --- |
+| Start-up API requests (cold) | 18 | 17 (+1 one-time vaccine `PUT`) | **14** (vaccine dates checked once a day, 8 s after start) |
+| Duplicate requests | 0 | 0 | 0 |
+| Cold first / largest paint | 1.33 s / 1.33 s | 1.34 s | 1.31–1.40 s (median ~1.33 s, 5 runs) |
+| Warm first paint | 1.06 s | ~1.06 s | ~1.03 s |
+| Layout shift (cold / warm) | 0.035 | 0.005 | 0.007 / 0.007 (fresh seed with a request and 4 groceries) |
+| Long tasks (cold) | ~490 ms | ~540 ms | ~450–580 ms (median ~510 ms) |
+| Start-up script (gzipped) | 174 KB | 174 KB | 176 KB |
 
-Tab switches after Home (requests): Us 5, Calendar 1, Threads 0, Photos 2, back to Home (after >20 s) 8.
+Tab switches after Home (requests, `tabs.mjs`): Us 3, Calendar 2, Threads 0, Photos 2, back to Home after > 20 s **4** (was 8).
+
+Known limit: on a phone's very first visit, a Needs-you list much longer than the default reserved height shifts the page (measured 0.23 with ~6 requests); every later visit reuses the stored card height (a number only).
 
 On GitHub's runner (perf job): cold 18 requests, first paint 1.25 s, 0 duplicates.
 
 ## Known issues and gaps (open)
 
-1. **Thread notifications still use the `feed` kind.** The 2.0 plan relabels shared "feed" notifications for Threads in Phase 1, keeping each person's setting. Not done.
-2. **Audit S1 — linked calendar secret in a URL.** The phone sends the decrypted secret iCal link as `GET /ics?url=…` (query string). Not fixed; fix is a POST body.
-3. **Tab-switch budget (≤ 4) exceeded:** Us 5, returning to Home 8.
-4. **Long tasks up ~50 ms** (490 → 540 ms) against "do not increase".
-5. **Start-up requests 17, target ≤ 14** — needs the Home redesign (Phase 3: Home reads two dog profiles, chores and dog stats).
-6. **Account deletion doesn't delete a person's threads or replies** (pre-existing). Privacy page doesn't claim it.
-7. **Hidden posts still written:** golden-day, dog-appointment "who can drive?", bingo and couples-picks posts go to the hidden feed.
-8. **Ask for help removed** until Requests (Phase 3).
-9. **Server/client window:** until `pawdeploy`, report/block errors and WHOOP shows "Not available yet".
-10. **Help chat module** `server/helpAgent.js` updated; spot-check its answers after deploy: NOT VERIFIED.
-11. Synthetic seed tracker profile has no `activity`, which makes the trackers throw `reading 'factor'` (harness data, not a 2.0 change; real profiles always have it).
+Closed since the Phase 0–1 gate: feed → Threads notification label (`5c02573`), S1 (`5c02573`), tab-switch budget (Home revisit 4, Us 3), start-up ≤ 14, account deletion of threads (`1a31356`), hidden-feed writes (`3d38ca0`), Ask for help (Requests, `3d38ca0`), seed tracker profile crash (`87452a5`).
+
+1. **Long tasks** ~510 ms median vs ~490 ms before 2.0 (within run-to-run noise of ±60 ms on this VM; not proven fixed).
+2. **First-visit layout shift** with a long Needs-you list (see Performance).
+3. **Concurrent edits to Home lists** (`requests:`, `groceries:`) are read-modify-write in KV: two simultaneous claims or adds can lose one (last write wins). Same pattern as chores and appointments. Low risk for one household; a fix would move the lists into the family's Durable Object.
+4. **Audit S3:** some fields still accept plaintext in encrypted families (pre-existing; not in Phase 0–3 scope beyond the new fields, which are sealed-only).
+5. **Deploy window:** between `pawdeploy` and merging to `main`, linked calendars don't refresh (S1 changed the request shape). Do both back to back.
+6. **A dog document deleted by someone other than its uploader** is removed from the dog's record, but the file stays in the store (the server refuses the delete: 403 by design).
+7. **Trackers code** (`js/storage.js` built-in profiles) contains real first names — pre-existing, not shown in the family app; out of Phase 0–3 scope.
+8. **The trackers' own grocery list** (built from the meal plan) is separate from Home's shared list until Health moves into the family app (Phase 5).
+9. **Help chat answers** after deploy: NOT VERIFIED (needs the deployed Worker).
 
 ## Security findings
 
@@ -113,20 +133,27 @@ On GitHub's runner (perf job): cold 18 requests, first paint 1.25 s, 0 duplicate
 | Connected-family photo access (any ID) | FIXED `1aaa8d1` |
 | `email_verified` missing counted as verified | FIXED `c0f82f0` |
 | Outing free text → Gemini free tier | FIXED `c0f82f0` |
-| Per-resource file authorization (audit S2) | FIXED `1aaa8d1` (in-family reads still rely on IDs only being given through resources a member can see) |
-| Linked calendar secret in query string (audit S1) | OPEN |
-| Plaintext accepted in encrypted families for some fields (audit S3) | OPEN |
+| Per-resource file authorization (audit S2) | FIXED `1aaa8d1` |
+| Linked calendar secret in query string (audit S1) | FIXED `5c02573` (POST body, family and trackers) |
+| Leaving a family wiped your content in another family you belong to (connected) | FIXED `03cbd76` |
+| Account deletion left replies in friends' families when your family was deleted | FIXED `03cbd76` |
+| Request time as unsealed free text | FIXED `03cbd76` |
+| Kids could read/claim requests | FIXED `29b6939` |
+| Reply images uploaded unlocked from a keyless device | FIXED `03cbd76` |
+| Plaintext accepted in encrypted families for some older fields (audit S3) | OPEN (pre-existing) |
 | Shared family key: permissions are server-enforced, not cryptographic | DOCUMENTED; future security project (docs/ARCHITECTURE.md §9) |
+
+Privacy review of Phase 3 features: request and grocery text sealed with the family key on the phone; the server sees who asked/helps, kind, day, clock time, and grocery timestamps. Notifications carry only the kind and day (never the text). Thread search decrypts in memory only, no index, nothing sent. App feedback sends only what the person sees in the form, after *Send this*. Nothing from Phases 2–3 goes to AI providers. No family key reaches any third party.
 
 ## Remaining household-code dependencies
 
-Pinned by `tests/dependencies.test.js`: `sync.ensure()` creates codes at trackers start-up (`js/app.js`); dog documents and adoption photos upload only under the code (`js/dogs.js`, `js/adopt.js`) — **the Phase 2 blocker**; trackers' linked calendars and the old subscribe link (`js/calTab.js`); Recover's old copies (`js/recover.js`); the sync itself (`js/sync.js`); the legacy assistant route for people not signed in.
+Pinned by `tests/dependencies.test.js`. Phase 2 removed every way to create, join or change a code. Still reading through an existing code (for phones that already shared one, until their move to the family): the trackers' sync (`js/sync.js` `follow`, push/pull), dog files shared earlier (`js/dogs.js` legacy URL, read and delete only), linked calendars of the trackers (`js/calTab.js`, `POST /ics {code,url}`), Recover's old copies (`js/recover.js`), and the legacy assistant route for people not signed in.
 
 ## Decisions needed
 
-- Authorize Phase 2 (no new codes), and whether to include the open Phase 0–1 gaps 1–4 and S1 first.
-- Whether account deletion should delete or anonymize threads and replies.
-- Whether the server should stop writing posts to the hidden feed now or in Phase 3.
+- Deployment of `v2/phase-2-3` (Worker via `pawdeploy`, then merge to `main`).
+- Authorization for Phase 4 (not started).
+- Optional: whether Home lists should move to the Durable Object to remove the concurrent-edit gap (issue 3).
 
 ## Evidence log
 
@@ -137,3 +164,8 @@ Pinned by `tests/dependencies.test.js`: `sync.ensure()` creates codes at tracker
 | 2026-10-28 | Performance before/after | `0c35063` vs `0e75cc3`+ | `node scripts/perf/budget.mjs` ×3–5, same machine | table above; cloud VM, timings ±10% |
 | 2026-10-28 | UI | phone 390 px | Playwright screenshots of Home, Threads, Photos, Calendar, thread/chat report, trackers Privacy/Devices | no page errors in the family app |
 | 2026-10-28 | Worker deploy | — | not run (user action) | pending |
+| 2026-10-28 | Phase 2–3 tests | `03cbd76` | `npm test` | 277/277 pass |
+| 2026-10-28 | CI | `87452a5`, `29d83da`, `29b6939`, `03cbd76` on `v2/phase-2-3` | GitHub Actions "Check" | green (test, links, perf) |
+| 2026-10-28 | Performance after Phase 3 | `03cbd76` vs Phase 0–1 numbers | `node scripts/perf/budget.mjs` ×5 on a fresh `seed.mjs` family; `tabs.mjs` | table above; same VM, ±10% |
+| 2026-10-28 | Review | `e374c81..03cbd76` | independent server security/privacy and client QA reviews; findings verified in code, fixed, tests added | see Review fixes |
+| 2026-10-28 | UI | 390 px light/dark, 320 px, 1280 px | Playwright: `home3.mjs`, `a11y3.mjs`, `fix3.mjs` (scratch) | no page errors; no sideways scroll |
