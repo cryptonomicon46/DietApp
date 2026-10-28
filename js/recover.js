@@ -4,6 +4,7 @@
 // account (and the bigger copy the server keeps when a much smaller one replaced it), the
 // household code (same), and backup files — including one your partner saves from their phone,
 // which keeps a copy of your data from household sharing.
+import { serverUrl } from './server.js';
 import { PROFILES, global, ownerId, exportProfile, importProfile } from './storage.js';
 import { account, mergeData } from './account.js';
 import { keys, tryOpen } from '../family/crypto.js';
@@ -53,7 +54,7 @@ export async function findCopies(person = ownerId()) {
   } catch { /* none */ }
   const a = account.get();
   if (a && person === a.profile) {
-    const url = (() => { try { return JSON.parse(localStorage.getItem('lp.g.sync'))?.url; } catch { return null; } })() || 'https://lean-plate-connect.sandman-amani.workers.dev';
+    const url = serverUrl();
     const auth = { Authorization: `Bearer ${localStorage.getItem('fam.token.live')}` };
     // 🔐 Locked copies open with this device's family key (or are skipped without it).
     const k = await keys.get(a.fid);
@@ -69,9 +70,9 @@ export async function findCopies(person = ownerId()) {
   if (s?.url && s?.code) {
     const base = `${s.url}/household/${encodeURIComponent(s.code)}/${person}`;
     const cur = await getJson(base);
-    if (cur?.data) copies.push({ id: 'household', label: 'The household code', data: cur.data, at: cur.savedAt });
+    if (cur?.data) copies.push({ id: 'household', label: 'An older shared copy', data: cur.data, at: cur.savedAt });
     const prev = await getJson(`${base}/prev`);
-    if (prev?.data) copies.push({ id: 'household-prev', label: 'An earlier, bigger copy on the household code', data: prev.data, at: prev.savedAt });
+    if (prev?.data) copies.push({ id: 'household-prev', label: 'An earlier, bigger shared copy', data: prev.data, at: prev.savedAt });
   }
   return copies.filter((c) => c.data && n(c.data));
 }

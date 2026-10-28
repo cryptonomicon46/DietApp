@@ -156,7 +156,9 @@ export async function familyApi(req, env, path, ctx = null) {
     try { body = text ? JSON.parse(text) : {}; } catch { return json({ error: 'not JSON' }, 400); }
   }
 
-  if (path === '/config') return json({ googleClientId: env.GOOGLE_CLIENT_ID || '', ready: !!env.GOOGLE_CLIENT_ID, supportEmail: env.SUPPORT_EMAIL || '', termsVersion: TERMS_VERSION, photos: !!blobStore(env) });
+  if (path === '/config') return json({ googleClientId: env.GOOGLE_CLIENT_ID || '', ready: !!env.GOOGLE_CLIENT_ID, supportEmail: env.SUPPORT_EMAIL || '', termsVersion: TERMS_VERSION, photos: !!blobStore(env),
+    // 🔌 Which device connections are set up here (only whether; never the keys), so the app never offers a Connect that can't work.
+    devices: { whoop: !!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET) } });
 
   // ---- sign in ----
   if (path === '/auth/google' && method === 'POST') {

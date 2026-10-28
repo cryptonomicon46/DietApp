@@ -19,7 +19,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawmily">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=266">
+  <link rel="stylesheet" href="styles.css?v=267">
 </head>
 <body>
   <header class="top">
@@ -270,7 +270,6 @@
     <div class="owner-choices" id="ownerChoices"></div>
   </dialog>
 
-  <dialog id="hhDialog" class="hh-dialog"></dialog>
 
   <!-- A FOOD OF YOUR OWN -->
   <dialog id="myFoodDialog" class="myfood-dialog">
@@ -299,45 +298,22 @@
   <dialog id="partnerDialog">
     <h2 id="partnerTitle"></h2>
     <p class="small" id="partnerText"></p>
-    <div class="link-box" id="partnerLink">
-      <p class="small"><b>Link your phones (once):</b> on one phone, enter the other phone's code, or type the same private phrase on both phones (6+ letters).</p>
-      <div class="small">This phone's code</div>
-      <div class="row" style="margin-top:4px"><code class="share-code" id="myCode"></code><button type="button" class="ghost small" id="sendCode">Send</button></div>
-      <label class="small">Code from <span id="partnerName2"></span>'s phone
-        <div class="row" style="margin-top:4px"><input id="joinCode" autocomplete="off" autocapitalize="none" placeholder="code or shared phrase"><button type="button" class="small" id="joinBtn">Link</button></div>
-      </label>
-      <p class="small" id="joinStatus"></p>
-    </div>
+    <p class="small muted" id="joinStatus"></p>
     <div class="row end">
       <button type="button" class="ghost" id="partnerClose">Close</button>
       <button type="button" id="partnerBack">Back</button>
     </div>
   </dialog>
 
-  <!-- DEVICES -->
+  <!-- DEVICES: real connections only; the connector's address is built in -->
   <dialog id="devicesDialog">
     <form method="dialog">
       <h2>Devices</h2>
-      <p class="muted small">Workouts from WHOOP and Garmin adjust today's calories and carbs.</p>
-      <label>Connector URL
-        <input id="serverUrl" type="url" placeholder="https://lean-plate-connect.you.workers.dev">
-      </label>
-      <p class="muted small">One-time setup — see <code>server/README.md</code>. Needed for WHOOP and Garmin auto-sync.</p>
-      <div class="device"><div><b>WHOOP</b><div class="small muted" id="whoopStatus"></div></div><button type="button" class="ghost small" id="whoopConnect">Connect</button></div>
-      <div class="device"><div><b>Garmin</b> <span class="small muted">via Strava auto-sync</span><div class="small muted" id="stravaStatus"></div></div><button type="button" class="ghost small" id="stravaConnect">Connect</button></div>
-      <div class="device"><div><b>WHOOP export</b><div class="small muted">WHOOP app → More → App Settings → Data Export. Unzip it and import workouts.csv. No setup needed.</div><div class="small" id="whoopCsvStatus"></div></div>
-        <label class="filebtn ghost small">Import<input id="whoopCsv" type="file" accept=".csv,text/csv" hidden></label></div>
-      <div class="device"><div><b>Garmin CSV</b><div class="small muted">Garmin Connect → Activities → Export CSV. No setup needed.</div><div class="small" id="csvStatus"></div></div>
-        <label class="filebtn ghost small">Import<input id="garminCsv" type="file" accept=".csv,text/csv" hidden></label></div>
-      <h3 class="share-head">Share with your household</h3>
-      <p class="muted small">See each other's macros and day. Each phone uploads its owner's data to your connector and downloads the other person's to view. Use the same household code on both phones.</p>
-      <label>Connector URL <input id="shareUrl" type="url" placeholder="https://lean-plate-connect.you.workers.dev"></label>
-      <label>Household code
-        <div class="row" style="margin-top:4px"><input id="shareCode" autocomplete="off" placeholder="xxxx-xxxx-xxxx"><button type="button" class="ghost small" id="shareNewCode">New code</button></div>
-      </label>
-      <p class="small">This phone belongs to <b id="shareMe"></b>. Its data is what gets shared from here.</p>
-      <div class="row"><button type="button" class="small" id="shareSave">Turn on sharing</button><button type="button" class="ghost small" id="shareOff">Turn off</button></div>
-      <p class="small" id="shareStatus"></p>
+      <p class="muted small">Workouts from a connected device adjust today's calories and carbs.</p>
+      <div class="device"><div><b>WHOOP</b><div class="small muted" id="whoopStatus"></div></div><button type="button" class="ghost small" id="whoopConnect" hidden>Connect</button></div>
+      <div class="device" id="stravaRow" hidden><div><b>Strava</b><div class="small muted" id="stravaStatus"></div></div><button type="button" class="ghost small" id="stravaConnect">Disconnect</button></div>
+      <div class="device"><div><b>Garmin</b><div class="small muted">Coming later.</div></div></div>
+      <div class="device"><div><b>Apple Health</b><div class="small muted">Needs the iPhone app, which isn't available yet.</div></div></div>
       <div class="row end"><button>Done</button></div>
     </form>
   </dialog>
@@ -423,53 +399,53 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/account.js": "./js/account.js?v=266",
-    "./js/accountBoot.js": "./js/accountBoot.js?v=266",
-    "./js/activity.js": "./js/activity.js?v=266",
-    "./js/adopt.js": "./js/adopt.js?v=266",
-    "./js/analytics.js": "./js/analytics.js?v=266",
-    "./js/app.js": "./js/app.js?v=266",
-    "./js/bodycomp.js": "./js/bodycomp.js?v=266",
-    "./js/brief.js": "./js/brief.js?v=266",
-    "./js/briefTab.js": "./js/briefTab.js?v=266",
-    "./js/calTab.js": "./js/calTab.js?v=266",
-    "./js/calendar.js": "./js/calendar.js?v=266",
-    "./js/cheer.js": "./js/cheer.js?v=266",
-    "./js/climb.js": "./js/climb.js?v=266",
-    "./js/commands.js": "./js/commands.js?v=266",
-    "./js/devices.js": "./js/devices.js?v=266",
-    "./js/dexa.js": "./js/dexa.js?v=266",
-    "./js/dogcal.js": "./js/dogcal.js?v=266",
-    "./js/dogs.js": "./js/dogs.js?v=266",
-    "./js/dress.js": "./js/dress.js?v=266",
-    "./js/dressTab.js": "./js/dressTab.js?v=266",
-    "./js/fight.js": "./js/fight.js?v=266",
-    "./js/foods.js": "./js/foods.js?v=266",
-    "./js/household.js": "./js/household.js?v=266",
-    "./js/lift.js": "./js/lift.js?v=266",
-    "./js/lifting.js": "./js/lifting.js?v=266",
-    "./js/marketMatch.js": "./js/marketMatch.js?v=266",
-    "./js/nextup.js": "./js/nextup.js?v=266",
-    "./js/notes.js": "./js/notes.js?v=266",
-    "./js/photos.js": "./js/photos.js?v=266",
-    "./js/plan.js": "./js/plan.js?v=266",
-    "./js/plans.js": "./js/plans.js?v=266",
-    "./js/poster.js": "./js/poster.js?v=266",
-    "./js/progress.js": "./js/progress.js?v=266",
-    "./js/recover.js": "./js/recover.js?v=266",
-    "./js/research.js": "./js/research.js?v=266",
-    "./js/review.js": "./js/review.js?v=266",
-    "./js/rewards.js": "./js/rewards.js?v=266",
-    "./js/rhythm.js": "./js/rhythm.js?v=266",
-    "./js/share.js": "./js/share.js?v=266",
-    "./js/shows.js": "./js/shows.js?v=266",
-    "./js/showsCore.js": "./js/showsCore.js?v=266",
-    "./js/storage.js": "./js/storage.js?v=266",
-    "./js/sync.js": "./js/sync.js?v=266",
-    "./js/zip.js": "./js/zip.js?v=266"
+    "./js/account.js": "./js/account.js?v=267",
+    "./js/accountBoot.js": "./js/accountBoot.js?v=267",
+    "./js/activity.js": "./js/activity.js?v=267",
+    "./js/adopt.js": "./js/adopt.js?v=267",
+    "./js/analytics.js": "./js/analytics.js?v=267",
+    "./js/app.js": "./js/app.js?v=267",
+    "./js/bodycomp.js": "./js/bodycomp.js?v=267",
+    "./js/brief.js": "./js/brief.js?v=267",
+    "./js/briefTab.js": "./js/briefTab.js?v=267",
+    "./js/calTab.js": "./js/calTab.js?v=267",
+    "./js/calendar.js": "./js/calendar.js?v=267",
+    "./js/cheer.js": "./js/cheer.js?v=267",
+    "./js/climb.js": "./js/climb.js?v=267",
+    "./js/commands.js": "./js/commands.js?v=267",
+    "./js/devices.js": "./js/devices.js?v=267",
+    "./js/dexa.js": "./js/dexa.js?v=267",
+    "./js/dogcal.js": "./js/dogcal.js?v=267",
+    "./js/dogs.js": "./js/dogs.js?v=267",
+    "./js/dress.js": "./js/dress.js?v=267",
+    "./js/dressTab.js": "./js/dressTab.js?v=267",
+    "./js/foods.js": "./js/foods.js?v=267",
+    "./js/household.js": "./js/household.js?v=267",
+    "./js/lift.js": "./js/lift.js?v=267",
+    "./js/lifting.js": "./js/lifting.js?v=267",
+    "./js/marketMatch.js": "./js/marketMatch.js?v=267",
+    "./js/nextup.js": "./js/nextup.js?v=267",
+    "./js/notes.js": "./js/notes.js?v=267",
+    "./js/photos.js": "./js/photos.js?v=267",
+    "./js/plan.js": "./js/plan.js?v=267",
+    "./js/plans.js": "./js/plans.js?v=267",
+    "./js/poster.js": "./js/poster.js?v=267",
+    "./js/progress.js": "./js/progress.js?v=267",
+    "./js/recover.js": "./js/recover.js?v=267",
+    "./js/research.js": "./js/research.js?v=267",
+    "./js/review.js": "./js/review.js?v=267",
+    "./js/rewards.js": "./js/rewards.js?v=267",
+    "./js/rhythm.js": "./js/rhythm.js?v=267",
+    "./js/server.js": "./js/server.js?v=267",
+    "./js/share.js": "./js/share.js?v=267",
+    "./js/shows.js": "./js/shows.js?v=267",
+    "./js/showsCore.js": "./js/showsCore.js?v=267",
+    "./js/storage.js": "./js/storage.js?v=267",
+    "./js/sync.js": "./js/sync.js?v=267",
+    "./js/zip.js": "./js/zip.js?v=267"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=266"></script>
+  <script type="module" src="js/app.js?v=267"></script>
 </body>
 </html>

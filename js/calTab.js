@@ -61,7 +61,7 @@ export async function refreshFeeds(force = false) {
         const events = parseIcs(await res.text(), { localTz: localTz(), from, who: f.who, source: f.name }).slice(0, 1500);
         cache[f.id] = { fetchedAt: Date.now(), events };
       } catch (err) {
-        cache[f.id] = { ...(cache[f.id] || {}), fetchedAt: Date.now(), error: /fetch/i.test(err.message) ? 'connector needs the update (server/README.md)' : err.message };
+        cache[f.id] = { ...(cache[f.id] || {}), fetchedAt: Date.now(), error: /fetch/i.test(err.message) ? "couldn't reach the server" : err.message };
       }
       global.set('calFeedCache', cache);
     }
@@ -221,9 +221,12 @@ function form() {
   </form>`;
 }
 
+// The subscribe link used to carry the household code, so it's no longer shown (calendars already
+// subscribed keep updating). A private family link replaces it in OurPawmily 2.0.
+const SUBSCRIBE_LINK = false;
 function subscribeCard() {
   const s = sync.settings();
-  if (!s?.url || !s?.code) return '';
+  if (!SUBSCRIBE_LINK || !s?.url || !s?.code) return '';
   const https = `${s.url}/household/${encodeURIComponent(s.code)}/calendar.ics`;
   const webcal = https.replace(/^https?:/, 'webcal:');
   return `<details class="card cal-sub"><summary><b>Show this calendar in Apple or Google Calendar</b></summary>

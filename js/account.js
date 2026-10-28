@@ -7,6 +7,7 @@
 //     for you (Me › Who can see my diet & fitness). Friends' families never get it — the server
 //     only answers members of the family.
 // The household code keeps working alongside while a partner hasn't moved over yet.
+import { serverUrl } from './server.js';
 import { PROFILES, global, ownerId, setOwner, exportProfile, importProfile } from './storage.js';
 import { keys, seal, tryOpen, checkKey } from '../family/crypto.js';
 
@@ -22,8 +23,7 @@ const openData = async (a, data) => (data?.enc == null ? data || {} : tryOpen(aw
 // A short fingerprint of some text (to tell whether anything changed).
 const hashOf = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return (h >>> 0).toString(36) + str.length.toString(36); };
 const LS = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
-const CONNECTOR = 'https://lean-plate-connect.sandman-amani.workers.dev';
-const connector = () => { try { return JSON.parse(LS('lp.g.sync'))?.url || CONNECTOR; } catch { return CONNECTOR; } };
+const connector = () => serverUrl();
 const token = () => (LS('fam.mode') === 'demo' ? null : LS('fam.token.live'));
 
 async function call(method, path, body, timeout = 8000) {

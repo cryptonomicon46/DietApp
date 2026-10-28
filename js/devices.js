@@ -1,14 +1,17 @@
 import { fromWhoop, fromStrava } from './activity.js';
 import { store } from './storage.js';
+import { serverUrl } from './server.js';
 
 // Talks to the connector worker (server/worker.js). Tokens are stored per profile on this phone.
+// The connector's address is built in (a phone that set its own before 2.0 keeps it).
 const load = () => store.get('devices', {});
+const server = (d = load()) => d.server || serverUrl();
 const save = (d) => store.set('devices', d);
 
 export const devices = {
   get() { return load(); },
-  setServer(url) { const d = load(); d.server = url.replace(/\/+$/, ''); save(d); },
-  connectUrl(provider) { return `${load().server}/${provider}/login`; },
+  server: () => server(),
+  connectUrl(provider) { return `${server()}/${provider}/login`; },
   disconnect(provider) { const d = load(); delete d[provider]; save(d); },
 
   // Called on page load: the worker redirects back with #connect=<provider>:<base64 tokens>.
@@ -34,10 +37,10 @@ export const devices = {
       ['strava', 'activities', fromStrava],
     ];
     for (const [provider, path, normalize] of sources) {
-      if (!d[provider] || !d.server) continue;
+      if (!d[provider]) continue;
       try {
         const token = await accessToken(provider);
-        const res = await fetch(`${d.server}/${provider}/${path}?start=${encodeURIComponent(start.toISOString())}`, {
+        const res = await fetch(`${server(d)}/${provider}/${path}?start=${encodeURIComponent(start.toISOString())}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error(`${res.status}`);
@@ -58,7 +61,7 @@ async function accessToken(provider) {
   const d = load();
   const t = d[provider];
   if (t.expires_at - Date.now() > 60_000) return t.access_token;
-  const res = await fetch(`${d.server}/${provider}/refresh`, {
+  const res = await fetch(`${server(d)}/${provider}/refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refresh_token: t.refresh_token }),

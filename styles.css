@@ -169,6 +169,7 @@ dialog {
 }
 dialog { max-height: 88vh; overflow-y: auto; }
 .device { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.device[hidden] { display: none; }
 .filebtn { display: inline-block; margin: 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--brand); font-weight: 600; cursor: pointer; flex: none; }
 .science li { display: block; padding: 10px 0; }
 .science a { color: inherit; }

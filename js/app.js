@@ -7,7 +7,7 @@ import {
   EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE, DRINKS, drinksTotals, fitItems, labelKcal,
 } from './plan.js';
 import {
-  SESSION_TYPES, SPORTS, INTENSITY, trainingDay, applyTraining, parseGarminCsv, parseWhoopCsv,
+  SESSION_TYPES, SPORTS, INTENSITY, trainingDay, applyTraining,
   sportStats, estimateActivity, sessionType,
 } from './activity.js';
 import { devices } from './devices.js';
@@ -20,7 +20,7 @@ import { initDress } from './dressTab.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
-import { sync, newHouseholdCode, DEFAULT_CONNECTOR, pushNow } from './sync.js';
+import { sync, pushNow } from './sync.js';
 import { account } from './account.js';
 import { findCopies, combine, applyRecovery, counts, describe, readBackup, partnerFile } from './recover.js';
 import { renderHousehold, initHousehold } from './household.js';
@@ -2113,59 +2113,28 @@ async function syncDevices(manual = false) {
 }
 
 // ---------- DEVICES ----------
+// Only real connections: WHOOP when the connector has it set up, Strava only to disconnect an
+// existing link. The connector's address is built in (js/server.js); no URL, CSV or code here.
 const devDialog = $('#devicesDialog');
-function openDevices() {
+async function openDevices() {
   const d = devices.get();
-  $('#serverUrl').value = d.server || '';
-  for (const p of ['whoop', 'strava']) {
-    $(`#${p}Status`).textContent = d[p] ? 'Connected' : 'Not connected';
-    $(`#${p}Connect`).textContent = d[p] ? 'Disconnect' : 'Connect';
-  }
-  $('#csvStatus').textContent = '';
-  renderSharing();
-  $('#whoopCsvStatus').textContent = '';
+  $('#whoopStatus').textContent = d.whoop ? 'Connected' : 'Checking…';
+  $('#whoopConnect').hidden = !d.whoop;
+  $('#whoopConnect').textContent = d.whoop ? 'Disconnect' : 'Connect';
+  $('#stravaRow').hidden = !d.strava;
+  $('#stravaStatus').textContent = d.strava ? 'Connected (no longer offered — you can disconnect it)' : '';
   devDialog.showModal();
+  if (d.whoop) return;
+  const ready = await fetch(`${devices.server()}/v2/config`).then((r) => r.json()).then((c) => !!c.devices?.whoop).catch(() => false);
+  $('#whoopStatus').textContent = ready ? 'Not connected' : 'Not available yet.';
+  $('#whoopConnect').hidden = !ready;
 }
 for (const p of ['whoop', 'strava']) {
   $(`#${p}Connect`).onclick = () => {
     if (devices.get()[p]) { devices.disconnect(p); openDevices(); renderAll(); return; }
-    const url = $('#serverUrl').value.trim();
-    if (!/^https:\/\//.test(url)) { $(`#${p}Status`).textContent = 'Add your connector URL first (see server/README.md).'; return; }
-    devices.setServer(url);
-    location.href = devices.connectUrl(p);
+    if (p === 'whoop') location.href = devices.connectUrl(p);
   };
 }
-$('#serverUrl').onchange = (e) => devices.setServer(e.target.value.trim());
-$('#whoopCsv').onchange = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    const list = parseWhoopCsv(await file.text());
-    mergeWorkouts(list);
-    const st = sportStats(list);
-    const top = Object.entries(st).sort((a, b) => b[1].sessions - a[1].sessions).slice(0, 4)
-      .map(([k, v]) => `${SPORTS[k].name} ${Math.round(v.kcalPerMin * 60)} kcal/h`).join(' · ');
-    $('#whoopCsvStatus').textContent = `Read ${list.length} workouts. Your burn rates: ${top || 'no matching sports found'}.`;
-    renderAll();
-  } catch (err) {
-    $('#whoopCsvStatus').textContent = err.message;
-  }
-  e.target.value = '';
-};
-$('#garminCsv').onchange = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    const list = parseGarminCsv(await file.text());
-    mergeWorkouts(list);
-    const recent = list.filter((w) => Date.now() - new Date(w.start).getTime() < 14 * 86400000).length;
-    $('#csvStatus').textContent = `Imported ${recent} recent activit${recent === 1 ? 'y' : 'ies'}.`;
-    renderAll();
-  } catch (err) {
-    $('#csvStatus').textContent = err.message;
-  }
-  e.target.value = '';
-};
 
 // ---------- SCIENCE ----------
 $('#openScience').onclick = () => {
@@ -2723,43 +2692,20 @@ function openPartnerNotice() {
   const has = !!state.profile;
   $('#partnerTitle').textContent = has ? `Linked with ${name}` : `${name}'s day isn't on this phone yet`;
   $('#partnerText').textContent = has
-    ? `Both phones should show the same code below. If ${name} can't see your day, enter the code from ${name}'s phone here (or yours on ${name}'s phone).`
-    : `${name} sets up and edits ${name}'s profile on ${name}'s own phone. Once your phones are linked, ${name}'s day shows up here to view, and updates every few minutes.`;
+    ? `${name}'s day comes through your OurPawmily family and updates every few minutes. If it stops, check that ${name} still shares diet & fitness with you (OurPawmily › Me › Who can see my diet & fitness).`
+    : `${name} sets up ${name}'s own profile on ${name}'s phone. Once you're in the same OurPawmily family and ${name} shares diet & fitness with you (OurPawmily › Me › Who can see my diet & fitness), ${name}'s day shows up here to view.`;
   $('#partnerBack').hidden = has;
   $('#partnerBack').textContent = `Back to ${owner?.name || 'my profile'}`;
   renderLinkBox(name);
   $('#partnerDialog').showModal();
 }
 
-// Linking: show this phone's household code, or take the other phone's.
+// When the partner's day last arrived, and when this phone last sent its own.
 function renderLinkBox(name) {
-  $('#partnerName2').textContent = name;
-  $('#myCode').textContent = sync.settings()?.code || '—';
   const seen = global.get(`seen.${activeProfile().id}`, 0);
   const pushed = global.get('pushedAt', 0);
-  $('#joinStatus').textContent = `Last update from ${name}: ${seen ? ago(seen) : 'none yet'} · this phone last uploaded: ${pushed ? ago(pushed) : 'not yet'}.`;
+  $('#joinStatus').textContent = `Last update from ${name}: ${seen ? ago(seen) : 'none yet'} · this phone last sent: ${pushed ? ago(pushed) : 'not yet'}.`;
 }
-$('#sendCode').onclick = async () => {
-  const code = sync.settings()?.code;
-  if (!code) return;
-  const url = `${location.origin}${location.pathname}#link=${encodeURIComponent(code)}`;
-  const text = `Tap to link our phones in OurPawmily (open it in the browser you use for OurPawmily): ${url}\nOr enter this code under "Code from my phone": ${code}`;
-  try {
-    if (navigator.share) await navigator.share({ text });
-    else { await navigator.clipboard.writeText(code); $('#joinStatus').textContent = 'Code copied.'; }
-  } catch { /* share sheet closed */ }
-};
-$('#joinBtn').onclick = async () => {
-  $('#joinStatus').textContent = 'Linking…';
-  try {
-    const got = await sync.join($('#joinCode').value);
-    $('#joinStatus').textContent = got ? 'Linked! Loading…' : `Linked ✓ This phone now uses ${sync.settings().code}, the same code as the other phone.`;
-    $('#myCode').textContent = sync.settings().code;
-    if (got) setTimeout(() => location.reload(), 600);
-  } catch (err) {
-    $('#joinStatus').textContent = err.message;
-  }
-};
 $('#partnerBack').onclick = () => { setActiveProfile(ownerId()); location.reload(); };
 $('#partnerClose').onclick = () => $('#partnerDialog').close();
 
@@ -3062,10 +3008,10 @@ function renderViewOnly() {
   if (ro) {
     const seen = global.get(`seen.${activeProfile().id}`, 0);
     $('#viewBanner').innerHTML = seen
-      ? `Viewing <b>${esc(name)}</b>'s day · updated ${ago(seen)} · <button class="linkish" id="refreshPartner">Refresh</button> · <button class="linkish" id="linkPartner">Link</button>`
+      ? `Viewing <b>${esc(name)}</b>'s day · updated ${ago(seen)} · <button class="linkish" id="refreshPartner">Refresh</button> · <button class="linkish" id="linkPartner">How sharing works</button>`
       : sync.enabled()
-        ? `<b>${esc(name)}</b>'s day isn't here yet. <button class="linkish" id="linkPartner">Link phones</button> · <button class="linkish" id="refreshPartner">Check now</button>`
-        : `<b>${esc(name)}</b>'s profile isn't set up on this phone. ${esc(name)} sets it up on their own phone; link your phones to see each other's day.`;
+        ? `<b>${esc(name)}</b>'s day isn't here yet. <button class="linkish" id="linkPartner">How to share</button> · <button class="linkish" id="refreshPartner">Check now</button>`
+        : `<b>${esc(name)}</b>'s profile isn't set up on this phone. ${esc(name)} sets it up on their own phone, then shares it with you through your OurPawmily family. <button class="linkish" id="linkPartner">How</button>`;
     if ($('#linkPartner')) $('#linkPartner').onclick = () => openPartnerNotice();
     if ($('#refreshPartner')) $('#refreshPartner').onclick = async () => {
       $('#refreshPartner').textContent = 'Checking…';
@@ -3074,18 +3020,6 @@ function renderViewOnly() {
   }
 }
 
-// ---------- HOUSEHOLD SHARING (in Devices) ----------
-function renderSharing() {
-  const s = sync.settings() || {};
-  $('#shareUrl').value = s.url || devices.get().server || DEFAULT_CONNECTOR;
-  $('#shareCode').value = s.code || '';
-  $('#shareMe').textContent = PROFILES.find((p) => p.id === ownerId())?.name || '—';
-  const acct = account.get();
-  $('#shareStatus').textContent = `${acct ? `Saved to your OurPawmily account (${acct.email}). ` : ''}${sync.household()
-    ? `Household sharing is on. Last upload ${global.get('pushedAt', 0) ? ago(global.get('pushedAt', 0)) : 'not yet'}.`
-    : acct ? '' : 'Off. Both profiles still work on this phone.'}`;
-  renderAccount();
-}
 // ---------- 🛟 Recover: add back anything this device is missing (never removes) ----------
 let recoverCopies = null;
 function renderRecover(msg = '') {
@@ -3095,7 +3029,7 @@ function renderRecover(msg = '') {
   const pf = partner && partnerFile(partner.id);
   const date = (t) => (t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
   el.innerHTML = `<div class="card"><div class="eyebrow">🛟 Recover my data</div>
-    <p class="small">Missing meals, weigh-ins or dogs? This looks for every copy of your trackers — your account, the household code, earlier copies the server kept, a backup file — and adds back whatever this device is missing. It never removes or replaces anything here.</p>
+    <p class="small">Missing meals, weigh-ins or dogs? This looks for every copy of your trackers — your account, older shared copies, earlier copies the server kept, a backup file — and adds back whatever this device is missing. It never removes or replaces anything here.</p>
     ${recoverCopies ? `<ul class="small recover-list">${recoverCopies.map((c) => `<li><b>${esc(c.label)}</b>${c.id === 'device' ? '' : ` <span class="muted">${date(c.at)}</span>`}<br><span class="muted">${describe(counts(c.data))}</span></li>`).join('')}</ul>
       <p class="small">Combined: <b>${describe(counts(combine(recoverCopies)))}</b></p>
       <button type="button" id="recoverApply">Add what's missing to this device</button>`
@@ -3150,26 +3084,6 @@ function renderAccount() {
     catch (err) { $('#accountSync').textContent = err.message; }
   };
 }
-$('#shareNewCode').onclick = () => { $('#shareCode').value = newHouseholdCode(); };
-$('#shareSave').onclick = async () => {
-  const url = $('#shareUrl').value.trim().replace(/\/+$/, '');
-  const code = $('#shareCode').value.trim();
-  if (!/^https:\/\//.test(url) || code.length < 12) {
-    $('#shareStatus').textContent = 'Add your connector URL and a household code (tap New code on the first phone, then type the same code on the other).';
-    return;
-  }
-  sync.save({ url, code });
-  global.set('shareOff', false);
-  $('#shareStatus').textContent = 'Syncing…';
-  try {
-    await sync.push();
-    await sync.pull();
-    location.reload();
-  } catch (err) {
-    $('#shareStatus').textContent = `Couldn't reach the connector: ${err.message}`;
-  }
-};
-$('#shareOff').onclick = () => { sync.save(null); global.set('shareOff', true); location.reload(); };
 
 initLift();
 initNotes();
@@ -3217,7 +3131,8 @@ window.addEventListener('lp:weighin', (e) => {
   store.set('weights', state.weights);
   renderAll();
 });
-// Commands the phone couldn't parse go to Claude through the connector (needs household sharing).
+// Commands the phone couldn't parse go to Claude through your account (or, on a phone that still
+// shares the old way, the connector's legacy route).
 window.addEventListener('lp:assistant', async (e) => {
   const s = sync.settings();
   if (account.active()) {
@@ -3234,7 +3149,7 @@ window.addEventListener('lp:assistant', async (e) => {
     return;
   }
   if (!sync.household()) {
-    setCommandFeedback(`${e.detail.message}<br><span class="muted">Turn on household sharing in Devices to let Claude handle commands like this.</span>`);
+    setCommandFeedback(`${e.detail.message}<br><span class="muted">Sign in to OurPawmily to let Claude handle commands like this.</span>`);
     return;
   }
   setCommandFeedback('<span class="muted">Asking Claude…</span>');
@@ -3257,31 +3172,15 @@ window.addEventListener('lp:assistant', async (e) => {
 $('#dayBar').onclick = () => { document.querySelector('[data-tab=today]').click(); };
 $('#weighDate').value = isoDate();
 const justConnected = devices.takeRedirect();
-// One-tap linking: opening the app at …#link=<code or phrase> joins that household.
-// The part after # never leaves the phone, so the phrase isn't in any server log or the code.
-function takeLinkFromUrl() {
+// #dogs opens the Dogs tab. An old one-tap link (#link=…) no longer links phones: sharing is
+// through your OurPawmily family now, so it's just cleared from the address bar.
+function takeHash() {
   if (location.hash === '#dogs') { history.replaceState(null, '', location.pathname + location.search); setTimeout(() => showTab('brief')); }
-  const m = location.hash.match(/^#link=(.+)$/);
-  if (!m) return false;
-  history.replaceState(null, '', location.pathname + location.search);
-  global.set('pendingLink', decodeURIComponent(m[1]));
-  return true;
+  if (/^#link=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
 }
-takeLinkFromUrl();
-// Link opened while the app is already open in this tab.
-window.addEventListener('hashchange', () => { if (takeLinkFromUrl()) applyPendingLink(); });
-async function applyPendingLink() {
-  const phrase = global.get('pendingLink', null);
-  if (!phrase || !ownerId()) return;
-  global.set('pendingLink', null);
-  try {
-    await sync.join(phrase);
-    alert(`Linked ✓ This ${navigator.userAgent.includes('CriOS') ? 'Chrome' : 'browser'} now shares with the household code ${sync.settings().code}.`);
-    location.reload();
-  } catch (err) {
-    alert(`Couldn't link: ${err.message}`);
-  }
-}
+takeHash();
+window.addEventListener('hashchange', takeHash);
+global.set('pendingLink', null);
 sync.ensure(); // household sharing is on by default
 renderWho();
 renderViewOnly();
@@ -3289,7 +3188,7 @@ if (!ownerId()) openOwnerPicker();
 else if (state.profile) renderAll();
 else if (sync.readOnly()) openPartnerNotice();
 else openProfile();
-renderHousehold(); // a changed household code asks for the new one as soon as the app opens
+renderHousehold();
 renderAccount();
 renderRecover();
 // Your own trackers changed on another phone or computer: show the new copy.
@@ -3297,7 +3196,6 @@ window.addEventListener('lp:mine', () => location.reload());
 // Pull workouts on open (at most every 10 min) and right after connecting.
 if (!sync.readOnly() && (justConnected || Date.now() - store.get('lastSync', 0) > 10 * 60000)) syncDevices();
 // Household: upload my latest, then fetch my partner's; reload if I'm looking at fresh data.
-applyPendingLink();
 if (sync.enabled() || account.get() || (() => { try { return localStorage.getItem('fam.token.live'); } catch { return null; } })()) {
   sync.push().catch(() => {});
   sync.pull().then((changed) => { renderAccount(); if (changed) registerMyFoods(); updateNotesBadge(); updateCalBadge(); if (changed) renderHome(); if (changed && sync.readOnly()) location.reload(); }).catch(() => {});
