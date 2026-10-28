@@ -93,7 +93,7 @@ test('threads: screenshots with captions, kept in step on edit, removed with the
   const { family } = await call('/families', sam, 'POST', { name: 'Fam' });
   const F = `/families/${family.fid}`;
   for (const id of ['shotaaaa1', 'shotbbbb2', 'shotcccc3']) for (const size of ['full', 'thumb']) await put(`${F}/photos/${id}?size=${size}`, sam);
-  const blobs = () => [...m.keys()].filter((k) => k.startsWith('blob:')).map((k) => k.split('/')[2]).sort();
+  const blobs = () => [...m.keys()].filter((k) => k.startsWith('blob:') && !k.includes('/many')).map((k) => k.split('/')[2]).sort();
   assert.equal(blobs().length, 6);
   const shots = [{ id: 'shotaaaa1', aspect: 0.46, cap: '  Premiums ' }, { id: 'shotbbbb2', cap: 'Deductibles' }, { id: 'shotcccc3' }, { id: 'bad id!' }];
   const t = (await call(`${F}/threads`, sam, 'POST', { aud: 'family', board: 'house', cat: 'talk', title: 'Health plans', body: 'Which one?', shots })).thread;
@@ -104,7 +104,10 @@ test('threads: screenshots with captions, kept in step on edit, removed with the
   const e = (await call(`${F}/threads/${t.id}`, sam, 'PATCH', { shots: t.shots.filter((x) => x.id !== 'shotbbbb2') })).thread;
   assert.deepEqual(e.shots.map((x) => x.id), ['shotaaaa1', 'shotcccc3']);
   assert.deepEqual(blobs(), ['shotaaaa1-full', 'shotaaaa1-thumb', 'shotcccc3-full', 'shotcccc3-thumb']);
-  assert.equal((await call(`${F}/threads`, sam, 'POST', { aud: 'family', title: 'Lots', body: 'x', shots: Array.from({ length: 20 }, (_, i) => ({ id: `many${String(i).padStart(5, '0')}` })) })).thread.shots.length, 12, 'at most 12');
+  const many = Array.from({ length: 20 }, (_, i) => ({ id: `many${String(i).padStart(5, '0')}` }));
+  assert.equal((await call(`${F}/threads`, sam, 'POST', { aud: 'family', title: 'Lots', body: 'x', shots: many })).status, 403, 'only files you uploaded');
+  for (const x of many.slice(0, 12)) await put(`${F}/photos/${x.id}?size=full`, sam);
+  assert.equal((await call(`${F}/threads`, sam, 'POST', { aud: 'family', title: 'Lots', body: 'x', shots: many })).thread.shots.length, 12, 'at most 12');
   await call(`${F}/threads/${t.id}`, sam, 'DELETE');
   assert.deepEqual(blobs(), [], 'deleting the thread deletes its screenshots');
 });

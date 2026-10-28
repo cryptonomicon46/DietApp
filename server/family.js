@@ -45,7 +45,7 @@ import { REPLIES, NOTE_DAYS, partnerOf, visibleTo, upcoming, agreed, streak } fr
 import { APPT_TYPES, cleanAppt, nextDue, shiftWeeks, startOf, spending } from './appts.js';
 import { parseSquares, makeCard, bingoLines, bingoPrompt, NEED, FREE } from './bingo.js';
 import { EVENTS as PICK_EVENTS, OUTCOMES, locked as pickLocked, score as pickScore, parseCouples } from './picks.js';
-import { blobStore, okPhotoId, photoKey, SIZES, quotaBytes, familyUsage, noteUsage, deletePhoto, deleteFamilyPhotos } from './photos.js';
+import { blobStore, okPhotoId, photoKey, SIZES, quotaBytes, familyUsage, noteUsage, deletePhoto, deleteFamilyPhotos, blobMetaKey, ownsFiles } from './photos.js';
 import { DEFAULT_AREA, areaKey, scoutArea } from './scout.js';
 import { planOuting, swapStop } from './outing.js';
 import { checkLinks } from './links.js';
@@ -249,6 +249,20 @@ export async function familyApi(req, env, path, ctx = null) {
 
   const families = async () => (await Promise.all(user.families.map((f) => db.get(`family:${f}`)))).filter(Boolean);
   const meIn = (fam) => fam.members.find((m) => m.uid === user.uid);
+  // A friends' family's file: only one on a post or thread they shared with friends, while the
+  // families are still connected, not from someone you blocked, and not tagging anyone kept private.
+  const sharedFile = async (fid, pid, ref) => {
+    const [, kind, id] = /^(post|thread):([a-z0-9]{4,40})$/.exec(ref || '') || [];
+    if (!kind || !/^[a-z0-9]{6,24}$/.test(fid) || !(await families()).some((f) => (f.connections || []).includes(fid))) return false;
+    const blocked = new Set((user.blocked || []).map((b) => b.uid));
+    if (kind === 'post') {
+      const [p, owner] = await Promise.all([db.get(`post:${fid}:${id}`), db.get(`family:${fid}`)]);
+      return !!p && !!owner && p.audience === 'connections' && p.photoId === pid && !blocked.has(p.byUid)
+        && !(p.tags || []).some((t) => !sharedWithFriends(owner, owner.members.find((x) => x.id === t)));
+    }
+    const t = await db.get(`thread:${fid}:${id}`);
+    return !!t && t.aud === 'connections' && !blocked.has(t.byUid) && [...(t.shots || []), ...(t.docs || [])].some((x) => x.id === pid);
+  };
   const loadFamily = async (fid) => {
     const fam = /^[a-z0-9]{6,24}$/.test(fid) ? await db.get(`family:${fid}`) : null;
     return fam && meIn(fam) ? fam : null;
@@ -1451,13 +1465,13 @@ export async function familyApi(req, env, path, ctx = null) {
   }
 
   // ---- 📖 threads ----
-  { const r = await threadRoutes({ path, method, body, db, user, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url, blobs: blobStore(env) }); if (r) return r; }
+  { const r = await threadRoutes({ path, method, body, db, user, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 📷 albums (family only) ----
-  { const r = await albumRoutes({ path, method, body, db, loadFamily, meIn, sealed, clean, randomId, json, blobs: blobStore(env) }); if (r) return r; }
+  { const r = await albumRoutes({ path, method, body, db, loadFamily, meIn, sealed, clean, randomId, json, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 🛒 the Market (family, and friends' families by default) ----
   // ---- 💬 chats between the grown-ups ----
-  { const r = await chatRoutes({ path, method, body, user, loadFamily, meIn, tell, json, url: () => url(req), hub: (fid) => chatHub(db, fid), blobs: blobStore(env), deletePhoto }); if (r) return r; }
-  { const r = await marketRoutes({ path, method, body, db, user, families, loadFamily, meIn, sealed, clean, randomId, tell, json, blobs: blobStore(env) }); if (r) return r; }
+  { const r = await chatRoutes({ path, method, body, user, loadFamily, meIn, tell, json, url: () => url(req), hub: (fid) => chatHub(db, fid), blobs: blobStore(env), deletePhoto: (b, f, id) => deletePhoto(b, f, id, db), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
+  { const r = await marketRoutes({ path, method, body, db, user, families, loadFamily, meIn, sealed, clean, randomId, tell, json, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ✨ Tidy it up: rough notes into headings and bullets. Only the text you tap it on is sent.
   m = path.match(/^\/families\/([a-z0-9]+)\/tidy$/);
   if (m && method === 'POST') {
@@ -1505,25 +1519,40 @@ export async function familyApi(req, env, path, ctx = null) {
     if (!blobs) return json({ error: 'photo storage is not set up on the connector yet — see server/README.md' }, 501);
     const size = ({ thumb: 'thumb', doc: 'doc' })[url(req).searchParams.get('size')] || 'full';
     let fam = await loadFamily(m[1]);
-    // Friends' families can see the photos on posts shared with them (still locked to them).
-    const viaConnection = !fam && method === 'GET' && m[2] && (await families()).some((f) => (f.connections || []).includes(m[1]));
-    if (!fam && !viaConnection) return json({ error: 'not found' }, 404);
+    if (!fam && !(method === 'GET' && m[2])) return json({ error: 'not found' }, 404);
     if (!m[2] && method === 'GET') return json({ used: await familyUsage(blobs, fam.fid, true), quota: quotaBytes(env) });
     if (!okPhotoId(m[2])) return json({ error: 'not found' }, 404);
     const key = photoKey(m[1], m[2], size);
     if (method === 'GET') {
+      // Friends' families: only a photo on something shared with them, which the phone names
+      // (?in=post:<id> or thread:<id>), and never one that tags someone kept private.
+      if (!fam && !(await sharedFile(m[1], m[2], url(req).searchParams.get('in')))) return json({ error: 'not found' }, 404);
       const b = await blobs.get(key);
       return b ? { status: 200, raw: b } : json({ error: 'not found' }, 404);
     }
-    if (meIn(fam).relation === 'child' && method === 'DELETE') return json({ error: 'ask a grown-up' }, 403);
+    const me = meIn(fam);
+    if (me.relation === 'child' && method === 'DELETE') return json({ error: 'ask a grown-up' }, 403);
+    // Only whoever uploaded a file (or the family's creator) may replace or delete it. A file from
+    // before uploads were recorded can be replaced only by the creator (turning on encryption).
+    const meta = await db.get(blobMetaKey(fam.fid, m[2]));
+    const mine = meta ? meta.by === me.id : false;
     if (method === 'PUT') {
       if (!bytes?.length || bytes.length > SIZES[size]) return json({ error: size === 'doc' ? 'that PDF is too large (20 MB at most)' : 'that photo is too large' }, 413);
+      if (!mine && me.role !== 'owner') {
+        if (meta) return json({ error: 'not yours to replace' }, 403);
+        for (const s of ['full', 'thumb', 'doc']) if (await blobs.has(photoKey(fam.fid, m[2], s))) return json({ error: 'not yours to replace' }, 403);
+      }
       if ((await familyUsage(blobs, fam.fid)) + bytes.length > quotaBytes(env)) return json({ error: `${fam.name}'s photo space is full (${Math.round(quotaBytes(env) / 1048576 / 1024 * 10) / 10} GB). Delete some older photo posts to make room.` }, 413);
       await blobs.put(key, bytes);
+      if (!meta) await db.put(blobMetaKey(fam.fid, m[2]), { by: me.id, at: Date.now() });
       noteUsage(fam.fid, bytes.length);
       return json({ ok: true });
     }
-    if (method === 'DELETE') { await deletePhoto(blobs, fam.fid, m[2]); return json({ ok: true }); }
+    if (method === 'DELETE') {
+      if (!mine && me.role !== 'owner') return json({ error: 'not yours to delete' }, 403);
+      await deletePhoto(blobs, fam.fid, m[2], db);
+      return json({ ok: true });
+    }
     return json({ error: 'not found' }, 404);
   }
   m = path.match(/^\/families\/([a-z0-9]+)\/posts$/);
@@ -1557,6 +1586,7 @@ export async function familyApi(req, env, path, ctx = null) {
       if (!help.from) return json({ error: 'which day do you need help?' }, 400);
     }
     const photoId = okPhotoId(body.photoId) && blobStore(env) ? body.photoId : '';
+    if (photoId && !(await ownsFiles(db, fam.fid, [photoId], me.id))) return json({ error: 'that photo isn\'t yours to post' }, 403);
     const aspect = Math.min(3, Math.max(0.3, +body.aspect || 1));
     if (!text && !photo && !photoId && !help) return json({ error: 'write something or add a photo' }, 400);
     // The same post sent again (a retry, a second tap): the one already saved, not a copy.
@@ -1602,6 +1632,7 @@ export async function familyApi(req, env, path, ctx = null) {
       // 📸 Moving an older photo out of the post into its own files (first device to do it wins).
       if (okPhotoId(body.photoId) && blobStore(env)) {
         if (!p.photo || p.photoId) return json({ error: 'already moved', photoId: p.photoId || '' }, 409);
+        if (!(await ownsFiles(db, fid, [body.photoId], meIn(own).id))) return json({ error: 'not yours' }, 403);
         p.photoId = body.photoId; p.aspect = Math.min(3, Math.max(0.3, +body.aspect || 1)); p.photo = ''; p.photoLocked = !!own.e2ee;
       }
       // Turning on encryption: the phone re-sent this post's photo files locked (one way only).
@@ -1666,7 +1697,7 @@ export async function familyApi(req, env, path, ctx = null) {
       await db.del(`post:${fid}:${id}`);
       await db.del(`report:${fid}:${id}`);
       await db.put(`feed:${fid}`, ((await db.get(`feed:${fid}`)) || []).filter((x) => x !== id));
-      if (p.photoId) await deletePhoto(blobStore(env), fid, p.photoId).catch(() => {});
+      if (p.photoId) await deletePhoto(blobStore(env), fid, p.photoId, db).catch(() => {});
       return json({ ok: true });
     }
   }
@@ -1840,7 +1871,7 @@ function chatHub(db, fid) {
 // Someone leaving: their one-to-one chats go (and, when their account goes, their group messages).
 async function forgetInChats(db, fid, memberId, all) {
   const r = await chatHub(db, fid).call('forget', { member: memberId, all }).catch(() => null);
-  for (const id of r?.files || []) await deletePhoto(db.blobs, fid, id).catch(() => {});
+  for (const id of r?.files || []) await deletePhoto(db.blobs, fid, id, db).catch(() => {});
 }
 async function removeMember(db, fam, t, { keepPosts = true } = {}) {
   fam.members = fam.members.filter((x) => x.id !== t.id);
@@ -1872,7 +1903,7 @@ async function scrubPosts(db, fid, uid, memberId) {
   for (const id of ids) {
     const p = await db.get(`post:${fid}:${id}`);
     if (!p) continue;
-    if ((memberId && p.by === memberId) || p.byUid === uid) { await db.del(`post:${fid}:${id}`); await db.del(`report:${fid}:${id}`); if (p.photoId) await deletePhoto(db.blobs, fid, p.photoId).catch(() => {}); continue; }
+    if ((memberId && p.by === memberId) || p.byUid === uid) { await db.del(`post:${fid}:${id}`); await db.del(`report:${fid}:${id}`); if (p.photoId) await deletePhoto(db.blobs, fid, p.photoId, db).catch(() => {}); continue; }
     keep.push(id);
     const comments = p.comments.filter((c) => c.uid !== uid), likes = p.likes.filter((u) => u !== uid);
     if (comments.length !== p.comments.length || likes.length !== p.likes.length) await db.put(`post:${fid}:${id}`, { ...p, comments, likes });

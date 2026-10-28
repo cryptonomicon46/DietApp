@@ -12,6 +12,7 @@ function fakeR2() {
     o,
     put: async (k, v) => { o.set(k, new Uint8Array(v)); },
     get: async (k) => (o.has(k) ? { arrayBuffer: async () => o.get(k).buffer.slice(0) } : null),
+    head: async (k) => (o.has(k) ? { size: o.get(k).length } : null),
     delete: async (keys) => { for (const k of [].concat(keys)) o.delete(k); },
     list: async ({ prefix }) => ({ objects: [...o].filter(([k]) => k.startsWith(prefix)).map(([key, v]) => ({ key, size: v.length })), truncated: false }),
   };
@@ -49,7 +50,8 @@ test('photo files: locked, counted, shared with friends, moved once, deleted wit
   assert.equal(post.photoLocked, true);
   const inv = await call(`${F}/invites`, sam, 'POST', { kind: 'family', email: 'friend@example.com' });
   await call(`/invites/${inv.invite.code}/accept`, friend, 'POST', { familyName: 'Friends' });
-  assert.equal((await call(`${F}/photos/abcdefgh1234?size=thumb`, friend)).status, 200);
+  assert.equal((await call(`${F}/photos/abcdefgh1234?size=thumb&in=post:${post.id}`, friend)).status, 200, 'on a post shared with them');
+  assert.equal((await call(`${F}/photos/abcdefgh1234?size=thumb`, friend)).status, 404, 'a friend must name the shared post');
   assert.equal((await call(`${F}/photos/abcdefgh1234?size=thumb`, friend, 'PUT', null, locked)).status, 404, 'friends can look, not change');
 
   // The family's space is full: no more uploads.
@@ -60,6 +62,7 @@ test('photo files: locked, counted, shared with friends, moved once, deleted wit
 
   // Moving an older inline photo out: once, the second phone gets "already moved".
   const { post: old } = await call(`${F}/posts`, sam, 'POST', { text: 'e1:AAAA', photo: 'e1:BBBB' });
+  await call(`${F}/photos/moved0000001?size=full`, sam, 'PUT', null, locked);
   assert.equal((await call(`/posts/${family.fid}/${old.id}`, sam, 'PATCH', { photoId: 'moved0000001', aspect: 1 })).ok, true);
   assert.equal((await call(`/posts/${family.fid}/${old.id}`, sam, 'PATCH', { photoId: 'moved0000002', aspect: 1 })).status, 409);
   const page = await call(`${F}/posts`, sam);

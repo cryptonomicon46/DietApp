@@ -552,12 +552,13 @@ function rememberPhoto(id, size, bytes) {
   photoCache(k, bytes);
   return photoUrls.get(k);
 }
-async function photoUrl(fid, id, size, key) {
+// `pin` names what a friends' family's photo is on (post:<id> or thread:<id>): the server checks it.
+async function photoUrl(fid, id, size, key, pin = '') {
   const k = `${id}:${size}`;
   if (photoUrls.has(k)) return photoUrls.get(k);
   const cached = await photoCached(k);
   if (cached) { photoUrls.set(k, URL.createObjectURL(new Blob([cached], { type: 'image/jpeg' }))); return photoUrls.get(k); }
-  const locked = await api.bytes('GET', `/families/${fid}/photos/${id}?size=${size}`);
+  const locked = await api.bytes('GET', `/families/${fid}/photos/${id}?size=${size}${pin && fid !== state.fid ? `&in=${pin}` : ''}`);
   return rememberPhoto(id, size, key ? await openBytes(key, locked) : locked);
 }
 async function photoDataUrl(fid, id, key) {
@@ -571,7 +572,7 @@ async function photoDataUrl(fid, id, key) {
 function photoBox(p, cls = '') {
   photoKeys.set(p.photoId, p._key || null);
   const src = photoUrls.get(`${p.photoId}:thumb`) || '';
-  return `<button type="button" class="ph ${cls}" style="aspect-ratio:${cls === 'grid' ? 1 : p.aspect || 1}" data-photoid="${p.photoId}" data-pfid="${p.fid}" aria-label="Open photo"><img alt="" ${src ? `src="${src}"` : ''}></button>`;
+  return `<button type="button" class="ph ${cls}" style="aspect-ratio:${cls === 'grid' ? 1 : p.aspect || 1}" data-photoid="${p.photoId}" data-pfid="${p.fid}" data-pin="post:${p.id}" aria-label="Open photo"><img alt="" ${src ? `src="${src}"` : ''}></button>`;
 }
 const photoSeen = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver((list) => {
   for (const x of list) {
@@ -580,17 +581,17 @@ const photoSeen = typeof IntersectionObserver !== 'undefined' ? new Intersection
     const el = x.target, id = el.dataset.photoid, img = el.querySelector('img');
     if (img.getAttribute('src')) continue;
     el.classList.add('loading');
-    photoUrl(el.dataset.pfid, id, 'thumb', photoKeys.get(id)).then((u) => { img.src = u; }).catch(() => { el.classList.add('missing'); }).finally(() => el.classList.remove('loading'));
+    photoUrl(el.dataset.pfid, id, 'thumb', photoKeys.get(id), el.dataset.pin).then((u) => { img.src = u; }).catch(() => { el.classList.add('missing'); }).finally(() => el.classList.remove('loading'));
   }
 }, { rootMargin: '600px 0px' }) : null;
 // Any photo box that appears on screen (feed, a person's page) gets watched.
-new MutationObserver(() => { for (const el of document.querySelectorAll('.ph[data-photoid]:not([data-w])')) { el.dataset.w = '1'; if (photoSeen) photoSeen.observe(el); else photoUrl(el.dataset.pfid, el.dataset.photoid, 'thumb', photoKeys.get(el.dataset.photoid)).then((u) => { el.querySelector('img').src = u; }).catch(() => {}); } })
+new MutationObserver(() => { for (const el of document.querySelectorAll('.ph[data-photoid]:not([data-w])')) { el.dataset.w = '1'; if (photoSeen) photoSeen.observe(el); else photoUrl(el.dataset.pfid, el.dataset.photoid, 'thumb', photoKeys.get(el.dataset.photoid), el.dataset.pin).then((u) => { el.querySelector('img').src = u; }).catch(() => {}); } })
   .observe(document.body, { childList: true, subtree: true });
 // Tap: the full photo.
-async function photoViewer(fid, id) {
+async function photoViewer(fid, id, pin) {
   const inAlbum = al.open?.photos.some((p) => p.id === id) && me()?.relation !== 'child';
   openSheet(`<div class="viewer"><img alt="" src="${photoUrls.get(`${id}:thumb`) || ''}"><p class="small muted center" id="viewerNote">Loading the full photo…</p><div class="row end">${inAlbum ? `<button type="button" class="linkish small danger" data-act="albumrm" data-id="${id}">Remove from album</button><button type="button" class="ghost" data-act="albumback">Back</button>` : '<button type="button" class="ghost" data-act="close">Close</button>'}</div></div>`);
-  try { const u = await photoUrl(fid, id, 'full', photoKeys.get(id)); const img = $('.viewer img'); if (img) img.src = u; $('#viewerNote')?.remove(); }
+  try { const u = await photoUrl(fid, id, 'full', photoKeys.get(id), pin); const img = $('.viewer img'); if (img) img.src = u; $('#viewerNote')?.remove(); }
   catch { if ($('#viewerNote')) $('#viewerNote').textContent = "Couldn't load the full photo."; }
 }
 // Older posts kept their photo inside: moved to files in the background, once per family per
@@ -2275,7 +2276,7 @@ function renderThread() {
     : `<div class="cat">${ico} ${cat} · ${esc(boardName(t.board))}${t.movedBy ? ` <small class="muted">· moved by ${esc(t.movedBy)}</small>` : ''}</div><h2 class="thtitle">${esc(t.title)}</h2>
        <div class="post first"><span class="av a1">${esc((t.byName || '?')[0])}</span><div class="grow"><div class="h"><b>${esc(t.mine ? 'You' : t.byName)}</b>${t.own ? '' : ` · ${esc(t.familyName)}`} · ${ago(t.at)} · #1${t.editedAt ? ' · edited' : ''}</div><div class="t thbody">${mention(blocks.map(blockHtml).join(''))}</div>${tagLine}</div></div>${pollHtml}`;
   for (const x of t.shots || []) photoKeys.set(x.id, t._key || null);
-  const shotsHtml = t.shots?.length ? `<div class="thshots">${t.shots.map((x) => `<figure><button type="button" class="ph grid" data-photoid="${x.id}" data-pfid="${t.fid}" aria-label="Open screenshot${x.cap ? `: ${esc(x.cap)}` : ''}"><img alt=""></button>${x.cap ? `<figcaption>${esc(x.cap)}</figcaption>` : ''}</figure>`).join('')}</div>` : '';
+  const shotsHtml = t.shots?.length ? `<div class="thshots">${t.shots.map((x) => `<figure><button type="button" class="ph grid" data-photoid="${x.id}" data-pfid="${t.fid}" data-pin="thread:${t.id}" aria-label="Open screenshot${x.cap ? `: ${esc(x.cap)}` : ''}"><img alt=""></button>${x.cap ? `<figcaption>${esc(x.cap)}</figcaption>` : ''}</figure>`).join('')}</div>` : '';
   const docsHtml = t.docs?.length ? `<div class="thdocs">${t.docs.map((x) => `<button type="button" class="doccard" data-docopen="${x.id}"><span class="dc-i">📄</span><span class="grow"><b>${esc(x.name)}</b><small>${[x.pages ? `${x.pages} page${x.pages === 1 ? '' : 's'}` : '', x.size ? fileSize(x.size) : ''].filter(Boolean).join(' · ')}</small></span><span class="muted">›</span></button>`).join('')}</div>` : '';
   const replies = letter ? t.replies.filter((r) => r.quote == null || typeof r.quote !== 'number') : t.replies;
   const sorted = t.cat === 'ask' ? [...replies].sort((a, b) => (b.id === t.bestId) - (a.id === t.bestId) || b.ups - a.ups || a.at - b.at) : replies;
@@ -2380,7 +2381,7 @@ async function docOpen(id) {
   openSheet(`<div class="row between"><h2>📄 ${esc(d.name)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div><p class="small muted" id="docNote">Opening…</p>`);
   try {
     if (!docUrls.has(id)) {
-      const locked = await api.bytes('GET', `/families/${t.fid}/photos/${id}?size=doc`);
+      const locked = await api.bytes('GET', `/families/${t.fid}/photos/${id}?size=doc${t.fid !== state.fid ? `&in=thread:${t.id}` : ''}`);
       const bytes = t._key ? await openBytes(t._key, locked) : locked;
       docUrls.set(id, URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })));
     }
@@ -4096,7 +4097,7 @@ document.addEventListener('click', (e) => {
     });
   }
   if (d.bingogame) { bingo.game = d.bingogame; return bingoGame(); }
-  if (d.photoid && t.classList.contains('ph')) return photoViewer(d.pfid, d.photoid);
+  if (d.photoid && t.classList.contains('ph')) return photoViewer(d.pfid, d.photoid, d.pin);
   if (d.momentedit) return momentSheet({ id: d.momentedit });
   if (d.watchaud) { const [id, aud] = d.watchaud.split(':'); return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { aud }); await watchSaved(); toast(aud === 'family' ? '👨‍👩‍👧 Shared with the family' : '🔒 Just you two now'); }); }
   if (d.watchtab) { watch.tab = d.watchtab; return renderWatch(); }

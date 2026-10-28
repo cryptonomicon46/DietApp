@@ -14,6 +14,7 @@ const day = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '');
 
 export async function marketRoutes(c) {
   const { path, method, body, db, user, families, loadFamily, meIn, sealed, clean, randomId, tell, json, blobs } = c;
+  const owns = c.owns || (async () => true);
   // The listing's box: sealed, or (a family not yet encrypted) plain fields, cleaned.
   const boxOf = (fam, v) => sealed(v, 6000) ?? (fam.e2ee || !v || typeof v !== 'object' ? null
     : { title: clean(v.title, 80), body: clean(v.body, 600), price: Number.isFinite(+v.price) && v.price !== '' ? Math.max(0, Math.round(+v.price)) : null });
@@ -59,13 +60,14 @@ export async function marketRoutes(c) {
     const aud = body.aud === 'family' ? 'family' : 'connections';
     const pk = aud === 'connections' && body.pk && sealed(body.pk.fam, 300) ? { fam: body.pk.fam, conns: Object.fromEntries(Object.entries(body.pk.conns || {}).filter(([f, v]) => (fam.connections || []).includes(f) && sealed(v, 300))) } : null;
     if (fam.e2ee && aud === 'connections' && !pk) return json({ error: 'missing the listing\'s key' }, 400);
+    if (okPhotoId(body.photoId) && !(await owns(fam.fid, [body.photoId], me.id))) return json({ error: 'that photo isn\'t yours to list' }, 403);
     // Full: the oldest finished listings make room; a market of only open ones is full.
     const keep = [...list];
     while (keep.length >= MAX_ITEMS) {
       const i = keep.map((x) => x.status).lastIndexOf('done');
       if (i < 0) return json({ error: `that's ${MAX_ITEMS} listings — mark some done or remove them first` }, 400);
       const [gone] = keep.splice(i, 1);
-      if (gone.photoId) await deletePhoto(blobs, fam.fid, gone.photoId).catch(() => {});
+      if (gone.photoId) await deletePhoto(blobs, fam.fid, gone.photoId, db).catch(() => {});
     }
     const item = { id: randomId(8), kind: body.kind, aud, box, ...(pk ? { pk } : {}), ...(okPhotoId(body.photoId) && blobs ? { photoId: body.photoId, aspect: Math.min(3, Math.max(0.3, +body.aspect || 1)) } : {}),
       status: 'open', by: me.id, byUid: user.uid, byName: me.name, at: Date.now(), lend: null, interest: [] };
@@ -113,7 +115,7 @@ export async function marketRoutes(c) {
     return json({ item: out(item, fam, own) });
   }
   if (method === 'DELETE') {
-    if (item.photoId) await deletePhoto(blobs, fam.fid, item.photoId).catch(() => {});
+    if (item.photoId) await deletePhoto(blobs, fam.fid, item.photoId, db).catch(() => {});
     await db.put(key, list.filter((x) => x !== item));
     return json({ ok: true });
   }

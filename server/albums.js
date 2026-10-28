@@ -11,6 +11,7 @@ const GOOGLE_PHOTOS = /^https:\/\/(photos\.app\.goo\.gl|photos\.google\.com)\/[^
 
 export async function albumRoutes(c) {
   const { path, method, body, db, loadFamily, meIn, sealed, clean, randomId, json, blobs } = c;
+  const owns = c.owns || (async () => true);
   const m = path.match(/^\/families\/([a-z0-9]+)\/albums(?:\/([a-z0-9]+))?$/);
   if (!m) return null;
   const fam = await loadFamily(m[1]);
@@ -47,10 +48,11 @@ export async function albumRoutes(c) {
     if (adult && body.title != null) { const t = title(body.title); if (!t) return json({ error: 'name the album' }, 400); a.title = t; }
     if (adult && body.link != null) { const l = link(body.link); if (l === null) return json({ error: 'that isn\'t a Google Photos album link' }, 400); a.link = l; }
     const add = (Array.isArray(body.add) ? body.add : []).filter((p) => okPhotoId(p?.id) && !a.photos.some((x) => x.id === p.id));
+    if (!(await owns(fam.fid, add.map((p) => p.id), me.id))) return json({ error: 'that photo isn\'t yours to add' }, 403);
     if (a.photos.length + add.length > MAX_PHOTOS) return json({ error: `an album holds ${MAX_PHOTOS} photos — start another one` }, 400);
     a.photos.push(...add.map((p) => ({ id: p.id, aspect: Math.min(3, Math.max(0.3, +p.aspect || 1)), by: me.id, at: Date.now() })));
     const remove = adult && Array.isArray(body.remove) ? body.remove.filter((id) => a.photos.some((x) => x.id === id)) : [];
-    for (const id of remove) await deletePhoto(blobs, fam.fid, id).catch(() => {});
+    for (const id of remove) await deletePhoto(blobs, fam.fid, id, db).catch(() => {});
     a.photos = a.photos.filter((x) => !remove.includes(x.id));
     if (adult && body.cover != null) a.cover = a.photos.some((x) => x.id === body.cover) ? body.cover : '';
     if (remove.includes(a.cover)) a.cover = '';
@@ -59,7 +61,7 @@ export async function albumRoutes(c) {
     return json({ album: { ...out(a), photos: a.photos } });
   }
   if (method === 'DELETE') {
-    for (const p of a.photos) await deletePhoto(blobs, fam.fid, p.id).catch(() => {});
+    for (const p of a.photos) await deletePhoto(blobs, fam.fid, p.id, db).catch(() => {});
     await db.put(key, list.filter((x) => x !== a));
     return json({ ok: true });
   }

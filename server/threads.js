@@ -18,6 +18,7 @@ const boardOk = (fam, b) => !!BOARDS[b] || (fam.boards || []).some((x) => x.id =
 
 export async function threadRoutes(c) {
   const { path, method, body, db, user, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url, blobs } = c;
+  const owns = c.owns || (async () => true);
   // 🏷️ Who's tagged: grown-ups and kids with accounts in your own family who can see the thread
   // (a just-us thread: only your partner). Stored as member ids; their accounts stay on the server.
   const tagsOf = (fam, me, aud, ids) => {
@@ -139,6 +140,8 @@ export async function threadRoutes(c) {
     if (shots.length) t.shots = shots;
     const docs = blobs ? docsOf(fam, body.docs) : [];
     if (docs.length) t.docs = docs;
+    // Only files you uploaded yourself can be attached.
+    if (!(await owns(fam.fid, [...shots, ...docs].map((x) => x.id), me.id))) return json({ error: 'that file isn\'t yours to attach' }, 403);
     const tg = tagsOf(fam, me, aud, body.tags);
     if (tg.tags.length) { t.tags = tg.tags; t.tagUids = tg.uids; }
     await db.put(`thread:${fam.fid}:${t.id}`, t);
@@ -176,14 +179,16 @@ export async function threadRoutes(c) {
       t.tags = tg.tags; t.tagUids = tg.uids;
       await tellTagged(added, me, t);
     }
+    const fresh = (old, next) => next.filter((x) => !(old || []).some((y) => y.id === x.id)).map((x) => x.id);
+    if (blobs && a.own && !(await owns(fid, [...fresh(t.shots, body.shots != null ? shotsOf(a.fam, body.shots) : []), ...fresh(t.docs, body.docs != null ? docsOf(a.fam, body.docs) : [])], meIn(a.fam).id))) return json({ error: 'that file isn\'t yours to attach' }, 403);
     if (body.shots != null && blobs) {
       const next = shotsOf(a.fam, body.shots);
-      for (const x of t.shots || []) if (!next.some((y) => y.id === x.id)) await deletePhoto(blobs, fid, x.id).catch(() => {});
+      for (const x of t.shots || []) if (!next.some((y) => y.id === x.id)) await deletePhoto(blobs, fid, x.id, db).catch(() => {});
       t.shots = next; t.editedAt = Date.now();
     }
     if (body.docs != null && blobs) {
       const next = docsOf(a.fam, body.docs);
-      for (const x of t.docs || []) if (!next.some((y) => y.id === x.id)) await deletePhoto(blobs, fid, x.id).catch(() => {});
+      for (const x of t.docs || []) if (!next.some((y) => y.id === x.id)) await deletePhoto(blobs, fid, x.id, db).catch(() => {});
       t.docs = next; t.editedAt = Date.now();
     }
     await save();
@@ -192,7 +197,7 @@ export async function threadRoutes(c) {
   if (!action && method === 'DELETE') {
     const owner = a.own && meIn(a.fam).role === 'owner';
     if (t.byUid !== user.uid && !owner) return json({ error: 'only who wrote it can delete it' }, 403);
-    for (const x of [...(t.shots || []), ...(t.docs || [])]) await deletePhoto(blobs, fid, x.id).catch(() => {});
+    for (const x of [...(t.shots || []), ...(t.docs || [])]) await deletePhoto(blobs, fid, x.id, db).catch(() => {});
     await db.del(key);
     await db.put(`threads:${fid}`, ((await db.get(`threads:${fid}`)) || []).filter((x) => x !== id));
     return json({ ok: true });

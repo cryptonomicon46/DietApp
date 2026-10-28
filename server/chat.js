@@ -209,6 +209,7 @@ export async function runOp(core, op, a) {
 // hub(fid) → {call(op, args) → out, live}: the family's Durable Object, or ChatCore right here.
 export async function chatRoutes(c) {
   const { path, method, body, user, loadFamily, meIn, tell, json, url, hub, blobs, deletePhoto } = c;
+  const owns = c.owns || (async () => true);
   const m = path.match(/^\/families\/([a-z0-9]+)\/chats(?:\/(ticket|[a-z0-9_]+)(?:\/(react|read|\d+))?)?$/);
   if (!m) return null;
   const [, fid, cid, action] = m;
@@ -238,6 +239,7 @@ export async function chatRoutes(c) {
   if (!action && method === 'POST') {
     const msg = cleanMessage(fam, body);
     if (!msg) return json({ error: fam.e2ee && typeof body.t === 'string' && !SEALED_RE.test(body.t) ? 'this family is end-to-end encrypted — update the app and try again' : 'write a message' }, 400);
+    if (!(await owns(fid, msg.p.map((f) => f.id), me.id))) return json({ error: 'that file isn\'t yours to send' }, 403);
     const r = await call('send', { chat, msg });
     // 🔔 Who it's for and isn't looking at this chat right now: who wrote, never what.
     const to = (r.notify || chat.with).filter((x) => x !== me.id);
