@@ -48,7 +48,7 @@ export async function threadRoutes(c) {
     id: t.id, fid: t.fid, aud: t.aud, board: t.board, movedBy: t.movedBy || '', cat: t.cat, title: t.title, by: t.by, byName: t.byName, byAvatar: t.byAvatar, mine: t.byUid === user.uid,
     at: t.at, lastAt: t.lastAt, lastByName: t.lastByName, replies: t.replies.filter((r) => !blocked.has(r.uid) && !hidden.has(r.id)).length, mins: t.mins || 1, pinned: !!t.pinned, shotCount: (t.shots || []).length, docCount: (t.docs || []).length, tagged: (t.tagUids || []).includes(user.uid),
     unread: (t.reads?.[user.uid] || 0) < t.lastAt && t.lastByUid !== user.uid, following: (t.followers || []).includes(user.uid), fav: favs.has(`${t.fid}:${t.id}`), own, familyName: famName,
-    best: !!t.best, poll: t.poll ? { closes: t.poll.closes, voted: t.poll.votes?.[user.uid] != null, n: Object.keys(t.poll.votes || {}).length } : null, ...(t.pk ? { pk: t.pk } : {}),
+    best: !!t.best, poll: t.poll ? { closes: t.poll.closes, voted: t.poll.votes?.[user.uid] != null, n: Object.keys(t.poll.votes || {}).length } : null, ...(t.pk ? { pk: t.pk } : {}), ...(t.ref ? { ref: t.ref } : {}),
   });
   const full = (t, own, fam) => ({
     ...summary(t, own, fam?.name || ''), body: t.body, editedAt: t.editedAt || null, shots: t.shots || [], docs: t.docs || [], tags: t.tags || [],
@@ -138,10 +138,19 @@ export async function threadRoutes(c) {
     // The same thread sent again (a retry): the one already saved.
     const cid = /^[a-z0-9]{8,24}$/.test(body.cid || '') ? body.cid : null;
     if (cid) { const had = await db.get(`threadcid:${user.uid}:${cid}`); const t = had && await db.get(`thread:${fam.fid}:${had}`); if (t) return json({ thread: full(t, true, fam), dup: true }); }
+    // 💬 Discuss from a show or a date idea: `ref` names the thing (an id, never its title), and
+    // the thread already started about it — by either of you — is the one you get.
+    const ref = /^[a-z]:[A-Za-z0-9_-]{4,64}$/.test(body.ref || '') ? body.ref : null;
+    if (ref) {
+      for (const id of (await db.get(`threads:${fam.fid}`)) || []) {
+        const t = await db.get(`thread:${fam.fid}:${id}`);
+        if (t?.ref === ref && visible(t, true)) return json({ thread: full(t, true, fam), dup: true });
+      }
+    }
     const now = Date.now();
     const t = { id: `${(1e13 - now).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '', aud, to: aud === 'us' ? [user.uid, partner.uid] : [],
       board: aud === 'us' ? 'us' : aud === 'connections' ? 'friends' : boardOk(fam, body.board) ? body.board : 'family', cat, title, body: b, mins: Math.max(1, Math.min(60, Math.round(+body.mins || 1))),
-      at: now, lastAt: now, lastByUid: user.uid, lastByName: me.name, replies: [], reads: { [user.uid]: now }, followers: [user.uid], ...(poll ? { poll } : {}), ...(pk ? { pk } : {}) };
+      at: now, lastAt: now, lastByUid: user.uid, lastByName: me.name, replies: [], reads: { [user.uid]: now }, followers: [user.uid], ...(poll ? { poll } : {}), ...(pk ? { pk } : {}), ...(ref ? { ref } : {}) };
     const shots = blobs ? shotsOf(fam, body.shots) : [];
     if (shots.length) t.shots = shots;
     const docs = blobs ? docsOf(fam, body.docs) : [];

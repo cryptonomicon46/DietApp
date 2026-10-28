@@ -58,5 +58,14 @@ for (let i = 0; i < 12; i++) await call(`/families/${fid}/chats/${i % 3 ? dm : '
 // 🙋 A request from Pat and a few groceries, as a household would have.
 await call(`/families/${fid}/requests`, pat, 'POST', { kind: 'ride', box: await L('A ride to the airport on Friday') });
 await call(`/families/${fid}/groceries`, sam, 'POST', { items: await Promise.all(['Milk', 'Eggs', 'Bread', 'Dog food'].map(L)) });
+// 📺 Watch: two on the go (one with history), an Up Next, a Want to Watch, a finished one, and
+// an older movie with no status (read as Watched, as before 2.0).
+const W = `/families/${fid}/watch`;
+const shows = [['Severance', 'appletv', 'show', 'watching'], ['The Bear', 'hulu', 'show', 'watching'], ['Silo', 'appletv', 'show', 'upnext'], ['Slow Horses', 'appletv', 'show', 'want'], ['Shogun', 'hulu', 'show', 'finished'], ['Past Lives', 'other', 'movie', null]];
+for (const [title, service, kind, status] of shows) {
+  const { show } = await call(W + '/shows', sam, 'POST', { aud: 'us', ...(status ? { status } : {}), body: await L({ title, service, kind, date: '2026-10-01' }) });
+  if (title === 'Severance') await call(`${W}/shows/${show.id}`, sam, 'PATCH', { progress: { s: 2, e: 3 }, night: '2026-10-20' });
+  if (title === 'The Bear') await call(`${W}/shows/${show.id}`, pat, 'PATCH', { progress: { s: 1, e: 5 }, night: '2026-10-25' });
+}
 writeFileSync(OUT, JSON.stringify({ fid, k, sam, pat }));
 console.log('seeded', fid);

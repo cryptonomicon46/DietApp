@@ -1000,3 +1000,31 @@ body.in-chat main { padding-bottom: 0; }
 /* A file input that stays reachable by keyboard: invisible, with the focus ring on its label. */
 .vh { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
 label:has(> .vh:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+
+/* 📺 2.0 Watch: a prominent card at the top of Us, and cards with one action each */
+.us-watch { border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line)); background: linear-gradient(160deg, var(--brand-soft), var(--card) 65%); min-height: 214px; }
+.uw-list { display: grid; margin: 6px 0 4px; }
+.uw-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+.uw-row:first-child { border-top: 0; }
+.uw-main { flex: 1; min-width: 0; display: grid; gap: 2px; justify-items: start; justify-content: start; align-content: center; background: none; color: var(--ink); text-align: left; font-weight: 400; padding: 4px 0; min-height: 44px; }
+.uw-main b, .uw-main small { display: block; overflow-wrap: anywhere; }
+.uw-row > button.small { flex-shrink: 0; min-height: 40px; }
+.uw-foot { gap: 8px; margin-top: 8px; }
+.uw-foot button { min-height: 44px; }
+.show-card { grid-template-columns: 1fr; }
+.show-main { display: grid; gap: 4px; justify-items: start; justify-content: start; width: 100%; background: none; color: var(--ink); text-align: left; font-weight: 400; padding: 0; }
+.show-do { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.show-do .small { min-height: 40px; }
+.show-card.watched { border-color: color-mix(in srgb, var(--brand) 50%, var(--line)); }
+.wl-h { margin: 14px 4px 8px; font-size: .9rem; }
+.pg-row { align-items: center; gap: 8px; }
+.pg-row .icon-btn { min-width: 44px; min-height: 44px; font-size: 1.2rem; }
+details.more { margin-top: 10px; }
+details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
+.us-acts { gap: 8px; margin-top: 10px; }
+.us-book { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); }
+.us-book .go { color: var(--muted); }
+.uw-main .svc { font-size: .66rem; padding: 1px 6px; margin-right: 2px; }
+.watch-head + .seg button { font-size: .85rem; white-space: nowrap; padding-left: 6px; padding-right: 6px; }
+.show-do:has(> .icon-btn:only-child) { justify-content: flex-end; }
+.watch-head + .seg { margin-bottom: 12px; }

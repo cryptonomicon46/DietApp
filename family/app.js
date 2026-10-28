@@ -1597,46 +1597,60 @@ function usBadge() {
   b.hidden = !n || state.view === 'us';
   b.textContent = n > 9 ? '9+' : String(n);
 }
+// 💞 Us: what the two of you want to do together — 📺 Watch first (what are we watching, what's
+// next), then what's waiting on you, ❤️ Dates, ✨ Ideas for Us and 💌 notes.
 async function usView() {
   const p = partnerMember();
-  if (!p) { $('#view').innerHTML = `${demoBanner()}<section class="card stack"><h2>💞 Us</h2><p class="small">A private space for you and your partner: love notes, plans, date nights and what you're watching. Add your spouse or partner to the family (Me › ＋ Person) to start.</p></section>`; return; }
+  if (!p) { $('#view').innerHTML = `${demoBanner()}<section class="card stack"><h2>💞 Us</h2><p class="small">A private space for you and your partner: what you're watching, date nights, ideas and love notes. Add your spouse or partner to the family (Me › ＋ Person) to start.</p></section>`; return; }
   $('#view').innerHTML = `${demoBanner()}<div class="us-page">
     <div class="us-title"><h2>💞 ${esc(me().name)} &amp; ${esc(p.name)}</h2><span class="small muted" id="usSub">🔒 Just you two</span></div>
+    <section class="card us-watch" id="usWatch" aria-labelledby="usWatchH"><h2 class="card-h" id="usWatchH">📺 Watch</h2><div class="skeleton line"></div><div class="skeleton line"></div></section>
     <section id="usFor"></section>
-    <section class="card" id="usNotesC"><div class="skeleton line"></div></section>
-    <section class="card" id="usBookC"></section>
-    <section class="card" id="usPlansC"></section>
+    <section class="card" id="usDatesC"></section>
     <section class="card" id="usIdeasC" hidden></section>
-    <section class="card" id="usOutC"></section>
-    <section class="card" id="usRhythmC"></section>
-    <section id="usTonight"></section></div>`;
+    <section class="card" id="usNotesC"><div class="skeleton line"></div></section>
+    <div id="usBook"></div></div>`;
   importUs().catch(() => {});
-  await Promise.all([loadUs(), loadRhythm().then((r) => { calm.rhythm = r; }).catch(() => {}), loadWatch().catch(() => {}), loadIdeas().catch(() => {}), loadThreads().catch(() => {})]);
+  // Watch draws as soon as it's in; the rest when everything has arrived.
+  const w = loadWatch().then(() => { if (state.view === 'us') renderUsWatch(); }).catch(() => { const el = $('#usWatch'); if (el) el.innerHTML = '<h2 class="card-h">📺 Watch</h2><p class="small muted">Couldn\'t load the watchlist just now.</p><button type="button" class="ghost wide" data-view="watch">Open Watchlist →</button>'; });
+  await Promise.all([loadUs(), loadRhythm().then((r) => { calm.rhythm = r; }).catch(() => {}), w, loadIdeas().catch(() => {}), loadThreads().catch(() => {})]);
   if (state.view !== 'us') return;
   renderUs();
-  loadTv().then(() => { if (state.view === 'us' && $('#usNotesC')) { renderUs(); usBadge(); } }).catch(() => {});
+  loadTv().then(() => { if (state.view === 'us' && $('#usWatch')) { renderUsWatch(); usBadge(); } }).catch(() => {});
   // Opening Us counts its new notes as seen (after this visit's "new" marks are drawn).
   LS.set(usSeenKey(), String(Date.now()));
   usBadge();
 }
+// 📺 The Watch card: "2 watching · 3 want to watch", the shows that matter tonight, one action each.
+function renderUsWatch() {
+  const el = $('#usWatch');
+  if (!el || !watch.S) return;
+  const p = watch.S.usPreview(watch.shows);
+  const line = (x) => {
+    const life = watch.S.lifecycle(x);
+    const what = x.ep?.newCount ? `🆕 ${x.ep.newCount} new episode${x.ep.newCount === 1 ? '' : 's'}` : life === 'watching' ? (pgText(x.progress) ? `Watching · ${pgText(x.progress)}` : 'Watching') : watch.S.isUpNext(x) ? '⭐ Up Next' : 'Want to Watch';
+    return `<div class="uw-row"><button type="button" class="uw-main" data-watchopen="${x.id}" aria-label="${esc(x.title)}: details"><b>${esc(x.title)}</b><small class="muted">${svcBadge(x.service)} ${esc(what)}</small></button>${watchPrimary(x, true)}</div>`;
+  };
+  el.innerHTML = `<div class="row between"><h2 class="card-h" id="usWatchH">📺 Watch</h2>${p.watching || p.want ? `<span class="small muted">${p.watching} watching · ${p.want} want to watch</span>` : ''}</div>
+    ${p.items.length ? `<div class="uw-list">${p.items.map(line).join('')}</div>` : '<p class="small muted">What are you two watching? Add it, and what you want to watch next.</p>'}
+    <div class="row uw-foot"><button type="button" class="grow" data-view="watch">Open Watchlist →</button><button type="button" class="ghost" data-act="watchadd" aria-label="Add a show or movie">＋ Add</button></div>`;
+}
 function renderUs() {
   if (!$('#usNotesC')) return;
+  renderUsWatch();
   const meId = fam().me, f = forYou(), pName = partnerName();
   const wn = (p) => (KINDS[p.kind] || KINDS.other);
   $('#usSub').textContent = `🔒 Just you two${us.streak > 1 ? ` · 💌 ${us.streak}-day note streak` : ''}`;
   // For you
-  $('#usFor').innerHTML = f.ask.length || f.notes.length || f.after.length ||  f.matches.length || f.letters.length || f.eps.length ? `<div class="foryou"><div class="row between"><b class="small up">For you</b>${f.count ? `<span class="small" style="color:var(--like);font-weight:800">${f.count}</span>` : ''}</div>
-    ${f.eps.map((x) => `<div class="fy"><span class="fy-i">🆕</span><div><b>${esc(x.title)}: ${x.ep.newCount} new episode${x.ep.newCount === 1 ? '' : 's'}</b><small>E${x.ep.from}${x.ep.to !== x.ep.from ? `–${x.ep.to}` : ''} out ${x.ep.latest === isoLocal() ? 'today' : shortDay(x.ep.latest)}${x.ep.nextDrop ? ` · next ${shortDay(x.ep.nextDrop)}` : ''}</small>
-      <div class="ans"><button type="button" class="small" data-watchnight="${x.id}">📺 Watching tonight</button><button type="button" class="ghost small" data-epseen="${x.id}:${x.ep.latest}">Later</button></div></div></div>`).join('')}
-    ${f.letters.map((t) => `<div class="fy"><span class="fy-i">📓</span><div><b>${t.mine ? `${esc(t.lastByName)} added a note to “${esc(t.title)}”` : `${esc(t.byName)} wrote: ${esc(t.title)}`}</b><small>${t.mins} min read${t.replies ? ` · ${t.replies} note${t.replies === 1 ? '' : 's'}` : ''}${LS.get(`fam.tonight.${t.id}`) ? ' · 🌙 saved for tonight' : ''}</small>
-      <div class="ans"><button type="button" class="small" data-thread="${t.fid}:${t.id}">Read</button>${LS.get(`fam.tonight.${t.id}`) ? '' : `<button type="button" class="ghost small" data-tonightlater="${t.id}">🌙 Tonight</button>`}</div></div></div>`).join('')}
+  // (New episodes show on the Watch card above, not here as well.)
+  // Only what needs an answer from you: new notes and write-ups show in Notes and Our notebook.
+  $('#usFor').innerHTML = f.ask.length || f.after.length || f.matches.length ? `<div class="foryou"><div class="row between"><b class="small up">For you</b>${f.ask.length + f.after.length + f.matches.length > 1 ? `<span class="small" style="color:var(--like);font-weight:800">${f.ask.length + f.after.length + f.matches.length}</span>` : ''}</div>
     ${f.matches.map((m) => `<div class="fy"><span class="fy-i">💞</span><div><b>It's a match: ${esc(m.idea.title)}</b><small>You both 💗 it${m.idea.day ? ` · ${esc(dayText(m.idea.day, m.idea.time))}` : ''}</small>
-      <div class="ans"><button type="button" class="small" data-match="${esc(m.t)}">📅 Make it a plan</button></div></div></div>`).join('')}
+      <div class="ans"><button type="button" class="small" data-match="${esc(m.t)}">📅 Make it a plan</button><button type="button" class="ghost small" data-discuss="i:${esc(m.t)}" data-dtitle="${esc(`💡 ${m.idea.title}`)}">💬 Discuss</button></div></div></div>`).join('')}
     ${f.ask.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>${esc(member(x.by)?.name || pName)} suggested ${esc(planTitle(x).toLowerCase().startsWith('date night') ? 'a date night' : planTitle(x))}</b><small>${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}${x.note ? ` · “${esc(x.note)}”` : ''}</small>
       ${x.idea ? ideaStrip(x) : ''}
       ${x.outing ? `<small class="muted">${x.outing.stops.map((st) => `${STOP_ICON[st.kind] || '📍'} ${esc(hm(st.time))}`).join(' → ')}</small><button type="button" class="linkish small" data-outplan="${x.id}">🧭 See the plan</button>` : ''}
       <div class="ans">${Object.entries(ANSWERS).map(([k, t], i) => `<button type="button" class="${i ? 'ghost' : ''} small" data-answer="${x.id}:${k}">${t}</button>`).join('')}</div></div></div>`).join('')}
-    ${f.notes.map((n) => `<div class="fy"><span class="fy-i">💌</span><div><b>New note from ${esc(member(n.by)?.name || pName)}</b><small>“${esc(n.text)}”</small></div><button type="button" class="heart" data-noteheart="${n.id}" aria-label="Heart">${n.hearts?.includes(meId) ? '❤️' : '🤍'}</button></div>`).join('')}
     ${f.after.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>How was ${esc(x.outing ? x.outing.title : (FOOD_KINDS.includes(x.kind) && x.where) || planTitle(x))}?</b><small>${esc(planWhen(x))}</small>
       <div class="ans"><button type="button" class="small" data-rate="${x.id}">⭐ Rate it</button><button type="button" class="ghost small" data-rateskip="${x.id}">Skip</button></div></div></div>`).join('')}</div>` : '';
   // Notes
@@ -1651,33 +1665,27 @@ function renderUs() {
   const status = (x) => (x.agreed ? '<span class="tag tg">You\'re both in 🎉</span>'
     : x.by === meId ? (x.to.map((id) => x.replies?.[id]?.r).find(Boolean) ? `<span class="tag tw">${esc(pName)}: ${esc(ANSWERS[x.to.map((id) => x.replies?.[id]?.r).find(Boolean)].replace(/^\S+ /, '').toLowerCase())}</span>` : `<span class="tag">waiting for ${esc(pName)}</span>`)
       : `<span class="tag">you: ${esc((ANSWERS[x.replies?.[meId]?.r] || '').replace(/^\S+ /, '').toLowerCase())}</span>`);
-  $('#usPlansC').innerHTML = `<div class="row between"><b class="us-h">✨ Plans</b><button type="button" class="linkish small" data-act="feel">＋ Suggest</button></div>
-    ${up.length ? up.map((x) => `<div class="planrow" data-plan="${x.id}"><span>${wn(x)[0]} <b>${esc(planTitle(x))}</b> <small class="muted">· ${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}</small>${x.outing ? ` <button type="button" class="linkish small" data-outplan="${x.id}">See plan</button>` : ''}${x.agreed && x.idea?.reserve ? ` <a class="linkish small" href="${esc(x.idea.reserve)}" target="_blank" rel="noopener">🍽 Reserve</a>` : ''}${x.agreed && x.idea?.kind === 'movie' && x.idea.url ? ` <a class="linkish small" href="${esc(x.idea.url)}" target="_blank" rel="noopener">🎟 Book seats</a>` : ''}</span>${status(x)}
-      ${x.by === meId && !x.agreed ? `<span class="planacts"><button type="button" class="linkish small" data-planmove="${x.id}">Another day</button> · <button type="button" class="linkish small" data-plandel="${x.id}">Cancel</button></span>` : ''}</div>`).join('')
-      : `<p class="small muted">Nothing planned. <button type="button" class="linkish" data-act="feel">Suggest something for this weekend ✨</button></p>`}`;
-  // 2-2-2-2
+  // ❤️ Dates: what's planned, the 2-2-2-2 rhythm, and the three ways to make a plan.
   const R = calm.R, list = calm.rhythm || [];
+  let rhythm = '';
   if (R) {
     const st = R.rhythmStatus(list, isoLocal());
     const chip = (k) => { const x = st[k]; const r = R.RHYTHMS[k]; if (k === 'close') return `<span class="rchip">${r.icon} ${x.count} of 2 this week</span>`; const name = r.label.replace('Multi-night ', '').toLowerCase(); return `<span class="rchip ${x.last && x.level === 'due' ? 'due' : ''}">${r.icon} ${!x.last ? `${name} · not yet` : x.level === 'due' ? `${name} due` : x.level === 'soon' ? `${name} soon` : `${name} ✓`}</span>`; };
     const dates = list.filter((e) => e.kind !== 'close').slice().reverse();
-    $('#usRhythmC').innerHTML = `<div class="row between"><b class="us-h">💞 2-2-2-2</b><button type="button" class="linkish small" data-act="lognew">❤️ Log a date</button></div>
-      <div class="rchips">${['date', 'close', 'overnight', 'getaway'].map(chip).join('')}</div>
-      ${dates.length ? `<details class="small"><summary>Last: ${R.momentIcon(dates[0])} ${esc(R.momentText(dates[0]))} · ${esc(new Date(`${dates[0].date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</summary><ul class="list">${dates.slice(0, 12).map((e) => `<li class="row between"><span>${R.momentIcon(e)} ${esc(R.momentText(e))}</span><span><small class="muted">${esc(new Date(`${e.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: e.date.slice(0, 4) !== isoLocal().slice(0, 4) ? 'numeric' : undefined }))}</small> <button type="button" class="linkish small" data-momentedit="${esc(e.id)}">✎</button></span></li>`).join('')}</ul></details>`
-        : '<p class="small muted">Log your dates and it keeps the rhythm: a date every 2 weeks, us time twice a week, an overnight twice a year, a getaway every 2 years.</p>'}`;
-  } else $('#usRhythmC').hidden = true;
-  renderIdeasCard(); renderOutingCard();
-  // 📓 Our notebook: the write-ups just for the two of you, newest first.
-  const book = th.list.filter((t) => t.aud === 'us').sort((a, b) => (b.pinned - a.pinned) || b.lastAt - a.lastAt);
-  $('#usBookC').innerHTML = `<div class="row between"><b class="us-h">📓 Our notebook</b><button type="button" class="linkish small" data-act="writeup">✍️ Write</button></div>
-    ${book.length ? book.slice(0, 6).map((t) => `<button type="button" class="nbrow" data-thread="${t.fid}:${t.id}"><span class="fp-i">${(THREAD_CATS[t.cat] || THREAD_CATS.learned)[0]}</span><span class="grow"><b>${t.unread ? '<i class="dot"></i>' : ''}${esc(t.title)}</b><small class="muted">${esc(t.mine ? 'You' : t.byName)} · ${ago(t.lastAt)}${t.replies ? ` · ✍️ ${t.replies}` : ''}${t.pinned ? ' · 📌' : ''}</small></span></button>`).join('')
-      : `<p class="small muted">Read something, tried something, had an idea? Write ${esc(pName)} about it while it's fresh — it waits here until they have a moment.</p>`}
-    ${book.length > 6 ? '<button type="button" class="linkish small" data-board="us" data-famtab="threads">All of it ›</button>' : ''}`;
-  // Tonight's show
-  const on = (watch.shows || []).filter((x) => x.status === 'watching').sort((a, b) => (b.ep?.newCount ? 1 : 0) - (a.ep?.newCount ? 1 : 0) || (watch.S?.lastActive(b) || '').localeCompare(watch.S?.lastActive(a) || ''))[0];
-  const tonightLogged = on?.nights.some((n) => n.date === isoLocal());
-  $('#usTonight').innerHTML = `<section class="card tonightc"><span class="big">🍿</span><div class="grow">${on ? `<b>${esc(on.title)}</b>${on.progress ? ` <small class="muted">S${on.progress.s || 1} · E${on.progress.e}</small>` : ''}${on.ep?.newCount ? ` <small class="ep-new">🆕 ${on.ep.newCount} new</small>` : ''}<br><small class="muted">${on.aud === 'family' ? '👨‍👩‍👧 shared with the family' : '🔒 just you two'}</small>` : '<b>Watching together</b><br><small class="muted">Add what you two are watching</small>'}</div>
-    ${on ? `<button type="button" class="${tonightLogged ? '' : 'ghost'} small" data-watchnight="${on.id}">${tonightLogged ? '✓ Tonight' : '📺 Tonight'}</button>` : ''}<button type="button" class="linkish small" data-view="watch">All ›</button></section>`;
+    rhythm = `<div class="rchips">${['date', 'close', 'overnight', 'getaway'].map(chip).join('')}</div>
+      ${dates.length ? `<details class="small"><summary>Last: ${R.momentIcon(dates[0])} ${esc(R.momentText(dates[0]))} · ${esc(new Date(`${dates[0].date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</summary><ul class="list">${dates.slice(0, 12).map((e) => `<li class="row between"><span>${R.momentIcon(e)} ${esc(R.momentText(e))}</span><span><small class="muted">${esc(new Date(`${e.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: e.date.slice(0, 4) !== isoLocal().slice(0, 4) ? 'numeric' : undefined }))}</small> <button type="button" class="linkish small" data-momentedit="${esc(e.id)}" aria-label="Edit">✎</button></span></li>`).join('')}</ul></details>` : ''}`;
+  }
+  $('#usDatesC').innerHTML = `<h2 class="card-h">❤️ Dates</h2>
+    ${up.length ? up.map((x) => `<div class="planrow" data-plan="${x.id}"><span>${wn(x)[0]} <b>${esc(planTitle(x))}</b> <small class="muted">· ${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}</small>${x.outing ? ` <button type="button" class="linkish small" data-outplan="${x.id}">See plan</button>` : ''}${x.agreed && x.idea?.reserve ? ` <a class="linkish small" href="${esc(x.idea.reserve)}" target="_blank" rel="noopener">🍽 Reserve</a>` : ''}${x.agreed && x.idea?.kind === 'movie' && x.idea.url ? ` <a class="linkish small" href="${esc(x.idea.url)}" target="_blank" rel="noopener">🎟 Book seats</a>` : ''}</span>${status(x)}
+      ${x.by === meId && !x.agreed ? `<span class="planacts"><button type="button" class="linkish small" data-planmove="${x.id}">Another day</button> · <button type="button" class="linkish small" data-plandel="${x.id}">Cancel</button></span>` : ''}</div>`).join('')
+      : '<p class="small muted">Nothing planned yet.</p>'}
+    ${rhythm}
+    <div class="row wrap us-acts"><button type="button" class="small" data-act="feel">✨ Suggest</button><button type="button" class="ghost small" data-act="outing">🧭 Plan an outing</button><button type="button" class="ghost small" data-act="lognew">❤️ Log a date</button></div>
+    ${savedOutings().length ? `<p class="tiny muted">Recent outings: ${savedOutings().slice(0, 3).map((o, i) => `<button type="button" class="linkish tiny" data-outsaved="${i}">${esc(o.title)}</button>`).join(' · ')}</p>` : ''}`;
+  renderIdeasCard();
+  // 📓 Your write-ups for each other live in Threads (Just us): one line here, not a second list.
+  const book = th.list.filter((t) => t.aud === 'us'), fresh = book.filter((t) => t.unread).length;
+  $('#usBook').innerHTML = `<button type="button" class="card nbrow us-book" data-board="us" data-famtab="threads"><span class="fp-i">📓</span><span class="grow"><b>Our notebook</b><small class="muted">${book.length ? `${book.length} write-up${book.length === 1 ? '' : 's'} just for you two${fresh ? ` · ${fresh} new` : ''}` : 'Write-ups just for you two, in Threads'}</small></span><span class="go">›</span></button>`;
 }
 // When you both say yes, the plan goes on the calendar for both of you (once).
 async function planToCalendar(p) {
@@ -1723,8 +1731,8 @@ function ideasCard() {
   const st = calm.R ? calm.R.rhythmStatus(calm.rhythm || [], isoLocal()).date : null;
   const due = st && (!st.last || st.level === 'due' || st.level === 'soon');
   const top = ideaDeck('all').filter((x) => !picked(x)).slice(0, 3);
-  return `<div class="row between"><b class="us-h">${due ? '💡 Time for a date?' : '💡 Date ideas'}</b><span><button type="button" class="linkish small" data-act="ideaset" aria-label="Date idea settings">⚙︎</button> <button type="button" class="linkish small" data-act="ideas">All ›</button></span></div>
-    ${due ? `<p class="small muted">${st.last ? 'It\'s been a while since your last date.' : 'Your first date on the 2-2-2-2 is waiting.'} 💗 what you'd like — when you both pick the same one, it's a match.</p>` : '<p class="tiny muted">🔒 Your 💗 stay private until you both pick the same one.</p>'}
+  return `<div class="row between"><h2 class="card-h">✨ Ideas for Us</h2><span><button type="button" class="linkish small" data-act="ideaset" aria-label="Date idea settings">⚙︎</button> <button type="button" class="linkish small" data-act="ideas">All ›</button></span></div>
+    ${due ? `<p class="small muted">${st.last ? 'Time for a date? It\'s been a while.' : 'Time for a date? Your first on the 2-2-2-2 is waiting.'} 💗 what you'd like — when you both pick the same one, it's a match.</p>` : '<p class="tiny muted">🔒 Your 💗 stay private until you both pick the same one.</p>'}
     <div class="idealist">${top.map((x) => `<div class="idearow"><span class="ii">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : ideaIcon(x)}</span><div class="grow"><b>${esc(x.title)}</b><small class="muted">${ideaMeta(x) || esc(x.why || '')}${scoreLine(x) ? ` · ${scoreLine(x)}` : ''}</small></div>
       <button type="button" class="icon-btn" data-idea="${esc(x.id)}:pass" aria-label="Not for us">✕</button><button type="button" class="icon-btn pick" data-idea="${esc(x.id)}:pick" aria-label="Pick">💗</button></div>`).join('') || '<p class="small muted">You\'ve been through them all — new ones come every Wednesday.</p>'}</div>
     ${ideas.week ? `<p class="tiny muted">This week around ${esc(ideas.week.area?.label || ideas.settings?.label || 'you')} · ${ideas.week.ideas.length} ideas</p>` : '<p class="tiny muted">Movies, events and new places for your area arrive every Wednesday morning.</p>'}`;
@@ -1746,7 +1754,7 @@ function ideasSheet() {
       ${ideaMeta(x) ? `<p class="small">${ideaMeta(x)}</p>` : ''}${scoreLine(x) ? `<p class="small"><b>${scoreLine(x)}</b> <span class="tiny muted">critics · audiences</span></p>` : ''}
       ${x.why ? `<p class="small muted">${esc(x.why)}</p>` : ''}${taste() && ideas.I.fit(x, taste()).why ? `<p class="fitwhy small">${esc(ideas.I.fit(x, taste()).why)}</p>` : ''}${times}
       ${links ? `<div class="row wrap">${links}</div>` : ''}
-      <button type="button" class="linkish small" data-ideasuggest="${esc(x.id)}">✨ Suggest it to ${esc(partnerName())} now</button>
+      <div class="row wrap"><button type="button" class="linkish small" data-ideasuggest="${esc(x.id)}">✨ Suggest it to ${esc(partnerName())} now</button>${ideas.tok[x.id] ? `<button type="button" class="linkish small" data-discuss="i:${ideas.tok[x.id]}" data-dtitle="${esc(`💡 ${x.title}`)}" data-dbody="${esc([x.why || '', x.url || ''].filter(Boolean).join('\n'))}">💬 Discuss</button>` : ''}</div>
       <div class="deckbtns"><button type="button" class="ghost" data-idea="${esc(x.id)}:pass">✕ Not for us</button><button type="button" class="ghost" data-idea="${esc(x.id)}:later">⏭ Later</button>${picked(x) ? `<button type="button" data-idea="${esc(x.id)}:unpick">💗 Picked</button>` : `<button type="button" class="hot" data-idea="${esc(x.id)}:pick">💗 I'd love this</button>`}</div>
       <p class="tiny muted center">${ideas.i + 1} of ${list.length}${x.src ? ` · ${esc(x.src)}` : ''}</p></article>`
       : ideasEmpty()}
@@ -3234,7 +3242,7 @@ async function saveFeeds(list) {
 // ---------- 🍿 what we watch: shows and movies, nights together, progress, the year ----------
 // Titles and services are end-to-end encrypted; the merging and the recap are the trackers' own
 // (js/showsCore.js), run over everyone in the family.
-const watch = { data: null, shows: [], tab: 'now', S: null, adding: { kind: 'show', service: 'netflix' } };
+const watch = { data: null, shows: [], tab: '', S: null, adding: { kind: 'show', service: 'netflix', status: 'want' } };
 async function loadWatch() {
   watch.S ||= await import('../js/showsCore.js');
   const w = await api.get(`/families/${state.fid}/watch`);
@@ -3271,17 +3279,22 @@ async function loadTv() {
   watch.tvm ||= await import('../server/tv.js');
   const { episodeStatus } = watch.tvm;
   const map = tvMap();
-  const list = watch.shows.filter((x) => x.kind !== 'movie' && !x.locked && ['watching', 'upnext'].includes(x.status)).slice(0, 15);
-  await Promise.all(list.map(async (x) => {
+  const list = watch.shows.filter((x) => x.kind !== 'movie' && !x.locked && ['watching', 'want'].includes(watch.S.lifecycle(x))).slice(0, 15);
+  const one = async (x) => {
     if (map[x.id] === undefined) {
-      const r = await api.get(`/tv/search?q=${encodeURIComponent(x.title)}`).catch(() => null);
+      if (watch.tvOff) return;
+      // Episode dates not set up on this connector (501): stop asking for this visit.
+      const r = await api.get(`/tv/search?q=${encodeURIComponent(x.title)}`).catch((e) => { if (e.status === 501) watch.tvOff = true; return null; });
       if (!r) return;
       map[x.id] = r.results[0]?.id || 0;
     }
     if (!map[x.id]) return;
     x.tv = await tvInfo(map[x.id]);
     x.ep = episodeStatus(x.tv, x.progress, isoLocal());
-  }));
+  };
+  // The first on its own: if episode dates aren't set up, nothing else is asked.
+  if (list.length) await one(list[0]);
+  await Promise.all(list.slice(1).map(one));
   try { LS.set(tvMapKey(), JSON.stringify(map)); } catch { /* full */ }
   watch.tvAt = Date.now();
 }
@@ -3587,67 +3600,91 @@ async function watchView() {
 }
 const svcBadge = (k) => { const v = watch.S.SERVICES[k] || watch.S.SERVICES.other; return `<span class="svc" style="background:${v.bg};color:${v.fg}">${esc(v.name)}</span>`; };
 const monthLabel = (ym, month = 'long') => new Date(`${ym}-15T12:00:00`).toLocaleDateString(undefined, { month, year: 'numeric' });
-function watchCard(x, opts = {}) {
-  const S = watch.S, my = fam().me, today = isoLocal();
-  const tonight = x.nights.find((n) => n.date === today);
-  const mine = x.ratings[my] || 0;
-  const theirs = Object.entries(x.ratings).filter(([p]) => p !== my);
-  const pg = x.progress;
-  const nights = x.kind === 'movie' ? `🍿 Movie${x.statusDate ? ` · ${new Date(`${x.statusDate}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}`
-    : `${x.nights.length} night${x.nights.length === 1 ? '' : 's'} together${opts.monthNights != null ? ` · ${opts.monthNights} this month` : ''}`;
-  return `<div class="show-card ${x.status}" data-watchshow="${x.id}">
-    <div class="show-top">${svcBadge(x.service)}<span class="show-status">${S.STATUS[x.status] || ''}</span></div>
-    <div class="show-title">${esc(x.title)}</div>${epLine(x)}
-    <div class="small muted">${nights}${x.rating ? ` · ${x.rating}★ avg` : ''}</div>
-    ${x.kind !== 'movie' && x.status === 'watching' ? `<div class="row wrap progress-row"><span class="pill">${pg ? `S${pg.s || 1} · E${pg.e}` : 'Not started'}</span><button type="button" class="ghost small" data-watchep="${x.id}">＋ Episode</button><button type="button" class="linkish small" data-watchpg="${x.id}">Set…</button></div>
-      <button type="button" class="${tonight ? 'tonight on' : 'tonight'}" data-watchnight="${x.id}">${tonight ? `✓ Watched tonight${tonight.by === my ? '' : ` (${esc(member(tonight.by)?.name || '')})`}` : '📺 We watched tonight'}</button>` : ''}
-    <div class="show-rate"><span class="small muted">You</span>${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="star ${n <= mine ? 'on' : ''}" data-watchrate="${x.id}:${n}" aria-label="Rate ${n} of 5">★</button>`).join('')}
-      ${theirs.map(([p, r]) => `<span class="small muted">· ${esc(member(p)?.name || '')} <span class="stars">${'★'.repeat(r)}${'☆'.repeat(5 - r)}</span></span>`).join('')}</div>
-    <div class="show-actions">
-      ${x.kind !== 'movie' ? Object.entries(S.STATUS).filter(([k]) => k !== x.status).map(([k, label]) => `<button type="button" class="linkish small" data-watchstatus="${x.id}:${k}">${label}</button>`).join('') : ''}
-      ${x.locked ? '' : `<button type="button" class="linkish small" data-watchbingo="${x.id}">🎲 Bingo</button>`}
-      <button type="button" class="linkish small muted" data-watchaud="${x.id}:${x.aud === 'family' ? 'us' : 'family'}">${x.aud === 'family' ? '👨‍👩‍👧 family · make it just us' : '🔒 just us · share with family'}</button>
-      ${x.by === fam().me || me().role === 'owner' ? `<button type="button" class="linkish small muted" data-watchdel="${x.id}">Delete</button>` : ''}
-    </div>
+// One show: what it is, where you're up to, and one obvious next step. Everything else (episode,
+// rating, sharing, bingo, status, delete) is in its details (tap the card).
+const pgText = (pg) => (pg?.e ? `S${pg.s || 1} · E${pg.e}` : '');
+function watchPrimary(x, short = false) {
+  const S = watch.S, life = S.lifecycle(x);
+  if (life === 'watched') return short || x.ratings[fam().me] ? '' : `<button type="button" class="ghost small" data-watchopen="${x.id}">☆ Rate it</button>`;
+  if (life === 'dropped') return '';
+  if (x.kind === 'movie') return `<button type="button" class="small" data-watchone="${x.id}" aria-label="We watched ${esc(x.title)}">✓ ${short ? 'Watched' : 'We watched it'}</button>`;
+  const tonight = x.nights.some((n) => n.date === isoLocal());
+  const label = `Watched ${tonight ? 'another' : 'an'} episode`;
+  return `<button type="button" class="small" data-watchone="${x.id}" aria-label="${label} of ${esc(x.title)}">＋ ${short ? 'Episode' : label}</button>`;
+}
+function watchCard(x) {
+  const S = watch.S, life = S.lifecycle(x);
+  const bits = [life === 'watching' ? (pgText(x.progress) ? `Watching · ${pgText(x.progress)}` : 'Watching') : life === 'want' ? (S.isUpNext(x) ? '⭐ Up Next' : 'Want to Watch') : life === 'watched' ? `Watched${x.statusDate ? ` · ${shortDay(x.statusDate)}` : ''}` : 'Dropped'];
+  if (x.rating && life === 'watched') bits.push(`${x.rating}★`);
+  return `<div class="show-card ${life}">
+    <button type="button" class="show-main" data-watchopen="${x.id}" aria-label="${esc(x.title)}: details"><span class="show-top">${svcBadge(x.service)}${x.kind === 'movie' ? '<span class="small muted">🍿 Movie</span>' : ''}</span>
+      <span class="show-title">${esc(x.title)}</span><span class="small muted">${esc(bits.join(' · '))}</span>${epLine(x)}</button>
+    <div class="show-do">${watchPrimary(x)}<button type="button" class="icon-btn" data-watchopen="${x.id}" aria-label="More for ${esc(x.title)}">•••</button></div>
   </div>`;
 }
+// 📺 Details: progress, rating, history, status, sharing, bingo, discuss, delete.
+function watchDetail(id) {
+  const S = watch.S, x = watch.shows.find((y) => y.id === id);
+  if (!x) return closeSheet();
+  const my = fam().me, life = S.lifecycle(x), mine = x.ratings[my] || 0;
+  const theirs = Object.entries(x.ratings).filter(([p]) => p !== my);
+  const states = [['want', 'Want to Watch'], ['watching', 'Watching'], ['finished', 'Watched']];
+  const lifeKey = { want: 'want', watching: 'watching', watched: 'finished' }[life];
+  const can = x.by === my || me().role === 'owner';
+  openSheet(`<div class="row between"><h2>${esc(x.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <p class="small">${svcBadge(x.service)} ${x.kind === 'movie' ? '🍿 Movie' : '📺 Show'} · ${x.aud === 'family' ? '👨‍👩‍👧 the family sees it' : '🔒 just you two'}</p>
+    ${life === 'dropped' ? '<p class="small muted">✋ You dropped this one. Pick a state below to bring it back.</p>' : ''}
+    <div class="seg" role="group" aria-label="Where it is">${states.map(([k, l]) => `<button type="button" class="${lifeKey === k ? 'on' : ''}" data-watchlife="${x.id}:${k}" aria-pressed="${lifeKey === k}">${l}</button>`).join('')}</div>
+    ${life === 'want' ? `<button type="button" class="ghost wide" data-watchlife="${x.id}:${S.isUpNext(x) ? 'want' : 'upnext'}">${S.isUpNext(x) ? '☆ Not Up Next' : '⭐ Make it Up Next'}</button>` : ''}
+    ${watchPrimary(x) ? `<div class="row">${watchPrimary(x)}</div>` : ''}
+    ${x.kind !== 'movie' ? `<div class="grp">Where you're up to</div><div class="row pg-row"><button type="button" class="icon-btn" data-watchpgstep="${x.id}:-1" aria-label="One episode back">−</button><span class="pill">${pgText(x.progress) || 'Not started'}</span><button type="button" class="icon-btn" data-watchpgstep="${x.id}:1" aria-label="One episode on">＋</button><button type="button" class="linkish small" data-watchpg="${x.id}">Set season &amp; episode…</button></div>${epLine(x)}` : ''}
+    <div class="grp">Your rating</div><div class="show-rate">${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="star ${n <= mine ? 'on' : ''}" data-watchrate="${x.id}:${n}" aria-label="Rate ${n} of 5" aria-pressed="${n <= mine}">★</button>`).join('')}
+      ${theirs.map(([p, r]) => `<span class="small muted">· ${esc(member(p)?.name || '')} <span class="stars" aria-label="${r} of 5">${'★'.repeat(r)}${'☆'.repeat(5 - r)}</span></span>`).join('')}</div>
+    <div class="grp">History</div><p class="small muted">${x.nights.length ? `${x.nights.length} night${x.nights.length === 1 ? '' : 's'} together · last ${shortDay(x.nights[x.nights.length - 1].date)}` : 'Not watched together yet'}${x.statusDate && life === 'watched' ? ` · finished ${shortDay(x.statusDate)}` : ''}</p>
+    <div class="stack tight">
+      <button type="button" class="ghost wide" data-discuss="w:${x.id}" data-dtitle="${esc(`🍿 ${x.title}`)}">💬 Discuss</button>
+      ${x.locked ? '' : `<button type="button" class="ghost wide" data-watchbingo="${x.id}">🎲 Bingo for it</button>`}
+    </div>
+    <details class="more"><summary class="small">More</summary><div class="stack tight">
+      <button type="button" class="linkish small" data-watchaud="${x.id}:${x.aud === 'family' ? 'us' : 'family'}">${x.aud === 'family' ? '🔒 Make it just us' : '👨‍👩‍👧 Share with the family'}</button>
+      ${life !== 'dropped' ? `<button type="button" class="linkish small" data-watchlife="${x.id}:dropped">✋ Drop it (stopped watching)</button>` : ''}
+      ${can ? `<button type="button" class="linkish small danger" data-watchdel="${x.id}">Delete it and its history</button>` : ''}
+    </div></details>`);
+}
+// The full Watchlist: Watching · Want to Watch · Watched (history, month by month and the recap).
 function renderWatch() {
   const S = watch.S, shows = watch.shows, ym = isoLocal().slice(0, 7), year = ym.slice(0, 4);
-  const tabs = [['now', 'Now'], ['month', 'By month'], ['year', `${year} recap`]];
+  const L = S.watchlist(shows);
+  if (!['watching', 'want', 'watched'].includes(watch.tab)) watch.tab = L.watching.length || !L.want.length ? 'watching' : 'want';
+  const tabs = [['watching', `Watching${L.watching.length ? ` ${L.watching.length}` : ''}`], ['want', `Want to Watch${L.want.length ? ` ${L.want.length}` : ''}`], ['watched', 'Watched']];
   let body = '';
-  if (watch.tab === 'now') {
-    const on = shows.filter((x) => x.status === 'watching').sort((a, b) => (b.ep?.newCount || 0) - (a.ep?.newCount || 0));
-    const next = shows.filter((x) => x.status === 'upnext');
-    const also = S.monthShows(shows, ym).filter((x) => x.status !== 'watching' && x.status !== 'upnext');
-    body = `${on.length ? on.map((x) => watchCard(x)).join('') : '<p class="small muted">Nothing on the go. Add what you\'re watching together.</p>'}
-      ${next.length ? `<h3>🕐 Up next</h3>${next.map((x) => watchCard(x)).join('')}` : ''}
-      ${also.length ? `<details class="us-more"><summary>Also in ${monthLabel(ym).split(' ')[0]} · ${also.length}</summary>${also.map((x) => watchCard(x, { monthNights: x.monthNights })).join('')}</details>` : ''}
-      <button type="button" class="ghost wide" data-act="watchadd">＋ Add a show or movie</button>`;
-  } else if (watch.tab === 'month') {
-    const months = [...new Set(shows.flatMap(S.showMonths))].sort().reverse();
-    body = months.length ? months.map((mo) => {
-      const list = S.monthShows(shows, mo), n = list.reduce((a, x) => a + x.monthNights, 0);
-      return `<details class="card month-shows" ${mo === ym ? 'open' : ''}><summary><b>${monthLabel(mo)}</b> <span class="small muted">${list.length} title${list.length === 1 ? '' : 's'} · ${n} night${n === 1 ? '' : 's'}</span></summary>
-        <ul class="list month-list">${list.map((x) => `<li class="row between">${svcBadge(x.service)}<span class="grow">${esc(x.title)}${x.status === 'finished' && (x.statusDate || '').startsWith(mo) ? ' 🎉' : ''}</span><span class="small muted">${x.kind === 'movie' ? '🍿' : `${x.monthNights}×`}${x.rating ? ` · ${x.rating}★` : ''}</span></li>`).join('')}</ul></details>`;
-    }).join('') : '<p class="small muted">Nothing logged yet.</p>';
+  if (watch.tab === 'watching') {
+    body = L.watching.length ? L.watching.sort((a, b) => (b.ep?.newCount || 0) - (a.ep?.newCount || 0) || S.lastActive(b).localeCompare(S.lastActive(a))).map(watchCard).join('')
+      : `<div class="card center"><p class="small">Nothing on the go.${L.want.length ? ' Pick something from Want to Watch — logging the first episode moves it here.' : ''}</p></div>`;
+  } else if (watch.tab === 'want') {
+    const next = L.want.filter(S.isUpNext), rest = L.want.filter((x) => !S.isUpNext(x));
+    body = L.want.length ? `${next.length ? `<h3 class="wl-h">⭐ Up Next</h3>${next.map(watchCard).join('')}` : ''}${rest.length ? `${next.length ? '<h3 class="wl-h">Later</h3>' : ''}${rest.map(watchCard).join('')}` : ''}`
+      : '<div class="card center"><p class="small">Nothing saved for later. Add a show or movie you want to watch together.</p></div>';
   } else {
+    const months = [...new Set(shows.flatMap(S.showMonths))].sort().reverse();
     const r = S.yearRecap(shows, year);
-    const rows = Object.entries(r.perService).sort((a, b) => b[1] - a[1]), max = rows[0]?.[1] || 1;
-    body = r.titles ? `<section class="card recap">
-        <div class="eyebrow">🍿 ${year} together</div>
+    body = `${L.watched.length ? L.watched.sort((a, b) => S.lastActive(b).localeCompare(S.lastActive(a))).slice(0, 20).map(watchCard).join('') : '<div class="card center"><p class="small">Nothing finished yet.</p></div>'}
+      ${months.length ? `<details class="card"><summary><b>📅 Month by month</b></summary>${months.map((mo) => {
+        const list = S.monthShows(shows, mo), n = list.reduce((a, x) => a + x.monthNights, 0);
+        return `<div class="month-shows"><b class="small">${monthLabel(mo)}</b> <span class="small muted">${list.length} title${list.length === 1 ? '' : 's'} · ${n} night${n === 1 ? '' : 's'}</span><ul class="list month-list">${list.map((x) => `<li class="row between">${svcBadge(x.service)}<span class="grow">${esc(x.title)}${x.status === 'finished' && (x.statusDate || '').startsWith(mo) ? ' 🎉' : ''}</span><span class="small muted">${x.kind === 'movie' ? '🍿' : `${x.monthNights}×`}${x.rating ? ` · ${x.rating}★` : ''}</span></li>`).join('')}</ul></div>`;
+      }).join('')}</details>` : ''}
+      ${r.titles ? `<details class="card recap"><summary><b>🏆 ${year} together</b></summary>
         <div class="recap-stats"><div><b>${r.nights}</b><small>nights</small></div><div><b>${r.shows}</b><small>shows</small></div><div><b>${r.movies}</b><small>movies</small></div><div><b>${r.finished}</b><small>finished</small></div></div>
         ${r.mostWatched ? `<p>🏆 Most watched: <b>${esc(r.mostWatched.title)}</b> (${r.mostWatched.nights.filter((n) => n.date.startsWith(year)).length} nights)</p>` : ''}
         ${r.topRated ? `<p>⭐ Our favourite: <b>${esc(r.topRated.title)}</b> (${r.topRated.rating}★)</p>` : ''}
-        ${r.topService ? `<p>Most of it on ${svcBadge(r.topService)}</p>` : ''}
-        <div class="svc-bars">${rows.map(([k, n]) => { const v = S.SERVICES[k] || S.SERVICES.other; return `<div class="svc-bar"><span class="small">${esc(v.name)}</span><span class="track"><span style="width:${Math.round((n / max) * 100)}%;background:${v.bg}"></span></span><span class="small muted">${n}</span></div>`; }).join('')}</div></section>
-      <h3>Month by month</h3>
-      <ul class="card list year-months">${r.months.map((mo) => `<li><b>${monthLabel(mo.month, 'short').split(' ')[0]}</b> <span>${mo.shows.map((x) => esc(x.title)).join(', ')}</span></li>`).join('')}</ul>`
-      : '<p class="small muted">Nothing logged this year yet.</p>';
+        ${r.topService ? `<p>Most of it on ${svcBadge(r.topService)}</p>` : ''}</details>` : ''}
+      ${L.dropped.length ? `<details class="card"><summary class="small">✋ Dropped · ${L.dropped.length}</summary>${L.dropped.map(watchCard).join('')}</details>` : ''}`;
   }
   $('#view').innerHTML = `${demoBanner()}
-    <section class="watch-head"><h2><button type="button" class="linkish" data-view="us" aria-label="Back to Us">‹</button> 🍿 Watching</h2><button type="button" class="ghost small" data-act="games">🎲 Bingo &amp; 💑 picks ›</button></section>
-    <div class="seg">${tabs.map(([k, l]) => `<button type="button" class="${watch.tab === k ? 'on' : ''}" data-watchtab="${k}">${l}</button>`).join('')}</div>
-    ${body}`;
+    <section class="watch-head"><h2><button type="button" class="linkish" data-view="us" aria-label="Back to Us">‹</button> 📺 Watchlist</h2><button type="button" class="small" data-act="watchadd">＋ Add</button></section>
+    <div class="seg" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" aria-selected="${watch.tab === k}" class="${watch.tab === k ? 'on' : ''}" data-watchtab="${k}">${l}</button>`).join('')}</div>
+    <div class="watchlist">${body}</div>
+    <button type="button" class="linkish small" data-act="games">🎲 Bingo &amp; 💑 couples picks ›</button>`;
 }
 function watchAddSheet() {
   const S = watch.S, a = watch.adding;
@@ -3655,13 +3692,40 @@ function watchAddSheet() {
     <form id="watchForm" class="stack">
       <div class="seg">${[['show', '📺 Show'], ['movie', '🍿 Movie']].map(([k, l]) => `<label class="segopt"><input type="radio" name="kind" value="${k}" ${a.kind === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
       <label>Title<input name="title" maxlength="80" required placeholder="e.g. The Bear" autocomplete="off"></label>
+      <div class="seg">${[['want', 'Want to Watch'], ['watching', 'Watching'], ['finished', 'Watched']].map(([k, l]) => `<label class="segopt"><input type="radio" name="status" value="${k}" ${(a.status || 'want') === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
       <fieldset class="svc-pick"><legend class="small">Where</legend>${Object.entries(S.SERVICES).map(([k, v]) => `<label class="svc-opt-l"><input type="radio" name="service" value="${k}" ${a.service === k ? 'checked' : ''}><span class="svc-opt" style="--svc:${v.bg}">${esc(v.name)}</span></label>`).join('')}</fieldset>
-      <label class="small">Started / watched on<input type="date" name="date" value="${isoLocal()}"></label>
       <label class="check"><input type="checkbox" name="family"><span>👨‍👩‍👧 Share with the family (otherwise it's just you two)</span></label>
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Add</button></div>
     </form>`);
 }
-const watchSaved = async () => { await loadWatch(); if (state.view === 'watch') renderWatch(); };
+// 💬 Discuss: the thread about a show or a date idea — the one either of you already started, or a
+// new one (just you two; the family's when there's no partner). Threads are the one place to talk.
+async function discuss(ref, title, body = '') {
+  if (lockedHere()) return toast(LOCKED_MSG);
+  const had = th.list.find((t) => t.ref === ref && t.fid === state.fid);
+  closeSheet();
+  if (had) return threadView(had.fid, had.id);
+  const aud = partnerMember() ? 'us' : 'family', k = fk(), L = (x) => (k ? seal(k, x) : x);
+  const r = await api.post(`/families/${state.fid}/threads`, { aud, board: aud === 'us' ? 'us' : 'family', cat: 'talk', title: await L(title), body: await L(body), mins: 1, ref });
+  await loadThreads().catch(() => {});
+  return threadView(state.fid, r.thread.id);
+}
+// "＋ Watched an episode" / "✓ We watched it": one PATCH — the next episode, tonight, and Want to
+// Watch → Watching (a movie → Watched). Asks before calling a show finished, and only when sure.
+async function watchOne(id) {
+  const S = watch.S, x = watch.shows.find((y) => y.id === id);
+  if (!x) return;
+  const today = isoLocal(), ch = S.watchedOne(x, today, x.tv);
+  await api.patch(`/families/${state.fid}/watch/shows/${id}`, { ...(ch.status ? { status: ch.status, date: today } : {}), ...(ch.progress ? { progress: ch.progress } : {}), ...(ch.night ? { night: today } : {}) });
+  await watchSaved();
+  if (x.kind === 'movie') return toast(`🍿 ${x.title} — watched. Rate it in its details.`);
+  toast(`✓ ${x.title} · S${ch.progress.s} E${ch.progress.e}${ch.status === 'watching' ? ' — now in Watching' : ''}`);
+  if (S.isFinale(ch.progress, x.tv) && confirm(`That was the last episode of ${x.title}. Mark it Watched?`)) {
+    await api.patch(`/families/${state.fid}/watch/shows/${id}`, { status: 'finished', date: today });
+    await watchSaved(); toast('🎉 Watched — it goes in your history');
+  }
+}
+const watchSaved = async () => { await loadWatch(); if (state.view === 'watch') renderWatch(); else if (state.view === 'us') renderUs(); if ($('#sheet').open && $('#sheetBody [data-watchlife]')) watchDetail($('#sheetBody [data-watchlife]').dataset.watchlife.split(':')[0]); };
 // Bingo for this show: its live game, or a new game from its card set, or a new card set.
 async function watchBingo(title) {
   const r = await api.get(`/families/${state.fid}/bingo`);
@@ -4333,6 +4397,23 @@ document.addEventListener('click', (e) => {
   if (d.momentedit) return momentSheet({ id: d.momentedit });
   if (d.watchaud) { const [id, aud] = d.watchaud.split(':'); return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { aud }); await watchSaved(); toast(aud === 'family' ? '👨‍👩‍👧 Shared with the family' : '🔒 Just you two now'); }); }
   if (d.watchtab) { watch.tab = d.watchtab; return renderWatch(); }
+  if (d.watchone) { t.disabled = true; return act(() => watchOne(d.watchone)).finally(() => { t.disabled = false; }); }
+  if (d.watchopen) return watchDetail(d.watchopen);
+  if (d.discuss) return act(() => discuss(d.discuss, d.dtitle || '💬', d.dbody || ''));
+  if (d.watchlife) {
+    const [id, st] = d.watchlife.split(':');
+    return act(async () => {
+      await api.patch(`/families/${state.fid}/watch/shows/${id}`, { status: st, date: isoLocal() });
+      await watchSaved();
+      toast({ finished: '🎉 Watched — it goes in your history', dropped: '✋ Dropped — find it under Watched › Dropped', upnext: '⭐ Up Next', watching: '▶️ Watching', want: 'Want to Watch' }[st]);
+    });
+  }
+  if (d.watchpgstep) {
+    const [id, n] = d.watchpgstep.split(':'), x = watch.shows.find((y) => y.id === id), pg = x?.progress;
+    if (!x) return;
+    const next = +n > 0 ? watch.S.nextEpisode(pg, x.tv) : { s: pg?.s || 1, e: Math.max(0, (pg?.e || 0) - 1) };
+    return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { progress: next }); await watchSaved(); });
+  }
   if (d.watchnight) return act(async () => { await api.post(`/families/${state.fid}/watch/shows/${d.watchnight}/night`, { date: isoLocal() }); await watchSaved(); });
   if (d.watchrate) { const [id, n] = d.watchrate.split(':'); const cur = watch.shows.find((x) => x.id === id)?.ratings[fam().me]; return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { rating: cur === +n ? null : +n }); await watchSaved(); }); }
   if (d.watchstatus) { const [id, st] = d.watchstatus.split(':'); return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { status: st, date: isoLocal() }); await watchSaved(); if (st === 'finished') toast('🎉 Finished — it goes in the recap'); }); }
@@ -4807,8 +4888,10 @@ document.addEventListener('submit', (e) => {
     if (lockedHere()) return toast('🔒 This device needs the family key first — Me › 🔐 Encryption');
     watch.adding = { kind: v.kind, service: v.service };
     return act(async () => {
-      await api.post(`/families/${state.fid}/watch/shows`, { aud: v.family ? 'family' : 'us', body: await lock({ title: v.title.trim(), service: v.service || 'other', kind: v.kind === 'movie' ? 'movie' : 'show', date: v.date || isoLocal() }) });
-      closeSheet(); watch.tab = 'now';
+      const status = ['want', 'watching', 'finished'].includes(v.status) ? v.status : 'want';
+      watch.adding.status = status;
+      await api.post(`/families/${state.fid}/watch/shows`, { aud: v.family ? 'family' : 'us', status, date: isoLocal(), body: await lock({ title: v.title.trim(), service: v.service || 'other', kind: v.kind === 'movie' ? 'movie' : 'show', date: isoLocal() }) });
+      closeSheet(); watch.tab = { want: 'want', watching: 'watching', finished: 'watched' }[status];
       if (state.view === 'watch') await watchSaved(); else show('watch');
       toast(`🍿 ${v.title.trim()} added`);
     });

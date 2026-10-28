@@ -771,7 +771,8 @@ export async function familyApi(req, env, path, ctx = null) {
     const save = () => db.put(key, { ...w, shows: w.shows.slice(-500), nights: w.nights.slice(-3000) });
     const bodyOf = (v) => sealed(v, 4000) ?? (fam.e2ee ? null : (typeof v === 'object' && v ? JSON.stringify(v).slice(0, 2000) : null));
     const day = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '');
-    const STATUSES = ['watching', 'upnext', 'finished', 'dropped'];
+    // 2.0: Want to Watch ('want'; 'upnext' is its ⭐ Up Next) → Watching → Watched ('finished'); 'dropped' kept apart.
+    const STATUSES = ['want', 'watching', 'upnext', 'finished', 'dropped'];
     // 🔒 A show is the couple's own unless it's shared with the family ("aud": "family"). Older
     // shows (no aud) stay as they were: the family's.
     const couple = [me.id, partnerOf(fam, me)?.id].filter(Boolean);
@@ -785,8 +786,11 @@ export async function familyApi(req, env, path, ctx = null) {
       const b = bodyOf(body.body);
       if (!b) return json({ error: 'this family is end-to-end encrypted — update the app and try again' }, 400);
       const show = { id: randomId(8), by: me.id, body: b, at: Date.now(), aud: body.aud === 'family' ? 'family' : 'us', to: body.aud === 'family' ? [] : couple };
-      w.shows.push(show); await save();
-      return json({ show });
+      w.shows.push(show);
+      // Where it starts: Want to Watch, Watching or Watched (older apps send nothing).
+      if (STATUSES.includes(body.status)) w.status[show.id] = { s: body.status, at: Date.now(), date: day(body.date) || new Date().toISOString().slice(0, 10), by: me.id };
+      await save();
+      return json({ show, status: w.status[show.id] || null });
     }
     // Bringing over the trackers' 📺 Watching: your shows, your nights, your ratings and status changes.
     if (what === 'import' && method === 'POST') {
@@ -837,8 +841,11 @@ export async function familyApi(req, env, path, ctx = null) {
         const se = Math.max(0, Math.min(99, Math.round(+body.progress.s || 0))), ep = Math.max(0, Math.min(999, Math.round(+body.progress.e || 0)));
         w.progress[id] = { s: se, e: ep, at: Date.now(), by: me.id };
       }
+      // "＋ Watched an episode": tonight is logged once (never un-logged by a second episode).
+      const night = day(body.night);
+      if (night && !w.nights.some((x) => x.show === id && x.date === night)) w.nights.push({ show: id, date: night, by: me.id, at: Date.now() });
       await save();
-      return json({ show, status: w.status[id] || null, ratings: w.ratings[id] || {}, progress: w.progress[id] || null });
+      return json({ show, status: w.status[id] || null, ratings: w.ratings[id] || {}, progress: w.progress[id] || null, nights: w.nights.filter((x) => x.show === id) });
     }
     if (!act && method === 'DELETE') {
       if (show.by !== me.id && me.role !== 'owner') return json({ error: 'only who added it can delete it' }, 403);

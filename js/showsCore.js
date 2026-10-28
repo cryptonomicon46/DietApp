@@ -65,3 +65,58 @@ export function yearRecap(shows, year) {
     months: months.map((m) => ({ month: m, shows: monthShows(inYear, m) })),
   };
 }
+
+// ---------- 2.0: three states a person needs — Want to Watch → Watching → Watched ----------
+// Stored statuses stay as they were (nothing is rewritten): 'want' and 'upnext' are both Want to
+// Watch ('upnext' is just its ⭐ Up Next priority), 'watching' is Watching, 'finished' is Watched,
+// and 'dropped' leaves the active list but can be brought back.
+export const LIFE = { want: 'Want to Watch', watching: 'Watching', watched: 'Watched', dropped: 'Dropped' };
+export const lifecycle = (x) => ({ want: 'want', upnext: 'want', watching: 'watching', finished: 'watched', dropped: 'dropped' })[x.status] || 'watching';
+export const isUpNext = (x) => x.status === 'upnext';
+
+// The episode after `pg` ({s, e}; nothing yet = S1 E1). With the show's season list (from TMDB)
+// the last episode of a season rolls over to the next season, if that season exists; without
+// it, it's simply the next episode number.
+export function nextEpisode(pg, tv) {
+  const s = pg?.s || 1, e = pg?.e || 0;
+  if (!pg || !pg.e) return { s, e: 1 };
+  const season = tv?.seasons?.find((x) => x.n === s);
+  if (season?.eps && e >= season.eps && tv.seasons.some((x) => x.n === s + 1)) return { s: s + 1, e: 1 };
+  return { s, e: e + 1 };
+}
+// Only when it's certain: the show has ended and `pg` is its very last episode.
+export function isFinale(pg, tv) {
+  if (!pg?.e || !tv?.seasons?.length || !/ended|canceled/i.test(tv.status || '')) return false;
+  const last = tv.seasons.reduce((a, x) => (x.n > a.n ? x : a));
+  return pg.s === last.n && last.eps > 0 && pg.e >= last.eps;
+}
+
+// What "＋ Watched an episode" (or ✓ We watched it, for a movie) changes, worked out up front so
+// the phone sends one PATCH: the status (Want to Watch becomes Watching; a movie becomes
+// Watched), the progress, and whether tonight still needs logging.
+export function watchedOne(x, today, tv = null) {
+  const out = { night: !x.nights?.some((n) => n.date === today) };
+  if (x.kind === 'movie') return { ...out, status: 'finished' };
+  out.progress = nextEpisode(x.progress, tv);
+  if (lifecycle(x) !== 'watching') out.status = 'watching';
+  return out;
+}
+
+// The Us card: "2 watching · 3 want to watch" and up to three shows that answer "what are we
+// watching?" and "what's next?" — new episodes first, then what you watched most recently, then
+// the ⭐ Up Next.
+export function usPreview(shows, n = 3) {
+  const on = shows.filter((x) => lifecycle(x) === 'watching')
+    .sort((a, b) => (b.ep?.newCount ? 1 : 0) - (a.ep?.newCount ? 1 : 0) || lastActive(b).localeCompare(lastActive(a)));
+  const want = shows.filter((x) => lifecycle(x) === 'want');
+  const next = want.filter(isUpNext).sort((a, b) => lastActive(b).localeCompare(lastActive(a)));
+  const pick = [...on.slice(0, n - (next.length ? 1 : 0)), ...next.slice(0, 1)];
+  for (const x of [...on, ...want]) if (pick.length < n && !pick.includes(x)) pick.push(x);
+  return { watching: on.length, want: want.length, items: pick.slice(0, n) };
+}
+// The full Watchlist's three lists (Dropped kept apart, recoverable).
+export function watchlist(shows) {
+  const by = (k) => shows.filter((x) => lifecycle(x) === k);
+  const want = by('want').sort((a, b) => (isUpNext(b) ? 1 : 0) - (isUpNext(a) ? 1 : 0) || lastActive(b).localeCompare(lastActive(a)));
+  return { watching: by('watching'), want, watched: by('watched'), dropped: by('dropped') };
+}

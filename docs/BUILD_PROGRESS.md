@@ -1,23 +1,42 @@
 # OurPawmily Build Progress
 
-Last update: 2026-10-28, Phase 3 implemented; second-pass review of Phases 0–3 in progress. Evidence below was checked against the repository (commits, tests, CI runs, local measurements). Items marked **NOT VERIFIED** or **UNKNOWN** were not checked.
+Last update: 2026-10-28 — Phases 4–11 authorized (master build authorization); Phase 4 at Checkpoint A. Phases 0–3 merged to `main` (`510eacc`) and deployed.
 
 ## Current phase and task
 
-- **Session authorization (2026-10-28):** Phase 0–1 gaps → Phase 2 → Phase 3 → full review of Phases 0–3, then STOP before Phase 4. Work happens on branch `v2/phase-2-3`; nothing is merged to `main` (deploy) without approval.
-- **Phase 0 + Phase 1:** complete, merged to `main` at `f4896ca` (deployed to Pages). Worker deploy (`pawdeploy`) by the user: pending/unknown.
-- **Phase 0–1 gaps:** done on `v2/phase-2-3`:
-  - account deletion / leaving a family deletes the person's threads and replies; deleting a family deletes its threads (`1a31356`);
-  - calendar links never in a URL — audit S1 — and thread notifications relabelled "📖 Threads" (`5c02573`);
-  - tab switches re-measured on a stable server: Us 3, Calendar 1, Threads 0, Photos 2; returning to Home after > 20 s still 8 → handled with the Phase 3 Home redesign, as are long tasks.
-- **Phase 2:** done (`87452a5`): no code is ever created/joined/changed; dog documents and adoption photos go to the family file store (sealed); browser check shows no `/household/` requests for a signed-in phone without a code.
-- **Phase 3:** implemented on `v2/phase-2-3`:
-  - Threads (`29d83da`): 🔎 search on the phone, ☆ Save / ★ Saved, ✎ edit your replies, 📷 up to 4 images on a reply, 💡 App feedback board with an explicit "send to the developer" form.
-  - Home lists on the connector (`1c5948d`): `server/home.js` — 🙋 Requests (claim one helper at a time, done, remove; grown-ups notified) and a shared 🛒 Groceries list; both sealed in an encrypted family; one `GET /home`.
-  - Home client (`3d38ca0`): greeting, Next up, 🔔 Needs you (requests, rides without a driver this week, threads you're tagged in, your own requests, Ask for a hand), 🛒 Groceries, house, dogs' care + walk, dog row, *More about the dogs* (lazy), 📌 Pinned. Today / Your day / digest cards removed from Home. ＋ › Ask for a hand.
-  - No more hidden-feed writes (`3d38ca0`): golden days (now a notification with the dogs' note), new dog appointments, bingo wins, picks endings.
-  - Fixes and docs (`29b6939`, `34de25a`): kids can't see/ask/take requests (server); leaving always releases claimed requests; `DELETE /members/<self>` does the `/leave` clean-up; call-Mom line moved into Next up; run/ride/hot-yoga reminders reachable from Me and Next up's ⋯; README, help guide, tour (What's new `2026-11b`), privacy, delete-account page, ARCHITECTURE.
-- **Second-pass review (QA, security/privacy, performance, mobile UX, accessibility):** done (`03cbd76`). Two independent code reviews (server security/privacy; client QA) plus browser checks; every verified finding fixed with tests where testable — see *Security findings* and *Review fixes* below. **STOP: Phase 4 is not authorized.**
+- **Session authorization (2026-10-28, second):** Phases 4–11 (Us/Watch, Health/Diet, permissions, Fitness, AI gateway + text parsing, photo → workout, legacy-code migration, Devices), with checkpoints A–E, then a full-product review and STOP. No deploy, no merge to `main`, no Read/Discover. Branch: `v2/phase-4-11` (from `main` at `510eacc`).
+- **Phases 0–3:** merged to `main` (PR #1, `510eacc`) and deployed (reported by the user).
+- **Phase 4 — Us / Watch:** done, Checkpoint A passed (below).
+- **Next:** Phase 5 — Health shell + Diet.
+
+### Phase 4 — Us and Watch (Checkpoint A)
+
+| Item | Before | After |
+| --- | --- | --- |
+| Watch on Us | last card ("🍿 tonight's show"), below For you, Notes, Notebook, Plans, Ideas, Outing, 2-2-2-2 | **first card**, inside the first screen at 390 px (y 135–442 of 844); ready ~150–220 ms after tapping Us |
+| What it shows | one show | "2 watching · 2 want to watch", up to 3 shows (🆕 new episodes, then most recent Watching, then ⭐ Up Next) with one action each, **Open Watchlist →**, ＋ Add |
+| Us sections | 9 | 5 + a notebook link: 📺 Watch, For you (only answers needed), ❤️ Dates (plans + 2-2-2-2 + Suggest / Outing / Log a date + recent outings), ✨ Ideas for Us (3 curated), 💌 Notes, 📓 notebook → Threads |
+| Show card | status, ＋ Episode, Set…, We watched tonight, 5 stars, 3 status buttons, Bingo, share, Delete | service, title, state line, **one action**, ••• → details |
+| Watchlist | Now · By month · Year recap | Watching · Want to Watch (⭐ Up Next, Later) · Watched (history, month by month, recap, ✋ Dropped) |
+
+State mapping (stored → shown → primary action), nothing rewritten:
+
+| Stored `status` | Shown | Primary action |
+| --- | --- | --- |
+| `want` (new) | Want to Watch | ＋ Watched an episode (→ Watching) · movie: ✓ We watched it (→ Watched) |
+| `upnext` | Want to Watch, ⭐ Up Next | same |
+| `watching` | Watching · S·E | ＋ Watched an episode (next episode; next season only when TMDB's season list says so) |
+| `finished` | Watched | ☆ Rate it (if you haven't) |
+| `dropped` | in Watched › Dropped (recoverable) | — (details) |
+| none (older records) | show → Watching, movie → Watched — unchanged from before | as above |
+
+- One action = one `PATCH {status?, progress, night}`; a second episode the same night keeps the night (the old toggle could remove it). A show is marked Watched only by the user; when TMDB says the show has ended and this was its last episode, the app asks.
+- Data migration: none needed — the server accepts `want` and a starting status on add; history (nights, progress, ratings, status timestamps) untouched; old clients keep working (`upnext`/`watching`/`finished`/`dropped` still valid).
+- 💬 Discuss (show details, date-idea sheet, matches): one thread per item (`ref`), just-us; Recommendation → 💗 Interested → 💬 Discuss → Make it a plan → both say yes → Calendar. No comments inside Watch.
+- Home: no Watch requests at start-up (checked); ✨ Next up already suggests shows with new episodes — no second Watch on Home.
+- Mobile verification (Playwright, 390 × 844, light and dark): Us opens with Watch on screen; ＋ Episode logs S2 E3 → E4 with tonight; Open Watchlist one tap; Up Next, Drop/recover, Discuss (opens and re-opens the same thread) work; no page errors. Tests: `tests/watchlife.test.js` (state mapping, next episode/finale, one action, preview, server status/night, Discuss ref).
+- Privacy: titles/services stay sealed; `ref` is an id or a keyed hash, never a title; Discuss threads are just-us.
+- Performance (fresh seed, 3 runs): start-up 14 requests, 0 duplicates, CLS 0.007, cold paint ~1.32–1.36 s (one 1.58 s outlier), script 178 KB (+2 KB); tab switches Us 3 (+ TMDB lookups when configured), Calendar 2, Threads 0, Photos 2, Home revisit 4. Episode lookups stop after a 501 (no TMDB key) instead of firing one per show.
 
 ## Last safe commit, deployment and rollback
 
