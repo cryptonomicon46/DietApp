@@ -18,11 +18,12 @@ async function owner() {
 export async function sheet() {
   await owner();
   const { devices } = await D();
-  const cfg = c.state.devCfg || (c.state.devCfg = await c.api.liveConfig().catch(() => ({})));
+  let cfg = c.state.devCfg;
+  if (!cfg) { cfg = await c.api.liveConfig().catch(() => ({ offline: true })); if (!cfg.missing && !cfg.offline) c.state.devCfg = cfg; }
   const w = devices.get().whoop, st = devices.status('whoop'), strava = devices.get().strava;
   const can = !!cfg.devices?.whoop, E = c.esc;
   c.openSheet(`<div class="row between"><h2>⌚ Devices</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
-    <div class="dev-row"><div class="grow"><b>WHOOP</b><p class="small muted" id="devWhoop" role="status">${E(w ? st.text : can ? 'Brings in your workouts and each day\'s calories burned.' : 'Not available yet on this app.')}</p></div></div>
+    <div class="dev-row"><div class="grow"><b>WHOOP</b><p class="small muted" id="devWhoop" role="status">${E(w ? st.text : can ? 'Brings in your workouts and each day\'s calories burned.' : cfg.offline ? 'Couldn\'t check — you seem to be offline.' : 'Not available yet on this app.')}</p></div></div>
     <div class="row wrap">${w ? `${st.needsReconnect ? '<button type="button" data-act="devconnect">Reconnect</button>' : '<button type="button" data-act="devsync">Sync now</button>'}<button type="button" class="ghost" data-act="devoff">Disconnect</button>` : can ? '<button type="button" data-act="devconnect">Connect WHOOP</button>' : ''}</div>
     ${strava ? '<div class="dev-row"><div class="grow"><b>Strava</b><p class="small muted">Connected before; no longer offered. You can disconnect it.</p></div><button type="button" class="ghost small" data-act="devoffstrava">Disconnect</button></div>' : ''}
     <div class="dev-row"><div class="grow"><b>Garmin</b><p class="small muted">Not available. Garmin only opens its data to approved companies, so OurPawmily can't connect to it directly.</p></div></div>

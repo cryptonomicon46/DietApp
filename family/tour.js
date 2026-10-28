@@ -60,17 +60,17 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-11b',
-  title: 'New on Home: Needs you and Groceries',
-  text: 'Ask the family for a hand, share one grocery list, and search your threads',
+  id: '2026-12a',
+  title: 'New: Watch, Health and Fitness',
+  text: 'Watch first on Us, your Diet and workouts in Health, workouts from words or a photo, and WHOOP',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'A simpler OurPawmily', cards: [
-  ['🔔', 'Needs you, on Home', '🙋 Ask for a hand (a ride, pet sitting, a meal…), see who can help, and the rides nobody’s driving yet.'],
-  ['🛒', 'Groceries', 'One list the household shares on Home. Type “milk, eggs” to add both.'],
-  ['🔎', 'Search and ★ Save threads', 'Search every thread on your phone, save the ones to find again, edit your replies and add pictures to them.'],
-  ['🏠', 'Home', 'Next up, what needs you, groceries, chores and the Gold Card, the dogs — dog details under More about the dogs.'],
-  ['🗂', 'Five places along the bottom', 'Home · Us · Calendar · Threads (with 📷 Photos) · Health. Old posts are kept, not deleted.'],
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'Watch, Health and Fitness', cards: [
+  ['📺', 'Watch, first on Us', 'Want to Watch → Watching → Watched, one tap to log an episode, and Discuss opens a thread.'],
+  ['💪', 'Health', 'Your Diet on one calm screen: today, your weight trend and how many of the last 7 days were on target.'],
+  ['🏋️', 'Fitness', 'Today’s Workout, logged round by round — build it, 💬 describe it in your own words, or 📷 snap a photo or screenshot of it. You check it before it’s added.'],
+  ['⌚', 'WHOOP in Devices', 'Health › Devices brings in your workouts and calories burned. Connecting shares nothing by itself.'],
+  ['🔑', 'Who sees what', 'Diet and Fitness are private until you share each one, person by person. The family’s creator chooses who uses Home, Calendar and Threads.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);

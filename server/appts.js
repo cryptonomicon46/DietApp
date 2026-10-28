@@ -43,7 +43,8 @@ export function cleanAppt(body, { petIds, memberIds, clean, text = clean }) {
     dropAt: when(body.dropAt), dropBy: who(body.dropBy),
     pickAt: when(body.pickAt), pickBy: who(body.pickBy),
     repeatWeeks: [0, 4, 6, 8, 12].includes(Number(body.repeatWeeks)) ? Number(body.repeatWeeks) : 0,
-    vaccine: body.type === 'vaccine' ? clean(body.vaccine, 40) : '',
+    // Which vaccine: sealed in an encrypted family (audit S3); plain only in families not yet encrypted.
+    vaccine: body.type === 'vaccine' ? text(body.vaccine, 40) : '',
     notes: text(body.notes, 300),
     remind: (Array.isArray(body.remind) ? body.remind : []).filter((x) => ['day', 'hour'].includes(x)),
   };

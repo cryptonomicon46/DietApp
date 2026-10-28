@@ -118,3 +118,12 @@ test('linked calendars refresh through the account: the secret link in the body,
     assert.equal(r.ok, false); assert.match(r.error, /live connector/); // the demo connector doesn't fetch
   } finally { globalThis.fetch = real; }
 });
+
+test('a phone with a family sign-in never uploads the old way, even while its account record is cleared (e.g. after a 401)', async () => {
+  device({ 'lp.g.sync': { url: 'https://c.test', code: CODE }, 'fam.token.live': 'sometoken', 'lp.g.owner': 'sandman', 'lp.p.sandman.weights': [{ date: '2026-10-09', weight: 150 }] });
+  assert.equal(account.active(), false, 'no account record on this phone right now');
+  assert.equal(sync.household(), false);
+  hits.length = 0;
+  await sync.push();
+  assert.ok(!hits.some((x) => x.startsWith('PUT')), `no household writes: ${hits}`);
+});

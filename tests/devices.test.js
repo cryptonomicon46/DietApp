@@ -98,12 +98,15 @@ test('no data yet: connected, nothing brought in, said plainly', async () => {
 
 test('a sync: every page, each workout once, the day\'s total burn for Diet', async () => {
   whoop.workouts = [W('w1', '2026-10-26'), W('w2', '2026-10-27'), W('w2', '2026-10-27'), W('w3', '2026-10-28'), { ...W('w4', '2026-10-28'), score_state: 'PENDING_SCORE' }];
-  whoop.cycles = [{ start: '2026-10-27T13:00:00.000Z', score_state: 'SCORED', score: { kilojoule: 10460 } }, { start: '2026-10-28T13:00:00.000Z', score_state: 'SCORED', score: { kilojoule: 8368 } }];
+  // A WHOOP day starts when you fall asleep (here 11:30 PM the evening before, in UTC-7): it's the next day's.
+  whoop.cycles = [{ start: '2026-10-27T06:30:00.000Z', score_state: 'SCORED', score: { kilojoule: 10460 } }, { start: '2026-10-28T06:30:00.000Z', score_state: 'SCORED', score: { kilojoule: 8368 } }];
   const r = await syncOwner(3);
   assert.equal(r.added, 3, 'w2 twice across pages is one workout; an unscored one waits');
   assert.deepEqual(me.get('workoutHistory').map((w) => w.id).sort(), ['whoop:w1', 'whoop:w2', 'whoop:w3']);
   assert.deepEqual(me.get('workoutHistory')[0], { id: 'whoop:w1', name: 'functional-fitness', start: '2026-10-26T15:00:00.000Z', minutes: 60, kcal: 300, strain: 9.1 });
-  assert.equal(me.get('deviceTotal')[new Date('2026-10-28T13:00:00.000Z').toLocaleDateString('en-CA')], 2000);
+  const dayOf = (iso) => new Date(Date.parse(iso) + 12 * 3600e3).toLocaleDateString('en-CA');
+  assert.equal(me.get('deviceTotal')[dayOf('2026-10-28T06:30:00.000Z')], 2000);
+  assert.equal(me.get('deviceTotal')[dayOf('2026-10-27T06:30:00.000Z')], 2500);
   // Again: nothing new, nothing doubled.
   assert.equal((await syncOwner(3)).added, 0);
   assert.equal(me.get('workoutHistory').length, 3);

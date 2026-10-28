@@ -10,7 +10,8 @@ import { normalize } from './workout.js';
 const NUM = '(\\d+(?:\\.\\d+)?)';
 const UNIT = '(lbs?|pounds?|#|kgs?|kilos?|kilograms?)';
 const BODYWEIGHT = /\b(bodyweight|body weight|bw|push-?ups?|pull-?ups?|chin-?ups?|dips?|sit-?ups?|crunch(es)?|bicycle crunch(es)?|plank|burpees?|mountain climbers?|air squats?|jumping jacks?|leg raises?|flutter kicks?|hollow (hold|rock)s?)\b/i;
-const FILLER = /\b(of|at|for|with|and|the|a|an|reps?|sets?|rounds?|each|per|side|dumbbells?|dbs?|kettlebells?|kbs?|barbell|same|weight|lbs?|pounds?|kgs?|kilos?|seconds?|secs?|minutes?|mins?|miles?|meters?|metres?|km|then|do|did)\b/gi;
+const FILLER = /\b(of|at|for|with|and|the|a|an|x|rpe|rir|rest|tempo|pause|reps?|sets?|rounds?|each|per|side|dumbbells?|dbs?|kettlebells?|kbs?|barbell|same|weight|lbs?|pounds?|kgs?|kilos?|seconds?|secs?|minutes?|mins?|miles?|meters?|metres?|km|then|do|did)\b/gi;
+const HEADING = /\b(mon|tues?|wed(nes)?|thu(rs)?|fri|sat(ur)?|sun)(day)?\b|\b(jan(uary)?|feb(ruary)?|march|apr(il)?|june?|july?|aug(ust)?|sept?(ember)?|oct(ober)?|nov(ember)?|dec(ember)?)\b|\b(week|day)\s*\d+\b|\btoday\b/i;
 const unitOf = (u) => (/^k/i.test(u || '') ? 'kg' : 'lb');
 const title = (s) => s.replace(/\s+/g, ' ').trim().replace(/(^|[\s(-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
 
@@ -35,16 +36,21 @@ function item(chunk, { unit, prevWeight }) {
   take(new RegExp(`${NUM}\\s*${UNIT}(?![a-z])`, 'i'), (m) => { out.weight = +m[1]; out.unit = unitOf(m[2]); });
   take(new RegExp(`(?:@|\\bat)\\s*${NUM}(?:\\s*/\\s*${NUM})*`, 'i'), (m) => { const all = m[0].match(/\d+(?:\.\d+)?/g).map(Number); if (all.length > 1) out.weights = all; else out.weight = all[0]; });
   // Sets × reps: "3x10", "3 x 10", "3 sets of 10"; a rep list "12/12/11/11"; "x3" alone = 3 sets.
-  take(/\b(\d+)\s*(?:x|×|sets?\s+of)\s*(\d+)\b/i, (m) => { out.sets = +m[1]; out.reps = +m[2]; });
+  // "135x5" (a weight bigger than any set count, times reps) is one set of 5 at 135.
+  take(/\b(\d+)\s*(?:x|×|sets?\s+of)\s*(\d+)\b/i, (m) => { if (+m[1] > 20 && +m[2] <= 30 && !/sets?\s+of/i.test(m[0])) { out.weight = +m[1]; out.reps = +m[2]; } else { out.sets = +m[1]; out.reps = +m[2]; } });
   // A number list: reps ("12/12/11/11"), or weights once the reps are known ("5x5 135/155/175").
   take(/\b\d+(?:\.\d+)?(?:\s*\/\s*\d+(?:\.\d+)?)+\b/, (m) => { const all = m[0].split('/').map((x) => +x.trim()); if (out.reps != null && out.weight == null && !out.weights) out.weights = all; else out.repsList = all; });
-  take(/(?:^|\s)[x×]\s*(\d+)\b/i, (m) => { out.sets = +m[1]; });
-  take(/\b(\d+)\s*sets?\b/i, (m) => { out.sets = +m[1]; });
+  if (out.sets == null) take(/(?:^|\s)[x×]\s*(\d+)\b/i, (m) => { out.sets = +m[1]; });
+  if (out.sets == null) take(/\b(\d+)\s*sets?\b/i, (m) => { out.sets = +m[1]; });
   take(/\b(\d+)\s*reps?\b/i, (m) => { out.reps = +m[1]; });
   // "10 push-ups": a count before the name is its reps.
   if (out.reps == null && !out.repsList) take(/^\s*(\d+)\s+(?=[a-z])/i, (m) => { out.reps = +m[1]; });
-  // "Bench 5x5 135": one bare number after sets × reps is the weight.
-  if (out.reps != null && out.weight == null && !out.weights) { const bare = s.match(/\b\d+(?:\.\d+)?\b/g); if (bare?.length === 1) take(/\b(\d+(?:\.\d+)?)\b/, (m) => { out.weight = +m[1]; }); }
+  // "Bench 5x5 135" / "4 x 8 x 135": one bare weight-sized number after sets × reps is the weight —
+  // not "RPE 8" or "rest 60", and not on a bodyweight move.
+  if (out.reps != null && out.weight == null && !out.weights && !BODYWEIGHT.test(chunk) && !/\b(rpe|rir|rest|tempo|sec|secs|min|mins|pause)\b/i.test(chunk)) {
+    const bare = s.match(/\b\d+(?:\.\d+)?\b/g);
+    if (bare?.length === 1 && +bare[0] >= 20) take(/\b(\d+(?:\.\d+)?)\b/, (m) => { out.weight = +m[1]; });
+  }
   if (BODYWEIGHT.test(chunk) && out.weight == null && !out.weights) out.bw = true;
   if (out.same && out.weight == null && prevWeight) { out.weight = prevWeight.weight; out.unit = prevWeight.unit; }
   const leftover = s.replace(/[@,.:;()]/g, ' ').replace(/\b\d+(\.\d+)?\b/g, (n) => { out.stray = [...(out.stray || []), n]; return ' '; });
@@ -53,7 +59,8 @@ function item(chunk, { unit, prevWeight }) {
 }
 // Its sets (one per round), with what wasn't said marked to check.
 function setsOf(it, rounds) {
-  const n = rounds || it.repsList?.length || it.weights?.length || it.sets || 1;
+  // A stated set count wins; a shorter list leaves the rest empty (and marked), never copied.
+  const n = rounds || it.sets || it.repsList?.length || it.weights?.length || 1;
   return Array.from({ length: n }, (_, i) => {
     const reps = it.repsList ? it.repsList[i] ?? null : it.reps;
     const weight = it.weights ? it.weights[i] ?? null : it.weight;
@@ -95,6 +102,8 @@ export function parseWorkout(text, { unit = 'lb', today = '' } = {}) {
     const items = [];
     for (const c of chunks.map((x) => x.trim()).filter(Boolean)) {
       const it = item(c.replace(/(\d)\s*\/\s*(\d)/g, '$1/$2'), { unit, prevWeight });
+      // A heading like "Monday 10/28" or "Week 3": not an exercise.
+      if (HEADING.test(c) && !/\d\s*[x×]\s*\d|\b(sets?|reps?|rounds?|lbs?|kg)\b/i.test(c)) { unread.push(c); continue; }
       if (!it.name) { unread.push(c); continue; }
       if (it.stray) {
         unread.push(c);

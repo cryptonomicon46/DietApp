@@ -26,13 +26,14 @@ test('the call sees only the minimized payload; the audit line has names and siz
   const out = await aiCall({ db, purpose: 'workout.text', input: { text: SECRET, unit: 'lb', member: 'Pat' }, now: Date.UTC(2026, 9, 28) }, async (p, provider) => { seen = { p, provider }; return 'ok'; });
   assert.equal(out, 'ok');
   assert.deepEqual(seen, { p: { text: SECRET, unit: 'lb' }, provider: 'anthropic' });
-  const lines = db.m.get('aiaudit:2026-10-28');
+  const auditLines = () => [...db.m.entries()].filter(([k]) => k.startsWith('aiaudit:2026-10-28:')).map(([, v]) => v);
+  const lines = auditLines();
   assert.equal(lines.length, 1);
-  assert.deepEqual({ ...lines[0], ms: 0 }, { at: Date.UTC(2026, 9, 28), purpose: 'workout.text', provider: 'anthropic', payload: 'personal-text', fields: ['text', 'unit'], sizes: { text: SECRET.length, unit: 2 }, dropped: ['member'], ok: true, ms: 0 });
+  assert.deepEqual({ ...lines[0], ms: 0 }, { at: Date.UTC(2026, 9, 28), purpose: 'workout.text', provider: 'anthropic', payload: 'personal-text', fields: ['text', 'unit'], sizes: { text: SECRET.length, unit: 2 }, dropped: 1, ok: true, ms: 0 });
   assert.ok(!JSON.stringify([...db.m.values()]).includes('benched'), 'no value in storage');
   // A failure is audited too, still without values.
   await assert.rejects(aiCall({ db, purpose: 'workout.text', input: { text: SECRET }, now: Date.UTC(2026, 9, 28) }, async () => { throw Object.assign(new Error(SECRET), { status: 529 }); }));
-  const fail = db.m.get('aiaudit:2026-10-28')[1];
+  const fail = auditLines().find((l) => !l.ok);
   assert.equal(fail.ok, false); assert.equal(fail.error, '529');
   assert.ok(!JSON.stringify(fail).includes('benched'));
 });
@@ -100,4 +101,19 @@ test('the /ai/workout route: signed in only, the gateway in between, nothing kep
   // Without Claude on the connector: an honest "off".
   delete env.__anthropic;
   assert.equal((await call('/ai/workout', token, 'POST', { text: 'squat 3x5' })).status, 501);
+});
+
+test('every personal-content route counts against the daily cap (bingo: 10 a day per person)', async () => {
+  const m = new Map();
+  let calls = 0;
+  const client = { beta: { messages: { create: async () => { calls++; return { content: [{ type: 'text', text: Array.from({ length: 30 }, (_, i) => `Square ${i}`).join('\n') }] }; } } } };
+  const env = { __anthropic: client, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
+  const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), { ...env, DEMO: true }, path); return { status: r.status, ...(r.data || {}) }; };
+  const { token } = await call('/auth/demo', null, 'POST', { email: 'sam@example.com' });
+  await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true });
+  const { family } = await call('/families', token, 'POST', { name: 'Fam' });
+  const live = async (path, body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) }), env, path); return r.status; };
+  const statuses = [];
+  for (let i = 0; i < 11; i++) statuses.push(await live(`/families/${family.fid}/bingo/generate`, { show: 'Severance' }));
+  assert.equal(calls, 10); assert.equal(statuses.at(-1), 429, 'the 11th is refused before Claude is called');
 });

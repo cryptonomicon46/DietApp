@@ -935,7 +935,7 @@ export async function familyApi(req, env, path, ctx = null) {
     if (job) { const done = await db.get(jkey(job)); if (done) return json({ ...done, cached: true }); }
     const work = (async () => {
       const { job: _, ...asked } = body;
-      const r = await aiCall({ db, purpose: swap ? 'outing.swap' : 'outing.plan', input: asked, who: user.uid }, (p) => (swap ? swapStop : planOuting)(env, db, fam, p, (fam.ideas?.label || DEFAULT_AREA.label)));
+      const r = await aiCall({ db, purpose: swap ? 'outing.swap' : 'outing.plan', input: asked, who: user.uid, underLimit }, (p) => (swap ? swapStop : planOuting)(env, db, fam, p, (fam.ideas?.label || DEFAULT_AREA.label)));
       if (job && !r.error && !r.demo) {
         await db.put(jkey(job), { ...r, at: Date.now() }, 86400);
         const n = await db.get(`jobnotify:${fam.fid}:${job}`);
@@ -1146,12 +1146,12 @@ export async function familyApi(req, env, path, ctx = null) {
       let client = env.__anthropic;
       if (!client) { const { default: Anthropic } = await import('@anthropic-ai/sdk'); client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }); }
       try {
-        const res = await aiCall({ db, purpose: 'bingo.squares', input: { show }, who: user.uid }, (p) => client.beta.messages.create({ model: 'claude-opus-5-5', max_tokens: 2000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'low' },
+        const res = await aiCall({ db, purpose: 'bingo.squares', input: { show }, who: user.uid, underLimit }, (p) => client.beta.messages.create({ model: 'claude-opus-5-5', max_tokens: 2000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'low' },
           system: 'You write playful, family-friendly bingo squares for couples watching TV together.', messages: [{ role: 'user', content: bingoPrompt(p.show) }] }));
         const squares = parseSquares((res.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n'));
         if (squares.length < NEED) return json({ error: 'Claude came back with too few squares — try again', prompt: bingoPrompt(show) }, 502);
         return json({ squares });
-      } catch { return json({ error: 'Claude is unavailable right now — copy the prompt into any chatbot instead', prompt: bingoPrompt(show) }, 502); }
+      } catch (e) { return json({ error: e instanceof GatewayError ? e.message : 'Claude is unavailable right now — copy the prompt into any chatbot instead', prompt: bingoPrompt(show) }, e instanceof GatewayError ? e.status : 502); }
     }
     if (what === 'packs' && !id && method === 'POST') {
       const title = clean(body.title, 60);
@@ -1622,7 +1622,10 @@ export async function familyApi(req, env, path, ctx = null) {
     const month = new Date().toISOString().slice(0, 7), key = `tidyruns:${fam.fid}:${month}`;
     const n = (await db.get(key)) || 0;
     if (n >= Math.max(1, +env.TIDY_MAX_RUNS || 60)) return json({ error: "that's a lot of tidying this month — more next month" }, 400);
-    const { text } = await aiCall({ db, purpose: 'thread.tidy', input: { text: raw }, who: user.uid }, (p) => askClaude(env, `Tidy up these rough notes someone wrote to share with their family. Keep their words, facts, numbers and links exactly; don't add anything new or give advice. Fix typos, group related points under short "## " headings, and use "- " bullets. Plain text only (no bold, no tables). Answer with only the tidied notes.\n\n${p.text}`, { search: false, maxTokens: 3000, model: env.TIDY_MODEL || 'claude-haiku-5-5' }));
+    let text;
+    try {
+      ({ text } = await aiCall({ db, purpose: 'thread.tidy', input: { text: raw }, who: user.uid, underLimit }, (p) => askClaude(env, `Tidy up these rough notes someone wrote to share with their family. Keep their words, facts, numbers and links exactly; don't add anything new or give advice. Fix typos, group related points under short "## " headings, and use "- " bullets. Plain text only (no bold, no tables). Answer with only the tidied notes.\n\n${p.text}`, { search: false, maxTokens: 3000, model: env.TIDY_MODEL || 'claude-haiku-5-5' })));
+    } catch (e) { if (e instanceof GatewayError) return json({ error: e.status === 413 ? 'that\'s a lot of text — tidy part of it' : e.message }, e.status); throw e; }
     await db.put(key, n + 1, 62 * 86400);
     return json({ text: String(text || '').trim().slice(0, 12000) });
   }

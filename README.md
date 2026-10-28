@@ -72,12 +72,14 @@ Your family and its people and pets, privacy (💪 who sees your Diet and your F
 - **Your keys:** live only on your family's devices. A new device gets them from an invite link, **📲 Add a device**, or your **🔑 Recovery phrase**. Treat those links like passwords.
 - **Photos and PDFs:** each file remembers who uploaded it. Only that person or the family's creator can replace or delete it, and threads, albums, chats and listings only take files you uploaded yourself. A friends' family can open a file only through the shared thread or post it's on, never one that tags someone your family keeps private, and nothing once the families disconnect.
 - **🚩 Report and ⛔ Block:** on someone else's thread or reply (⋯), or a chat message (tap it). A report hides it for you and the family's creator sees a count; a chat report keeps only which message and why, never what it says. Block hides that person's threads, replies and chats. Unblock in Me › Blocked.
-- **AI features:** every one is optional, and none of them gets your family's keys.
+- **AI features:** every one is optional, and none of them gets your family's keys. Every request goes through one checkpoint on the connector that sends only the fields that feature needs, sends personal content only to Claude (never a free service that may train on it), limits how many a day each person can make, and keeps a 30-day note of each request without its content.
 
 | Feature | Who answers | What's sent |
 |---|---|---|
 | 💬 Help | Claude (Anthropic) | Your questions; to help with your account: your name, email, family and member names |
 | ✨ Tidy it up (Threads) | Claude | Only the text you tap it on |
+| 💬 Describe it (Fitness) | Your phone first; Claude only if you tap *Read it with Claude* | The words you typed and your weight unit — nothing else |
+| 📷 Photo (Fitness) | Claude, only when you tap *Read it* | That one picture, redrawn on your phone (no location or camera details) and your weight unit; not kept |
 | 🏋️ Ask Claude (Train) | Claude | The workout command you typed and today's exercises |
 | 🧭 Plan an outing / swap a stop | Claude only | The place you typed, the day, your choices and your home town; your taste line only when 💞 *Use our taste* is on |
 | 💡 Weekly date ideas | Gemini with Google Search, or Claude | Your area and the dates |
@@ -89,7 +91,7 @@ The full privacy policy is in [family/privacy.html](family/privacy.html), and th
 
 Most features work as soon as the connector (a small Cloudflare Worker) is deployed. Some need a key or a switch, all explained step by step in [server/README.md](server/README.md):
 - **Google sign-in:** a Google client ID.
-- **Claude features** (help, tidy, outings, date ideas): an Anthropic API key. **Gemini** (optional, free within Google's daily allowance, for date ideas only): a Gemini API key; Claude stays as the backup.
+- **Claude features** (help, tidy, outings, date ideas, reading workouts from words or photos): an Anthropic API key. **Gemini** (optional, free within Google's daily allowance, for date ideas only): a Gemini API key; Claude stays as the backup.
 - **Date ideas, movies and episodes:** Ticketmaster, TMDB and OMDb keys (SeatGeek optional).
 - **📥 From Google Photos** in albums: the Google Photos Picker API switched on in Google Cloud.
 - **Photos:** the R2 bucket.

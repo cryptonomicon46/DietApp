@@ -338,7 +338,9 @@ details.house .fold { margin-left: auto; color: var(--brand); font-weight: 700; 
 .postit { flex: 0 0 150px; min-height: 116px; padding: 12px; border-radius: 4px 4px 14px 4px; box-shadow: 0 3px 8px rgba(0,0,0,.08); font-size: .88rem; font-family: "Marker Felt", "Comic Sans MS", cursive; color: #3a3320; transform: rotate(-1.2deg); white-space: pre-line; overflow-wrap: anywhere; }
 .postit:nth-child(even) { transform: rotate(1deg); }
 .postit small { display: block; margin-top: 8px; font: .7rem -apple-system, sans-serif; color: #6b5d2f; }
-.postit .heart { background: none; padding: 0 2px; font-size: .8rem; color: inherit; }
+.postit .heart { background: none; padding: 0 2px; font-size: .8rem; color: inherit; position: relative; }
+/* A bigger place to tap than the little heart shows (44 × 44), without moving the note's layout. */
+.postit .heart::after { content: ''; position: absolute; inset: -14px -12px; }
 .postit.yellow { background: #fff3a8; } .postit.pink { background: #ffd6e5; } .postit.blue { background: #d4ecff; } .postit.green { background: #d9f5e5; } .postit.peach { background: #ffe0c2; }
 .postit.add { background: transparent; border: 2px dashed var(--line); color: var(--muted); box-shadow: none; display: grid; place-items: center; font: 600 .9rem -apple-system, sans-serif; transform: none; }
 .emo { display: flex; gap: 6px; flex-wrap: wrap; } .emo .chip { font-size: 1.1rem; padding: 4px 8px; }
@@ -1101,6 +1103,6 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .fx-check { min-width: 48px; min-height: 48px; border-radius: 50%; font-size: 1.2rem; }
 .fx-logrow.done { opacity: .7; }
 .fx-rdone { margin: 4px 0; }
-.fx-measure { justify-self: start; font-size: .8rem; padding: 6px 8px; }
+.fx-measure { justify-self: start; font-size: .8rem; padding: 6px 8px; min-height: 40px; }
 .fx-lab { width: 34px; }
 .fx-lab span { font-size: .7rem; color: var(--muted); min-height: 40px; display: grid; place-items: center; }

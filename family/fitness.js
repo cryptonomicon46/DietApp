@@ -105,20 +105,25 @@ async function readSaid() {
   const local = T.parseWorkout(text, { today: fx.c.iso() });
   if (!T.needsHelp(local)) { fx.said = null; fx.unread = []; return edit(local.workout); }
   fx.said = { text, local };
-  if (fx.ai == null) fx.ai = await fx.c.aiReady().catch(() => false);
+  if (fx.ai == null) fx.ai = await fx.c.aiReady().catch(() => null);
   return render();
 }
 async function readWithClaude() {
   const c = fx.c, text = fx.said?.text;
   if (!text || fx.reading) return;
   fx.reading = true; render();
+  const asked = fx.said;
   try {
     const r = await c.api.post('/ai/workout', { text, unit: 'lb', today: c.iso() });
+    fx.reading = false;
+    if (fx.view !== 'describe' || fx.said !== asked) return null; // left meanwhile: don't replace anything
     fx.said = null; fx.unread = r.unread || [];
     return edit(r.workout);
   } catch (e) {
+    fx.reading = false;
     if (e.status === 501) fx.ai = false;
-    c.toast(e.status === 501 ? 'Reading with Claude isn\'t set up here — review what your phone read' : e.message);
+    if (fx.view !== 'describe') return null;
+    c.toast(e.status === 501 ? 'Reading with Claude isn\'t set up here — review what your phone read' : !navigator.onLine ? "You're offline — try again when you're connected" : e.message);
     return render();
   } finally { fx.reading = false; }
 }
@@ -259,7 +264,7 @@ export async function onClick(t) {
     case 'read': return readSaid();
     case 'reviewlocal': { const w = fx.said?.local?.workout; fx.unread = fx.said?.local?.unread || []; fx.said = null; return w && edit(w); }
     case 'readai': return readWithClaude();
-    case 'photo': dropPic(); fx.view = 'photo'; render(); if (fx.ai == null) { fx.ai = await c.aiReady().catch(() => false); render(); } return null;
+    case 'photo': dropPic(); fx.view = 'photo'; render(); if (fx.ai == null) { fx.ai = await c.aiReady().catch(() => null); render(); } return null;
     case 'readpic': return readPic();
     case 'pickpic': return document.querySelector('[data-fxpick]')?.click();
     case 'tpl': return startWith(fx.templates[n[0]], 'repeat');

@@ -14,7 +14,18 @@ Last update: 2026-10-28 — Phases 4–11 authorized (master build authorization
 - **Phase 9 — 📷 Photo → Today's Workout:** done; Checkpoint D below.
 - **Phase 10 — legacy household-code migration:** done; details below.
 - **Phase 11 — Devices / WHOOP / Garmin:** done; Checkpoint E below.
-- **Next:** final full-product review (six perspectives), then the report and STOP.
+- **Final full-product review:** done (below). **Phases 4–11 are complete; stopped for review.** Not merged, not deployed.
+
+### Final review (six perspectives)
+Two independent reviewers (security/privacy; correctness) read `510eacc..HEAD` / `f4b3404..HEAD` without my notes; every finding below was traced in code before fixing.
+- **Security/privacy — fixed:** (1) a signed-in phone could go back to uploading its full tracker copy to the household code after a 401 cleared its account record → `sync.household()` also refuses whenever a family sign-in token exists (test). (2) Daily AI caps weren't enforced for outing, tidy and bingo (bingo had no cap at all) → every route passes `underLimit`; cap refusals now say so (bingo 429 test; tidy returns the message instead of a 500). (3) Caller-chosen field names went into audit lines → only the count of dropped fields is kept. Audit S3 (partly): unsealed vaccine names on appointments → sealed on the phone, plaintext refused in encrypted families.
+- **Security/privacy — documented, not changed:** the legacy `/assistant` route in `worker.js` (signed-out phones with a household code) isn't behind the gateway; the help chat's tool results (names, emails the help agent looks up) reach Anthropic outside the gateway's field list; family photo/document reads check family membership but not household areas (a member without Threads who knows a file id can still fetch it — they hold the family key anyway). Remaining S3 fields: bingo pack titles/squares, couples-picks names, Market borrower name, help-offer messages (all hidden or game features), member/pet avatar photos (sealing them would hide them from connected families — a product decision), and unsealed blob detection.
+- **Correctness — fixed:** parser: "Bench 135x5" no longer means 135 sets (weight × reps), "x 135" no longer overwrites a stated set count, "RPE 8" / "rest 60" no longer become weights (they go to "couldn't place"), a stated set count wins over a shorter weight list (the rest left empty and flagged), "Monday 10/28" / "Week 3" headings aren't exercises (6th parser test). WHOOP: a day total belongs to the day the cycle wakes into (cycles start at bedtime); the "so far today" total only replaces the estimate once it's higher (a morning partial no longer freezes into the day's burn); device workouts use the local date; disconnect renews the token first so WHOOP's access is actually revoked; two apps renewing the same sign-in no longer falsely ask to reconnect. Fitness: "Read it with Claude" no longer stays disabled after an error, a late answer can't replace a draft you started meanwhile, and an offline moment no longer hides the Claude option or Devices until reload. Audit lines are one record per call (no lost lines, no oversized shared list).
+- **Performance:** Watch moved out of the start-up script → **176 KB** (baseline 176; was 182). Cold 14 requests, 0 duplicates, paint ~1.33 s; warm layout shift 0 (baseline 0.007), cold first-ever 0.028 (known issue below).
+- **Mobile/accessibility (320 px, all new screens: Health, Devices, Fitness, Describe, Review, Photo, Us, Watchlist):** no horizontal scroll, every control named, no duplicate ids; fixed two small tap targets (Fitness "Measured in" 31 → 40 px; note ♥/remove on Us 16 px → 44 px tap area). Keyboard: the photo picker is a real button (not a label), the Describe box is focused on open, status lines use `role=status`/`alert`.
+- **Consumer design:** one primary action per screen (Read it / Review it / Add to Today's Workout / Connect WHOOP), no AI jargon in Fitness except the explicit "Read it with Claude" consent, honest unavailable states (Photo without Claude, WHOOP not set up, Garmin). What's New (`2026-12a`) tells existing members about Watch, Health, Fitness, Devices and who-sees-what.
+- **Maintainability:** new code lives in small lazy modules (`health.js`, `fitness.js`, `deviceScreen.js`, `watch.js`, `js/workout.js`, `js/workoutText.js`, `js/devices.js`, `server/aiGateway.js`, `server/workoutAi.js`) with their own tests; `app.js` hands lazy modules their helpers once (`init`).
+- `npm test`: 338 pass.
 
 ### Phase 11 — Devices (Checkpoint E)
 **How WHOOP works now.** 💪 Health › *Devices ›* (or the trackers' 🔐 Privacy › Devices) › **Connect WHOOP** (shown only when the connector has `WHOOP_CLIENT_ID/SECRET`) → the phone makes a random `state` (kept in sessionStorage; `.f` = come back to the family app) → connector `/whoop/login` → WHOOP's own sign-in and consent page, scopes **`offline read:workout read:cycles`** (recovery dropped) → `/whoop/callback` exchanges the code with the client secret (which never leaves Cloudflare) → back to `family/#connect=whoop:<tokens>:<state>` (fragment only) → the phone checks the state (a sign-in that didn't start on this device, or a "no" on WHOOP's page, connects nothing) → tokens stored on this device under the owner's profile (`lp.p.<owner>.devices`; never exported, never in a Health part, never on the server) → the account copy is pulled, the last 14 days of workouts and day totals synced (all pages, `nextToken`), merged by WHOOP id, pushed (Fitness part). After that: a sync when the trackers open (≥ 10 min apart) and *Sync now*. Workouts → `workoutHistory` / `workouts` → 🏋️ Fitness history (`fromDeviceWorkout`) and today's calories; cycles → `deviceTotal[date]` → Diet's burn ("WHOOP (so far today)") unless a total was typed. Errors: refresh refused (400/401) or API 401/403 after one refresh → *reconnect* (Reconnect button); 5xx/offline → "couldn't reach WHOOP… tries again" (still connected). Disconnect → `/whoop/revoke` → WHOOP `DELETE /v2/user/access` (best effort), tokens deleted, workouts kept.
@@ -141,7 +152,7 @@ State mapping (stored → shown → primary action), nothing rewritten:
 | Item | Value |
 | --- | --- |
 | Last verified safe commit | `main`: `e374c81` (deployed). Work branch `v2/phase-2-3`: see the evidence log (CI per commit) |
-| Branch | `main` (deployed); `v2/phase-2-3` (Phases 0–1 gaps, 2, 3 — not merged, not deployed) |
+| Branch | `main` (deployed, Phases 0–3); `v2/phase-4-11` (Phases 4–11 + final review — not merged, not deployed; deploy order: `pawdeploy` the Worker and merge to `main` back to back) |
 | Pages (front end) | deployed from `main` at `e374c81` — "pages build and deployment" run green |
 | Worker (connector) | NOT deployed with Phase 0–1 yet (needs `git pull` + `pawdeploy`) |
 | App rollback | revert the Phase 0–1 merge range on `main` and push (Pages redeploys) |
@@ -236,7 +247,10 @@ Closed since the Phase 0–1 gate: feed → Threads notification label (`5c02573
 1. **Long tasks** ~510 ms median vs ~490 ms before 2.0 (within run-to-run noise of ±60 ms on this VM; not proven fixed).
 2. **First-visit layout shift** with a long Needs-you list (see Performance).
 3. **Concurrent edits to Home lists** (`requests:`, `groceries:`) are read-modify-write in KV: two simultaneous claims or adds can lose one (last write wins). Same pattern as chores and appointments. Low risk for one household; a fix would move the lists into the family's Durable Object.
-4. **Audit S3:** some fields still accept plaintext in encrypted families (pre-existing; not in Phase 0–3 scope beyond the new fields, which are sealed-only).
+4. **Audit S3:** partly fixed in the final review (appointment vaccine names sealed); the remaining fields are listed under Final review — mostly hidden features, plus avatars (a product decision).
+10. **Cold first-visit layout shift 0.028** (budget 0.05; warm 0): only for the person with the 📞 call reminder when it wraps to two lines (time-of-day dependent); Next up remembers its height after the first visit.
+11. **Real-world checks not possible here:** WHOOP live connect/sync/revoke (no WHOOP credentials; developer site unreachable from this session), Claude reading real photos and real typed workouts (no API key), help chat after deploy.
+12. **A member without 📖 Threads also loses the couple's just-us notebook** (its threads are `aud: 'us'`) — decide whether the notebook should follow Us instead.
 5. **Deploy window:** between `pawdeploy` and merging to `main`, linked calendars don't refresh (S1 changed the request shape). Do both back to back.
 6. **A dog document deleted by someone other than its uploader** is removed from the dog's record, but the file stays in the store (the server refuses the delete: 403 by design).
 7. **Trackers code** (`js/storage.js` built-in profiles) contains real first names — pre-existing, not shown in the family app; out of Phase 0–3 scope.
@@ -257,7 +271,15 @@ Closed since the Phase 0–1 gate: feed → Threads notification label (`5c02573
 | Request time as unsealed free text | FIXED `03cbd76` |
 | Kids could read/claim requests | FIXED `29b6939` |
 | Reply images uploaded unlocked from a keyless device | FIXED `03cbd76` |
-| Plaintext accepted in encrypted families for some older fields (audit S3) | OPEN (pre-existing) |
+| Plaintext accepted in encrypted families for some older fields (audit S3) | PARTLY FIXED (vaccine names, final review); rest listed under Final review |
+| Signed-in phone could resume household-code uploads after a 401 | FIXED (final review) |
+| No daily AI cap on bingo / outing / tidy | FIXED (final review) |
+| Caller-chosen names in AI audit lines | FIXED (final review) |
+| WHOOP OAuth state not checked; tokens under the open profile | FIXED (Phase 11) |
+| Signed-in phones uploaded the full tracker copy to the household code | FIXED (Phase 10) |
+| Us part readable beyond the couple; old posts without Home | FIXED (Checkpoint B) |
+| Photo/document reads don't check household areas | OPEN (low; documented) |
+| Legacy `/assistant` and help-tool results outside the AI gateway | OPEN (low; documented) |
 | Shared family key: permissions are server-enforced, not cryptographic | DOCUMENTED; future security project (docs/ARCHITECTURE.md §9) |
 
 Privacy review of Phase 3 features: request and grocery text sealed with the family key on the phone; the server sees who asked/helps, kind, day, clock time, and grocery timestamps. Notifications carry only the kind and day (never the text). Thread search decrypts in memory only, no index, nothing sent. App feedback sends only what the person sees in the form, after *Send this*. Nothing from Phases 2–3 goes to AI providers. No family key reaches any third party.

@@ -96,7 +96,7 @@ async function openPost(p) {
   return { ...p, text: text ?? '', photo: photo ?? '', comments, help, locked: text === null || photo === null, _key: k };
 }
 // What only family members can read on an appointment: where, notes, how it went.
-const openAppt = async (a) => ({ ...a, place: (await unlock(a.place)) ?? '🔒', notes: (await unlock(a.notes)) ?? '', outcome: (await unlock(a.outcome)) ?? '' });
+const openAppt = async (a) => ({ ...a, place: (await unlock(a.place)) ?? '🔒', notes: (await unlock(a.notes)) ?? '', outcome: (await unlock(a.outcome)) ?? '', vaccine: a.vaccine ? (await unlock(a.vaccine)) ?? '' : '' });
 // How someone shows up: relations are as the person who added them described them.
 const relLabel = (m) => (m.id === fam()?.me ? 'You' : m.kind === 'pet' ? SPECIES[m.species] || 'Pet' : m.relation === 'self' ? 'Family creator' : RELATION[m.relation] || 'Family');
 const me = () => fam()?.members.find((m) => m.id === fam().me);
@@ -414,7 +414,8 @@ function fit() {
       api, fid: state.fid, me: fam().me, esc, toast, openSheet, closeSheet, iso: () => isoLocal(), confirm: (q) => confirm(q),
       lock: async (v) => (fk() ? { enc: await seal(fk(), v) } : v), unlock: async (v) => (isSealed(v) ? tryOpen(fk(), v, null) : v),
       el: () => (state.view === 'fitness' ? $('#view') : null), show: () => (state.view === 'fitness' ? F.render() : show('fitness')),
-      aiReady: async () => !!(await api.liveConfig()).ai,
+      // null when the settings couldn't be read (offline): asked again next time, not remembered as off.
+      aiReady: async () => { const cfg = await api.liveConfig(); return cfg.missing || cfg.offline ? null : !!cfg.ai; },
     });
     return F;
   })().catch((e) => { fitMod = null; throw e; });
@@ -4906,7 +4907,7 @@ document.addEventListener('submit', (e) => {
     e.preventDefault();
     const fd = new FormData(f);
     const body = { ...v, pets: fd.getAll('pets'), repeatWeeks: +v.repeatWeeks };
-    const sealIt = async () => { body.place = await lock(body.place); body.notes = await lock(body.notes); };
+    const sealIt = async () => { body.place = await lock(body.place); body.notes = await lock(body.notes); if (body.vaccine) body.vaccine = await lock(body.vaccine); };
     return act(async () => {
       await sealIt();
       if (f.dataset.id) await api.patch(`/families/${state.fid}/appts/${f.dataset.id}`, { edit: body });

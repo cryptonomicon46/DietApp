@@ -63,3 +63,19 @@ test("what it can't place comes back unread, and only then is help worth asking 
   assert.equal(needsHelp(odd), true);
   assert.equal(needsHelp(parseWorkout('')), true);
 });
+
+test('review fixes: nothing confidently wrong from weight×reps, RPE, rest, dates or a short weight list', () => {
+  const p = (t) => shape(parseWorkout(t).workout);
+  assert.deepEqual(p('Bench 135x5'), [['straight', 1, [['Bench', [[5, 135]]]]]], '135x5 is one set of 5 at 135, not 135 sets');
+  assert.deepEqual(p('Bench 4 x 8 x 135'), [['straight', 4, [['Bench', Array(4).fill([8, 135])]]]]);
+  const rpe = parseWorkout('Bench 3x10 RPE 8');
+  assert.deepEqual(shape(rpe.workout), [['straight', 3, [['Bench', Array(3).fill([10, null])]]]], 'RPE 8 is not 8 lb');
+  assert.deepEqual(rpe.unread, ['Bench 3x10 RPE 8']);
+  assert.deepEqual(p('Push-ups 3x15 rest 60'), [['straight', 3, [['Push-Ups', Array(3).fill([15, 'bw'])]]]], 'rest 60 is not 60 lb');
+  const short = parseWorkout('Bench 5x5 135, 155, 175').workout.blocks[0].items[0].sets;
+  assert.deepEqual(short.map((s) => [s.reps, s.weight]), [[5, 135], [5, 155], [5, 175], [5, null], [5, null]], 'five sets as stated');
+  assert.ok(short[3].uncertain.includes('weight'));
+  const day = parseWorkout('Monday 10/28\nBench 3x10 @ 135');
+  assert.deepEqual(day.unread, ['Monday 10/28']);
+  assert.equal(day.workout.blocks.length, 1);
+});

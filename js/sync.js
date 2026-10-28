@@ -49,7 +49,8 @@ export const sync = {
   // Reading partners who haven't moved yet.
   householdReads() { const s = this.settings(); return !!(s?.url && s?.code && !s.moved && ownerId() && !account.get()?.householdOff); },
   // Uploading this phone's copy: only a phone that isn't signed in to the family.
-  household() { return this.householdReads() && !account.active(); },
+  // (Signed in = a family sign-in on this phone, even while its account record is being refreshed.)
+  household() { return this.householdReads() && !account.active() && !token(); },
   // Someone in your family who has their trackers on their account: never read from the code.
   movedToAccount(profileId) { return !!(account.active() && account.get()?.members?.[profileId]); },
   enabled() { return this.household() || account.active(); },

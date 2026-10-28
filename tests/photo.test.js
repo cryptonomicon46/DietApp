@@ -100,7 +100,7 @@ test('the route: the picture passes through and is not kept; caps and sizes hold
   assert.equal(r.status, 200); assert.equal(r.workout.source, 'photo');
   assert.ok(![...m.values()].some((v) => JSON.stringify(v).includes(pic)), 'the picture is not stored');
   const raw = [...m.entries()].find(([k]) => k.includes('aiaudit:'))[1], audit = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  assert.deepEqual(audit.at(-1).fields, ['image', 'mime', 'unit']); assert.equal(audit.at(-1).payload, 'personal-image');
+  assert.deepEqual(audit.fields, ['image', 'mime', 'unit']); assert.equal(audit.payload, 'personal-image');
   assert.equal((await call('/ai/workout', token, 'POST', { image: 'A'.repeat(3_500_004), mime: 'image/jpeg' })).status, 413);
   assert.equal((await call('/ai/workout', token, 'POST', { image: 'not base64!', mime: 'image/jpeg' })).status, 400);
   for (let i = 1; i < 20; i++) assert.equal((await call('/ai/workout', token, 'POST', { image: pic, mime: 'image/png' })).status, 200);

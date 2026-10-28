@@ -3,8 +3,8 @@
 //   2. sends only that purpose's allowed fields, each capped in size (anything else is dropped);
 //   3. goes only to that purpose's provider — personal content never goes to a free tier that may
 //      train on it (Gemini's free tier), and family keys never leave the phone at all;
-//   4. leaves an audit line: purpose, provider, the field names and their sizes, how long it took and
-//      whether it worked — never the values themselves.
+//   4. leaves an audit line: purpose, provider, the allowed field names and their sizes, how many
+//      other fields were dropped, how long it took and whether it worked — never the values.
 // What each purpose may carry is the whole contract; the prompts live with the features.
 export const PURPOSES = {
   // 💬 "Describe it": the words someone typed about their workout (and their weight unit).
@@ -44,13 +44,11 @@ export function minimize(purpose, input = {}) {
   return { payload, sizes, dropped };
 }
 
-// Audit lines: one list per day (30 days), field names and sizes only.
+// Audit lines: one record per call (kept 30 days) — no shared list to race on or outgrow.
 export async function audit(db, line) {
   if (!db) return;
-  const day = new Date(line.at).toISOString().slice(0, 10), key = `aiaudit:${day}`;
-  const list = (await db.get(key)) || [];
-  list.push(line);
-  await db.put(key, list.slice(-1000), 30 * 86400);
+  const day = new Date(line.at).toISOString().slice(0, 10);
+  await db.put(`aiaudit:${day}:${line.at.toString(36)}${Math.random().toString(36).slice(2, 8)}`, line, 30 * 86400);
 }
 
 // The one way to call an AI provider. `run(payload, provider)` does the provider call with only
@@ -63,7 +61,8 @@ export async function aiCall({ db, purpose, input, provider, who, underLimit, no
   if (to !== p.provider || !ALLOWED[p.payload].includes(to)) throw new GatewayError(`${purpose} can't go to ${to}`, 500);
   const { payload, sizes, dropped } = minimize(purpose, input);
   if (who && underLimit && !(await underLimit(db, `ai:${purpose}:${who}:${new Date(now).toISOString().slice(0, 10)}`, p.perDay, 86400))) throw new GatewayError("that's a lot for one day — try again tomorrow", 429);
-  const line = { at: now, purpose, provider: to, payload: p.payload, fields: Object.keys(payload), sizes, ...(dropped.length ? { dropped } : {}) };
+  // Dropped fields are only counted: their names come from the caller and could carry text.
+  const line = { at: now, purpose, provider: to, payload: p.payload, fields: Object.keys(payload), sizes, ...(dropped.length ? { dropped: dropped.length } : {}) };
   const t0 = Date.now();
   try {
     const out = await run(payload, to);

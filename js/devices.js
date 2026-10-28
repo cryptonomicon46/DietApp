@@ -51,9 +51,11 @@ export const devices = {
   },
   // Forget the sign-in here and ask WHOOP to drop this app's access (best effort). Synced workouts stay.
   async disconnect(provider) {
-    const d = load(), t = d[provider];
+    // A fresh token first (they last about an hour), so WHOOP can actually be asked.
+    const token = load()[provider] ? await accessToken(provider).catch(() => load()[provider]?.access_token) : null;
+    const d = load();
     delete d[provider]; save(d);
-    if (provider === 'whoop' && t?.access_token) await fetch(`${server(d)}/whoop/revoke`, { method: 'POST', headers: { Authorization: `Bearer ${t.access_token}` } }).catch(() => null);
+    if (provider === 'whoop' && token) await fetch(`${server(d)}/whoop/revoke`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
   },
   // A line for the Devices screen.
   status(provider) {
@@ -94,7 +96,12 @@ async function accessToken(provider, force = false) {
   if (!force && t.expires_at - Date.now() > 60_000) return t.access_token;
   const res = await fetch(`${server(d)}/${provider}/refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: t.refresh_token }) }).catch(() => null);
   if (!res) throw new DeviceError('unavailable', 'offline');
-  if (res.status === 401 || res.status === 400) throw new DeviceError('reconnect', 'sign-in removed or ran out');
+  if (res.status === 401 || res.status === 400) {
+    // The other app on this device (trackers / OurPawmily) may have just renewed it: use that one.
+    const now = load()[provider];
+    if (now?.refresh_token && now.refresh_token !== t.refresh_token) return now.expires_at - Date.now() > 60_000 ? now.access_token : accessToken(provider, true);
+    throw new DeviceError('reconnect', 'sign-in removed or ran out');
+  }
   if (!res.ok) throw new DeviceError('unavailable', `${res.status}`);
   const fresh = await res.json();
   const cur = load();
@@ -134,7 +141,8 @@ async function whoopSince(start) {
     if (c.score_state && c.score_state !== 'SCORED') continue;
     const kj = c.score?.kilojoule;
     if (!kj || !c.start) continue;
-    const day = localDay(c.start);
+    // A WHOOP day starts when you fall asleep, often the evening before: it belongs to the next day.
+    const day = localDay(new Date(Date.parse(c.start) + 12 * 3600e3).toISOString());
     totals[day] = Math.max(totals[day] || 0, Math.round(kj / 4.184));
   }
   return { workouts, totals };

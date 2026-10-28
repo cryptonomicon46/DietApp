@@ -127,12 +127,14 @@ function burnedToday() {
   const typed = state.whoopTotal[today];
   if (typed) return { kcal: typed, source: 'WHOOP (you entered)' };
   const synced = store.get('deviceTotal', {})[today];
-  if (synced) return { kcal: synced, source: 'WHOOP (so far today)' };
   const base = baseTargets();
-  if (!activityOf(state.profile).tracked) return { kcal: base.tdee, source: 'estimate from your activity level' };
+  if (!activityOf(state.profile).tracked) return synced > base.tdee ? { kcal: synced, source: 'WHOOP (so far today)' } : { kcal: base.tdee, source: 'estimate from your activity level' };
   const day = todaysTraining();
   const exercise = day.sessions.reduce((a, w) => a + Math.max((w.kcal || 0) - (base.bmr / 1440) * w.minutes, 0), 0);
-  return { kcal: Math.round(base.tdee + exercise), source: 'estimate: daily life + your activities' };
+  const est = Math.round(base.tdee + exercise);
+  // WHOOP's total so far today counts once it's past the estimate (in the morning it's only partial).
+  if (synced > est) return { kcal: synced, source: 'WHOOP (so far today)' };
+  return { kcal: est, source: 'estimate: daily life + your activities' };
 }
 
 // Positive while cutting, 0 at maintenance or on a diet break, negative on a lean gain.
