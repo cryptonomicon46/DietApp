@@ -149,15 +149,18 @@ async function boot() {
   if (dk) { await keys.set(dk.fid, dk.key); history.replaceState(null, '', location.pathname); state.fid = dk.fid; state.keyAdded = true; }
   state.invite = LS.get('fam.invite');
   if (!api.token()) return signIn();
+  // The family this phone opened last is asked for alongside /me (same sign-in; used only if
+  // /me says you're still in it), so start-up waits for one round trip instead of two.
+  const famEarly = state.fid && !state.family ? { fid: state.fid, p: api.get(`/families/${state.fid}`).catch(() => null) } : null;
   const r = await api.get('/me').catch((err) => (err.status === 401 ? null : Promise.reject(err)));
   if (!r) return signIn();
   state.user = r.user; state.families = r.families;
-  if (state.support == null) api.liveConfig().then((c) => { state.support = c.supportEmail || ''; }).catch(() => {});
+  if (state.support == null) later(loadSupport, 8000);
   if (r.user.needsConsent) return consentView();
   if (state.invite) return inviteView();
   if (!state.families.length) return onboard();
   if (!state.families.some((f) => f.fid === state.fid)) state.fid = state.families[0].fid;
-  await loadFamily();
+  await loadFamily(famEarly?.fid === state.fid ? famEarly.p : null);
   const hv = location.hash.match(/^#(feed|dogs|calendar|me|us|threads|chats|chat=[a-z0-9_]+)$/)?.[1];
   if (hv) { state.view = hv === 'dogs' ? 'pets' : hv; history.replaceState(null, '', location.pathname + location.search); }
   show(state.view === 'member' && !member(state.memberId) ? 'feed' : state.view === 'us' && !partnerMember() ? 'feed' : state.view === 'chat' ? 'chats' : state.view);
@@ -165,8 +168,8 @@ async function boot() {
   startChats();
   if (partnerMember() && state.view !== 'us') loadUs().then(usBadge).catch(() => {});
 }
-async function loadFamily() {
-  const r = await api.get(`/families/${state.fid}`);
+async function loadFamily(early = null) {
+  const r = (early && await early) || await api.get(`/families/${state.fid}`);
   state.family = r.family; state.connected = r.connected;
   LS.set('fam.fid', state.fid);
   jobs.list = null; setTimeout(() => resumeJobs().catch(() => {}), 0);
@@ -346,8 +349,8 @@ function startChats() {
   const on = !!state.family && canChat();
   $('#chatTop').hidden = !on;
   if (!on) { dmMod?.stop(); chatBadge(0); return; }
-  const go = () => dms().catch(() => {});
-  if ('requestIdleCallback' in window) requestIdleCallback(go, { timeout: 3000 }); else setTimeout(go, 1200);
+  // The badge and live connection come once the first screen has settled.
+  later(() => dms().catch(() => {}), 2500);
 }
 const demoBanner = () => (api.mode() === 'demo' ? '<div class="banner">Demo — everything stays on this phone.</div>' : '');
 // 🖥 A wide window (a Mac, a big iPad in landscape): side-by-side layouts. Crossing the line
@@ -394,7 +397,7 @@ async function feedView() {
   if (!r) return;
   state.feed = await Promise.all(r.posts.map(openPost));
   renderPosts();
-  setTimeout(() => moveOldPhotos().catch(() => {}), 1500);
+  later(() => moveOldPhotos().catch(() => {}), 15000); // once per family on this phone
 }
 // The first week of a month: last month's Gold Card winner tops the feed.
 async function goldNews() {
@@ -1136,6 +1139,7 @@ function petDetails(m, data) {
 }
 
 function meView() {
+  if (state.support == null) loadSupport().then(() => { if (state.view === 'me') meView(); });
   const f = fam(), my = me();
   const others = f.members.filter((m) => m.kind === 'person' && m.id !== my.id && m.status === 'active');
   const hasLegacy = Object.keys(localStorage).some((k) => k.startsWith('lp.p.'));
@@ -2538,7 +2542,7 @@ async function nextUpCtx() {
     dogs = { enabled: true, walkedToday: (c?.days?.[today] || []).some((e) => e.kind === 'walk' || e.kind === 'park') };
   }
   // New episodes need the Watch list; it's fetched once in the background, then this runs again.
-  if (p && !watch.shows.length && !nu.watchKick) { nu.watchKick = true; loadWatch().then(loadTv).then(() => renderNextUp()).catch(() => {}); }
+  if (p && !watch.shows.length && !nu.watchKick) { nu.watchKick = true; later(() => { if (!watch.shows.length) loadWatch().then(loadTv).then(() => renderNextUp()).catch(() => {}); }, 8000); }
   const shows = (watch.shows || []).filter((x) => x.status === 'watching' && x.ep?.newCount).map((x) => ({ id: x.id, title: x.title, newCount: x.ep.newCount, from: x.ep.from, to: x.ep.to }));
   const A = await import('../js/activity.js');
   const workouts = {};
