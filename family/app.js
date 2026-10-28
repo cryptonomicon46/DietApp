@@ -3,6 +3,7 @@
 // The trackers (food, training, dogs, calendar) stay in the current app for now; their data
 // comes over with "Bring over the current app".
 import { api } from './api.js';
+import { makeShared } from './shared.js';
 import { sealBytes, openBytes } from './crypto.js';
 import { keys, seal, tryOpen, newKey, makeCheck, checkKey, lockBackup, unlockBackup, newPhrase, keyFromHash, deviceLink, isSealed } from './crypto.js';
 import { planImport, legacySnapshot, backupBlob, runImport, importCare, verifyImport } from './migrate.js';
@@ -38,6 +39,17 @@ const download = (blob, name) => { const a = document.createElement('a'); a.href
 const VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
 const state = { user: null, families: [], fid: LS.get('fam.fid'), family: null, connected: [], feed: [], view: 'feed', memberId: null, invite: null, open: {} };
 const fam = () => state.family;
+// Requests for the same thing at start-up (and within a few seconds) are shared: see shared.js.
+const shared = makeShared((path) => api.get(path));
+// Changes (not opening the live chat or marking it read) clear what's shared.
+const call0 = api.call;
+api.call = (method, path, body) => { if (method !== 'GET' && !/\/chats\/(ticket|[a-z0-9_]+\/read)$/.test(path)) shared.clear(); return call0(method, path, body); };
+const memberData = (id = fam().me) => shared(`/families/${state.fid}/members/${id}/data`);
+// Work the first screen doesn't need: after a pause, when the phone is idle.
+const later = (fn, ms) => setTimeout(() => { if ('requestIdleCallback' in window) requestIdleCallback(() => fn(), { timeout: 4000 }); else fn(); }, ms);
+// The support address (Me › Help): asked for once, when there's time or when Me opens.
+let supportAsk = null;
+const loadSupport = () => (supportAsk ||= api.liveConfig().then((c) => { state.support = c.supportEmail || ''; }).catch(() => { state.support = ''; }));
 
 // ---------- 🔐 end-to-end encryption (keys never leave the family's devices; see crypto.js) ----------
 const famKeys = {}; // {familyId: key} on this device, each checked against the family's key check
@@ -167,7 +179,7 @@ async function loadFamily() {
 async function lockMyData() {
   if (!fam().e2ee || !fk() || state.lockedMine === state.fid) return;
   state.lockedMine = state.fid;
-  const rec = await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null);
+  const rec = await memberData().catch(() => null);
   if (rec?.data && rec.data.enc == null && Object.keys(rec.data).length) await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData(rec.data) });
 }
 function chrome(on) {
@@ -429,7 +441,7 @@ async function apptChanged() {
   if (state.view === 'pets') {
     renderComing(); renderVax(); renderSpend();
     // A finished vaccination changes the dog's record: show the new due date.
-    for (const p of dogsOf()) dogsHub.profiles[p.id] = (await openData(await api.get(`/families/${state.fid}/members/${p.id}/data`).catch(() => null)))?.profile || dogsHub.profiles[p.id];
+    for (const p of dogsOf()) dogsHub.profiles[p.id] = (await openData(await memberData(p.id).catch(() => null)))?.profile || dogsHub.profiles[p.id];
     renderVax();
     const cards = $('#dogcards');
     if (cards) cards.innerHTML = dogsOf().map((p) => dogCard(p)).join('');
@@ -648,7 +660,7 @@ const timeText = (at) => (at && at.length > 10 ? new Date(at).toLocaleTimeString
 const who = (id) => (id === fam().me ? 'You' : member(id)?.name || '');
 const daysTo = (d) => Math.round((Date.parse(`${d}T12:00:00`) - Date.parse(`${isoLocal()}T12:00:00`)) / 864e5);
 async function loadAppts() {
-  const r = await api.get(`/families/${state.fid}/appts?today=${isoLocal()}`).catch(() => null);
+  const r = await shared(`/families/${state.fid}/appts?today=${isoLocal()}`).catch(() => null);
   if (r) { dogsHub.appts = await Promise.all(r.appts.map(openAppt)); dogsHub.spending = r.spending; }
   return dogsHub.appts;
 }
@@ -679,7 +691,7 @@ async function petsView() {
   renderWalk();
   await loadAppts();
   renderComing();
-  await Promise.all(dogsOf().map(async (p) => { dogsHub.profiles[p.id] = (await openData(await api.get(`/families/${state.fid}/members/${p.id}/data`).catch(() => null)))?.profile || {}; }));
+  await Promise.all(dogsOf().map(async (p) => { dogsHub.profiles[p.id] = (await openData(await memberData(p.id).catch(() => null)))?.profile || {}; }));
   const cards = $('#dogcards');
   if (cards) cards.innerHTML = dogsOf().map((p) => dogCard(p)).join('');
   renderVax(); renderSpend(); renderHappy();
@@ -784,7 +796,7 @@ function renderSpend() {
 async function renderHappy() {
   const el = $('#happy');
   if (!el) return;
-  const s = await api.get(`/families/${state.fid}/dogstats?today=${isoLocal()}`).catch(() => null);
+  const s = await shared(`/families/${state.fid}/dogstats?today=${isoLocal()}`).catch(() => null);
   if (!s || !$('#happy')) return;
   const max = Math.max(1, ...s.months.map((m) => m.golden));
   el.innerHTML = `<div class="stats3"><div><b>${s.month.golden}</b>golden days<br>this month</div><div><b>${s.streak}${s.streak > 1 ? '🔥' : ''}</b>day streak</div><div><b>${s.month.walks}</b>outings<br>this month</div></div>
@@ -797,7 +809,7 @@ async function renderHappy() {
 let mineCache = null;
 function myTrackers() {
   if (!mineCache || Date.now() - mineCache.at > 60000 || mineCache.fid !== state.fid) {
-    mineCache = { at: Date.now(), fid: state.fid, p: api.get(`/families/${state.fid}/members/${fam().me}/data`).then(openData).catch(() => null) };
+    mineCache = { at: Date.now(), fid: state.fid, p: memberData().then(openData).catch(() => null) };
   }
   return mineCache.p;
 }
@@ -843,15 +855,20 @@ async function renderYourDay() {
       ${acts.length > 1 ? '<p class="tiny muted">Run and ride are alternatives — pick whichever fits.' + (list.some((i) => i.label.endsWith('🐾')) ? ' 🐾 = a good time to walk the dogs too.' : '') + '</p>' : ''}`;
   } catch { if ($('#yourDay')) $('#yourDay').remove(); }
 }
+let wxFetch = null; // the weather on its way, shared by everyone who asks meanwhile
 async function walkWeather() {
   const B = await import('../js/brief.js');
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem('fam.weather') || 'null'); } catch { /* none */ }
   if (!cached || Date.now() - cached.at > 30 * 60000) {
-    const u = B.weatherUrls(B.PLACE);
-    const [f, air] = await Promise.all([fetch(u.forecast).then((r) => r.json()), fetch(u.air).then((r) => (r.ok ? r.json() : null)).catch(() => null)]);
-    cached = { at: Date.now(), f, air };
-    try { localStorage.setItem('fam.weather', JSON.stringify(cached)); } catch { /* full */ }
+    wxFetch ||= (async () => {
+      const u = B.weatherUrls(B.PLACE);
+      const [f, air] = await Promise.all([fetch(u.forecast).then((r) => r.json()), fetch(u.air).then((r) => (r.ok ? r.json() : null)).catch(() => null)]);
+      const fresh = { at: Date.now(), f, air };
+      try { localStorage.setItem('fam.weather', JSON.stringify(fresh)); } catch { /* full */ }
+      return fresh;
+    })().finally(() => { wxFetch = null; });
+    cached = await wxFetch;
   }
   const hourly = B.parseWeather(cached.f, cached.air);
   const now = new Date();
@@ -919,7 +936,7 @@ const isDogKind = (k) => DOG_KINDS.includes(k) || ownChores().some((c) => `x_${c
 async function renderCare() {
   if (!$('#careHouse') && !$('#careDogs')) return;
   const today = isoLocal();
-  const r = await act(() => api.get(`/families/${state.fid}/care?to=${today}&days=1`));
+  const r = await act(() => shared(`/families/${state.fid}/care?to=${today}&days=1`));
   if (!r) return;
   const list = r.days[today] || [];
   careToday = list;
@@ -956,7 +973,7 @@ async function renderRace() {
   const el = $('#race');
   if (!el) return;
   const today = isoLocal(), month = today.slice(0, 7);
-  race = await act(() => api.get(`/families/${state.fid}/chores?month=${month}&today=${today}`));
+  race = await act(() => shared(`/families/${state.fid}/chores?month=${month}&today=${today}`));
   if (!race) return;
   const left = new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate() - +today.slice(8, 10);
   const [a, b] = race.board;
@@ -980,7 +997,7 @@ async function renderFight(fresh = true) {
   if (!el || !(fam().modules || []).includes('health') || me()?.relation === 'child') return;
   if (fresh || !fight.data) {
     const partner = partnerMember();
-    const [F, mine, theirs] = await Promise.all([import('../js/fight.js'), myTrackers(), partner ? api.get(`/families/${state.fid}/members/${partner.id}/data`).then(openData).catch(() => null) : null]);
+    const [F, mine, theirs] = await Promise.all([import('../js/fight.js'), myTrackers(), partner ? memberData(partner.id).then(openData).catch(() => null) : null]);
     const has = (d) => d && !d.locked && ((d.weights || []).length || Object.keys(d.mealLog || {}).length);
     fight.data = { F, mine: mine && !mine.locked ? mine : {}, theirs: has(theirs) ? theirs : null, partner };
   }
@@ -1211,7 +1228,7 @@ function planDayOf(when, made, day) {
 }
 const us = { plans: [], notes: [], partner: null, streak: 0, theirStreak: 0 };
 async function loadUs() {
-  const r = await api.get(`/families/${state.fid}/us?today=${isoLocal()}`).catch(() => null);
+  const r = await shared(`/families/${state.fid}/us?today=${isoLocal()}`).catch(() => null);
   if (!r) return;
   // 🔐 Unlocked here: what it is, where, when, the note.
   us.plans = await Promise.all(r.plans.map(async (p) => ({ ...p, ...((await unlock(p.body)) || { kind: 'other', what: '🔒', locked: true }) })));
@@ -1266,7 +1283,7 @@ async function renderToday() {
   const today = isoLocal();
   const tile = (ico, label, value, sub = '', attrs = '') => `<button type="button" class="tile" ${attrs}>${ico} ${label}<b>${value}</b>${sub ? `<small class="muted">${sub}</small>` : ''}</button>`;
   const [care, mine, weather] = await Promise.all([
-    (fam().modules || []).includes('dogs') ? api.get(`/families/${state.fid}/care?to=${today}&days=1`).catch(() => null) : null,
+    (fam().modules || []).includes('dogs') ? shared(`/families/${state.fid}/care?to=${today}&days=1`).catch(() => null) : null,
     myTrackers(),
     (fam().modules || []).includes('dogs') ? walkWeather().catch(() => null) : null,
     partnerMember() && !ideas.loaded ? loadIdeas().catch(() => {}) : null,
@@ -1316,7 +1333,7 @@ async function callLine() {
 const callNudge = { data: null, all: null };
 // 🔁 Check-in reminders for this account (Call Mom, Run, Ride, Hot yoga), loaded once a session.
 async function loadNudges(fresh = false) {
-  if (!callNudge.all || fresh) callNudge.all = await api.get(`/account/nudges?today=${isoLocal()}`).then((r) => r.nudges).catch(() => callNudge.all || {});
+  if (!callNudge.all || fresh) callNudge.all = await (fresh ? api.get(`/account/nudges?today=${isoLocal()}`) : shared(`/account/nudges?today=${isoLocal()}`)).then((r) => r.nudges).catch(() => callNudge.all || {});
   callNudge.data = callNudge.all.callmom || null;
   return callNudge.all;
 }
@@ -2061,7 +2078,7 @@ async function openThreadText(t, k) {
     docs: Array.isArray(t.docs) ? await Promise.all(t.docs.map(async (x) => { let m = isSealed(x.meta) ? await tryOpen(k, x.meta, null) : x.meta; if (typeof m === 'string') { try { m = JSON.parse(m); } catch { m = null; } } return { ...x, name: m?.name || '🔒 PDF', pages: m?.pages || 0 }; })) : [] };
 }
 async function loadThreads() {
-  const r = await api.get('/threads').catch(() => null);
+  const r = await shared('/threads').catch(() => null);
   if (!r) return th.list;
   th.list = await Promise.all(r.threads.map(async (t) => openThreadText(t, await threadKey(t))));
   th.loaded = Date.now();
@@ -2517,7 +2534,7 @@ async function nextUpCtx() {
   const callWindows = me()?.legacyId && B.CALL.who === me().legacyId ? [...B.callWindows(today), ...B.callWindows(tomorrow)] : [];
   let dogs = null;
   if ((fam().modules || []).includes('dogs') && dogsOf().length) {
-    const c = await api.get(`/families/${state.fid}/care?to=${today}&days=1`).catch(() => null);
+    const c = await shared(`/families/${state.fid}/care?to=${today}&days=1`).catch(() => null);
     dogs = { enabled: true, walkedToday: (c?.days?.[today] || []).some((e) => e.kind === 'walk' || e.kind === 'park') };
   }
   // New episodes need the Watch list; it's fetched once in the background, then this runs again.
@@ -2615,7 +2632,7 @@ async function nuKnows() {
 async function importUs() {
   const flag = `fam.usImported.${state.fid}`;
   if (LS.get(flag) || lockedHere()) return;
-  const data = await openData(await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null));
+  const data = await openData(await memberData().catch(() => null));
   if (!data || data.locked) return;
   const plans = await Promise.all((data.plans || []).filter((p) => p?.id && p.date).map(async (p) => ({
     id: p.id, at: p.at, done: !!p.done, weekend: p.when === 'weekend', day: planDayOf(p.when, p.date, p.day),
@@ -2641,8 +2658,8 @@ const calModule = () => import('../js/calendar.js');
 async function loadCal() {
   calm.C ||= await calModule();
   const [r, stats] = await Promise.all([
-    api.get(`/families/${state.fid}/events`).catch(() => ({ events: [], feeds: [] })),
-    (fam().modules || []).includes('dogs') ? api.get(`/families/${state.fid}/dogstats?today=${isoLocal()}`).catch(() => null) : null,
+    shared(`/families/${state.fid}/events`).catch(() => ({ events: [], feeds: [] })),
+    (fam().modules || []).includes('dogs') ? shared(`/families/${state.fid}/dogstats?today=${isoLocal()}`).catch(() => null) : null,
     loadAppts(), loadUs(),
   ]);
   calm.events = await Promise.all(r.events.map(async (e) => ({ ...e, ...((await unlock(e.body)) || { title: '🔒 Locked', locked: true }) })));
@@ -2883,7 +2900,7 @@ async function renderCalDress(date) {
 async function loadRhythm() {
   const R = await import('../js/rhythm.js');
   const partner = us.partner;
-  const [mine, theirs] = await Promise.all([myTrackers(), partner ? api.get(`/families/${state.fid}/members/${partner.id}/data`).then(openData).catch(() => null) : null]);
+  const [mine, theirs] = await Promise.all([myTrackers(), partner ? memberData(partner.id).then(openData).catch(() => null) : null]);
   calm.R = R;
   calm.myRatings = mine?.taste?.ratings || [];
   calm.ratings = [...calm.myRatings, ...(theirs && !theirs.locked ? theirs.taste?.ratings || [] : [])];
@@ -3129,7 +3146,7 @@ const howLink = (id, label) => `<button type="button" class="how" data-tourat="$
 const al = { list: null, open: null };
 const GOOGLE_ALBUM = /^https:\/\/(photos\.app\.goo\.gl|photos\.google\.com)\/\S+$/;
 async function loadAlbums() {
-  const r = await api.get(`/families/${state.fid}/albums`);
+  const r = await shared(`/families/${state.fid}/albums`);
   al.list = await Promise.all(r.albums.map(async (a) => ({ ...a, title: (await unlock(a.title)) ?? '🔒', link: a.link ? (await unlock(a.link)) || '' : '' })));
   return al.list;
 }
@@ -3245,7 +3262,7 @@ const newsSet = () => { try { return { off: false, topics: ['politics', 'tech', 
 async function loadNews() {
   let c = null; try { c = JSON.parse(LS.get('fam.news') || 'null'); } catch { /* none */ }
   if (c && Date.now() - c.got < 30 * 60e3) return (nw.data = c.data);
-  const r = await api.get('/news').catch(() => null);
+  const r = await shared('/news').catch(() => null);
   if (r?.news) { nw.data = r.news; try { LS.set('fam.news', JSON.stringify({ got: Date.now(), data: r.news })); } catch { /* full */ } }
   return nw.data || c?.data || null;
 }
@@ -3684,6 +3701,7 @@ function refreshPush() {
   swReady().then((reg) => reg.pushManager.getSubscription()).then((sub) => sub && sendSub(sub)).then(() => LS.set('fam.pushSync', isoLocal())).catch(() => {});
 }
 if (pushOk()) navigator.serviceWorker.addEventListener('message', (e) => {
+  if (e.data?.pushed) shared.clear(); // something changed elsewhere: ask again
   if (e.data?.open && state.family) show(e.data.open === 'dogs' ? 'pets' : e.data.open);
   if (typeof e.data?.pushed === 'string' && e.data.pushed.startsWith('chat-')) return dmMod?.refresh();
   if (e.data?.pushed && state.family) loadThreads().then(() => { if (state.view === 'feed' && state.famTab === 'threads') threadsView(); }).catch(() => {});
