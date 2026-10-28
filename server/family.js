@@ -1906,7 +1906,36 @@ async function removeMember(db, fam, t, { keepPosts = true } = {}) {
     }));
   }
   await scrubPosts(db, fam.fid, t.uid, t.id);
-  for (const c of fam.connections || []) await scrubPosts(db, c, t.uid, null);
+  await scrubThreads(db, fam.fid, t.uid, t.id);
+  for (const c of fam.connections || []) { await scrubPosts(db, c, t.uid, null); await scrubThreads(db, c, t.uid, null); }
+}
+// Removes one person's threads (with their screenshots, PDFs and reports) and their replies,
+// votes, ▲s, tags, reads and follows from a family's threads.
+async function scrubThreads(db, fid, uid, memberId) {
+  const ids = (await db.get(`threads:${fid}`)) || [];
+  const keep = [];
+  for (const id of ids) {
+    const t = await db.get(`thread:${fid}:${id}`);
+    if (!t) continue;
+    if (t.byUid === uid) {
+      for (const x of [...(t.shots || []), ...(t.docs || [])]) await deletePhoto(db.blobs, fid, x.id, db).catch(() => {});
+      await db.del(`thread:${fid}:${id}`);
+      await db.del(`report:${fid}:thread:${id}`);
+      continue;
+    }
+    keep.push(id);
+    const before = JSON.stringify(t);
+    const gone = new Set(t.replies.filter((r) => r.uid === uid).map((r) => r.id));
+    t.replies = t.replies.filter((r) => !gone.has(r.id)).map((r) => ((r.ups || []).includes(uid) ? { ...r, ups: r.ups.filter((u) => u !== uid) } : r));
+    if (gone.has(t.best)) t.best = null;
+    if (t.reads?.[uid]) { t.reads = { ...t.reads }; delete t.reads[uid]; }
+    t.followers = (t.followers || []).filter((u) => u !== uid);
+    t.to = (t.to || []).filter((u) => u !== uid);
+    if (t.tagUids?.includes(uid)) { t.tagUids = t.tagUids.filter((u) => u !== uid); t.tags = (t.tags || []).filter((m) => m !== memberId); }
+    if (t.poll?.votes?.[uid] != null) { t.poll = { ...t.poll, votes: { ...t.poll.votes } }; delete t.poll.votes[uid]; }
+    if (JSON.stringify(t) !== before) await db.put(`thread:${fid}:${id}`, t);
+  }
+  if (keep.length !== ids.length) await db.put(`threads:${fid}`, keep);
 }
 // Removes one person's posts (by member id) and comments / likes (by account) from a family's feed.
 async function scrubPosts(db, fid, uid, memberId) {
@@ -1922,10 +1951,14 @@ async function scrubPosts(db, fid, uid, memberId) {
   }
   if (keep.length !== ids.length) await db.put(`feed:${fid}`, keep);
 }
-// Everything a family has: posts, member data, the care log, and its links to other families.
+// Everything a family has: posts, threads, member data, the care log, and its links to other families.
 async function deleteFamily(db, fam) {
   for (const id of (await db.get(`feed:${fam.fid}`)) || []) { await db.del(`post:${fam.fid}:${id}`); await db.del(`report:${fam.fid}:${id}`); }
   await db.del(`feed:${fam.fid}`);
+  for (const id of (await db.get(`threads:${fam.fid}`)) || []) { await db.del(`thread:${fam.fid}:${id}`); await db.del(`report:${fam.fid}:thread:${id}`); }
+  await db.del(`threads:${fam.fid}`);
+  // Who uploaded each file goes with the files.
+  for (const o of (await db.blobs?.list(`f/${fam.fid}/`).catch(() => [])) || []) { const pid = o.key.split('/')[2]?.replace(/-(full|thumb|doc)$/, ''); if (pid) await db.del(blobMetaKey(fam.fid, pid)); }
   await deleteFamilyPhotos(db.blobs, fam.fid).catch(() => {});
   for (const x of fam.members) { await db.del(`data:${fam.fid}:${x.id}`); await db.del(`dataprev:${fam.fid}:${x.id}`); }
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) await db.del(`care:${fam.fid}:${d}`);
