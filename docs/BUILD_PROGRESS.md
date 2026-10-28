@@ -36,6 +36,12 @@ Checkpoint B matrix (`tests/permissions.test.js`, `tests/healthparts.test.js`, `
 | Member who left | 404, removed from everyone's lists, parts deleted |
 | Child | no requests; nothing of others' Health unless shared |
 
+Security review of Phases 5–6 (independent, 2026-10-28) — fixed in the commit after `19cf56a`:
+1. **HIGH — Us part readable by any spouse/partner for non-partners (incl. kids), and by others after the creator left** (`partnerOf` falls back to "someone"). Fixed: `isCouple` — creator + their spouse/partner, mutual, never a child. Test added.
+2. **MEDIUM — old feed posts (shown on Home) not gated by Home** (`/feed`, `/families/:fid/posts`, `/posts/:fid/:id`). Fixed: `posts` → Home in the guard; `/feed` and post actions only through families where you have Home. Test added.
+3. **LOW — notifications to excluded members** (calendar reminders, dog appointments/vaccines, golden day, thread replies). Fixed: reminders by area, `adultsOf(…, area)`, followers filtered by Threads.
+4. **LOW / documented** — before a person's phone first splits, members in both lists read the full copy (as before 2.0); phones still on a household code upload the full profile under it (Phase 10).
+
 Browser (390 px): creator toggled Pat's Home and Threads off on Pat's page → Pat's bar: Home · Us · Calendar · Health; Home shows only Next up and a short note; Calendar works; no 403s at start-up (dog data isn't requested without Home). Security review: see Security findings.
 
 ### Phase 5 — Health and Diet

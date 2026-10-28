@@ -235,7 +235,9 @@ export async function threadRoutes(c) {
     t.reads = { ...(t.reads || {}), [user.uid]: r.at };
     if (!(t.followers || []).includes(user.uid)) t.followers = [...(t.followers || []), user.uid];
     await save();
-    const to = (t.followers || []).filter((u) => u !== user.uid && !blocked.has(u));
+    // Followers who've since lost Threads in this family aren't told.
+    const memberOf = (u) => a.fam?.members?.find((x) => x.uid === u);
+    const to = (t.followers || []).filter((u) => u !== user.uid && !blocked.has(u) && (!memberOf(u) || !c.hasArea || c.hasArea(memberOf(u), 'threads')));
     if (to.length) await tell(to, t.aud === 'us' ? 'us' : 'feed', { title: `💬 ${myName} replied`, body: 'Tap to read it', url: t.aud === 'us' ? 'family/#us' : 'family/#threads', tag: `thread-${id}` });
     return json({ thread: full(t, a.own, a.fam) });
   }

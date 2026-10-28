@@ -127,3 +127,28 @@ test('someone who leaves loses everything at once; kids keep their limits', asyn
   assert.equal((await call(`${F}/requests`, t.kid, 'POST', { kind: 'ride', box: 'x' })).status, 403);
   assert.equal(await can(call, F, id.pat, t.kid, 'diet'), 403);
 });
+
+test('review fixes: Us is the couple only; the old posts need Home; notifications follow areas', async () => {
+  const { call, t, id, F, fid } = await setup();
+  // A spouse can't read anyone's Us but their partner's — not Mom's, not a kid's.
+  assert.equal(await can(call, F, id.mom, t.pat, 'us'), 403);
+  assert.equal(await can(call, F, id.kid, t.pat, 'us'), 403);
+  assert.equal(await can(call, F, id.sam, t.pat, 'us'), 200);
+  // The creator hands over and leaves: no "self" any more, so nobody gets anyone's Us.
+  await call(`${F}/owner`, t.sam, 'POST', { memberId: id.pat });
+  await call(`${F}/leave`, t.sam, 'POST');
+  assert.equal(await can(call, F, id.pat, t.mom, 'us'), 403);
+  assert.equal(await can(call, F, id.mom, t.pat, 'us'), 403);
+  // The old feed's posts were on Home: without Home, none of them.
+  const { adultsOf } = await import('../server/push.js');
+  await call(`${F}/members/${id.mom}`, t.pat, 'PATCH', { access: ['calendar'] });
+  assert.equal((await call(`${F}/posts`, t.mom)).status, 403);
+  assert.equal((await call('/feed', t.mom)).posts.length, 0);
+  // Notifications for an area skip people without it.
+  const me = await call('/me', t.pat);
+  const fam = me.families.find((f) => f.fid === fid);
+  const full = { members: fam.members.map((x) => ({ ...x, uid: x.status === 'active' ? x.id : '' })) };
+  const momUid = id.mom;
+  assert.ok(!adultsOf(full, 'nobody', 'home').includes(momUid));
+  assert.ok(adultsOf(full, 'nobody', 'calendar').includes(momUid));
+});
