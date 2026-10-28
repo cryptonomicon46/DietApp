@@ -369,9 +369,10 @@ async function feedView() {
   if (th.list.length) $('#thDot').hidden = !unreadThreads().length;
   if (state.famTab === 'threads') { threadsView(); loadUs().then(() => usBadge()); return; }
   const m = {
-    nextUp: '<div id="hello"></div><section class="nextup" id="nextUp" hidden></section>', digest: '<div id="digest"></div>',
+    // Next up and Albums nearly always appear: placeholders of their usual size, so the feed below doesn't jump.
+    nextUp: `<div id="hello"></div><section class="nextup" id="nextUp" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section>`, digest: '<div id="digest"></div>',
     share: `<button type="button" class="sharebar" data-act="post">${avatar(me(), 30)}<span>Share with the family…</span><b>📷 Photo</b></button>`,
-    albums: '<section class="card albums" id="albums" hidden></section>',
+    albums: `<section class="card albums" id="albums" ${LS.get(`fam.albumsOn.${state.fid}`) === '0' || lockedHere() ? 'hidden>' : '><div class="skeleton line"></div>'}</section>`,
     yourDay: '<section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>',
     today: '<section class="card today" id="today"><div class="skeleton line"></div></section>',
     news: '<section class="card news" id="newsCard" hidden></section>', movies: '<section class="card movies" id="moviesCard" hidden></section>',
@@ -388,9 +389,9 @@ async function feedView() {
   renderNews().catch(() => {});
   renderAlbums().catch(() => {});
   helloCard();
-  renderNextUp().catch(() => {});
-  importUs().catch(() => {});
-  const [r] = await Promise.all([act(() => api.get('/feed')), loadAppts(), loadUs(), loadThreads().catch(() => {})]);
+  renderNextUp().catch(() => { const el = $('#nextUp'); if (el?.querySelector('.skeleton')) el.hidden = true; });
+  later(() => importUs().catch(() => {}), 10000); // once per family on this phone
+  const [r] = await Promise.all([act(() => shared('/feed')), loadAppts(), loadUs(), loadThreads().catch(() => {})]);
   renderToday(); renderComingLine(); usBadge();
   if ($('#digest')) $('#digest').innerHTML = digestCard();
   if ($('#thDot')) $('#thDot').hidden = !unreadThreads().length;
@@ -3166,10 +3167,11 @@ async function loadAlbums() {
 }
 async function renderAlbums() {
   const el = $('#albums');
-  if (!el || lockedHere() || !(await photosReady())) return;
+  if (!el || lockedHere() || !(await photosReady())) { if (el) { el.hidden = true; LS.set(`fam.albumsOn.${state.fid}`, '0'); } return; }
   const list = await loadAlbums().catch(() => null);
-  if (!$('#albums') || !list) return;
-  el.hidden = false;
+  if (!$('#albums')) return;
+  if (!list) { el.hidden = true; return; }
+  el.hidden = false; LS.set(`fam.albumsOn.${state.fid}`, '1');
   el.innerHTML = `<div class="row between"><b class="small">📷 Albums</b>${list.length ? '' : '<span class="tiny muted">Trips, the dogs, holidays…</span>'}</div>
     <div class="albumstrip">${list.map((a) => { if (a.cover) photoKeys.set(a.cover, fk()); return `<button type="button" class="albumtile" data-album="${a.id}">${a.cover ? `<span class="ph grid" data-photoid="${a.cover}" data-pfid="${state.fid}"><img alt=""></span>` : `<span class="albumicon">${a.link ? '🔗' : '📷'}</span>`}<b>${esc(a.title)}</b><small class="muted">${a.count ? `${a.count} photo${a.count === 1 ? '' : 's'}` : a.link ? 'Google Photos' : 'Empty'}</small></button>`; }).join('')}
       <button type="button" class="albumtile add" data-act="albumnew"><span class="albumicon">＋</span><b>New album</b></button></div>`;

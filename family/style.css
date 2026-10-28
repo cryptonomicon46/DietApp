@@ -992,3 +992,21 @@ body.in-chat main { padding-bottom: 0; }
 .hm-pick button.on { border-color: var(--brand); background: var(--brand-soft); }
 .hm-preview { font-size: 56px; text-align: center; position: relative; width: max-content; margin: 4px auto; line-height: 1.1; }
 @media (prefers-reduced-motion: reduce) { .fg-perfect, .hm-bar i, .hm .hm-moment { animation: none; transition: none; } }
+
+/* 👆 Bigger tap areas, same look: the top-bar buttons get a transparent 5px ring (44 × 44 to tap,
+   34 × 34 to see) with matching negative margins so nothing moves; chips and the Moments/Threads
+   tabs get an invisible strip above and below. */
+.bar .chat-top, .bar .help-top, .bar .plus-top, .bar .me-top { width: 44px; height: 44px; border: 5px solid transparent; background-clip: padding-box; margin: -5px; }
+.bar .chat-top, .bar .help-top { box-shadow: inset 0 0 0 1.5px var(--line); }
+.bar .me-top { box-shadow: inset 0 0 0 2px var(--line); }
+.bar .plus-top { margin-right: 1px; }
+.bar .chat-top.on { box-shadow: inset 0 0 0 1.5px var(--brand); }
+.bar > .row { min-height: 42px; } /* the bar keeps its height */
+.rchips .chip, .famtabs button { position: relative; }
+.rchips .chip::after { content: ""; position: absolute; inset: -7px -3px; }
+.famtabs button::after { content: ""; position: absolute; inset: -4px 0; }
+.today:has(> .skeleton) { min-height: 290px; }
+.albums:has(> .skeleton) { min-height: 186px; } .nextup:has(> .skeleton) { min-height: 131px; }
+.albums > .skeleton.line, .nextup > .skeleton.line { height: 100%; min-height: 60px; }
+/* the scrolling board row clips what sticks out, so it gets the room itself (same spacing as before) */
+.boards { padding-block: 7px; margin: -7px 0 1px; }
