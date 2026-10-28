@@ -4,9 +4,14 @@ Last update: 2026-10-28, after the Phase 0 + Phase 1 review gate. Evidence below
 
 ## Current phase and task
 
-- **Phase 0 + Phase 1: complete and merged to `main`** (fast-forward to `f4896ca`, approved by the user with "go" on 2026-10-28; GitHub Pages deployed it).
-- **Server deployment (`pawdeploy`): pending, by the user.** The Check on `main` is green (`f4896ca` and `e374c81`). Until the Worker is redeployed, the new app runs against the old server: report/block in Threads and Chats returns errors, and Devices shows WHOOP as "Not available yet".
-- **Next authorized work: none.** Phase 2 and the Phase 0–1 follow-ups below need explicit authorization.
+- **Session authorization (2026-10-28):** Phase 0–1 gaps → Phase 2 → Phase 3 → full review of Phases 0–3, then STOP before Phase 4. Work happens on branch `v2/phase-2-3`; nothing is merged to `main` (deploy) without approval.
+- **Phase 0 + Phase 1:** complete, merged to `main` at `f4896ca` (deployed to Pages). Worker deploy (`pawdeploy`) by the user: pending/unknown.
+- **Phase 0–1 gaps:** done on `v2/phase-2-3`:
+  - account deletion / leaving a family deletes the person's threads and replies; deleting a family deletes its threads (`1a31356`);
+  - calendar links never in a URL — audit S1 — and thread notifications relabelled "📖 Threads" (`5c02573`);
+  - tab switches re-measured on a stable server: Us 3, Calendar 1, Threads 0, Photos 2; returning to Home after > 20 s still 8 → handled with the Phase 3 Home redesign, as are long tasks.
+- **Phase 2:** done (`87452a5`): no code is ever created/joined/changed; dog documents and adoption photos go to the family file store (sealed); browser check shows no `/household/` requests for a signed-in phone without a code.
+- **Phase 3:** in progress.
 
 ## Last safe commit, deployment and rollback
 
