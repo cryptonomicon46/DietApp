@@ -22,6 +22,7 @@ const b = await chromium.launch(process.env.CHROMIUM ? { executablePath: process
 const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, bypassCSP: true }); // the page's CSP allows only the real connector
 await ctx.route('**/*', route);
 await ctx.addInitScript(({ seed }) => {
+  if (!location.href.startsWith('http')) return; // about:blank between runs has no storage
   if (!localStorage.getItem('perf.seeded')) {
     localStorage.setItem('fam.server', 'http://localhost:8787');
     localStorage.setItem('lp.g.sync', JSON.stringify({ url: 'http://localhost:8787' })); // before fam.server existed
