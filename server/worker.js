@@ -44,8 +44,9 @@ export default {
     else if (event.cron === '43 13-22 * * 4') ctx.waitUntil(runScout(env, { refresh: true }));
     else {
       ctx.waitUntil(runFamilyReminders(env, event.scheduledTime));
-      // 📰 At 6:45 and 3:45 Pacific: the news.
-      const news = runNewsEdition(env, event.scheduledTime);
+      // 📰 At 6:45 and 3:45 Pacific: the news — hidden in 2.0, so it only runs with NEWS_ON set
+      // (its code and stored editions are kept).
+      const news = env.NEWS_ON ? runNewsEdition(env, event.scheduledTime) : null;
       if (news) ctx.waitUntil(news.catch(() => {}));
     }
   },

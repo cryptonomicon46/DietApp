@@ -14,7 +14,7 @@ export function weatherBody(url) {
 }
 export const route = (r) => {
   const u = r.request().url();
-  if (/localhost:(8098|8787)/.test(u)) return r.continue();
+  if (/^http:\/\/localhost:\d+\//.test(u)) return r.continue();
   if (/open-meteo\.com/.test(u)) return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(weatherBody(u)) });
   return r.fulfill({ status: 404, body: '{}' });
 };

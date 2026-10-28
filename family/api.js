@@ -1,12 +1,12 @@
 // Talks to the family API: the connector (live, Google sign-in) or, for trying it out, the very
 // same code running on this phone with storage that never leaves it (demo).
-const CONNECTOR = 'https://lean-plate-connect.sandman-amani.workers.dev';
+import { serverUrl } from '../js/server.js';
+
 const LS = {
   get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* blocked */ } },
 };
-// The connector this phone already uses for sharing, if it has one.
-const connectorUrl = () => { try { return JSON.parse(LS.get('lp.g.sync'))?.url || CONNECTOR; } catch { return CONNECTOR; } };
+const connectorUrl = () => serverUrl();
 
 // A KV store over localStorage, for the demo.
 const demoKv = {

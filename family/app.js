@@ -15,6 +15,7 @@ const LS = { get: (k) => { try { return localStorage.getItem(k); } catch { retur
 const RELATION = { self: 'You', spouse: 'Spouse', partner: 'Partner', child: 'Child', parent: 'Parent', sibling: 'Sibling', grandparent: 'Grandparent', relative: 'Relative', friend: 'Close friend', other: 'Family', pet: 'Pet' };
 const SPECIES = { dog: '🐶 Dog', cat: '🐱 Cat', other: '🐾 Other' };
 const HUES = [152, 18, 210, 280, 340, 45, 190];
+// 'feed' stays in the list so families that had it keep it, but 2.0 no longer offers it.
 const MODULES = { dogs: '🐶 Dogs — feeding, walks, vet & meds', chores: '🧺 Chores — laundry, garbage, groceries, cleaning, with a monthly 🏆 Gold Card', feed: '📸 Family feed — photos and updates', health: '🥗 Diet & fitness — weight, meals, training', calendar: '📅 Family calendar' };
 const CARE = { breakfast: ['🍳', 'Breakfast'], dinner: ['🍲', 'Dinner'], walk: ['🦮', 'Walk'], park: ['🌳', 'Dog park'], treat: ['🦴', 'Treat'], meds: ['💊', 'Meds'],
   poop: ['💩', 'Poop patrol'], trash: ['🗑️', 'Garbage'], laundry: ['🧺', 'Laundry'], groceries: ['🛒', 'Groceries'], cleaning: ['🧽', 'Cleaning'], dishes: ['🍽️', 'Dishes'],
@@ -37,13 +38,14 @@ const deviceName = () => { const u = navigator.userAgent; return `${/iPhone/.tes
 const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
 
 const VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
-const state = { user: null, families: [], fid: LS.get('fam.fid'), family: null, connected: [], feed: [], view: 'feed', memberId: null, invite: null, open: {} };
+const state = { user: null, families: [], fid: LS.get('fam.fid'), family: null, connected: [], feed: [], view: 'home', memberId: null, invite: null, open: {} };
 const fam = () => state.family;
 // Requests for the same thing at start-up (and within a few seconds) are shared: see shared.js.
 const shared = makeShared((path) => api.get(path));
 // Changes (not opening the live chat or marking it read) clear what's shared.
 const call0 = api.call;
-api.call = (method, path, body) => { if (method !== 'GET' && !/\/chats\/(ticket|[a-z0-9_]+\/read)$/.test(path)) shared.clear(); return call0(method, path, body); };
+// (A chat ticket or read receipt, and the vaccine due list for reminders, change nothing the app reads.)
+api.call = (method, path, body) => { if (method !== 'GET' && !/\/chats\/(ticket|[a-z0-9_]+\/read)$|\/vaxdue$/.test(path)) shared.clear(); return call0(method, path, body); };
 const memberData = (id = fam().me) => shared(`/families/${state.fid}/members/${id}/data`);
 // Work the first screen doesn't need: after a pause, when the phone is idle.
 const later = (fn, ms) => setTimeout(() => { if ('requestIdleCallback' in window) requestIdleCallback(() => fn(), { timeout: 4000 }); else fn(); }, ms);
@@ -161,9 +163,10 @@ async function boot() {
   if (!state.families.length) return onboard();
   if (!state.families.some((f) => f.fid === state.fid)) state.fid = state.families[0].fid;
   await loadFamily(famEarly?.fid === state.fid ? famEarly.p : null);
-  const hv = location.hash.match(/^#(feed|dogs|calendar|me|us|threads|chats|chat=[a-z0-9_]+)$/)?.[1];
-  if (hv) { state.view = hv === 'dogs' ? 'pets' : hv; history.replaceState(null, '', location.pathname + location.search); }
-  show(state.view === 'member' && !member(state.memberId) ? 'feed' : state.view === 'us' && !partnerMember() ? 'feed' : state.view === 'chat' ? 'chats' : state.view);
+  // Older links (#feed, #dogs, notifications sent before 2.0) open Home.
+  const hv = location.hash.match(/^#(home|feed|dogs|calendar|me|us|threads|chats|chat=[a-z0-9_]+)$/)?.[1];
+  if (hv) { state.view = hv; history.replaceState(null, '', location.pathname + location.search); }
+  show(state.view === 'member' && !member(state.memberId) ? 'home' : state.view === 'us' && !partnerMember() ? 'home' : state.view === 'chat' ? 'chats' : state.view);
   refreshPush();
   startChats();
   if (partnerMember() && state.view !== 'us') loadUs().then(usBadge).catch(() => {});
@@ -194,7 +197,6 @@ function chrome(on) {
       <span class="row wrap"><button type="button" class="small" data-act="keylink">Use a link from my phone</button><button type="button" class="ghost small" data-act="keyrestore">Use my recovery phrase</button></span>`;
   }
   document.body.classList.toggle('with-nav', on);
-  if (on) document.querySelector('#nav [data-view=pets]').hidden = !(fam().modules || []).some((x) => x === 'dogs' || x === 'chores');
   if (on) $('#navTrackers').hidden = !(fam().modules || []).includes('health');
   if (on) {
     $('#navMe').hidden = !$('#navTrackers').hidden;
@@ -216,9 +218,9 @@ async function signIn() {
       ${state.invite ? '<div class="note">💌 You have an invite. Sign in with the Google account it was sent to.</div>' : ''}
       <div class="signin">
         ${cfg.ready ? '<div id="gbtn" class="gbtn"></div><p class="tiny muted">Protected by your Google account, including its 2-Step Verification.</p>'
-          : `<p class="small muted">${cfg.missing ? 'Google sign-in turns on once the connector is updated (<code>npx wrangler deploy</code> in <code>server/</code>) and given a Google client ID — see server/README.md.' : 'Google sign-in needs a client ID on the connector — see server/README.md.'}</p>`}
+          : `<p class="small muted">Google sign-in isn't switched on for this server yet. You can still try OurPawmily on this phone.</p>`}
         <button type="button" class="ghost wide" data-act="demo">Try it on this phone (demo)</button>
-        <p class="tiny muted">The demo keeps everything on this phone, so you can try families, invites and the feed before anything goes live.</p>
+        <p class="tiny muted">The demo keeps everything on this phone, so you can try families, invites and threads before anything goes live.</p>
       </div>
       <button type="button" class="linkish small" data-act="help">💬 Trouble signing in? Get help</button>
       <a class="small" href="../">🥗 Just the trackers? Open them without signing in ›</a>
@@ -278,7 +280,7 @@ function onboard() {
         <label>Family name<input name="name" required maxlength="40" placeholder="e.g. The Pawsome Family"></label>
         <label>Your name in the family<input name="myName" maxlength="40" value="${esc(state.user.name.split(' ')[0])}"></label>
         <fieldset class="modules"><legend>What would you like to manage?</legend>
-          ${Object.entries(MODULES).map(([k, v]) => `<label class="check"><input type="checkbox" name="mod" value="${k}" ${k === 'calendar' ? '' : 'checked'}><span>${v}</span></label>`).join('')}
+          ${Object.entries(MODULES).filter(([k]) => k !== 'feed').map(([k, v]) => `<label class="check"><input type="checkbox" name="mod" value="${k}" ${k === 'calendar' ? '' : 'checked'}><span>${v}</span></label>`).join('')}
           <small class="muted">You can change this any time in Me › Family settings.</small></fieldset>
         <button class="wide">Create family</button>
       </form>
@@ -318,11 +320,12 @@ async function inviteView() {
 function show(view, extra) {
   if (/^chat=/.test(view || '')) { extra = view.slice(5); view = 'chat'; }
   if (view !== 'chat' && view !== 'chats') dmMod?.leave();
-  if (view === 'threads') { state.famTab = 'threads'; LS.set('fam.famTab', 'threads'); view = 'feed'; }
+  // 2.0: the feed is retired (its posts are kept) and Dogs & chores is part of Home.
+  if (view === 'feed' || view === 'pets' || view === 'dogs' || !view) view = 'home';
   if (view !== 'compose') state.prevView = view;
   state.view = view;
   if (view === 'member') state.memberId = extra;
-  if (view === 'compose') { state.view = state.prevView || 'feed'; return plusMenu(); }
+  if (view === 'compose') { state.view = state.prevView || 'home'; return plusMenu(); }
   chrome(true);
   const lit = view === 'member' || view === 'family' ? 'me' : view === 'watch' || view === 'bingo' ? 'us' : view;
   document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === lit));
@@ -330,7 +333,7 @@ function show(view, extra) {
   if (view !== 'bingo') clearInterval(bingo.timer);
   $('#chatTop')?.classList.toggle('on', view === 'chats' || view === 'chat');
   if (view === 'chats' || view === 'chat') return dms().then((d) => (view === 'chat' ? d.convView(extra) : d.listView())).catch((e) => toast(e.message));
-  ({ feed: feedView, family: familyView, pets: petsView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, us: usView })[view]?.();
+  ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, us: usView })[view]?.();
 }
 // 💬 Chats (chat.js): loaded once the app is on screen, so it never slows the start.
 let dmMod = null;
@@ -359,9 +362,46 @@ const WIDE = typeof matchMedia === 'function' ? matchMedia('(min-width: 1100px)'
 const wide = () => !!WIDE?.matches;
 WIDE?.addEventListener?.('change', () => {
   if (!state.family || $('#sheet').open) return;
-  ({ feed: feedView, pets: petsView, calendar: calendarView })[state.view]?.();
+  ({ home: homeView, threads: threadsPage, calendar: calendarView })[state.view]?.();
 });
 
+// 🏠 Home: what the household needs to know or do today — Next up, your day, today, then the
+// house (chores, the Gold Card) and the dogs.
+async function homeView() {
+  const { house, dogPart, fame } = petsParts();
+  const h = new Date().getHours(), first = esc((me()?.name || state.user?.name || '').split(' ')[0]);
+  const top = `<h1 class="home-hi">${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}. Here’s your ${esc(new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))}.</h1>
+    <div id="hello"></div><section class="nextup" id="nextUp" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section><div id="digest"></div>
+    <section class="card yourday" id="yourDay"><div class="skeleton line"></div></section>
+    <section class="card today" id="today"><div class="skeleton line"></div></section>
+    <div id="goldNews"></div><section class="card movies" id="moviesCard" hidden></section>`;
+  // 🖥 Wide: today and the house on one side, the dogs on the other.
+  $('#view').innerHTML = `${demoBanner()}${wide() && dogPart
+    ? `<div class="wide2 pets"><div class="col-main">${top}${house}${fame}</div><div class="col-main">${dogPart}</div></div>`
+    : `${top}${house}${dogPart}${fame}`}`;
+  goldNews();
+  renderYourDay();
+  renderMovies().catch(() => {});
+  helloCard();
+  renderNextUp().catch(() => { const el = $('#nextUp'); if (el?.querySelector('.skeleton')) el.hidden = true; });
+  later(() => importUs().catch(() => {}), 10000); // once per family on this phone
+  const dogsDone = petsFill();
+  await Promise.all([loadAppts(), loadUs(), loadThreads().catch(() => {})]);
+  if (state.view !== 'home') return;
+  renderToday(); usBadge(); famBadge();
+  if ($('#digest')) $('#digest').innerHTML = digestCard();
+  await dogsDone;
+}
+// 📖 Threads: the family's write-ups and questions, and its 📷 Photos (albums).
+function threadsPage() {
+  state.famTab = state.famTab === 'photos' ? 'photos' : 'threads';
+  $('#view').innerHTML = `${demoBanner()}<div class="seg famtabs" role="tablist">${[['threads', 'Threads'], ['photos', 'Photos']].map(([k, l]) => `<button type="button" role="tab" class="${state.famTab === k ? 'on' : ''}" data-famtab="${k}">${l}</button>`).join('')}</div>
+    <div id="famBody"></div>`;
+  if (state.famTab === 'threads') { threadsView(); loadUs().then(() => usBadge()); return; }
+  $('#famBody').innerHTML = '<section class="card albums" id="albums"><div class="skeleton line"></div></section>';
+  renderAlbums().catch(() => {});
+}
+// The old feed (Moments): no longer in the app's navigation. Its posts are kept on the connector.
 async function feedView() {
   state.famTab ||= LS.get('fam.famTab') || 'moments';
   $('#view').innerHTML = `${demoBanner()}<div class="seg famtabs" role="tablist">${[['moments', 'Moments'], ['threads', 'Threads']].map(([k, l]) => `<button type="button" role="tab" class="${state.famTab === k ? 'on' : ''}" data-famtab="${k}">${l}${k === 'threads' ? ' <i class="dot" id="thDot" hidden></i>' : ''}</button>`).join('')}</div>
@@ -442,7 +482,7 @@ async function recordVaccine(a, given, due) {
 // After any change to an appointment: refresh whichever screen shows them.
 async function apptChanged() {
   await loadAppts();
-  if (state.view === 'pets') {
+  if (state.view === 'home') {
     renderComing(); renderVax(); renderSpend();
     // A finished vaccination changes the dog's record: show the new due date.
     for (const p of dogsOf()) dogsHub.profiles[p.id] = (await openData(await memberData(p.id).catch(() => null)))?.profile || dogsHub.profiles[p.id];
@@ -450,7 +490,6 @@ async function apptChanged() {
     const cards = $('#dogcards');
     if (cards) cards.innerHTML = dogsOf().map((p) => dogCard(p)).join('');
   }
-  if (state.view === 'feed') renderPosts();
 }
 // A dog appointment someone added: live, so whoever's free can take the open leg from here.
 function apptPost(p) {
@@ -669,30 +708,28 @@ async function loadAppts() {
   if (r) { dogsHub.appts = await Promise.all(r.appts.map(openAppt)); dogsHub.spending = r.spending; }
   return dogsHub.appts;
 }
-async function petsView() {
+// 🏠 The house (Gold Card, chores) and 🐾 the dogs, on Home: the parts, then filling them in.
+function petsParts() {
   const mods = fam().modules || [];
-  const dogs = mods.includes('dogs');
-  const chores = mods.includes('chores');
-  // 🏆 The scores first, then the house, then everything about the dogs together, news last.
+  const dogs = mods.includes('dogs'), chores = mods.includes('chores');
+  if (!dogs && !chores) return { house: '', dogPart: '', fame: '' };
   const house = `<section class="card gold" id="race"><div class="skeleton line"></div></section>
-    <section class="fightcard" id="fight" hidden></section>
     ${chores ? `<h3 class="grp-h">🏠 The house</h3><section class="card care" id="careHouse"><div class="skeleton line"></div></section>` : ''}`;
-  const dogPart = `${dogs ? `<h3 class="grp-h">🐾 The dogs</h3><section class="card care" id="careDogs"><div class="skeleton line"></div></section>
+  const dogPart = dogs ? `<h3 class="grp-h">🐾 The dogs</h3><section class="card care" id="careDogs"><div class="skeleton line"></div></section>
     <section class="card walkcard" id="walk"><div class="skeleton line"></div></section>
     <section class="card" id="coming"><div class="skeleton line"></div></section>
     <section class="card" id="vax" hidden></section>
     <section class="card"><b class="small">😊 How happy are the dogs</b><div id="happy"><div class="skeleton line"></div></div></section>
     <div class="dogcards" id="dogcards">${dogsOf().map((p) => dogCard(p)).join('')}</div>
     <button type="button" class="ghost wide" data-act="addpet">＋ Add a pet</button>
-    <section class="card" id="spend" hidden></section>` : ''}`;
-  const fame = '<section id="fame"></section>', rescue = dogs ? '<section class="card rescue" id="rescue"><div class="skeleton line"></div></section>' : '';
-  // 🖥 Wide: the house and the scores on one side, the dogs on the other.
-  $('#view').innerHTML = `${demoBanner()}${wide() && dogs
-    ? `<div class="wide2 pets"><div class="col-main">${house}${fame}${rescue}</div><div class="col-main">${dogPart}</div></div>`
-    : `${house}${dogPart}${fame}${rescue}`}`;
-  renderCare(); renderRace(); renderFight().catch(() => {});
-  if (dogs) renderRescue().catch(() => {});
-  if (!dogs) return;
+    <section class="card" id="spend" hidden></section>` : '';
+  return { house, dogPart, fame: '<section id="fame"></section>' };
+}
+async function petsFill() {
+  const mods = fam().modules || [];
+  if (!mods.includes('dogs') && !mods.includes('chores')) return;
+  renderCare(); renderRace();
+  if (!mods.includes('dogs')) return;
   renderWalk();
   await loadAppts();
   renderComing();
@@ -990,72 +1027,6 @@ async function renderRace() {
   const fame = $('#fame');
   if (fame) fame.innerHTML = race.gold.length ? `<h3>Hall of fame</h3><div class="fame">${race.gold.map((g) => `<div class="mini-gold"><b>${esc(monthName(g.month))}</b><span>${g.winners.map((w) => esc(w.name)).join(' & ')}</span><small>${g.points} pts${g.prize ? ` · ${esc(g.prize)}` : ''}</small></div>`).join('')}</div>` : '';
 }
-// ❤️ The health meter (js/fight.js), under the Gold Card: a Street Fighter-style face-off for
-// checking in — the morning weigh-in and each meal logged — never the scale. Each week is a round,
-// each month has a champion. From your own trackers and, head to head, your partner's when they
-// share diet & fitness with you. Fighters and the month's prize live in each person's own
-// trackers (locked like the rest); which moments you've seen stays on this phone.
-const fight = { open: false, data: null, pick: null };
-const meterSeen = () => { try { return JSON.parse(LS.get(`fam.meter.${state.fid}`) || '{}'); } catch { return {}; } };
-async function renderFight(fresh = true) {
-  const el = $('#fight');
-  if (!el || !(fam().modules || []).includes('health') || me()?.relation === 'child') return;
-  if (fresh || !fight.data) {
-    const partner = partnerMember();
-    const [F, mine, theirs] = await Promise.all([import('../js/fight.js'), myTrackers(), partner ? memberData(partner.id).then(openData).catch(() => null) : null]);
-    const has = (d) => d && !d.locked && ((d.weights || []).length || Object.keys(d.mealLog || {}).length);
-    fight.data = { F, mine: mine && !mine.locked ? mine : {}, theirs: has(theirs) ? theirs : null, partner };
-  }
-  const { F, mine, theirs, partner } = fight.data, today = isoLocal();
-  const cur = F.currentRound(today);
-  const prize = [mine.fightPrize, theirs?.fightPrize].filter((x) => x?.month === cur.month).sort((a, b) => b.at - a.at)[0]?.text || '';
-  const person = (name, d) => ({ name, data: d, face: d.fighter?.face, kit: d.fighter?.kit });
-  const me_ = person('You', mine), rival = theirs ? person(partner.name, theirs) : null;
-  // Last 3 finished months, for the hall of fame.
-  const fame = [];
-  if (rival) for (let i = 1; i <= 3; i++) { const d = new Date(`${cur.month}-15T12:00:00`); d.setMonth(d.getMonth() - i); const r = F.monthResult(mine, theirs, d.toISOString().slice(0, 7), today); if (r.champion && (r.mePts || r.rivalPts)) fame.push(r); }
-  el.hidden = false;
-  el.innerHTML = F.meterHtml({ me: me_, rival, today, open: fight.open, prize, moment: F.momentFor(mine, theirs, today, meterSeen()), fame })
-    .replace('When your partner shares diet &amp; fitness with you', partner ? `When ${esc(partner.name)} shares diet &amp; fitness with you (their Me › Who can see my diet &amp; fitness)` : 'When your partner shares diet &amp; fitness with you');
-  // A perfect week (7 of 7 check-in days) just finished: PERFECT!, once.
-  const won = F.perfectWeek(mine, today);
-  if (won && LS.get('fam.fightPerfect') !== won) {
-    LS.set('fam.fightPerfect', won);
-    const fx = document.createElement('div');
-    fx.className = 'fg-perfect'; fx.setAttribute('role', 'status');
-    fx.innerHTML = '<div><div class="big">PERFECT!</div><p>7 of 7 check-in days last week.</p><button type="button" class="ghost">🎉 Nice</button></div>';
-    fx.querySelector('button').onclick = () => fx.remove();
-    document.body.append(fx);
-  }
-}
-// A moment (ROUND n · FIGHT!, K.O.!, the champion) is shown once on this phone.
-function seeMoment(v) {
-  const [kind, key] = v.split(':');
-  LS.set(`fam.meter.${state.fid}`, JSON.stringify({ ...meterSeen(), [kind]: key }));
-  renderFight(false);
-}
-// Saving to your own trackers: read, change, lock and write back.
-async function saveMine(patch, done) {
-  const data = await openData(await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null));
-  if (data.locked) return toast('This device needs the family key first');
-  await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData({ ...data, ...patch }) });
-  mineCache = null;
-  if (fight.data) fight.data.mine = { ...fight.data.mine, ...patch };
-  toast(done);
-}
-const saveFightPrize = (text) => saveMine({ fightPrize: { text: text.trim().slice(0, 60), month: fight.data?.F.currentRound(isoLocal()).month || isoLocal().slice(0, 7), at: Date.now() } }, '🎁 Prize saved');
-// 🥋 Choose your fighter: a face and something to fight in. Just a look.
-function fighterSheet() {
-  const F = fight.data?.F;
-  if (!F) return;
-  fight.pick ||= { face: '🧑', kit: 'gi', ...(fight.data.mine.fighter || {}) };
-  const p = fight.pick;
-  openSheet(`<h2>🥋 Choose your fighter</h2><p class="small muted">How you look on the health meter. It changes nothing else.</p>
-    <div class="hm-pick" role="radiogroup" aria-label="Face">${F.FACES.map((f) => `<button type="button" class="${p.face === f ? 'on' : ''}" data-pickface="${f}" role="radio" aria-checked="${p.face === f}">${f}</button>`).join('')}</div>
-    <div class="row wrap hm-kits" role="radiogroup" aria-label="Fighting in">${Object.entries(F.KITS).map(([k, e]) => `<button type="button" class="chip ${p.kit === k ? 'on' : ''}" data-pickkit="${k}" role="radio" aria-checked="${p.kit === k}">${e ? `${e} ` : ''}${({ gi: 'Gi', gloves: 'Gloves', kicks: 'Kicks', none: 'Nothing' })[k]}</button>`).join('')}</div>
-    <div class="hm-preview">${esc(p.face)}${F.KITS[p.kit] ? `<i>${F.KITS[p.kit]}</i>` : ''}</div>
-    <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button type="button" data-fightersave="1">Ready!</button></div>`);
-}
 // A little burst of joy for every chore logged.
 function celebrate(kind, x, y) {
   const pts = ptsOf(kind);
@@ -1157,7 +1128,7 @@ function meView() {
     <section class="card"><b>Who can see my diet & fitness</b><p class="small muted">Weight, meals and training. Off for everyone until you turn it on.</p>
       ${others.length ? `<ul class="list toggles">${others.map((o) => `<li><label class="switch-row">${avatar(o, 32)}<span>${esc(o.name)} <small class="muted">${esc(relLabel(o))}</small></span><input type="checkbox" data-share="${o.id}" ${(my.shareWith || []).includes(o.id) ? 'checked' : ''}><i class="switch"></i></label></li>`).join('')}</ul>`
         : '<p class="small muted">Once someone accepts their invite, you can choose here.</p>'}
-      <p class="tiny muted">Pets and posts are seen by your whole family. Posts you mark "+ connected families" are also seen by the families you've connected with.</p></section>
+      <p class="tiny muted">Pets, family threads and the calendar are seen by your whole family. Threads you share with connected families are also seen by them.</p></section>
     ${hasLegacy ? `<h3>Your data</h3><section class="card"><b>Bring over the current app</b><p class="small muted">Copies everything from the current app on this phone into ${esc(f.name)}: your meals, weigh-ins, training and dog duties, your partner's shared data, and your dogs. Nothing is removed from the current app, and you can run it again to refresh.</p>
       <div class="row wrap"><button type="button" data-act="import">Bring it over</button><button type="button" class="ghost" data-act="backup">Download a backup</button></div><div id="importLog" class="small"></div></section>` : ''}
     <h3>Families</h3>
@@ -1165,8 +1136,7 @@ function meView() {
       <button type="button" class="linkish small" data-act="newfamily">＋ Create another family</button></section>
     ${my.role === 'owner' ? `<h3>Family settings</h3><section class="card stack">
       <form id="famSettings" class="stack"><label>Family name<input name="name" maxlength="40" value="${esc(f.name)}"></label>
-        <fieldset class="modules"><legend>What ${esc(f.name)} manages</legend>${Object.entries(MODULES).map(([k, v]) => `<label class="check"><input type="checkbox" name="mod" value="${k}" ${(f.modules || []).includes(k) ? 'checked' : ''}><span>${v}</span></label>`).join('')}</fieldset>
-        <label class="check"><input type="checkbox" name="goldenPosts" ${f.goldenPosts !== false ? 'checked' : ''}><span>🐾 On a ⭐ golden day, the dogs post a thank-you on the feed</span></label>
+        <fieldset class="modules"><legend>What ${esc(f.name)} manages</legend>${Object.entries(MODULES).filter(([k]) => k !== 'feed').map(([k, v]) => `<label class="check"><input type="checkbox" name="mod" value="${k}" ${(f.modules || []).includes(k) ? 'checked' : ''}><span>${v}</span></label>`).join('')}${(f.modules || []).includes('feed') ? '<input type="hidden" name="mod" value="feed">' : ''}</fieldset>
         <button class="ghost">Save</button></form>
       ${others.filter((o) => o.relation !== 'child').length ? `<button type="button" class="linkish small" data-act="handover">Hand ${esc(f.name)} over to someone else</button>` : ''}
       <button type="button" class="linkish small danger" data-act="deletefamily">Delete ${esc(f.name)}…</button></section>`
@@ -1429,7 +1399,7 @@ function renderComingLine() {
     const open = (a.dropAt && !a.dropBy) || (a.pickAt && !a.pickBy);
     bits.push(`${(APPT[a.type] || APPT.other)[0]} ${esc(whenText(a.dropAt || a.pickAt))} ${esc(pets)}${open ? ' · <span class="tone-warn">a ride needs a driver</span>' : ''}`);
   }
-  el.innerHTML = bits.length ? `<button type="button" class="card coming-line" data-view="pets"><span class="small">📅 <b>Coming up:</b> ${bits.join(' · ')}</span></button>` : '';
+  el.innerHTML = bits.length ? `<button type="button" class="card coming-line" data-view="home"><span class="small">📅 <b>Coming up:</b> ${bits.join(' · ')}</span></button>` : '';
 }
 // ＋ Create: three things for the two of you first, then the family.
 function plusMenu() {
@@ -1438,8 +1408,6 @@ function plusMenu() {
     ['writeup', '📖', 'Write it up'],
     ['eventnew', '📅', 'Event'],
     ...((fam().modules || []).includes('dogs') ? [['apptnew', '🐾', 'Dog appt']] : []),
-    ['post', '📸', 'Post'],
-    ['askhelp', '🙋', 'Ask for help'],
   ];
   openSheet(`<div class="row between"><h2>Create</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     ${p ? `<div class="grp">💞 You &amp; ${esc(p.name)}</div><div class="create4">
@@ -2107,7 +2075,7 @@ function threadBanner() {
   const fresh = th.list.filter((t) => t.unread && !t.mine && Math.max(t.at, t.lastAt || 0) > seen);
   LS.set('fam.bannerAt', String(Date.now()));
   // Not over an open sheet (it couldn't be tapped there); the badges still show it.
-  if (!seen || !fresh.length || (state.view === 'feed' && state.famTab === 'threads') || $('#sheet').open) return;
+  if (!seen || !fresh.length || (state.view === 'threads' && state.famTab === 'threads') || $('#sheet').open) return;
   const t = fresh.sort((a, b) => b.tagged - a.tagged || b.lastAt - a.lastAt)[0];
   const who = t.lastAt > t.at && t.lastByName ? t.lastByName : t.byName;
   const head = t.tagged ? `🏷️ ${who} tagged you` : t.lastAt > t.at ? `💬 ${who} replied` : `📖 ${who} posted`;
@@ -2121,7 +2089,7 @@ function threadBanner() {
   setTimeout(() => el.classList.add('out'), 7000); setTimeout(() => el.remove(), 7600);
 }
 // Coming back to the app (or a notification arriving while it's open): one quick check.
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.family && Date.now() - th.loaded > 60000) loadThreads().then(() => { if (state.view === 'feed' && state.famTab === 'threads') threadsView(); }).catch(() => {}); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.family && Date.now() - th.loaded > 60000) loadThreads().then(() => { if (state.view === 'threads' && state.famTab === 'threads') threadsView(); }).catch(() => {}); });
 const unreadThreads = (us = false) => th.list.filter((t) => t.unread && (us ? t.aud === 'us' : t.aud !== 'us'));
 function famBadge() {
   const b = $('#famBadge');
@@ -2318,7 +2286,7 @@ async function threadReport(rid, block) {
   th.loaded = 0;
   if (rid && !block) return threadAct(() => api.get(base));
   th.cur = null; th.quote = null;
-  return show(state.view === 'us' ? 'us' : 'feed');
+  return show(state.view === 'us' ? 'us' : 'threads');
 }
 // ✍️ Write it up: for just the two of you, the family, or friends' families. Drafts keep themselves.
 const draftKey = () => `fam.threadDraft.${state.fid}`;
@@ -2539,8 +2507,8 @@ async function postThread(f) {
   th.loaded = 0; th.board = v.aud === 'us' ? 'us' : 'new';
   toast(v.aud === 'us' ? `📓 Saved for ${partnerName()} to read` : '📖 Posted');
   if (v.aud === 'us' && state.view === 'us') { await loadThreads(); return renderUs(); }
-  state.famTab = 'threads'; LS.set('fam.famTab', 'threads');
-  show('feed');
+  state.famTab = 'threads';
+  show('threads');
   return threadView(state.fid, r.thread.id);
 }
 async function saveThreadEdit(f) {
@@ -3195,11 +3163,11 @@ async function loadAlbums() {
 }
 async function renderAlbums() {
   const el = $('#albums');
-  if (!el || lockedHere() || !(await photosReady())) { if (el) { el.hidden = true; LS.set(`fam.albumsOn.${state.fid}`, '0'); } return; }
-  const list = await loadAlbums().catch(() => null);
+  if (!el) return;
+  const why = lockedHere() ? '🔒 This device needs the family key to show your photos.' : !(await photosReady()) ? "Photo storage isn't set up on your connector yet." : '';
+  const list = why ? null : await loadAlbums().catch(() => null);
   if (!$('#albums')) return;
-  if (!list) { el.hidden = true; return; }
-  el.hidden = false; LS.set(`fam.albumsOn.${state.fid}`, '1');
+  if (!list) { el.innerHTML = `<p class="small muted">${why || "Couldn't load your albums. Pull down to try again."}</p>`; return; }
   el.innerHTML = `<div class="row between"><b class="small">📷 Albums</b>${list.length ? '' : '<span class="tiny muted">Trips, the dogs, holidays…</span>'}</div>
     <div class="albumstrip">${list.map((a) => { if (a.cover) photoKeys.set(a.cover, fk()); return `<button type="button" class="albumtile" data-album="${a.id}">${a.cover ? `<span class="ph grid" data-photoid="${a.cover}" data-pfid="${state.fid}"><img alt=""></span>` : `<span class="albumicon">${a.link ? '🔗' : '📷'}</span>`}<b>${esc(a.title)}</b><small class="muted">${a.count ? `${a.count} photo${a.count === 1 ? '' : 's'}` : a.link ? 'Google Photos' : 'Empty'}</small></button>`; }).join('')}
       <button type="button" class="albumtile add" data-act="albumnew"><span class="albumicon">＋</span><b>New album</b></button></div>`;
@@ -3265,7 +3233,7 @@ async function pickFromGooglePhotos(id) {
     error_callback: (e) => rej(new Error(e.type === 'popup_closed' ? 'cancelled' : e.message || 'Google sign-in was cancelled')),
   }).requestAccessToken());
   const H = { Authorization: `Bearer ${token}` };
-  const call = async (path, init = {}) => { const r = await fetch(`${PICKER}${path}`, { ...init, headers: H }); if (!r.ok) throw new Error(r.status === 403 ? 'Google Photos isn\'t switched on for this app yet (see server/README.md)' : `Google Photos: ${r.status}`); return r.status === 204 ? null : r.json(); };
+  const call = async (path, init = {}) => { const r = await fetch(`${PICKER}${path}`, { ...init, headers: H }); if (!r.ok) throw new Error(r.status === 403 ? 'Google Photos isn\'t switched on for this app yet' : `Google Photos: ${r.status}`); return r.status === 204 ? null : r.json(); };
   const session = await call('/sessions', { method: 'POST' });
   // Opening the picker has to come from a tap (phones block pop-ups otherwise).
   openSheet(`<h2>📥 From Google Photos</h2><p class="small">Pick the photos in Google Photos, tap <b>Done</b>, then come back here.</p>
@@ -3615,7 +3583,7 @@ const CHIPS = ['How do I set up a family?', 'How do I add people and pets?', "My
 // Assistant text → safe HTML: **bold**, links, line breaks.
 const rich = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|\s)_(.+?)_(?=\s|$)/g, '$1<i>$2</i>').replace(/https:\/\/[^\s<)]+/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`).replace(/\n/g, '<br>');
 function helpView() {
-  const here = state.user && state.family ? TOUR_SCREEN[state.view === 'feed' && state.famTab === 'threads' ? 'threads' : state.view] : '';
+  const here = state.user && state.family ? TOUR_SCREEN[state.view] : '';
   openSheet(`<div class="row between"><h2>❓ Help</h2><button type="button" class="linkish small" data-act="close">Done</button></div>
     ${state.user && state.family ? `<button type="button" class="tourbtn" data-act="tour"><span class="ti">📖</span><span class="grow"><b>Take the tour</b><small>What’s in the app · 2 min</small></span><span class="muted">›</span></button>
     <div class="row helprow"><button type="button" class="tourbtn soft" data-act="whatsnew"><span class="ti">✨</span><b>What’s new</b></button>${here ? `<button type="button" class="tourbtn soft" data-tourat="${here}"><span class="ti">🧭</span><b>This screen</b></button>` : ''}</div>` : ''}
@@ -3746,9 +3714,9 @@ function refreshPush() {
 }
 if (pushOk()) navigator.serviceWorker.addEventListener('message', (e) => {
   if (e.data?.pushed) shared.clear(); // something changed elsewhere: ask again
-  if (e.data?.open && state.family) show(e.data.open === 'dogs' ? 'pets' : e.data.open);
+  if (e.data?.open && state.family) show(e.data.open);
   if (typeof e.data?.pushed === 'string' && e.data.pushed.startsWith('chat-')) return dmMod?.refresh();
-  if (e.data?.pushed && state.family) loadThreads().then(() => { if (state.view === 'feed' && state.famTab === 'threads') threadsView(); }).catch(() => {});
+  if (e.data?.pushed && state.family) loadThreads().then(() => { if (state.view === 'threads' && state.famTab === 'threads') threadsView(); }).catch(() => {});
 });
 
 // ✎ Edit chores: remove any chore (built-in or your own) from the buttons, bring one back, or
@@ -3977,7 +3945,7 @@ document.addEventListener('click', (e) => {
     return act(async () => {
       const r = await api.post(`/families/${state.fid}/care`, { kind: d.care, date: isoLocal(), by: careWho });
       renderCare(); renderRace();
-      if (r.golden) { state.feed = [r.golden, ...state.feed]; setTimeout(() => toast(`⭐ Golden day! ${r.golden.byName} left you a note on the feed`), 1600); }
+      if (r.golden) { state.feed = [r.golden, ...state.feed]; setTimeout(() => toast('⭐ Golden day! Every chore done today'), 1600); }
     });
   }
   if (d.carewho) {
@@ -4050,22 +4018,16 @@ document.addEventListener('click', (e) => {
   if (d.dogcalno != null) { const x = dogCal.list[+d.dogcalno]; if (!x) return; const mk = dogCalMarks(); mk[x.key] = 'no'; LS.set(dogCalKey(), JSON.stringify(mk)); return dogCalSuggestions(); }
   if (d.nudgeundo) return act(async () => { setNudges(await api.post(`/account/nudges/${d.nudgeundo}/undo?today=${isoLocal()}`)); renderYourDay(); });
   if (d.callnudge && d.callnudge !== 'done') return act(() => callNudgeAct(d.callnudge, t));
-  if (d.famtab) { if (d.board) th.board = d.board; state.famTab = d.famtab; LS.set('fam.famTab', d.famtab); if (state.view !== 'feed') return show('feed'); return feedView(); }
+  if (d.famtab) { if (d.board) th.board = d.board; state.famTab = d.famtab === 'photos' ? 'photos' : 'threads'; th.cur = null; return state.view === 'threads' ? threadsPage() : show('threads'); }
   if (d.board) { th.board = d.board; return threadsView(); }
   if (d.thread) { const [f, id] = d.thread.split(':'); th.quote = null; return act(() => threadView(f, id)); }
-  if (d.thback) { th.cur = null; th.quote = null; return show(state.view === 'us' ? 'us' : 'feed'); }
+  if (d.thback) { th.cur = null; th.quote = null; return show(state.view === 'us' ? 'us' : 'threads'); }
   if (d.thmenu != null) return threadMenu(d.thmenu);
   if (d.threport != null) return act(() => threadReport(d.threport, false));
   if (d.thblock != null) return act(() => threadReport(d.thblock, true));
   if (d.thfollow) return act(async () => { const r = await api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/follow`); th.cur.following = r.following; renderThread(); toast(r.following ? '🔔 You\'ll hear about new replies' : '🔕 No more replies from this one'); });
   if (d.thpin) return act(() => threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}`, { pinned: !th.cur.pinned })));
-  if (d.thdel) { if (!confirm('Delete this thread and its replies?')) return; return act(async () => { await api.del(`/families/${th.cur.fid}/threads/${th.cur.id}`); th.loaded = 0; th.list = th.list.filter((x) => x.id !== th.cur.id); th.cur = null; toast('Deleted'); show('feed'); }); }
-  if (d.moment) return seeMoment(d.moment);
-  if (d.fighter) { fight.pick = null; return fighterSheet(); }
-  if (d.pickface) { fight.pick.face = d.pickface; return fighterSheet(); }
-  if (d.pickkit) { fight.pick.kit = d.pickkit; return fighterSheet(); }
-  if (d.fightersave) return act(async () => { const f = { face: fight.pick.face, kit: fight.pick.kit }; closeSheet(); await saveMine({ fighter: f }, `${f.face} Ready to fight!`); renderFight(false); });
-  if (d.fight) { fight.open = !fight.open; return renderFight(false); }
+  if (d.thdel) { if (!confirm('Delete this thread and its replies?')) return; return act(async () => { await api.del(`/families/${th.cur.fid}/threads/${th.cur.id}`); th.loaded = 0; th.list = th.list.filter((x) => x.id !== th.cur.id); th.cur = null; toast('Deleted'); show('threads'); }); }
   if (d.thedit) return writeupSheet({ edit: th.cur });
   if (d.thmove) return moveSheet();
   if (d.thmoveto) return moveThread(d.thmoveto);
@@ -4157,7 +4119,7 @@ document.addEventListener('click', (e) => {
   if (d.ticket) return act(async () => { await api.patch(`/admin/tickets/${d.ticket}`, { status: d.status }); adminView(); });
   if (d.view) { e.preventDefault(); return show(d.view); }
   if (d.member) { closeSheet(); return show('member', d.member); }
-  if (d.fam) { state.fid = d.fam; return act(async () => { await loadFamily(); show('feed'); }); }
+  if (d.fam) { state.fid = d.fam; return act(async () => { await loadFamily(); show('home'); }); }
   if (d.tag) { draft.tags = draft.tags.includes(d.tag) ? draft.tags.filter((x) => x !== d.tag) : [...draft.tags, d.tag]; t.classList.toggle('on'); return; }
   if (d.kind) { draft.text = $('#postForm textarea')?.value || draft.text; draft.help = d.kind === 'help' ? (draft.help || { type: 'petsit', from: '', to: '', time: '' }) : null; if (draft.help && state.connected.length) draft.audience = 'connections'; return compose(); }
   if (d.htype) { const f = $('#postForm'); Object.assign(draft.help, { type: d.htype, from: f.from.value, to: f.to.value, time: f.time.value }); draft.text = f.text.value; return compose(); }
@@ -4278,7 +4240,7 @@ document.addEventListener('click', (e) => {
     case 'admin': return adminView();
     case 'runcheck': t.disabled = true; t.textContent = 'Checking…'; return act(async () => { await api.post('/admin/maintenance'); adminView(); });
     case 'home': return boot();
-    case 'signout': return act(async () => { await api.post('/auth/logout').catch(() => {}); api.setToken(null); chat.messages = []; state.family = null; state.view = 'feed'; boot(); });
+    case 'signout': return act(async () => { await api.post('/auth/logout').catch(() => {}); api.setToken(null); chat.messages = []; state.family = null; state.view = 'home'; boot(); });
     case 'addperson': return addPerson();
     case 'addpet': return addPet();
     case 'editpet': return addPet(member(d.id));
@@ -4287,7 +4249,7 @@ document.addEventListener('click', (e) => {
     case 'accept': return act(async () => {
       const r = await api.post(`/invites/${state.invite}/accept`);
       if (LS.get('fam.inviteKey')) await keys.set(r.family.fid, LS.get('fam.inviteKey'));
-      LS.set('fam.invite', null); LS.set('fam.inviteKey', null); state.invite = null; state.fid = r.family.fid; state.view = 'feed';
+      LS.set('fam.invite', null); LS.set('fam.inviteKey', null); state.invite = null; state.fid = r.family.fid; state.view = 'home';
       markNewcomer(r.family.fid);
       toast(`Welcome to ${r.family.name}!`); boot();
     });
@@ -4387,7 +4349,6 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('change', async (e) => {
   const t = e.target;
-  if (t.dataset.fightprize) return act(() => saveFightPrize(t.value));
   if (t.name === 'photo' && t.files?.[0]) {
     draft.text = $('#postForm textarea')?.value || draft.text;
     draft.file = t.files[0];
@@ -4535,7 +4496,7 @@ document.addEventListener('submit', (e) => {
   }
   if (f.id === 'demoForm') {
     e.preventDefault();
-    return act(async () => { api.setMode('demo'); const s = await api.post('/auth/demo', { ...v, device: deviceName() }); api.setToken(s.token); closeSheet(); state.view = 'feed'; boot(); });
+    return act(async () => { api.setMode('demo'); const s = await api.post('/auth/demo', { ...v, device: deviceName() }); api.setToken(s.token); closeSheet(); state.view = 'home'; boot(); });
   }
   if (f.id === 'famForm') {
     e.preventDefault();
@@ -4554,7 +4515,7 @@ document.addEventListener('submit', (e) => {
   }
   if (f.id === 'famSettings') {
     e.preventDefault();
-    return act(async () => { await api.patch(`/families/${state.fid}`, { name: v.name, modules: new FormData(f).getAll('mod'), goldenPosts: !!v.goldenPosts }); await loadFamily(); chrome(true); toast('Saved'); });
+    return act(async () => { await api.patch(`/families/${state.fid}`, { name: v.name, modules: new FormData(f).getAll('mod') }); await loadFamily(); chrome(true); toast('Saved'); });
   }
   if (f.id === 'watchForm') {
     e.preventDefault();
@@ -4669,7 +4630,7 @@ document.addEventListener('submit', (e) => {
       if (f.dataset.id) await api.patch(`/families/${state.fid}/appts/${f.dataset.id}`, { edit: body });
       else await api.post(`/families/${state.fid}/appts`, body);
       if (f.dataset.calkey) { const mk = dogCalMarks(); mk[f.dataset.calkey] = 'appt'; LS.set(dogCalKey(), JSON.stringify(mk)); }
-      closeSheet(); await apptChanged(); toast(f.dataset.id ? 'Saved' : '🐾 Added — it\'s on the feed and the calendar');
+      closeSheet(); await apptChanged(); toast(f.dataset.id ? 'Saved' : '🐾 Added — it\'s on the calendar');
     });
   }
   if (f.id === 'apptDoneForm') {
@@ -4831,7 +4792,7 @@ $('#sheet').addEventListener('click', (e) => {
   const r = $('#sheet').getBoundingClientRect();
   if (e.clientY < r.top || e.clientY > r.bottom || e.clientX < r.left || e.clientX > r.right) closeSheet();
 });
-$('#sheet').addEventListener('close', () => { if (state.view === 'compose') { draft.text = $('#postForm textarea')?.value ?? draft.text; show('feed'); } });
+$('#sheet').addEventListener('close', () => { if (state.view === 'compose') { draft.text = $('#postForm textarea')?.value ?? draft.text; show('home'); } });
 window.addEventListener('hashchange', () => { if (/invite=/.test(location.hash)) boot(); });
 
 // Errors this phone hits are counted on the connector (message and place only) so the
