@@ -118,7 +118,10 @@ export async function verifyGoogle(idToken, clientId, keys = null) {
   if (!['accounts.google.com', 'https://accounts.google.com'].includes(payload.iss)) throw new Error('bad issuer');
   if (payload.aud !== clientId) throw new Error('token is for another app');
   if (!(payload.exp * 1000 > Date.now())) throw new Error('token expired');
-  if (!payload.email || payload.email_verified === false) throw new Error('email not verified');
+  // Invites are matched by email, so the address must be one Google has verified (older tokens
+  // say "true" as a string). A token issued in the future (beyond 5 minutes of clock drift) is refused.
+  if (!payload.email || !(payload.email_verified === true || payload.email_verified === 'true')) throw new Error('email not verified');
+  if (payload.iat != null && !(payload.iat * 1000 <= Date.now() + 300e3)) throw new Error('token issued in the future');
   return { uid: `g${payload.sub}`, email: payload.email.toLowerCase(), name: clean(payload.name || payload.email.split('@')[0], 60), picture: clean(payload.picture, 300) };
 }
 

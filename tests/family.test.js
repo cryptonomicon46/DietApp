@@ -32,6 +32,11 @@ test('Google ID tokens: signature, audience and expiry are checked', async () =>
   await assert.rejects(verifyGoogle(await idToken({ sub: '1', email: 'a@x.com', exp: 1 }), 'client-1', [pub]), /expired/);
   const t = await idToken({ sub: '1', email: 'a@x.com' });
   await assert.rejects(verifyGoogle(`${t.split('.').slice(0, 2).join('.')}.${b64url(new Uint8Array(256))}`, 'client-1', [pub]), /signature/);
+  // The email must be verified by Google: a missing, false or "false" claim is refused.
+  for (const v of [undefined, false, 'false']) await assert.rejects(verifyGoogle(await idToken({ sub: '1', email: 'a@x.com', email_verified: v }), 'client-1', [pub]), /not verified/);
+  assert.equal((await verifyGoogle(await idToken({ sub: '1', email: 'a@x.com', email_verified: 'true' }), 'client-1', [pub])).email, 'a@x.com');
+  await assert.rejects(verifyGoogle(await idToken({ sub: '1', email: 'a@x.com', iat: Math.floor(Date.now() / 1000) + 3600 }), 'client-1', [pub]), /future/);
+  assert.ok(await verifyGoogle(await idToken({ sub: '1', email: 'a@x.com', iat: Math.floor(Date.now() / 1000) + 60 }), 'client-1', [pub]), 'a minute of clock drift is fine');
   assert.equal((await api('/me')).status, 401);
   assert.equal((await api('/auth/demo', { method: 'POST', body: { email: 'x@y.z' } })).status, 404, 'no demo sign-in on the real connector');
 });

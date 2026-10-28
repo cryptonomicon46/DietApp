@@ -77,9 +77,9 @@ export async function planOuting(env, db, fam, body, from, now = new Date()) {
   const runs = (await db.get(key)) || [];
   const cap = Math.max(1, +env.OUTING_MAX_RUNS || 20);
   if (runs.filter((x) => !x.swap).length >= cap) return { error: `that's ${cap} outings planned this month — more next month` };
-  // What you've rated stays with Claude; a plain place-and-day question can go to Gemini.
+  // Outings stay with Claude: the where-to box is free text, and Gemini's free tier may be reviewed by Google.
   const taste = clean(body.taste, 300);
-  const { text: answer, usage } = await askSearch(env, outingPrompt({ text, day, chips, from, taste }), { city: from, maxUses: 5, db, claudeOnly: !!taste });
+  const { text: answer, usage } = await askSearch(env, outingPrompt({ text, day, chips, from, taste }), { city: from, maxUses: 5, db, claudeOnly: true });
   await db.put(key, [...runs, { at: Date.now(), ...usage }], 62 * 86400);
   const outing = shapeOuting(parseScout(answer), { day, from, text });
   if (!outing) return { error: "Claude couldn't put that one together — try saying it another way" };
@@ -109,7 +109,7 @@ export async function swapStop(env, db, fam, body, from, now = new Date()) {
   const cap = Math.max(1, +env.OUTING_MAX_RUNS || 20) * 3; // swaps are small: three per outing on average
   if (runs.length >= cap) return { error: 'that\'s a lot of planning this month — more next month' };
   const taste = clean(body.taste, 300);
-  const { text, usage } = await askSearch(env, swapPrompt({ area, day, time, kind, cuisine, avoid, taste }), { city: from, maxUses: 3, maxTokens: 3000, model: env.SWAP_MODEL || 'claude-haiku-5-5', db, claudeOnly: !!taste });
+  const { text, usage } = await askSearch(env, swapPrompt({ area, day, time, kind, cuisine, avoid, taste }), { city: from, maxUses: 3, maxTokens: 3000, model: env.SWAP_MODEL || 'claude-haiku-5-5', db, claudeOnly: true });
   await db.put(key, [...runs, { at: Date.now(), swap: true, ...usage }], 62 * 86400);
   const options = await checked(env, shape(parseScout(text)), area, 3);
   return options.length ? { options } : { error: "Couldn't find any — try another cuisine" };

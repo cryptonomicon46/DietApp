@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { askSearch, askGemini, searchReady } from '../server/search.js';
-import { planOuting } from '../server/outing.js';
+import { planOuting, swapStop } from '../server/outing.js';
 
 const kv = () => { const m = new Map(); return { m, get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); } }; };
 const claude = (text, calls) => ({ messages: { create: async () => { calls.claude++; return { stop_reason: 'end_turn', content: [{ type: 'text', text }], usage: { input_tokens: 10, output_tokens: 5 } }; } } });
@@ -43,12 +43,14 @@ test('Claude takes over when Gemini fails, and for personal asks', async () => {
   assert.equal(searchReady({ GEMINI_API_KEY: 'g' }), true);
 });
 
-test('an outing goes to Gemini unless it carries what you liked', async () => {
+test('outings never go to Gemini: the where-to box is free text', async () => {
   const calls = { gemini: 0, claude: 0 };
   const plan = JSON.stringify({ area: 'Hayes Valley', stops: [{ time: '19:30', kind: 'dinner', name: 'Bistro' }] });
   const env = { GEMINI_API_KEY: 'g', __fetch: gemini(plan, calls), __anthropic: claude(plan, calls) };
   assert.ok((await planOuting(env, kv(), { fid: 'f' }, { text: 'Hayes Valley', day: '2026-11-01' }, 'San Jose')).outing);
-  assert.deepEqual([calls.gemini, calls.claude], [1, 0]);
+  assert.deepEqual([calls.gemini, calls.claude], [0, 1]);
   await planOuting(env, kv(), { fid: 'f' }, { text: 'Hayes Valley', day: '2026-11-01', taste: 'loved the ramen' }, 'San Jose');
-  assert.deepEqual([calls.gemini, calls.claude], [1, 1]);
+  assert.deepEqual([calls.gemini, calls.claude], [0, 2]);
+  await swapStop({ ...env, __anthropic: claude('{"options":[{"name":"Sushi spot"}]}', calls) }, kv(), { fid: 'f' }, { area: 'Hayes Valley, San Francisco', day: '2026-11-01', time: '19:30', kind: 'dinner' }, 'San Jose');
+  assert.deepEqual([calls.gemini, calls.claude], [0, 3], 'a swap too');
 });
