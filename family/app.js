@@ -2047,11 +2047,12 @@ document.addEventListener('visibilitychange', () => {
 
 // ---------- 📖 threads: write-ups read in your own time, with replies, polls and best answers ----------
 const THREAD_CATS = { learned: ['📚', 'Learned'], talk: ['💬', 'Talk'], howto: ['📌', 'How-to'], ask: ['❓', 'Ask'], poll: ['📊', 'Poll'] };
-const THREAD_BOARDS = { us: '💞 Just us', family: '👨‍👩‍👧 Family', dogs: '🐾 Dogs', house: '🏠 House & money', friends: "🤝 Friends'" };
+const THREAD_BOARDS = { us: '💞 Just us', family: '👨‍👩‍👧 Family', dogs: '🐾 Dogs', house: '🏠 House & money', app: '💡 App feedback', friends: "🤝 Friends'", saved: '★ Saved' };
 // 🗂 The built-in boards and the family's own ("🎓 School"…).
 const ownBoards = () => fam()?.boards || [];
 const boardName = (b) => THREAD_BOARDS[b] || ownBoards().find((x) => x.id === b)?.label || THREAD_BOARDS.family;
-const th = { list: [], board: 'new', cur: null, quote: null, loaded: 0 };
+const th = { list: [], board: 'new', cur: null, quote: null, loaded: 0, rshots: [], q: '', full: null };
+const MAX_REPLY_SHOTS = 4;
 const threadKey = (t) => (t.pk ? postKey(t) : Promise.resolve(fk(t.fid)));
 async function openThreadText(t, k) {
   const o = async (v) => { if (v == null) return ''; const r = await tryOpen(k, v, null); return r ?? (isSealed(v) ? '🔒' : v); };
@@ -2146,18 +2147,57 @@ async function threadsView() {
   if (!el) return;
   if (!th.loaded || Date.now() - th.loaded > 20000) { el.innerHTML = '<div class="skeleton card"></div>'; await loadThreads(); if (!$('#famBody') || state.famTab !== 'threads') return; }
   const hasFriends = (fam().connections || []).length || th.list.some((t) => !t.own);
-  const boards = ['new', ...(partnerMember() ? ['us'] : []), 'family', ...((fam().modules || []).includes('dogs') ? ['dogs'] : []), 'house', ...ownBoards().map((b) => b.id), ...(hasFriends ? ['friends'] : [])];
+  const boards = ['new', ...(th.list.some((t) => t.fav) ? ['saved'] : []), ...(partnerMember() ? ['us'] : []), 'family', ...((fam().modules || []).includes('dogs') ? ['dogs'] : []), 'house', ...ownBoards().map((b) => b.id), ...(hasFriends ? ['friends'] : []), 'app'];
   // ✨ For you: tags and anything new first (tags on top), then everything else under Earlier.
   const forYou = th.list.filter((t) => t.unread && !t.mine).sort((a, b) => b.tagged - a.tagged || b.lastAt - a.lastAt);
-  const list = th.board === 'new' ? [...forYou, ...th.list.filter((t) => !forYou.includes(t))] : th.list.filter((t) => t.board === th.board);
+  const list = th.board === 'new' ? [...forYou, ...th.list.filter((t) => !forYou.includes(t))] : th.board === 'saved' ? th.list.filter((t) => t.fav) : th.list.filter((t) => t.board === th.board);
   const rows = th.board === 'new' && forYou.length && forYou.length < list.length
     ? `${forYou.map(threadRow).join('')}<div class="grp">Earlier</div>${list.slice(forYou.length).map(threadRow).join('')}` : list.map(threadRow).join('');
   el.innerHTML = `<div class="row between"><div class="rchips boards">${boards.map((b) => `<button type="button" class="chip ${th.board === b ? 'on' : ''}" data-board="${b}">${b === 'new' ? `✨ For you${forYou.length ? ` <span class="cnt">${forYou.length}</span>` : ''}` : esc(boardName(b))}${b !== 'new' && th.list.some((t) => t.board === b && t.unread) ? ' <i class="dot"></i>' : ''}</button>`).join('')}${me()?.relation === 'child' ? '' : '<button type="button" class="chip addboard" data-boardadd="1" aria-label="Add a board">＋ Board</button>'}</div></div>
+    <input type="search" id="thSearch" class="thsearch" placeholder="🔎 Search threads" aria-label="Search threads" autocomplete="off" value="${esc(th.q || '')}">
     <button type="button" class="input-like" data-act="writeup">✍️ Write something up…</button>
-    <div class="thlist">${rows || `<div class="card center"><p class="small">${th.board === 'us' ? `Write ${esc(partnerName())} something to read later — what you read about, a plan, an idea.` : 'Start a thread: something you learned, a question, a decision to talk through, or a how-to.'}</p><button type="button" data-act="writeup">✍️ Write it up</button></div>`}</div>`;
+    <div class="thlist" id="thList">${th.q ? '<p class="small muted">Searching…</p>' : rows || `<div class="card center"><p class="small">${th.board === 'us' ? `Write ${esc(partnerName())} something to read later — what you read about, a plan, an idea.` : 'Start a thread: something you learned, a question, a decision to talk through, or a how-to.'}</p><button type="button" data-act="writeup">✍️ Write it up</button></div>`}</div>`;
+  if (th.q) runSearch();
 }
+// 🔎 Search: every thread you can see, still locked, fetched once and unlocked in memory here
+// (family/search.js) — nothing is stored or sent anywhere. Fetched again after a minute.
+let searchMod = null;
+async function loadFullThreads() {
+  if (th.full && Date.now() - th.full.at < 60000) return th.full.list;
+  const r = await api.get('/threads?full=1');
+  th.full = { at: Date.now(), list: await Promise.all(r.threads.map(async (t) => openThreadText(t, await threadKey(t)))) };
+  return th.full.list;
+}
+let searchSeq = 0;
+async function runSearch() {
+  const el = $('#thList'), q = th.q.trim(), seq = ++searchSeq;
+  if (!el) return;
+  if (!q) { th.full = null; return threadsView(); }
+  searchMod ||= await import(`./search.js?v=${VERSION}`);
+  const list = await loadFullThreads().catch(() => null);
+  if (seq !== searchSeq || !$('#thList')) return;
+  if (!list) { el.innerHTML = '<p class="small muted">Couldn\'t search right now. Try again in a moment.</p>'; return; }
+  const hits = searchMod.searchThreads(q, list);
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const mark = (s) => esc(s).replace(new RegExp(`(${words.join('|')})`, 'gi'), '<mark>$1</mark>');
+  const where = { title: 'Title', body: 'Write-up', reply: 'Reply', caption: 'Screenshot', pdf: 'PDF' };
+  el.innerHTML = hits.length
+    ? `<p class="tiny muted" role="status">${hits.length} thread${hits.length === 1 ? '' : 's'} · searched on this phone</p>${hits.map((h) => {
+      const s = th.list.find((x) => x.id === h.thread.id) || h.thread;
+      return `${threadRow(s)}${h.where === 'title' ? '' : `<p class="tiny muted snip">${where[h.where]}${h.by ? ` · ${esc(h.by)}` : ''}: ${mark(h.snippet)}</p>`}`;
+    }).join('')}`
+    : `<div class="card center" role="status"><p class="small">No thread mentions “${esc(q)}”.</p></div>`;
+}
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'thSearch') return;
+  th.q = e.target.value;
+  clearTimeout(runSearch.t);
+  runSearch.t = setTimeout(runSearch, 160);
+});
 // One thread: just-us ones read like a letter (notes in the margin); the rest like a forum topic.
 async function threadView(fid, id) {
+  for (const x of th.rshots) URL.revokeObjectURL(x.url);
+  th.rshots = [];
   const r = await api.get(`/families/${fid}/threads/${id}`);
   const k = await threadKey(r.thread);
   th.cur = await openThreadText(r.thread, k);
@@ -2222,11 +2262,12 @@ function renderThread() {
   const letter = t.aud === 'us';
   const atPara = (i) => t.replies.filter((r) => r.quote === i);
   const replyHtml = (r, n) => `<div class="post" id="r-${r.id}"><span class="av ${r.mine ? 'a1' : 'a2'}">${esc((r.name || '?')[0])}</span><div class="grow">
-      <div class="h"><b>${esc(r.mine ? 'You' : r.name)}</b> · ${ago(r.at)}${letter ? '' : ` · #${n + 2}`}${t.bestId === r.id ? ' <span class="tag tg">✓ Best answer</span>' : ''}</div>
+      <div class="h"><b>${esc(r.mine ? 'You' : r.name)}</b> · ${ago(r.at)}${letter ? '' : ` · #${n + 2}`}${r.editedAt ? ' · edited' : ''}${t.bestId === r.id ? ' <span class="tag tg">✓ Best answer</span>' : ''}</div>
       ${r.quote != null && !letter ? `<div class="quote">❝ ${esc(typeof r.quote === 'number' ? (blocks[r.quote] ? blockText(blocks[r.quote]).slice(0, 140) : '') : r.quote)} ❞</div>` : ''}
-      <div class="t">${linkify(r.text)}</div>
+      ${r.text ? `<div class="t">${linkify(r.text)}</div>` : ''}
+      ${(r.shots || []).length ? `<div class="rshots">${r.shots.map((x) => { photoKeys.set(x.id, t._key || null); return `<button type="button" class="ph grid" data-photoid="${x.id}" data-pfid="${t.fid}" data-pin="thread:${t.id}" aria-label="Open image"><img alt=""></button>`; }).join('')}</div>` : ''}
       <div class="ractions">${t.cat === 'ask' ? `<button type="button" class="linkish tiny" data-thup="${r.id}">▲ ${r.ups}${r.upped ? ' · you' : ''}</button>` : ''}${t.cat === 'ask' && t.mine ? `<button type="button" class="linkish tiny" data-thbest="${r.id}">${t.bestId === r.id ? 'Unmark best' : '✓ Best answer'}</button>` : ''}
-        <button type="button" class="linkish tiny" data-thquote="r:${r.id}">❝ Quote</button>${r.mine ? `<button type="button" class="linkish tiny" data-thrdel="${r.id}">Delete</button>` : `<button type="button" class="linkish tiny" data-thmenu="${r.id}" aria-label="Report or block ${esc(r.name)}">⋯</button>`}</div></div></div>`;
+        <button type="button" class="linkish tiny" data-thquote="r:${r.id}">❝ Quote</button>${r.mine ? `<button type="button" class="linkish tiny" data-thredit="${r.id}">Edit</button><button type="button" class="linkish tiny" data-thrdel="${r.id}">Delete</button>` : `<button type="button" class="linkish tiny" data-thmenu="${r.id}" aria-label="Report or block ${esc(r.name)}">⋯</button>`}</div></div></div>`;
   const pollHtml = t.poll ? `<div class="poll">${t.poll.opts.map((o, i) => { const total = t.poll.counts.reduce((a, b) => a + b, 0) || 1; return `<button type="button" class="${t.poll.mine === i ? 'on' : ''}" data-thvote="${i}"><i style="width:${Math.round((t.poll.counts[i] / total) * 100)}%"></i><span>${t.poll.mine === i ? '✓ ' : ''}${esc(o)} · ${t.poll.counts[i]}</span></button>`; }).join('')}
     <p class="tiny muted">${t.poll.closes ? `Closes ${esc(dayText(t.poll.closes).replace(/ ·.*/, ''))} · ` : ''}tap to vote, tap another to change</p></div>` : '';
   const seen = !t.mine ? '' : letter ? (t.readers.length ? `✓ Read by ${esc(partnerName())} ${ago(Math.max(...t.readers))}` : `Not read yet by ${esc(partnerName())}`) : t.readCount && !(t.seen || []).length ? `Seen by ${t.readCount}` : '';
@@ -2250,15 +2291,18 @@ function renderThread() {
   const sorted = t.cat === 'ask' ? [...replies].sort((a, b) => (b.id === t.bestId) - (a.id === t.bestId) || b.ups - a.ups || a.at - b.at) : replies;
   $('#view').innerHTML = `${demoBanner()}<div class="thread-page">
     <div class="row between"><button type="button" class="linkish" data-thback="1">‹ ${letter ? 'Us' : 'Threads'}</button>
-      <span class="row">${t.own && t.aud !== 'connections' ? '<button type="button" class="linkish small" data-thmove="1">🗂 Move</button>' : ''}<button type="button" class="linkish small" data-thfollow="1">${t.following ? '🔔 Following' : '🔕 Follow'}</button>${t.mine ? '' : ` <button type="button" class="linkish small" data-thmenu="" aria-label="Report or block">⋯</button>`}${t.mine ? ` <button type="button" class="linkish small" data-thedit="1">Edit</button>` : ''}${t.mine || fam()?.members.find((x) => x.id === meId)?.role === 'owner' ? ` <button type="button" class="linkish small" data-thpin="1">${t.pinned ? 'Unpin' : '📌 Pin'}</button> <button type="button" class="linkish small danger" data-thdel="1">Delete</button>` : ''}</span></div>
+      <span class="row">${t.own && t.aud !== 'connections' ? '<button type="button" class="linkish small" data-thmove="1">🗂 Move</button>' : ''}<button type="button" class="linkish small" data-thfav="1" aria-pressed="${!!t.fav}">${t.fav ? '★ Saved' : '☆ Save'}</button><button type="button" class="linkish small" data-thfollow="1">${t.following ? '🔔 Following' : '🔕 Follow'}</button>${t.mine ? '' : ` <button type="button" class="linkish small" data-thmenu="" aria-label="Report or block">⋯</button>`}${t.mine ? ` <button type="button" class="linkish small" data-thedit="1">Edit</button>` : ''}${t.mine || fam()?.members.find((x) => x.id === meId)?.role === 'owner' ? ` <button type="button" class="linkish small" data-thpin="1">${t.pinned ? 'Unpin' : '📌 Pin'}</button> <button type="button" class="linkish small danger" data-thdel="1">Delete</button>` : ''}</span></div>
     ${body}
+    ${t.board === 'app' && t.own && !letter ? `<div class="card feedback-send"><p class="small">💡 Want the people who make OurPawmily to see this? Nothing is sent unless you choose to.</p><button type="button" class="ghost small" data-thsend="1">📮 Send to the app's developer…</button></div>` : ''}
     ${docsHtml}
     ${shotsHtml}
     ${seenRow}
     ${seen ? `<p class="tiny muted">${seen}</p>` : ''}
     ${sorted.length ? `<div class="grp">${letter ? 'Notes' : `${sorted.length} repl${sorted.length === 1 ? 'y' : 'ies'}`}</div>${sorted.map(replyHtml).join('')}` : ''}
     <form id="thReplyForm" class="stack reply-box">${th.quote ? `<div class="quote">❝ ${esc(th.quote.label)} ❞ <button type="button" class="linkish tiny" data-thquote="x">✕</button></div>` : ''}
-      <textarea name="text" rows="2" maxlength="4000" placeholder="${letter ? 'Write a note…' : t.cat === 'ask' ? 'Your answer…' : 'Reply…'}" required></textarea><div class="row end"><button>${letter ? 'Add note' : 'Reply'}</button></div></form>
+      <textarea name="text" rows="2" maxlength="4000" placeholder="${letter ? 'Write a note…' : t.cat === 'ask' ? 'Your answer…' : 'Reply…'}" aria-label="${letter ? 'Note' : 'Reply'}"></textarea>
+      ${th.rshots.length ? `<div class="rshots pending">${th.rshots.map((x, i) => `<span class="rshot"><img src="${x.url}" alt=""><button type="button" class="icon-btn" data-rshotx="${i}" aria-label="Remove image">✕</button></span>`).join('')}</div>` : ''}
+      <div class="row between">${t.own && !letter ? `<label class="linkish small rshot-add">📷 Image<input type="file" accept="image/*" multiple hidden data-rshots></label>` : '<span></span>'}<button>${letter ? 'Add note' : 'Reply'}</button></div></form>
   </div>`;
 }
 // ⚑ Report or 🚫 block, for a thread or one reply someone else wrote (rid: the reply, or '' for the thread).
@@ -4036,6 +4080,31 @@ document.addEventListener('click', (e) => {
   if (d.thup) return act(() => threadAct(() => api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/up/${d.thup}`)));
   if (d.thbest) return act(() => threadAct(() => api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/best`, { reply: d.thbest })));
   if (d.thvote != null) return act(() => threadAct(() => api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/vote`, { i: +d.thvote })));
+  if (d.thfav) return act(async () => {
+    const r = await api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/fav`, { on: !th.cur.fav });
+    th.cur.fav = r.fav;
+    const s = th.list.find((x) => x.id === th.cur.id); if (s) s.fav = r.fav;
+    toast(r.fav ? '★ Saved — find it under ★ Saved in Threads' : 'Removed from ★ Saved');
+    redrawThreadKeepingReply();
+  });
+  // 📮 App feedback → the developer: you see (and can change) exactly what is sent first.
+  if (d.thsend) {
+    const t = th.cur;
+    return openSheet(`<form id="feedbackSendForm" class="stack"><div class="row between"><h2>📮 Send to the developer</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+      <p class="small">Only what's in these boxes is sent to the people who make OurPawmily, with your email so they can reply. Nothing else from ${esc(fam().name)} — no replies, screenshots or names.</p>
+      <label>What kind<select name="category"><option value="feature">💡 An idea</option><option value="bug">🐞 Something's broken</option></select></label>
+      <label>Summary<input name="summary" required maxlength="120" value="${esc(t.title.slice(0, 120))}"></label>
+      <label>Details<textarea name="details" rows="6" maxlength="2000">${esc(String(t.body || '').slice(0, 2000))}</textarea></label>
+      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Send this</button></div></form>`);
+  }
+  if (d.thredit) {
+    const r = th.cur.replies.find((x) => x.id === d.thredit);
+    if (!r) return;
+    return openSheet(`<form id="replyEditForm" class="stack" data-rid="${r.id}"><div class="row between"><h2>✎ Edit your reply</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+      <textarea name="text" rows="5" maxlength="4000" aria-label="Your reply" ${(r.shots || []).length ? '' : 'required'}>${esc(r.text)}</textarea>
+      <p class="tiny muted">Everyone sees it was edited.</p><div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save</button></div></form>`);
+  }
+  if (d.rshotx != null) { const [x] = th.rshots.splice(+d.rshotx, 1); if (x) URL.revokeObjectURL(x.url); return redrawThreadKeepingReply(); }
   if (d.thrdel) { if (!confirm('Delete your reply?')) return; return act(() => threadAct(() => api.del(`/families/${th.cur.fid}/threads/${th.cur.id}/replies/${d.thrdel}`))); }
   if (d.thquote) {
     if (d.thquote === 'x') th.quote = null;
@@ -4347,8 +4416,20 @@ document.addEventListener('click', (e) => {
   if (t.id === 'newPostTop') return plusMenu();
 });
 
+// Re-draw the open thread without losing what's typed in the reply box.
+function redrawThreadKeepingReply() {
+  const keep = $('#thReplyForm textarea')?.value || '';
+  renderThread();
+  const ta = $('#thReplyForm textarea'); if (ta) { ta.value = keep; ta.focus(); }
+}
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.dataset.rshots != null && t.files?.length) {
+    const imgs = [...t.files].filter((f) => f.type?.startsWith('image/')), room = MAX_REPLY_SHOTS - th.rshots.length;
+    for (const f of imgs.slice(0, Math.max(0, room))) th.rshots.push({ file: f, url: URL.createObjectURL(f) });
+    if (imgs.length > room) toast(`Up to ${MAX_REPLY_SHOTS} images on a reply`);
+    return redrawThreadKeepingReply();
+  }
   if (t.name === 'photo' && t.files?.[0]) {
     draft.text = $('#postForm textarea')?.value || draft.text;
     draft.file = t.files[0];
@@ -4467,13 +4548,39 @@ document.addEventListener('submit', (e) => {
   if (f.id === 'thReplyForm') {
     e.preventDefault();
     const text = f.text.value.trim();
-    if (!text) return;
+    if (!text && !th.rshots.length) return;
     return act(async () => {
       const k = th.cur._key, L = (x) => (k ? seal(k, x) : x);
       const quote = th.quote ? (th.quote.para != null ? th.quote.para : await L(th.quote.text)) : null;
       const sealedText = await L(text);
-      await threadAct(() => api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/replies`, { text: sealedText, quote }));
-      th.quote = null; renderThread(); window.scrollTo(0, document.body.scrollHeight);
+      // 📷 Images go up first (locked with the thread's key), then the reply names them.
+      const shots = [];
+      for (const [i, x] of th.rshots.entries()) {
+        if (th.rshots.length > 1) toast(`📷 Sending image ${i + 1} of ${th.rshots.length}…`);
+        const made = await photoFiles(x.file, { max: 2000, q: 0.85 });
+        const id = randomToken();
+        for (const size of ['thumb', 'full']) await api.bytes('PUT', `/families/${th.cur.fid}/photos/${id}?size=${size}`, k ? await sealBytes(k, made[size]) : made[size]);
+        rememberPhoto(id, 'thumb', made.thumb);
+        shots.push({ id, aspect: made.aspect });
+      }
+      await threadAct(() => api.post(`/families/${th.cur.fid}/threads/${th.cur.id}/replies`, { text: sealedText, quote, ...(shots.length ? { shots } : {}) }));
+      for (const x of th.rshots) URL.revokeObjectURL(x.url);
+      th.quote = null; th.rshots = []; renderThread(); window.scrollTo(0, document.body.scrollHeight);
+    });
+  }
+  if (f.id === 'feedbackSendForm') {
+    e.preventDefault();
+    return act(async () => {
+      const r = await api.post('/help/report', { category: v.category, summary: v.summary, details: v.details, app: { version: VERSION, device: deviceName(), page: 'threads › app feedback' } });
+      closeSheet(); toast(r.ticket ? `📮 Sent — thank you! (#${r.ticket})` : '📮 Sent — thank you!');
+    });
+  }
+  if (f.id === 'replyEditForm') {
+    e.preventDefault();
+    return act(async () => {
+      const k = th.cur._key, text = f.text.value.trim(), sealed = k ? await seal(k, text) : text;
+      await threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}/replies/${f.dataset.rid}`, { text: sealed }));
+      closeSheet(); toast('Saved');
     });
   }
   if (f.id === 'rateForm') { e.preventDefault(); return act(() => saveRating(f)); }

@@ -263,7 +263,7 @@ export async function familyApi(req, env, path, ctx = null) {
         && !(p.tags || []).some((t) => !sharedWithFriends(owner, owner.members.find((x) => x.id === t)));
     }
     const t = await db.get(`thread:${fid}:${id}`);
-    return !!t && t.aud === 'connections' && !blocked.has(t.byUid) && [...(t.shots || []), ...(t.docs || [])].some((x) => x.id === pid);
+    return !!t && t.aud === 'connections' && !blocked.has(t.byUid) && [...(t.shots || []), ...(t.docs || []), ...t.replies.filter((r) => !blocked.has(r.uid)).flatMap((r) => r.shots || [])].some((x) => x.id === pid);
   };
   const loadFamily = async (fid) => {
     const fam = /^[a-z0-9]{6,24}$/.test(fid) ? await db.get(`family:${fid}`) : null;
@@ -1478,7 +1478,7 @@ export async function familyApi(req, env, path, ctx = null) {
   }
 
   // ---- 📖 threads ----
-  { const r = await threadRoutes({ path, method, body, db, user, saveUser, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
+  { const r = await threadRoutes({ path, method, body, db, user, saveUser, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url: () => url(req), blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 📷 albums (family only) ----
   { const r = await albumRoutes({ path, method, body, db, loadFamily, meIn, sealed, clean, randomId, json, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 🛒 the Market (family, and friends' families by default) ----
@@ -1919,7 +1919,7 @@ async function scrubThreads(db, fid, uid, memberId) {
     const t = await db.get(`thread:${fid}:${id}`);
     if (!t) continue;
     if (t.byUid === uid) {
-      for (const x of [...(t.shots || []), ...(t.docs || [])]) await deletePhoto(db.blobs, fid, x.id, db).catch(() => {});
+      for (const x of [...(t.shots || []), ...(t.docs || []), ...t.replies.flatMap((r) => r.shots || [])]) await deletePhoto(db.blobs, fid, x.id, db).catch(() => {});
       await db.del(`thread:${fid}:${id}`);
       await db.del(`report:${fid}:thread:${id}`);
       continue;
@@ -1927,6 +1927,7 @@ async function scrubThreads(db, fid, uid, memberId) {
     keep.push(id);
     const before = JSON.stringify(t);
     const gone = new Set(t.replies.filter((r) => r.uid === uid).map((r) => r.id));
+    for (const r of t.replies) if (gone.has(r.id)) for (const x of r.shots || []) await deletePhoto(db.blobs, fid, x.id, db).catch(() => {});
     t.replies = t.replies.filter((r) => !gone.has(r.id)).map((r) => ((r.ups || []).includes(uid) ? { ...r, ups: r.ups.filter((u) => u !== uid) } : r));
     if (gone.has(t.best)) t.best = null;
     if (t.reads?.[uid]) { t.reads = { ...t.reads }; delete t.reads[uid]; }

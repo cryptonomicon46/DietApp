@@ -20,7 +20,7 @@ export const SLIDES = [
     ['📚', 'Write it up', 'Learned, Talk, How-to, ❓ Ask or 📊 Poll — for just you two, the family, or friends’ families.'],
     ['📷', 'Screenshots and 📎 PDFs', 'Add plan comparisons, tables or a whole deck as a PDF: pick, paste or drag them in.'],
     ['🏷️', 'Tag people', 'Tap a face or type @. They get a notification, and you see when they’ve seen it.'],
-    ['🗂', 'Boards', 'Move a thread to another board any time, or add your own, like 🎓 School.'],
+    ['🔎', 'Search and ★ Saved', 'Find anything said in a thread — searched on your phone. ☆ Save the ones you’ll want again.'],
     ['📷', 'Photos', 'Your albums: link a Google Photos album, or copy favorites in. Only the family sees them.'],
   ] },
   { id: 'chats', eyebrow: '💬 Chats', title: 'Message the grown-ups', go: 'chats', cards: [

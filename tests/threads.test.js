@@ -207,3 +207,62 @@ test('threads: moving between boards, and the family’s own boards', async () =
   await call(`${B}/${school.id}`, sam, 'DELETE');
   assert.equal((await call(`${T}/${t.id}`, mom)).thread.board, 'family');
 });
+
+test('replies: edit your own (marked edited), up to 4 images of your own, removed with the reply', async () => {
+  const m = new Map();
+  const env = { DEMO: true, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
+  const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path.split('?')[0]); return { status: r.status, ...(r.data || {}) }; };
+  const put = (path, token) => familyApi(new Request(`https://x.test${path}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: new Uint8Array([1, 2, 3]) }), env, path.split('?')[0]);
+  const signIn = async (email) => { const { token } = await call('/auth/demo', null, 'POST', { email }); await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true }); return token; };
+  const sam = await signIn('sam@example.com'), pat = await signIn('pat@example.com');
+  const { family } = await call('/families', sam, 'POST', { name: 'Fam' });
+  const add = await call(`/families/${family.fid}/members`, sam, 'POST', { kind: 'person', name: 'Pat', relation: 'spouse', email: 'pat@example.com' });
+  const inv = await call(`/families/${family.fid}/invites`, sam, 'POST', { kind: 'member', memberId: add.member.id });
+  await call(`/invites/${inv.invite.code}/accept`, pat, 'POST');
+  const F = `/families/${family.fid}`;
+  const t = (await call(`${F}/threads`, sam, 'POST', { aud: 'family', title: 'Plans', body: 'x' })).thread;
+  const T = `${F}/threads/${t.id}`;
+  const r = (await call(`${T}/replies`, pat, 'POST', { text: 'Frday works' })).thread.replies[0];
+  assert.equal((await call(`${T}/replies/${r.id}`, sam, 'PATCH', { text: 'hacked' })).status, 403, 'only who wrote it');
+  const e = (await call(`${T}/replies/${r.id}`, pat, 'PATCH', { text: 'Friday works' })).thread.replies[0];
+  assert.equal(e.text, 'Friday works');
+  assert.ok(e.editedAt, 'marked edited');
+  assert.equal((await call(`${T}/replies/${r.id}`, pat, 'PATCH', { text: '  ' })).status, 400, "can't empty it");
+  // Images: your own uploads only, at most 4, and a reply can be just an image.
+  for (const id of ['reply00001', 'reply00002', 'reply00003', 'reply00004', 'reply00005']) await put(`${F}/photos/${id}?size=full`, pat);
+  await put(`${F}/photos/samimage01?size=full`, sam);
+  assert.equal((await call(`${T}/replies`, pat, 'POST', { text: '', shots: [{ id: 'samimage01' }] })).status, 403, "not someone else's");
+  const withShots = (await call(`${T}/replies`, pat, 'POST', { text: '', shots: ['reply00001', 'reply00002', 'reply00003', 'reply00004', 'reply00005'].map((id) => ({ id })) })).thread.replies.at(-1);
+  assert.equal(withShots.shots.length, 4);
+  await call(`${T}/replies/${withShots.id}`, pat, 'DELETE');
+  assert.ok(![...m.keys()].some((k) => /reply0000[1-4]/.test(k)), 'its images go with it');
+  // Deleting the thread deletes reply images too.
+  await put(`${F}/photos/reply00006?size=full`, pat);
+  await call(`${T}/replies`, pat, 'POST', { text: 'pic', shots: [{ id: 'reply00006' }] });
+  await call(T, sam, 'DELETE');
+  assert.ok(![...m.keys()].some((k) => k.includes('reply00006')));
+});
+
+test('★ Saved is yours alone; App feedback is a built-in board', async () => {
+  const m = new Map();
+  const env = { DEMO: true, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
+  const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path.split('?')[0]); return { status: r.status, ...(r.data || {}) }; };
+  const signIn = async (email) => { const { token } = await call('/auth/demo', null, 'POST', { email }); await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true }); return token; };
+  const sam = await signIn('sam@example.com'), pat = await signIn('pat@example.com');
+  const { family } = await call('/families', sam, 'POST', { name: 'Fam' });
+  const add = await call(`/families/${family.fid}/members`, sam, 'POST', { kind: 'person', name: 'Pat', relation: 'spouse', email: 'pat@example.com' });
+  const inv = await call(`/families/${family.fid}/invites`, sam, 'POST', { kind: 'member', memberId: add.member.id });
+  await call(`/invites/${inv.invite.code}/accept`, pat, 'POST');
+  const F = `/families/${family.fid}`;
+  const t = (await call(`${F}/threads`, sam, 'POST', { aud: 'family', board: 'app', title: 'Dark mode on the calendar', body: 'please' })).thread;
+  assert.equal(t.board, 'app');
+  assert.equal((await call(`${F}/threads/${t.id}/fav`, sam, 'POST', {})).fav, true);
+  assert.equal((await call('/threads', sam)).threads[0].fav, true);
+  assert.equal((await call('/threads', pat)).threads[0].fav, false, "Pat's list isn't affected");
+  assert.equal((await call(`${F}/threads/${t.id}/fav`, sam, 'POST', { on: false })).fav, false);
+  // Search gets the write-ups too, still sealed in an encrypted family; it doesn't count as reading.
+  const before = (await call('/threads', pat)).threads[0].unread;
+  const full = (await call('/threads?full=1', pat)).threads[0];
+  assert.equal(full.body, 'please');
+  assert.equal((await call('/threads', pat)).threads[0].unread, before, 'searching is not reading');
+});

@@ -6,12 +6,12 @@
 
 import { okPhotoId, deletePhoto, SIZES } from './photos.js';
 
-export const BOARDS = { family: '👨‍👩‍👧 Family', dogs: '🐾 Dogs', house: '🏠 House & money' };
+export const BOARDS = { family: '👨‍👩‍👧 Family', dogs: '🐾 Dogs', house: '🏠 House & money', app: '💡 App feedback' };
 export const CATS = { learned: '📚 Learned', talk: '💬 Talk', howto: '📌 How-to', ask: '❓ Ask', poll: '📊 Poll' };
 
 // 📷 Screenshots on a thread (plan comparisons, tables…): photo files locked with the thread's key,
 // with an optional sealed caption each. At most 12.
-const MAX_SHOTS = 12, MAX_DOCS = 5;
+const MAX_SHOTS = 12, MAX_DOCS = 5, MAX_REPLY_SHOTS = 4;
 // 🗂 A family's own boards ("🎓 School", "✈️ Trips"…), next to the built-in ones: [{id, label}].
 export const MAX_BOARDS = 12;
 const boardOk = (fam, b) => !!BOARDS[b] || (fam.boards || []).some((x) => x.id === b);
@@ -34,7 +34,7 @@ export async function threadRoutes(c) {
     .map((x) => ({ id: x.id, aspect: Math.min(4, Math.max(0.2, +x.aspect || 1)), cap: (x.cap && text(fam, x.cap, 80)) || '' }));
   const text = (fam, v, max) => sealed(v, max * 3 + 200) ?? (fam.e2ee ? null : typeof v === 'string' ? String(v).replace(/[\u0000-\u0009\u000b-\u001f]/g, ' ').trim().slice(0, max) : null);
   const visible = (t, own) => (t.aud === 'us' ? (t.to || []).includes(user.uid) : own || t.aud === 'connections');
-  const blocked = new Set((user.blocked || []).map((b) => b.uid)), hidden = new Set(user.hidden || []);
+  const blocked = new Set((user.blocked || []).map((b) => b.uid)), hidden = new Set(user.hidden || []), favs = new Set(user.favThreads || []);
   const saveUser = c.saveUser || (async () => {});
   // A family's thread you can see: your own family's, or a friends' family's shared with friends.
   const access = async (fid) => {
@@ -47,12 +47,12 @@ export async function threadRoutes(c) {
   const summary = (t, own, famName) => ({
     id: t.id, fid: t.fid, aud: t.aud, board: t.board, movedBy: t.movedBy || '', cat: t.cat, title: t.title, by: t.by, byName: t.byName, byAvatar: t.byAvatar, mine: t.byUid === user.uid,
     at: t.at, lastAt: t.lastAt, lastByName: t.lastByName, replies: t.replies.filter((r) => !blocked.has(r.uid) && !hidden.has(r.id)).length, mins: t.mins || 1, pinned: !!t.pinned, shotCount: (t.shots || []).length, docCount: (t.docs || []).length, tagged: (t.tagUids || []).includes(user.uid),
-    unread: (t.reads?.[user.uid] || 0) < t.lastAt && t.lastByUid !== user.uid, following: (t.followers || []).includes(user.uid), own, familyName: famName,
+    unread: (t.reads?.[user.uid] || 0) < t.lastAt && t.lastByUid !== user.uid, following: (t.followers || []).includes(user.uid), fav: favs.has(`${t.fid}:${t.id}`), own, familyName: famName,
     best: !!t.best, poll: t.poll ? { closes: t.poll.closes, voted: t.poll.votes?.[user.uid] != null, n: Object.keys(t.poll.votes || {}).length } : null, ...(t.pk ? { pk: t.pk } : {}),
   });
   const full = (t, own, fam) => ({
     ...summary(t, own, fam?.name || ''), body: t.body, editedAt: t.editedAt || null, shots: t.shots || [], docs: t.docs || [], tags: t.tags || [],
-    replies: t.replies.filter((r) => !blocked.has(r.uid) && !hidden.has(r.id)).map((r) => ({ id: r.id, name: r.name, text: r.text, quote: r.quote ?? null, at: r.at, mine: r.uid === user.uid, ups: (r.ups || []).length, upped: (r.ups || []).includes(user.uid) })),
+    replies: t.replies.filter((r) => !blocked.has(r.uid) && !hidden.has(r.id)).map((r) => ({ id: r.id, name: r.name, text: r.text, quote: r.quote ?? null, at: r.at, editedAt: r.editedAt || null, shots: r.shots || [], mine: r.uid === user.uid, ups: (r.ups || []).length, upped: (r.ups || []).includes(user.uid) })),
     bestId: t.best || null,
     // ⚑ How many reports it has: for the family's creator only.
     reports: own && fam?.members && meIn(fam)?.role === 'owner' ? t.reports || 0 : 0,
@@ -65,7 +65,10 @@ export async function threadRoutes(c) {
   });
 
   // The list: every family you're in, and threads friends' families shared with friends.
+  // ?full=1 (🔎 search): every thread's write-up and replies too, still sealed — the phone unlocks and
+  // searches them in memory. Doesn't count as reading them.
   if (path === '/threads' && method === 'GET') {
+    const withAll = url().searchParams.get('full') === '1';
     const fams = await families();
     const mine = new Set(fams.map((f) => f.fid));
     const sources = fams.map((f) => ({ fid: f.fid, own: true, fam: f }));
@@ -76,7 +79,7 @@ export async function threadRoutes(c) {
       for (const id of ((await db.get(`threads:${s.fid}`)) || []).slice(0, 80)) {
         const t = await db.get(`thread:${s.fid}:${id}`);
         if (!t || !visible(t, s.own) || blocked.has(t.byUid) || hidden.has(t.id)) continue;
-        out.push(summary(t, s.own, fam?.name || ''));
+        out.push(withAll ? full(t, s.own, fam) : summary(t, s.own, fam?.name || ''));
       }
     }
     out.sort((a, b) => (b.pinned - a.pinned) || b.lastAt - a.lastAt);
@@ -111,7 +114,7 @@ export async function threadRoutes(c) {
     return json({ error: 'not found' }, 404);
   }
 
-  let m = path.match(/^\/families\/([a-z0-9]+)\/threads(?:\/([a-z0-9]+)(?:\/(replies|vote|best|follow|up|move|report|block)(?:\/([a-z0-9]+))?)?)?$/);
+  let m = path.match(/^\/families\/([a-z0-9]+)\/threads(?:\/([a-z0-9]+)(?:\/(replies|vote|best|follow|up|move|report|block|fav)(?:\/([a-z0-9]+))?)?)?$/);
   if (!m) return null;
   const [, fid, id, action, sub] = m;
   if (!id && method === 'POST') {
@@ -200,17 +203,20 @@ export async function threadRoutes(c) {
   if (!action && method === 'DELETE') {
     const owner = a.own && meIn(a.fam).role === 'owner';
     if (t.byUid !== user.uid && !owner) return json({ error: 'only who wrote it can delete it' }, 403);
-    for (const x of [...(t.shots || []), ...(t.docs || [])]) await deletePhoto(blobs, fid, x.id, db).catch(() => {});
+    for (const x of [...(t.shots || []), ...(t.docs || []), ...t.replies.flatMap((r) => r.shots || [])]) await deletePhoto(blobs, fid, x.id, db).catch(() => {});
     await db.del(key);
     await db.del(`report:${fid}:thread:${id}`);
     await db.put(`threads:${fid}`, ((await db.get(`threads:${fid}`)) || []).filter((x) => x !== id));
     return json({ ok: true });
   }
   if (action === 'replies' && !sub && method === 'POST') {
-    const v = text(a.fam, body.text, 4000);
-    if (!v || !String(v).trim()) return json({ error: 'write a reply' }, 400);
+    const v = text(a.fam, body.text ?? '', 4000);
+    // 📷 Up to 4 images on a reply (your own uploads, in your own family), locked like thread screenshots.
+    const shots = blobs && a.own ? shotsOf(a.fam, body.shots).slice(0, MAX_REPLY_SHOTS) : [];
+    if (v == null || (!String(v).trim() && !shots.length)) return json({ error: 'write a reply' }, 400);
+    if (shots.length && !(await owns(fid, shots.map((x) => x.id), meIn(a.fam).id))) return json({ error: 'that file isn\'t yours to attach' }, 403);
     const quote = body.quote == null ? null : Number.isInteger(body.quote) ? Math.max(0, Math.min(200, body.quote)) : text(a.fam, body.quote, 300);
-    const r = { id: randomId(5), uid: user.uid, name: myName, text: v, quote, at: Date.now(), ups: [] };
+    const r = { id: randomId(5), uid: user.uid, name: myName, text: v, quote, at: Date.now(), ups: [], ...(shots.length ? { shots } : {}) };
     t.replies = [...t.replies, r].slice(-300);
     Object.assign(t, { lastAt: r.at, lastByUid: user.uid, lastByName: myName });
     t.reads = { ...(t.reads || {}), [user.uid]: r.at };
@@ -220,9 +226,21 @@ export async function threadRoutes(c) {
     if (to.length) await tell(to, t.aud === 'us' ? 'us' : 'feed', { title: `💬 ${myName} replied`, body: 'Tap to read it', url: t.aud === 'us' ? 'family/#us' : 'family/#threads', tag: `thread-${id}` });
     return json({ thread: full(t, a.own, a.fam) });
   }
+  // ✎ Editing your own reply: the text only (a quiet "edited", no history).
+  if (action === 'replies' && sub && method === 'PATCH') {
+    const r = t.replies.find((x) => x.id === sub);
+    if (!r || r.uid !== user.uid) return json({ error: 'only who wrote it can change it' }, 403);
+    const v = text(a.fam, body.text ?? '', 4000);
+    if (v == null) return json({ error: 'expected sealed text' }, 400);
+    if (!String(v).trim() && !(r.shots || []).length) return json({ error: 'write a reply' }, 400);
+    r.text = v; r.editedAt = Date.now();
+    await save();
+    return json({ thread: full(t, a.own, a.fam) });
+  }
   if (action === 'replies' && sub && method === 'DELETE') {
     const r = t.replies.find((x) => x.id === sub);
     if (!r || r.uid !== user.uid) return json({ error: 'not found' }, 404);
+    for (const x of r.shots || []) await deletePhoto(blobs, fid, x.id, db).catch(() => {});
     t.replies = t.replies.filter((x) => x.id !== sub);
     if (t.best === sub) t.best = null;
     await save();
@@ -295,6 +313,13 @@ export async function threadRoutes(c) {
     t.movedBy = me.name;
     await save();
     return json({ thread: full(t, a.own, a.fam) });
+  }
+  // ★ Saved: your own shortlist of threads to find again (only you see it).
+  if (action === 'fav' && method === 'POST') {
+    const k = `${fid}:${id}`, on = body.on != null ? !!body.on : !favs.has(k);
+    user.favThreads = [...(user.favThreads || []).filter((x) => x !== k), ...(on ? [k] : [])].slice(-300);
+    await saveUser();
+    return json({ fav: on });
   }
   if (action === 'follow' && method === 'POST') {
     t.followers = (t.followers || []).includes(user.uid) ? t.followers.filter((u) => u !== user.uid) : [...(t.followers || []), user.uid];
