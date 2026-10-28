@@ -1,6 +1,6 @@
 # OurPawmily Build Progress
 
-Last update: 2026-10-28, after the Phase 0 + Phase 1 review gate. Evidence below was checked against the repository (commits, tests, CI runs, local measurements). Items marked **NOT VERIFIED** or **UNKNOWN** were not checked.
+Last update: 2026-10-28, Phase 3 implemented; second-pass review of Phases 0–3 in progress. Evidence below was checked against the repository (commits, tests, CI runs, local measurements). Items marked **NOT VERIFIED** or **UNKNOWN** were not checked.
 
 ## Current phase and task
 
@@ -11,19 +11,26 @@ Last update: 2026-10-28, after the Phase 0 + Phase 1 review gate. Evidence below
   - calendar links never in a URL — audit S1 — and thread notifications relabelled "📖 Threads" (`5c02573`);
   - tab switches re-measured on a stable server: Us 3, Calendar 1, Threads 0, Photos 2; returning to Home after > 20 s still 8 → handled with the Phase 3 Home redesign, as are long tasks.
 - **Phase 2:** done (`87452a5`): no code is ever created/joined/changed; dog documents and adoption photos go to the family file store (sealed); browser check shows no `/household/` requests for a signed-in phone without a code.
-- **Phase 3:** in progress.
+- **Phase 3:** implemented on `v2/phase-2-3`:
+  - Threads (`29d83da`): 🔎 search on the phone, ☆ Save / ★ Saved, ✎ edit your replies, 📷 up to 4 images on a reply, 💡 App feedback board with an explicit "send to the developer" form.
+  - Home lists on the connector (`1c5948d`): `server/home.js` — 🙋 Requests (claim one helper at a time, done, remove; grown-ups notified) and a shared 🛒 Groceries list; both sealed in an encrypted family; one `GET /home`.
+  - Home client (`3d38ca0`): greeting, Next up, 🔔 Needs you (requests, rides without a driver this week, threads you're tagged in, your own requests, Ask for a hand), 🛒 Groceries, house, dogs' care + walk, dog row, *More about the dogs* (lazy), 📌 Pinned. Today / Your day / digest cards removed from Home. ＋ › Ask for a hand.
+  - No more hidden-feed writes (`3d38ca0`): golden days (now a notification with the dogs' note), new dog appointments, bingo wins, picks endings.
+  - Fixes and docs (`29b6939`, `34de25a`): kids can't see/ask/take requests (server); leaving always releases claimed requests; `DELETE /members/<self>` does the `/leave` clean-up; call-Mom line moved into Next up; run/ride/hot-yoga reminders reachable from Me and Next up's ⋯; README, help guide, tour (What's new `2026-11b`), privacy, delete-account page, ARCHITECTURE.
+- **Second-pass review (QA, security/privacy, performance, mobile UX, accessibility):** in progress.
 
 ## Last safe commit, deployment and rollback
 
 | Item | Value |
 | --- | --- |
-| Last verified safe commit | `f4896ca` (code); `e374c81` (docs only, on top) |
-| Branch | `main` (feature branch `v2/phase-0-1` = `f4896ca`, kept) |
+| Last verified safe commit | `main`: `e374c81` (deployed). Work branch `v2/phase-2-3`: see the evidence log (CI per commit) |
+| Branch | `main` (deployed); `v2/phase-2-3` (Phases 0–1 gaps, 2, 3 — not merged, not deployed) |
 | Pages (front end) | deployed from `main` at `e374c81` — "pages build and deployment" run green |
 | Worker (connector) | NOT deployed with Phase 0–1 yet (needs `git pull` + `pawdeploy`) |
 | App rollback | revert the Phase 0–1 merge range on `main` and push (Pages redeploys) |
 | Worker rollback | `npx wrangler rollback` in `server/` |
-| Data migrations | none; nothing deleted. New KV records `fileby:<fid>:<pid>` (uploader per new file) and `report:<fid>:thread:<id>` / `report:<fid>:chat:<cid>` |
+| Data migrations | none; nothing deleted. New KV records `fileby:<fid>:<pid>` (uploader per new file), `report:<fid>:thread:<id>` / `report:<fid>:chat:<cid>`, and (Phase 3) `requests:<fid>`, `groceries:<fid>`. Old feed posts untouched; the server just stops adding to the feed. |
+| Deploy order for `v2/phase-2-3` | Worker first (`pawdeploy`: new routes `/home`, `/requests`, `/groceries`, `POST /v2/ics`, reply edit), then merge to `main` (Pages). An app without the new Worker shows Needs you / Groceries as "Couldn't check just now" and can't add. Between the two steps, linked calendars (family and trackers) don't refresh: the new Worker only accepts the link in a POST body (S1), the live app still sends GET; phones keep showing their cached copies. Do both steps back to back. |
 
 ## Deployment facts (verified)
 

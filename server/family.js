@@ -1859,7 +1859,18 @@ async function forgetInChats(db, fid, memberId, all) {
   const r = await chatHub(db, fid).call('forget', { member: memberId, all }).catch(() => null);
   for (const id of r?.files || []) await deletePhoto(db.blobs, fid, id, db).catch(() => {});
 }
-async function removeMember(db, fam, t, { keepPosts = true } = {}) {
+// The families someone can still reach after leaving one: those they're in, and the families
+// those are connected to. What they wrote there stays.
+async function stillReaches(db, uid, leaving) {
+  const out = new Set();
+  for (const f of ((await db.get(`user:${uid}`))?.families || [])) {
+    if (f === leaving) continue;
+    out.add(f);
+    for (const c of (await db.get(`family:${f}`))?.connections || []) out.add(c);
+  }
+  return out;
+}
+async function removeMember(db, fam, t, { keepPosts = true, reach = null } = {}) {
   fam.members = fam.members.filter((x) => x.id !== t.id);
   for (const x of fam.members) x.shareWith = (x.shareWith || []).filter((id) => id !== t.id);
   await db.put(`family:${fam.fid}`, fam);
@@ -1884,7 +1895,10 @@ async function removeMember(db, fam, t, { keepPosts = true } = {}) {
   }
   await scrubPosts(db, fam.fid, t.uid, t.id);
   await scrubThreads(db, fam.fid, t.uid, t.id);
-  for (const c of fam.connections || []) { await scrubPosts(db, c, t.uid, null); await scrubThreads(db, c, t.uid, null); }
+  // Friends' families: their comments and replies there go — unless they can still reach that
+  // family another way (they're in it, or in another family connected to it).
+  const reached = reach || (await stillReaches(db, t.uid, fam.fid));
+  for (const c of fam.connections || []) if (!reached.has(c)) { await scrubPosts(db, c, t.uid, null); await scrubThreads(db, c, t.uid, null); }
 }
 // Removes one person's threads (with their screenshots, PDFs and reports) and their replies,
 // votes, ▲s, tags, reads and follows from a family's threads.
@@ -1911,6 +1925,8 @@ async function scrubThreads(db, fid, uid, memberId) {
     t.to = (t.to || []).filter((u) => u !== uid);
     if (t.tagUids?.includes(uid)) { t.tagUids = t.tagUids.filter((u) => u !== uid); t.tags = (t.tags || []).filter((m) => m !== memberId); }
     if (t.poll?.votes?.[uid] != null) { t.poll = { ...t.poll, votes: { ...t.poll.votes } }; delete t.poll.votes[uid]; }
+    // "Last reply by" no longer names them.
+    if (gone.size && t.lastByUid === uid) { const last = t.replies.at(-1); Object.assign(t, last ? { lastAt: last.at, lastByUid: last.uid, lastByName: last.name } : { lastAt: t.at, lastByUid: t.byUid, lastByName: t.byName }); }
     if (JSON.stringify(t) !== before) await db.put(`thread:${fid}:${id}`, t);
   }
   if (keep.length !== ids.length) await db.put(`threads:${fid}`, keep);
@@ -1979,10 +1995,14 @@ export async function deleteAccount(db, user) {
     if (!me) continue;
     if (me.role === 'owner') {
       const next = fam.members.find((x) => x.kind === 'person' && x.uid && x.uid !== user.uid && x.relation !== 'child');
-      if (!next) { await deleteFamily(db, fam); summary.familiesDeleted.push(fam.name); continue; }
+      if (!next) {
+        // The family goes; what they wrote in friends' families goes too.
+        for (const c of fam.connections || []) { await scrubPosts(db, c, user.uid, null); await scrubThreads(db, c, user.uid, null); }
+        await deleteFamily(db, fam); summary.familiesDeleted.push(fam.name); continue;
+      }
       next.role = 'owner'; summary.familiesHandedOver.push({ family: fam.name, to: next.name });
     } else summary.familiesLeft.push(fam.name);
-    await removeMember(db, fam, me, { keepPosts: false });
+    await removeMember(db, fam, me, { keepPosts: false, reach: new Set() }); // the whole account goes
   }
   for (const x of user.sessions || []) await db.del(`session:${x.t}`);
   await db.del(`keybackup:${user.uid}`);

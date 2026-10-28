@@ -134,6 +134,16 @@ function openSheet(html) { $('#sheetBody').innerHTML = html; if (!$('#sheet').op
 const closeSheet = () => $('#sheet').open && $('#sheet').close();
 // Something in the sheet that's open now (a closed sheet keeps its last content).
 const open$ = (sel) => ($('#sheet').open ? $(`#sheetBody ${sel}`) : null);
+// A form's send button stays disabled while it sends: a second tap does nothing.
+function busy(f, fn) {
+  const b = f.querySelector('button:not([type=button])');
+  if (b?.disabled) return null;
+  if (b) b.disabled = true;
+  return act(fn).finally(() => { if (b) b.disabled = false; });
+}
+// An open thread this device can't lock replies for (an encrypted family without its key here).
+const threadLockedHere = () => !th.cur?._key && (!!fam()?.e2ee || th.cur?.title === '🔒');
+const LOCKED_MSG = '🔒 This device needs the family key first — Me › 🔐 Encryption';
 async function act(fn) { try { return await fn(); } catch (err) { if (err.status === 401 || err.data?.consent) return boot(); toast(err.message); return null; } }
 
 // ---------- start ----------
@@ -427,7 +437,8 @@ function renderAttn() {
   const el = $('#attn');
   if (!el) return;
   const meId = fam().me, kid = me()?.relation === 'child', today = isoLocal(), week = shiftLocal(today, 7);
-  const when = (x) => [x.day ? dayText(x.day) : '', x.time].filter(Boolean).join(' · ');
+  const clock = (t) => (t ? new Date(`2000-01-01T${t}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '');
+  const when = (x) => (x.day ? dayText(x.day, x.time) : clock(x.time));
   const reqLine = (x, head, btns) => `<li class="attn-row"><span class="grow"><b>${head}</b><small>${esc(x.text)}</small>${when(x) ? `<small class="muted">${esc(when(x))}</small>` : ''}</span><span class="attn-acts">${btns}</span></li>`;
   const rows = [];
   for (const x of home.requests) {
@@ -459,7 +470,7 @@ function askSheet() {
     <form id="reqForm" class="stack">
       <fieldset class="chips plain"><legend>What do you need?</legend>${Object.entries(REQ_KINDS).map(([k, l], i) => `<label class="chipcheck"><input type="radio" name="kind" value="${k}" ${i ? '' : 'checked'}><span>${l}</span></label>`).join('')}</fieldset>
       <label>A few words<textarea name="text" rows="3" maxlength="300" required placeholder="e.g. A ride to the airport, my flight's at 9"></textarea></label>
-      <div class="two"><label>Day <small class="muted">(optional)</small><input type="date" name="day" min="${isoLocal()}"></label><label>Time <small class="muted">(optional)</small><input name="time" maxlength="20" placeholder="e.g. 7 AM"></label></div>
+      <div class="two"><label>Day <small class="muted">(optional)</small><input type="date" name="day" min="${isoLocal()}"></label><label>Time <small class="muted">(optional)</small><input type="time" name="time"></label></div>
       <p class="tiny muted">The grown-ups in ${esc(fam().name)} get a notification. ${fam().e2ee ? 'What you write is locked on this phone.' : ''}</p>
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Ask</button></div>
     </form>`);
@@ -468,7 +479,6 @@ async function sendAsk(f) {
   const v = Object.fromEntries(new FormData(f));
   const text = (v.text || '').trim();
   if (!text) return;
-  f.querySelector('button:last-child').disabled = true;
   await setHome(await api.post(`/families/${state.fid}/requests`, { kind: v.kind, day: v.day, time: v.time, box: await lockBox(text) }));
   closeSheet(); renderAttn(); toast('🙋 Asked — the family will see it');
 }
@@ -994,6 +1004,8 @@ function myTrackers() {
 }
 // 🏃 Your day (top of the feed): the best run and ride windows, dog walks, and your Movement
 // classes, in time order — what the trackers' Home used to show. After 9 PM it plans tomorrow.
+// After a reminder changes: Next up (on Home) and Your day (old feed screen) both redraw.
+const refreshDay = () => { renderYourDay(); renderNextUp().catch(() => {}); };
 async function renderYourDay() {
   const el = $('#yourDay');
   if (!el) return;
@@ -1489,7 +1501,7 @@ async function tickHabits(ticks) {
   for (const [k, d] of ticks) ticked.add(`${k}:${d}`);
   try { for (const [k, d] of ticks) setNudges(await api.post(`/account/nudges/${k}/done?today=${isoLocal()}`, { date: d })); }
   catch { /* tried again next time */ } finally { ticking = false; }
-  renderYourDay();
+  refreshDay();
 }
 function habitsSheet() {
   const all = callNudge.all || {};
@@ -1506,7 +1518,7 @@ async function saveHabits(f) {
     if (v[`on_${k}`]) setNudges(await api.put(`/account/nudges/${k}?today=${isoLocal()}`, { every: +v[`every_${k}`] }));
     else if (callNudge.all?.[k]) setNudges(await api.del(`/account/nudges/${k}?today=${isoLocal()}`));
   }
-  closeSheet(); renderYourDay(); toast('Saved');
+  closeSheet(); refreshDay(); toast('Saved');
 }
 async function callNudgeAct(what, t) {
   const P = '/account/nudges/callmom';
@@ -2298,8 +2310,8 @@ async function threadsView() {
   el.innerHTML = `<div class="row between"><div class="rchips boards">${boards.map((b) => `<button type="button" class="chip ${th.board === b ? 'on' : ''}" data-board="${b}">${b === 'new' ? `✨ For you${forYou.length ? ` <span class="cnt">${forYou.length}</span>` : ''}` : esc(boardName(b))}${b !== 'new' && th.list.some((t) => t.board === b && t.unread) ? ' <i class="dot"></i>' : ''}</button>`).join('')}${me()?.relation === 'child' ? '' : '<button type="button" class="chip addboard" data-boardadd="1" aria-label="Add a board">＋ Board</button>'}</div></div>
     <input type="search" id="thSearch" class="thsearch" placeholder="🔎 Search threads" aria-label="Search threads" autocomplete="off" value="${esc(th.q || '')}">
     <button type="button" class="input-like" data-act="writeup">✍️ Write something up…</button>
-    <div class="thlist" id="thList">${th.q ? '<p class="small muted">Searching…</p>' : rows || `<div class="card center"><p class="small">${th.board === 'us' ? `Write ${esc(partnerName())} something to read later — what you read about, a plan, an idea.` : 'Start a thread: something you learned, a question, a decision to talk through, or a how-to.'}</p><button type="button" data-act="writeup">✍️ Write it up</button></div>`}</div>`;
-  if (th.q) runSearch();
+    <div class="thlist" id="thList">${th.q.trim() ? '<p class="small muted">Searching…</p>' : rows || `<div class="card center"><p class="small">${th.board === 'us' ? `Write ${esc(partnerName())} something to read later — what you read about, a plan, an idea.` : 'Start a thread: something you learned, a question, a decision to talk through, or a how-to.'}</p><button type="button" data-act="writeup">✍️ Write it up</button></div>`}</div>`;
+  if (th.q.trim()) runSearch();
 }
 // 🔎 Search: every thread you can see, still locked, fetched once and unlocked in memory here
 // (family/search.js) — nothing is stored or sent anywhere. Fetched again after a minute.
@@ -2314,14 +2326,21 @@ let searchSeq = 0;
 async function runSearch() {
   const el = $('#thList'), q = th.q.trim(), seq = ++searchSeq;
   if (!el) return;
-  if (!q) { th.full = null; return threadsView(); }
+  if (!q) {
+    // Cleared: the usual list again, with the cursor still in the search box.
+    th.full = null; threadsView();
+    const i = $('#thSearch'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+    return;
+  }
   searchMod ||= await import(`./search.js?v=${VERSION}`);
   const list = await loadFullThreads().catch(() => null);
   if (seq !== searchSeq || !$('#thList')) return;
   if (!list) { el.innerHTML = '<p class="small muted">Couldn\'t search right now. Try again in a moment.</p>'; return; }
   const hits = searchMod.searchThreads(q, list);
-  const words = q.toLowerCase().split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const mark = (s) => esc(s).replace(new RegExp(`(${words.join('|')})`, 'gi'), '<mark>$1</mark>');
+  // Highlight on the plain text, then escape each piece (never inside an escaped &amp;).
+  const words = q.toLowerCase().split(/\s+/).filter((w) => w.length > 1 || /\d/.test(w)).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = words.length ? new RegExp(`(${words.join('|')})`, 'gi') : null;
+  const mark = (s) => (re ? String(s).split(re).map((x, i) => (i % 2 ? `<mark>${esc(x)}</mark>` : esc(x))).join('') : esc(s));
   const where = { title: 'Title', body: 'Write-up', reply: 'Reply', caption: 'Screenshot', pdf: 'PDF' };
   el.innerHTML = hits.length
     ? `<p class="tiny muted" role="status">${hits.length} thread${hits.length === 1 ? '' : 's'} · searched on this phone</p>${hits.map((h) => {
@@ -2353,7 +2372,7 @@ function moveSheet() {
   const t = th.cur, meId = fam()?.me, p = partnerMember();
   const couple = (x) => ['self', 'spouse', 'partner'].includes(x?.relation);
   const usOk = p && couple(me()) && couple(p) && (t.by === meId || t.by === p.id);
-  const list = [...(usOk || t.aud === 'us' ? ['us'] : []), 'family', ...((fam().modules || []).includes('dogs') ? ['dogs'] : []), 'house', ...ownBoards().map((b) => b.id)];
+  const list = [...(usOk || t.aud === 'us' ? ['us'] : []), 'family', ...((fam().modules || []).includes('dogs') ? ['dogs'] : []), 'house', 'app', ...ownBoards().map((b) => b.id)];
   openSheet(`<h2>🗂 Move to a board</h2><p class="small muted">${esc(t.title)}</p>
     <div class="stack moveboards">${list.map((b) => `<span class="row"><button type="button" class="${t.board === b ? '' : 'ghost'} grow" data-thmoveto="${b}" ${t.board === b ? 'disabled' : ''}>${esc(boardName(b))}${t.board === b ? ' · here now' : ''}</button>${ownBoards().some((x) => x.id === b) && me()?.relation !== 'child' ? `<button type="button" class="icon-btn" data-boardrm="${b}" aria-label="Remove the board ${esc(boardName(b))}">✕</button>` : ''}</span>`).join('')}</div>
     ${me()?.relation === 'child' ? '' : '<button type="button" class="linkish small" data-boardadd="1">＋ Add a board</button>'}
@@ -2444,7 +2463,7 @@ function renderThread() {
     <form id="thReplyForm" class="stack reply-box">${th.quote ? `<div class="quote">❝ ${esc(th.quote.label)} ❞ <button type="button" class="linkish tiny" data-thquote="x">✕</button></div>` : ''}
       <textarea name="text" rows="2" maxlength="4000" placeholder="${letter ? 'Write a note…' : t.cat === 'ask' ? 'Your answer…' : 'Reply…'}" aria-label="${letter ? 'Note' : 'Reply'}"></textarea>
       ${th.rshots.length ? `<div class="rshots pending">${th.rshots.map((x, i) => `<span class="rshot"><img src="${x.url}" alt=""><button type="button" class="icon-btn" data-rshotx="${i}" aria-label="Remove image">✕</button></span>`).join('')}</div>` : ''}
-      <div class="row between">${t.own && !letter ? `<label class="linkish small rshot-add">📷 Image<input type="file" accept="image/*" multiple hidden data-rshots></label>` : '<span></span>'}<button>${letter ? 'Add note' : 'Reply'}</button></div></form>
+      <div class="row between">${t.own && !letter ? `<label class="linkish small rshot-add">📷 Image<input type="file" accept="image/*" multiple class="vh" data-rshots></label>` : '<span></span>'}<button>${letter ? 'Add note' : 'Reply'}</button></div></form>
   </div>`;
 }
 // ⚑ Report or 🚫 block, for a thread or one reply someone else wrote (rid: the reply, or '' for the thread).
@@ -2494,9 +2513,11 @@ function writeupSheet(preset = {}) {
   }
   const p = partnerMember(), hasFriends = (fam().connections || []).length;
   const aud = preset.aud || d.aud || (state.view === 'us' && p ? 'us' : 'family');
-  const v = { aud, board: d.board || 'family', cat: preset.cat || d.cat || (aud === 'us' ? 'learned' : 'talk'), title: d.title || '', body: d.body || '', opts: d.opts || ['', ''] };
+  // Writing from a board (💡 App feedback, 🐾 Dogs…) puts it on that board.
+  const here = ['family', 'dogs', 'house', 'app', ...ownBoards().map((b) => b.id)].includes(th.board) ? th.board : 'family';
+  const v = { aud, board: d.board || here, cat: preset.cat || d.cat || (aud === 'us' ? 'learned' : 'talk'), title: d.title || '', body: d.body || '', opts: d.opts || ['', ''] };
   const auds = [...(p ? [['us', `💞 Just ${p.name}`]] : []), ['family', '👨‍👩‍👧 Family'], ...(hasFriends ? [['connections', "🤝 Friends' families"]] : [])];
-  const boards = [['family', 'General'], ...((fam().modules || []).includes('dogs') ? [['dogs', '🐾 Dogs']] : []), ['house', '🏠 House & money'], ...ownBoards().map((b) => [b.id, b.label])];
+  const boards = [['family', 'General'], ...((fam().modules || []).includes('dogs') ? [['dogs', '🐾 Dogs']] : []), ['house', '🏠 House & money'], ['app', '💡 App feedback'], ...ownBoards().map((b) => [b.id, b.label])];
   openSheet(`<div class="row between"><h2>✍️ Write it up</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     <form id="writeForm" class="stack">
       <div class="rchips radios chipradios">${auds.map(([k, l]) => `<label><input type="radio" name="aud" value="${k}" ${v.aud === k ? 'checked' : ''}><span class="chip">${esc(l)}</span></label>`).join('')}</div>
@@ -4210,7 +4231,7 @@ document.addEventListener('click', (e) => {
   if (d.epseen) { const i = d.epseen.indexOf(':'); LS.set(`fam.epSeen.${d.epseen.slice(0, i)}`, d.epseen.slice(i + 1)); renderUs(); return usBadge(); }
   if (d.dogcal != null) { const x = dogCal.list[+d.dogcal]; if (!x) return; return apptSheet(null, { type: x.m.type, pets: x.m.pets.length ? x.m.pets : undefined, place: x.e.place || '', dropAt: `${x.e.date}T${x.e.allDay || !x.e.start ? '09:00' : x.e.start}`, notes: `From ${x.feed || 'a linked calendar'}: ${x.e.title}`, calKey: x.key }); }
   if (d.dogcalno != null) { const x = dogCal.list[+d.dogcalno]; if (!x) return; const mk = dogCalMarks(); mk[x.key] = 'no'; LS.set(dogCalKey(), JSON.stringify(mk)); return dogCalSuggestions(); }
-  if (d.nudgeundo) return act(async () => { setNudges(await api.post(`/account/nudges/${d.nudgeundo}/undo?today=${isoLocal()}`)); renderYourDay(); });
+  if (d.nudgeundo) return act(async () => { setNudges(await api.post(`/account/nudges/${d.nudgeundo}/undo?today=${isoLocal()}`)); refreshDay(); });
   if (d.callnudge && d.callnudge !== 'done') return act(() => callNudgeAct(d.callnudge, t));
   if (d.famtab) { if (d.board) th.board = d.board; state.famTab = d.famtab === 'photos' ? 'photos' : 'threads'; th.cur = null; return state.view === 'threads' ? threadsPage() : show('threads'); }
   if (d.board) { th.board = d.board; return threadsView(); }
@@ -4643,7 +4664,7 @@ document.addEventListener('change', async (e) => {
   if (t.dataset.moviesonoff) return act(async () => { mv.prefs = (await api.put('/account/movies', { on: t.checked })).movies; toast(t.checked ? '🎬 Movies are on — see 🏠 Home' : 'Movies are off'); });
   if (t.dataset.nudgedone && t.checked) {
     const k = t.dataset.nudgedone; t.disabled = true; t.closest('.habit')?.classList.add('done');
-    return act(async () => { await new Promise((r) => setTimeout(r, 400)); setNudges(await api.post(`/account/nudges/${k}/done?today=${isoLocal()}`, { date: isoLocal() })); toast(`✓ ${MOVE_NUDGES[k][1]} done — next ${new Date(`${callNudge.all[k].next}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })}`); renderYourDay(); });
+    return act(async () => { await new Promise((r) => setTimeout(r, 400)); setNudges(await api.post(`/account/nudges/${k}/done?today=${isoLocal()}`, { date: isoLocal() })); toast(`✓ ${MOVE_NUDGES[k][1]} done — next ${new Date(`${callNudge.all[k].next}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })}`); refreshDay(); });
   }
   if (t.dataset.callnudge === 'done' && t.checked) { t.disabled = true; t.closest('.call-due')?.classList.add('done'); return act(() => new Promise((r) => setTimeout(r, 450)).then(() => callNudgeAct('done', t))); }
   if (t.form?.id === 'writeForm' && (t.name === 'aud' || t.name === 'cat')) {
@@ -4696,7 +4717,7 @@ document.addEventListener('submit', (e) => {
     return ask(v.text || '');
   }
   if (f.id === 'habitForm') { e.preventDefault(); return act(() => saveHabits(f)); }
-  if (f.id === 'reqForm') { e.preventDefault(); return act(() => sendAsk(f)).finally(() => { const b = f.querySelector('button:last-child'); if (b) b.disabled = false; }); }
+  if (f.id === 'reqForm') { e.preventDefault(); return busy(f, () => sendAsk(f)); }
   if (f.id === 'grocForm') { e.preventDefault(); return act(() => grocAdd(f)); }
   if (f.id === 'callForm') { e.preventDefault(); return act(async () => { const r = await api.put(`/account/nudges/callmom?today=${isoLocal()}`, { every: +v.every, last: v.last || undefined }); setNudges(r); closeSheet(); renderToday(); renderNextUp().catch(() => {}); toast('Saved'); }); }
   if (f.id === 'writeForm') { e.preventDefault(); return act(() => (f.dataset.edit ? saveThreadEdit(f) : postThread(f))); }
@@ -4704,7 +4725,8 @@ document.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = f.text.value.trim();
     if (!text && !th.rshots.length) return;
-    return act(async () => {
+    if (threadLockedHere()) return toast(LOCKED_MSG);
+    return busy(f, async () => {
       const k = th.cur._key, L = (x) => (k ? seal(k, x) : x);
       const quote = th.quote ? (th.quote.para != null ? th.quote.para : await L(th.quote.text)) : null;
       const sealedText = await L(text);
@@ -4725,14 +4747,15 @@ document.addEventListener('submit', (e) => {
   }
   if (f.id === 'feedbackSendForm') {
     e.preventDefault();
-    return act(async () => {
+    return busy(f, async () => {
       const r = await api.post('/help/report', { category: v.category, summary: v.summary, details: v.details, app: { version: VERSION, device: deviceName(), page: 'threads › app feedback' } });
       closeSheet(); toast(r.ticket ? `📮 Sent — thank you! (#${r.ticket})` : '📮 Sent — thank you!');
     });
   }
   if (f.id === 'replyEditForm') {
     e.preventDefault();
-    return act(async () => {
+    if (threadLockedHere()) return toast(LOCKED_MSG);
+    return busy(f, async () => {
       const k = th.cur._key, text = f.text.value.trim(), sealed = k ? await seal(k, text) : text;
       await threadAct(() => api.patch(`/families/${th.cur.fid}/threads/${th.cur.id}/replies/${f.dataset.rid}`, { text: sealed }));
       closeSheet(); toast('Saved');

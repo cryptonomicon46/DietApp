@@ -107,9 +107,11 @@ export const account = {
   async getFile(id, type = '') {
     const a = this.get();
     if (!a?.me) return null;
+    // Still locked on this device: nothing (never the locked bytes, which would then be kept as the file).
+    const k = await familyKey(a);
+    if (a.e2ee && !k) return null;
     const res = await fetch(`${connector()}/v2/families/${a.fid}/photos/${id}?size=doc`, { headers: { Authorization: `Bearer ${token()}` } }).catch(() => null);
     if (!res?.ok) return null;
-    const k = await familyKey(a);
     const bytes = new Uint8Array(await res.arrayBuffer());
     const plain = k ? await openBytes(k, bytes).catch(() => null) : bytes;
     return plain ? new Blob([plain], { type: type || 'application/octet-stream' }) : null;

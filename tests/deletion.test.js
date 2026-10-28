@@ -61,3 +61,31 @@ test('deleting a family (its last grown-up deletes their account) deletes all it
   assert.deepEqual(del.familiesDeleted, ['Solo']);
   assert.deepEqual(keysWith(m, `${family.fid}`).filter((k) => /thread|fileby|samshot/.test(k)), [], 'threads, the list, files and uploader records are gone');
 });
+
+test("leaving a family keeps what you wrote in your own other family, even when the two are connected", async () => {
+  const { call, sam, pat, F } = await setup();
+  // Pat also runs a family of their own, connected to Sam's.
+  const inv = (await call(`${F}/invites`, sam, 'POST', { kind: 'family', email: 'pat@example.com' })).invite;
+  const B = (await call(`/invites/${inv.code}/accept`, pat, 'POST', { familyName: 'Pat’s side' })).family?.fid
+    || (await call('/me', pat)).families.find((f) => f.name === 'Pat’s side').fid;
+  const mine = (await call(`/families/${B}/threads`, pat, 'POST', { aud: 'family', title: 'Pat’s own', body: 'x' })).thread;
+  const shared = (await call(`/families/${B}/threads`, pat, 'POST', { aud: 'connections', title: 'For friends', body: 'x' })).thread;
+  await call(`/families/${B}/threads/${shared.id}/replies`, pat, 'POST', { text: 'still mine' });
+  assert.equal((await call(`${F}/leave`, pat, 'POST')).ok, true);
+  assert.equal((await call(`/families/${B}/threads/${mine.id}`, pat)).thread?.title, 'Pat’s own', 'kept');
+  assert.deepEqual((await call(`/families/${B}/threads/${shared.id}`, pat)).thread.replies.map((r) => r.text), ['still mine']);
+});
+
+test("deleting your account when your own family goes with it removes your replies in friends' families", async () => {
+  const { call, sam, F } = await setup();
+  const ally = await (async () => { const { token } = await call('/auth/demo', null, 'POST', { email: 'ally@example.com' }); await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true }); return token; })();
+  const inv = (await call(`${F}/invites`, sam, 'POST', { kind: 'family', email: 'ally@example.com' })).invite;
+  await call(`/invites/${inv.code}/accept`, ally, 'POST', { familyName: 'Ally’s' });
+  const t = (await call(`${F}/threads`, sam, 'POST', { aud: 'connections', title: 'For friends', body: 'x' })).thread;
+  const r = await call(`${F}/threads/${t.id}/replies`, ally, 'POST', { text: 'from Ally' });
+  assert.equal(r.status, 200);
+  assert.equal((await call('/account/delete', ally, 'POST', { confirm: 'DELETE' })).deleted, true);
+  const after = (await call(`${F}/threads/${t.id}`, sam)).thread;
+  assert.deepEqual(after.replies.map((x) => x.text), [], "Ally's reply is gone");
+  assert.notEqual(after.lastByName, 'Ally', 'and no longer named as the last reply');
+});

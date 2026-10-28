@@ -994,3 +994,9 @@ body.in-chat main { padding-bottom: 0; }
 .dogmore[open] summary::after { transform: rotate(90deg); }
 .dogmore #dogMoreBody > * { margin-top: 12px; }
 .pins .nbrow:first-of-type { border-top: 0; }
+/* Narrow phones (320 px): the care log's Me · Both · Pat · Undo wraps instead of scrolling the page. */
+@media (max-width: 359px) { .care-acts { gap: 10px; flex-wrap: wrap; flex: 0 1 auto; } .care-acts button + button::before { margin-right: 10px; } }
+.gi .icon-btn, .attn-acts .icon-btn { min-width: 44px; min-height: 44px; }
+/* A file input that stays reachable by keyboard: invisible, with the focus ring on its label. */
+.vh { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+label:has(> .vh:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }

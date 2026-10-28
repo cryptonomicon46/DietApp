@@ -21,7 +21,7 @@ async function setup() {
 
 test('requests: ask, someone claims it (one helper at a time), done; only the family sees them', async () => {
   const { told, call, sam, pat, kid, stranger, F } = await setup();
-  const r = (await call(`${F}/requests`, sam, 'POST', { kind: 'ride', day: '2026-11-02', time: '9:00', box: 'Drop Rex at the groomer' })).request;
+  const r = (await call(`${F}/requests`, sam, 'POST', { kind: 'ride', day: '2026-11-02', time: '09:00', box: 'Drop Rex at the groomer' })).request;
   assert.equal(r.status, 'open');
   assert.ok(told.some((x) => x.to === 'pat-phone' && /could use a hand/.test(x.title)), 'grown-ups are told');
   assert.ok(!told.some((x) => x.to === 'kid-phone'), 'kids are not');
@@ -37,7 +37,8 @@ test('requests: ask, someone claims it (one helper at a time), done; only the fa
   assert.equal((await call(`${F}/requests`, stranger)).status, 404, 'not for strangers');
   assert.equal((await call(`${F}/requests/${r.id}`, pat, 'DELETE')).status, 403, 'only who asked (or the creator) removes it');
   assert.equal((await call(`${F}/requests/${r.id}`, sam, 'DELETE')).ok, true);
-  assert.equal((await call(`${F}/home`, pat)).requests.length, 0);
+  assert.equal((await call(`${F}/home`, pat)).requests.length, 0);  assert.equal((await call(`${F}/requests`, sam, 'POST', { kind: 'other', time: 'pick up Pat at school', box: 'x' })).request.time, '', 'free text never goes in the plain time field');
+  assert.equal((await call(`${F}/requests`, sam, 'POST', { kind: 'other', time: '07:30', box: 'y' })).request.time, '07:30');
 });
 
 test('groceries: one list for the household; add, tick, clear ticked', async () => {

@@ -40,9 +40,10 @@ export async function homeRoutes(c) {
     if (!id && method === 'GET') return json({ requests: (await requests()).map(reqOut) });
     if (!id && method === 'POST') {
       const kind = REQUEST_KINDS[body.kind] ? body.kind : 'other';
+      // What it's about is sealed; the day and time are plain dates and clock times only.
       const box = boxOf(body.box, 300);
       if (!box) return json({ error: fam.e2ee && body.box ? 'this family is end-to-end encrypted — update the app and try again' : 'say what you need' }, 400);
-      const r = { id: randomId(8), by: me.id, byName: me.name, kind, day: day(body.day), time: clean(body.time, 20), box, status: 'open', claimedBy: '', claimedName: '', at: Date.now() };
+      const r = { id: randomId(8), by: me.id, byName: me.name, kind, day: day(body.day), time: /^([01]\d|2[0-3]):[0-5]\d$/.test(body.time || '') ? body.time : '', box, status: 'open', claimedBy: '', claimedName: '', at: Date.now() };
       // Done ones older than a week make room first.
       const keep = all.filter(recent).slice(-(MAX_REQUESTS - 1));
       await db.put(key, [...keep, r]);
