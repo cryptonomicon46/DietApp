@@ -62,6 +62,8 @@ import { askClaude } from './scout.js';
 import { aiCall, GatewayError } from './aiGateway.js';
 import { readWorkout } from './workoutAi.js';
 import { askPlan } from './planCoach.js';
+import { lookRoutes, isLookBytes, forgetLooks, LOOK_IMG } from './look.js';
+import { nameItem, findPieces } from './lookAi.js';
 import { cleanFacts, cleanTurns } from '../js/planCoach.js';
 import { bookRoutes, bookLookupRoutes, bookCover, forgetReader } from './books.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
@@ -179,7 +181,11 @@ export async function familyApi(req, env, path, ctx = null) {
   const method = req.method;
   let body = {}, bytes = null;
   // 📸 A photo file (already locked on the phone): raw bytes, not JSON.
-  if (method === 'PUT' && /^\/families\/[a-z0-9]+\/photos\/[a-z0-9]+$/.test(path)) {
+  if (method === 'PUT' && isLookBytes(path)) {
+    // 👔 A Closet or Fit Check picture (locked on the phone in an encrypted family).
+    bytes = new Uint8Array(await req.arrayBuffer());
+    if (bytes.length > LOOK_IMG.full) return json({ error: 'that picture is too large' }, 413);
+  } else if (method === 'PUT' && /^\/families\/[a-z0-9]+\/photos\/[a-z0-9]+$/.test(path)) {
     bytes = new Uint8Array(await req.arrayBuffer());
     if (bytes.length > (/[?&]size=doc\b/.test(req.url) ? SIZES.doc : SIZES.full)) return json({ error: /[?&]size=doc\b/.test(req.url) ? 'that PDF is too large (20 MB at most)' : 'that photo is too large' }, 413);
   } else if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
@@ -363,6 +369,28 @@ export async function familyApi(req, env, path, ctx = null) {
   // ---- 📚 Read: book lookups (public details) and the family's books ----
   { const r = await bookLookupRoutes({ path, method, env, json, url, req, user, underLimit, db }); if (r) return r; }
   { const r = await bookRoutes({ path, method, body, db, loadFamily, meIn, isCouple, sealed, randomId, json }); if (r) return r; }
+  // ---- 👔 Look: your own Closet (yours alone), its pictures, and Fit Checks with your partner ----
+  if (/^\/families\/[a-z0-9]+\/(members\/[a-z0-9]+\/look|fitchecks)/.test(path)) {
+    const blobs = blobStore(env);
+    const r = await lookRoutes({ path, method, body, bytes, db, user, loadFamily, meIn, partnerOf, isCouple, sealed, randomId, tell, json, url: () => url(req), blobs, usage: () => familyUsage(blobs, path.split('/')[2]), quota: quotaBytes(env) });
+    if (r) return r;
+  }
+
+  // ---- 👔 Look with Claude: name one piece, or find the pieces in an outfit photo ----
+  // Only that one picture goes, through the gateway; nothing is kept; the phone confirms each piece.
+  if ((path === '/ai/look/item' || path === '/ai/look/pieces') && method === 'POST') {
+    if (!aiReady(env)) return json({ error: 'this needs Claude on the connector', off: true }, 501);
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(body.mime)) return json({ error: 'a JPEG, PNG or WebP picture' }, 400);
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(String(body.image || '').slice(-4096))) return json({ error: 'that picture didn\'t arrive whole' }, 400);
+    const pieces = path.endsWith('pieces');
+    try {
+      return json(await aiCall({ db, purpose: pieces ? 'look.pieces' : 'look.item', input: { image: String(body.image), mime: body.mime }, who: user.uid, underLimit },
+        async (payload) => (pieces ? findPieces : nameItem)(await claude(env), payload, { model: env.PARSE_MODEL || 'claude-sonnet-5-5' })));
+    } catch (e) {
+      if (e instanceof GatewayError) return json({ error: e.status === 413 ? 'that picture is too large' : e.message }, e.status);
+      return json({ error: "Claude couldn't read that picture just now" }, 502);
+    }
+  }
 
   // ---- 📈 Ask about my plan (Claude explains; nothing is changed or kept) ----
   // The plan's numbers are rebuilt through the allowlist here, whatever the phone sent.
@@ -2059,6 +2087,7 @@ async function removeMember(db, fam, t, { keepPosts = true, reach = null } = {})
   for (const part of HEALTH_PARTS) await db.del(`health:${fam.fid}:${t.id}:${part}`);
   for (const w of ['today', 'log']) await db.del(`workouts:${fam.fid}:${t.id}:${w}`);
   await forgetReader(db, fam.fid, t.id);
+  await forgetLooks(db, db.blobs, fam.fid, t.id).catch(() => {});
   await db.del(`dataprev:${fam.fid}:${t.id}`);
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) await db.del(`bingocard:${fam.fid}:${g.id}:${t.id}`);
   for (const s of (await db.get(`picks:${fam.fid}`)) || []) await db.del(`pickcard:${fam.fid}:${s.id}:${t.id}`);
@@ -2142,6 +2171,8 @@ async function deleteFamily(db, fam) {
   await deleteFamilyPhotos(db.blobs, fam.fid).catch(() => {});
   for (const x of fam.members) { await db.del(`data:${fam.fid}:${x.id}`); await db.del(`dataprev:${fam.fid}:${x.id}`); for (const part of HEALTH_PARTS) await db.del(`health:${fam.fid}:${x.id}:${part}`); for (const w of ['today', 'log']) await db.del(`workouts:${fam.fid}:${x.id}:${w}`); }
   await db.del(`books:${fam.fid}`);
+  for (const x of fam.members) { await db.del(`look:${fam.fid}:${x.id}`); await db.del(`lookimgs:${fam.fid}:${x.id}`); } // their pictures went with deleteFamilyPhotos
+  await db.del(`fitchecks:${fam.fid}`);
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) await db.del(`care:${fam.fid}:${d}`);
   await db.del(`careidx:${fam.fid}`);
   await db.del(`goldenmsg:${fam.fid}`);

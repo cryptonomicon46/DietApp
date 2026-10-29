@@ -11,6 +11,10 @@ export const PURPOSES = {
   'workout.text': { provider: 'anthropic', payload: 'personal-text', fields: { text: 1500, unit: 4 }, perDay: 40 },
   // 📷 "From a photo": one re-encoded image (no location or camera data) and the weight unit.
   'workout.photo': { provider: 'anthropic', payload: 'personal-image', fields: { image: 3_500_000, mime: 16, unit: 4 }, perDay: 20 },
+  // 👔 Look: one cut-out piece to name, or one outfit photo to find its pieces in (redrawn on the
+  // phone — no location or camera data). Nothing else from the Closet goes with them.
+  'look.item': { provider: 'anthropic', payload: 'personal-image', fields: { image: 3_500_000, mime: 16 }, perDay: 60 },
+  'look.pieces': { provider: 'anthropic', payload: 'personal-image', fields: { image: 3_500_000, mime: 16 }, perDay: 20 },
   // 📈 "Ask about my plan": the plan's numbers only (rebuilt through js/planCoach.js cleanFacts —
   // phase, week, targets, a 7-day adherence summary, trend, planned rate, goal date, training-day
   // count), the question, and earlier questions and answers of the same chat. Never names, meals,

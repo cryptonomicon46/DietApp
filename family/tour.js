@@ -39,7 +39,7 @@ export const SLIDES = [
   ] },
   { id: 'calendar', eyebrow: '📅 Calendar', title: 'When it’s happening', go: 'calendar', cards: [
     ['📅', 'One family calendar', 'Everyone’s events, ⭐ golden days, ❤️ dates, 🐾 appointments, linked phone calendars.'],
-    ['👔', 'Dress for the day', 'What each of you should wear, from the weather where you’ll be.'],
+    ['👔', 'Today’s Look', 'What to wear today, from clothes you own — tap it for Look.'],
     ['❤️', 'Plans and dates', 'A plan you both said yes to goes on both your calendars.'],
   ] },
   { id: 'me', eyebrow: 'Health and Me', title: 'Each person’s own', go: 'me', cards: [
@@ -61,19 +61,19 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-12b',
-  title: 'New: Health is your day, and Train',
-  text: 'Weigh in on Health, see how your plan is going, and Start Workout → Train → Complete',
+  id: '2026-12c',
+  title: 'New: Look — what to wear today',
+  text: 'Start with an outfit you already wear; three Looks for today, and a Fit Check with your partner',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'Health is your day', cards: [
-  ['⚖️', 'Weigh in on Health', 'Type today’s weight on 💪 Health and it’s in Meals and Weight too. A 7 AM reminder is there if you want it.'],
-  ['📈', 'How your plan is going', 'Week, days left, On track / Behind / Ahead — or Too early to tell — with an estimate, the next step and why. 💬 Ask about my plan asks Claude (just your plan numbers and your question). Nothing changes your targets without your OK.'],
-  ['🏋️', 'Today’s Workout → Train', 'Add a workout, Start Workout, record what you actually did set by set, leave and Resume any time, then Complete. Names are suggested; rename them later.'],
-  ['🛒', 'Scan is in Groceries', 'Food is Meals · Weight · Groceries; ▦ Scan a barcode is at the top of Groceries.'],
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'Look: what to wear today', cards: [
+  ['📸', 'Start with a Look you wear', 'One photo of an outfit you already wear is a Look. Find its pieces later — or don’t.'],
+  ['👔', 'Three Looks for today', 'From your own clothes, for today’s plans and weather. Swap a piece, then Wear this.'],
+  ['❤️', 'Fit Check', 'Send one Look to your partner for a quick Hit or Miss. Only that Look is shared.'],
+  ['🔒', 'Yours alone', 'Your Closet and what you wear are private to you. Find it from Today’s Look on Calendar.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);
 export const slide = (id) => SLIDES.find((s) => s.id === id) || null;
 // The tour page for the screen you're on.
-export const SCREEN = { home: 'home', threads: 'threads', us: 'us', watch: 'us', read: 'us', calendar: 'calendar', me: 'me', family: 'me', member: 'me', chats: 'chats', chat: 'chats' };
+export const SCREEN = { look: 'calendar', home: 'home', threads: 'threads', us: 'us', watch: 'us', read: 'us', calendar: 'calendar', me: 'me', family: 'me', member: 'me', chats: 'chats', chat: 'chats' };

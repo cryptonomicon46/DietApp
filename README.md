@@ -41,7 +41,7 @@ A greeting with today's date on top (*Good afternoon, Sam. Here's your Wednesday
 Top to bottom: **📺 Watch** (what you're watching and what's next, one tap to log an episode), **📚 Read** (what each of you is reading or listening to right now), what's waiting for your answer, **❤️ Dates** (plans you answer 🙌 / 🤔 / ⏰, the 2-2-2-2 rhythm, ✨ Suggest, 🧭 Plan an outing, ❤️ Log a date), **✨ Ideas for Us** (a few curated movies, new restaurants and events — 💗 privately, matches become plans, 💬 Discuss any of them), **💌 Notes**, and a link to 📓 your notebook in Threads.
 
 ### 📅 Calendar
-A shared month view with everyone's events, ⭐ golden days, ❤️ dates, 🐾 appointments and 💞 plans; repeating events; linked iCloud / Google calendars (read-only); 👔 dress for the day for both of you; reminders.
+A shared month view with everyone's events, ⭐ golden days, ❤️ dates, 🐾 appointments and 💞 plans; repeating events; linked iCloud / Google calendars (read-only); a small **👔 Today's Look** card under today's events (*Dinner at 5:30 PM · Cool evening · 52–66°F · 3 looks ready → View Looks*); reminders.
 
 ### 📺 Watch
 First in 💞 Us: "2 watching · 3 want to watch", the shows that matter tonight (🆕 new episodes first, then what you're watching, then ⭐ Up Next), each with one button — **＋ Episode** (or **✓ Watched** for a movie) — and **Open Watchlist →**. Every show is in one of three places: **Want to Watch → Watching → Watched**. ⭐ Up Next just puts something first in Want to Watch. Tap a show for its details: where you're up to, your ★ rating, history, 💬 Discuss, 🎲 Bingo, and under *More*: share or keep private, ✋ Drop, delete.
@@ -69,6 +69,19 @@ Your day in one calm screen — each part shows where you are and the one next t
 
 The detailed screens are each person's **🍽 Food** (Meals, Weight and Groceries — meal plans with exact portions, logging, weekly check-ins, plan progress, groceries with barcode scan) and, signed in, **Activity** (the day's activities and training calories, runs, rides, climbing). The header of every tracker screen says where you are — *‹ Health · Meals* — and takes you back to 💪 Health. Details in *The trackers, in detail* below.
 
+### 👔 Look
+What should I wear today? From clothes you actually own — and you don't have to catalog your wardrobe first. Look is its own screen (from the Today's Look card on 📅 Calendar, or on 🏠 Home when there's something for today), with **Today · Closet · Saved** at the top and *‹ Calendar* (or *‹ Home*) to go back.
+- **Start with a Look you already wear.** *Add a Look*: a photo of a whole outfit — a mirror photo, a full-length one, an outfit laid flat or one you already have — a name (*Dinner Look*, suggested) and, if you like, what it's for (Work, Meeting, Business casual, Smart casual, Dinner, Date, Other). Save it and it's usable straight away. Then *Build your Closet from this?* **Find pieces** — or **Not now**, which is fine.
+- **Find pieces:** first it says it *sends only this photo to Claude to find the pieces*. Each piece comes back cut out — *Navy blazer, Light-blue Oxford, Charcoal trousers, Brown loafers* — for you to keep, rename or skip; something small or half hidden says *Possible watch — check it* instead of guessing a model. If a piece looks like one you already have, it asks: *Looks like your Navy blazer — Use existing / Add new*; nothing is merged or added without you. You can also **mark a piece yourself** by dragging a box over it (and that's what happens when Claude isn't set up).
+- **Add an item:** photograph one piece (laid flat or against a plain wall works best). The background is removed on your phone — no other app needed — and you get *Looks like Light-blue Oxford* with its colour, kind and how dressy it is: **Looks right** or **Edit**. When the background is too busy it says *Couldn't clean this image perfectly* — **Use original**, **Try again** or **Retake**; you can always save. One tap says what it is (top, bottoms, jacket, shoes, watch, accessory, dress). **✨ Name it with Claude** sends just that cut-out picture; once you've used it, the next pieces are named the same way (it says so). Watches are first-class pieces.
+- **Today:** a short line for the day (*Thu, Oct 29 · Dinner at 5:30 PM · San Jose · 52–66°F*, with *Dinner* and *Smart casual*), then the best Look as a large **flat-lay of your own pieces** (or your outfit photo), its name (*Navy Dinner*), one line on why it works, **Wear this**, and **⇄ Swap · ☆ Save · ❤️ Ask Pat**. *Other good options* — two more — scroll sideways. On a wide screen the day, Fit Checks and a Closet shortcut sit on the right.
+- **Swap:** only the kinds in that Look (Shirt, Jacket, Trousers, Shoes, Watch); pick another and the board changes at once, with **↶ Undo**; *No watch* is an option. Also *Warmer, Cooler, More casual, More formal, Different shoes, Different watch, Surprise me*, and *Not today* or *Not my style*.
+- **Wear this** remembers the Look, the day and its pieces (last worn, times worn), shows *✓ Today's Look · Navy Dinner — have a good night*, and counts as a strong "yes" for next time. **Saved** keeps the Looks you like (*Navy Dinner · Last worn Oct 18 · Wear again*); wearing the same thing again is good data, not a problem.
+- **How it decides** — on your phone, nothing sent: today's events (the most dressed-up one decides: a client meeting, dinner, a date…; only a short label is shown, never the event's title), the weather where the calendar puts you (feels-like when you leave, later, rain), how dressy each piece is and how warm, colours that go together, what you wore lately, your Saved Looks, Fit Check answers, and what you've chosen before (worn, saved, swapped, more casual, not my style). No style quiz.
+- **❤️ Ask Pat — Fit Check:** send the Look (or two to compare, A vs B) with an optional message (*Dinner tonight — what do you think?*). *Only this Look will be shared* — not your Closet. Pat gets a notification and sees *Fit Check · Sam is considering this* with **🔥 Hit** or **🙈 Miss** (or **A / B / Neither 😬**); a Miss can say what's off (shoes, jacket, watch, colours, too formal, too casual, not my style) or be *Just Miss*. You see *🔥 Pat says HIT → Wear this*, or *🙈 Miss — shoes → Fix it*, which re-ranks today's Looks around it. *💬 Discuss* opens a thread about it only if you want one. Fit Checks last two weeks.
+- **Closet:** your pieces as a picture grid (thumbnails, loaded as they scroll into view), search, and filters for only the kinds you have (All · Tops · Bottoms · Jackets · Shoes · Watches · Accessories). Tap a piece to edit it (name, kind, colour, how dressy, warmth; optional brand, model, material, size, notes), mark it unavailable (at the cleaner's), make it a favourite, or delete it — a deleted piece never comes back in suggestions, but Looks you wore keep showing it.
+- **Private:** your Closet, its pictures, your Saved Looks and what you've worn are yours alone — not your partner's, not the family's creator's. In an encrypted family they're locked on your phone first.
+
 ### ❓ Help and the tour
 The **❓** at the top of every screen (and **Help** at the foot of the sidebar on a Mac) opens Help: **📖 Take the tour** (one page per area, with *Show me* to jump there), **✨ What's new**, **🧭 This screen**, and the help chat. Someone who's just created or joined a family sees a welcome and the tour once, then a *New here?* card for a week; after an update with new features, everyone else gets one *What's new* card. Empty screens link to the page that explains them.
 
@@ -92,6 +105,8 @@ Your family and its people and pets, privacy (💪 who sees your Diet and your F
 | 💬 Describe it (Fitness) | Claude when you tap *✨ Read it with Claude*; your phone when you tap *Read on this phone instead* (or offline) | The words you typed and your weight unit — nothing else |
 | 📷 Photo (Fitness) | Claude, only when you tap *Read it* | That one picture, redrawn on your phone (no location or camera details) and your weight unit; not kept |
 | 📈 Ask about my plan (Meals) | Claude, only after you've seen *Sends your plan numbers and your question to Claude* | Your plan's numbers only — phase, week, targets, a 7-day summary (days logged and on target, average calories and protein), the trend, the planned rate, the goal date, how many days you trained — plus your question and this chat's earlier questions and answers. Never your name, meals, notes, weights or anyone else's data; nothing kept |
+| 👔 Find pieces (Look) | Claude, only after it says so and you tap | That one outfit photo, redrawn on your phone (no location or camera details); not kept |
+| 👔 ✨ Name it with Claude (Look) | Claude, when you tap (then for the next pieces you add, as it says) | That one cut-out picture; not kept |
 | 🏋️ Ask Claude (Train, trackers on their own) | Claude | The workout command you typed and today's exercises |
 | 🧭 Plan an outing / swap a stop | Claude only | The place you typed, the day, your choices and your home town; your taste line only when 💞 *Use our taste* is on |
 | 💡 Weekly date ideas | Gemini with Google Search, or Claude | Your area and the dates |
@@ -381,7 +396,7 @@ Signed in to OurPawmily, this tab is **Activity**: everything below except the l
   - Every logged moment shows as a ❤️ on the shared **📅 Calendar**, next to the dogs' ⭐ golden days.
   - **Fix or add later:** tap a day on the calendar (or a moment under *Logged moments*) and **✎ Edit** changes what, where or the day, or **Delete** removes it — from either phone, whoever logged it. **❤️ Log a date on this day** adds another one to that day.
   - A multi-night getaway also counts as an overnight trip. Weeks run Monday to Sunday. Logged moments can be removed.
-- **👔 Dress for the day** (under the chosen day, today through a week ahead): for each of you, where you'll be, the feels-like temperature when you leave, at the warmest point and when you get home, and how to layer.
+- **👔 Dress for the day** (trackers on their own, without an account; in OurPawmily it's replaced by 👔 Look) (under the chosen day, today through a week ahead): for each of you, where you'll be, the feels-like temperature when you leave, at the warmest point and when you get home, and how to layer.
   - **Where:** an event for that person (or for both of you) whose title or location names a place puts them there for the day: *Office – SF*, *Oakland*, or an address in San Francisco. Otherwise it's **San Jose (95131)**. The menu next to each name changes a day by hand (**↺ Use the calendar** undoes it).
   - **When:** an hour before your first event of the day until an hour after your last one, or 8 AM–6 PM when the calendar is empty.
   - **How the day goes:** *cool start, warm midday, cool again by evening*, *hot all day*, *cold all day* or *steady*. Then the layers: a base (tee → long sleeves), a light layer or sweater, and a jacket or coat only when it's cold enough. A rain jacket when rain is likely, or a windbreaker when it's gusty. Layers you'll shed are marked *take off later*, with times, e.g. *Jacket off around 10 AM, back on by 6 PM*. Plus an umbrella, sunglasses and sunscreen, or warm socks when they're needed.
@@ -499,6 +514,12 @@ npm install        # first time on a fresh copy
 npx wrangler deploy
 ```
 
+Or run `bash scripts/pawdeploy.sh` from anywhere: it pulls the latest code for the branch you have checked out (normally `main`), keeps your local storage id in `server/wrangler.toml`, and deploys. It stops without deploying if the pull fails or the storage id is still the placeholder. To get the short `pawdeploy` command, run this once from the project folder (in Git Bash on Windows; use `~/.zshrc` on a Mac):
+
+```sh
+echo "alias pawdeploy='bash \"$(pwd)/scripts/pawdeploy.sh\"'" >> ~/.bashrc && source ~/.bashrc
+```
+
 Secrets are added with `npx wrangler secret put …` and never committed.
 
 ## Releasing an update
@@ -526,7 +547,10 @@ Run `node scripts/bump-version.mjs` before committing. It gives every tracker fi
 | `server/bingo.js` | 🎲 Show bingo: reading pasted squares, dealing cards, finding bingo |
 | `server/goldenPost.js` | ⭐ The dogs' golden-day thank-you notes (sent as a notification; no longer posted) |
 | `server/helpAgent.js`, `server/helpGuide.js` | 💬 The help assistant (Claude with account tools) and the guide it answers from |
-| `js/dress.js`, `js/dressTab.js` | 👔 Dress for the day: places from the calendar, layering for each person's weather |
+| `js/dress.js`, `js/dressTab.js` | 👔 Dress for the day (trackers on their own): places from the calendar, layering for each person's weather; `js/dress.js`'s places and weather also feed 👔 Look |
+| `js/look.js`, `js/cutout.js` | 👔 Look on the phone: the Closet model, flat-lay layout, today's context, recommendations, swaps, learning; background removal |
+| `family/look.js` | 👔 Look's screens (Today, Closet, Saved, Add a Look / item, Find pieces, Swap, Fit Check), loaded when opened |
+| `server/look.js`, `server/lookAi.js` | 👔 Each person's Closet record and pictures (theirs alone), Fit Checks; naming a piece and finding pieces with Claude |
 | `js/dogs.js`, `js/adopt.js` | Dog profiles and documents; adoption board |
 | `js/calendar.js`, `js/calTab.js` | Calendar rules, .ics import / export, Calendar tab |
 | `js/notes.js`, `js/plans.js`, `js/shows.js` | Us tab: notes, plans, watching |
