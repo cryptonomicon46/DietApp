@@ -277,3 +277,8 @@ test('cut-out: says when it can\'t do it cleanly', () => {
   assert.ok(cutout(photo(120, 150), { tolerance: 0.7 }).ok);
   assert.ok(borderModel(photo(60, 60)).length >= 1);
 });
+
+test('which Look a Fit Check was about stays in your own record, bounded', () => {
+  const r = L.normalize({ fc: { fc00000001: { look: 'look0001', items: [['blazer01', 'BAD'], ['oxford01'], ['x']] }, 'BAD KEY': {} } });
+  assert.deepEqual(r.fc, { fc00000001: { look: 'look0001', items: [['blazer01'], ['oxford01']] } });
+});

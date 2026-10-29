@@ -9,6 +9,7 @@
 //            lastWorn?, wearCount, verdict? }   — a Look can be just a photo of an outfit
 //   Wear   { d, look?, items, name, occ, f }
 //   Prefs  { item: {id: n}, pair: {"a|b": n}, occ: {occasion: shift} } — small, explainable
+//   fc     { fitCheckId: { look?, items: [[itemId]] } } — which Look(s) a Fit Check you sent was about
 //
 // The loop is Event → Look → Partner → Wear → Learn: a complete outfit you already wear is a
 // usable Look straight away; pieces can be pulled out of it later, and recommendations get better
@@ -163,6 +164,7 @@ export function normalize(raw = {}) {
     wears: (Array.isArray(r.wears) ? r.wears : []).slice(-500).filter((w) => date(w?.d)).map((w) => ({ d: w.d, look: okId(w.look), items: (w.items || []).map(okId).filter(Boolean).slice(0, 12), name: txt(w.name, 60), occ: OCCASIONS[w.occ] ? w.occ : 'other', f: num(w.f, 1, 5) || 3 })),
     prefs: { item: nums(p.item), pair: nums(p.pair), occ: nums(p.occ) },
     ob: r.ob && typeof r.ob === 'object' ? { welcomed: !!r.ob.welcomed } : {},
+    fc: Object.fromEntries(Object.entries(r.fc && typeof r.fc === 'object' ? r.fc : {}).filter(([k]) => okId(k)).slice(-30).map(([k, v]) => [k, { look: okId(v?.look), items: (Array.isArray(v?.items) ? v.items : []).slice(0, 2).map((l) => (Array.isArray(l) ? l : []).map(okId).filter(Boolean).slice(0, 12)) }])),
   };
 }
 // What's in the Closet now (deleted pieces stay only so old Looks still show them).

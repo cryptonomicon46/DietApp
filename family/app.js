@@ -467,7 +467,8 @@ async function lookView() {
   const L = await act(looks);
   if (!L || state.view !== 'look') return;
   if (state.fitOpen) { const id = state.fitOpen; state.fitOpen = null; return L.openFit(id); }
-  if (L.state.view === 'fit') L.state.view = null;
+  // Coming in from Calendar or Home: Today, every time.
+  L.state.view = null; L.state.tab = 'today';
   L.render();
 }
 // ✏️ A change to your own trackers made here (a weigh-in on Health, turning on the lifting
@@ -5097,7 +5098,18 @@ $('#sheet').addEventListener('click', (e) => {
   if (e.clientY < r.top || e.clientY > r.bottom || e.clientX < r.left || e.clientX > r.right) closeSheet();
 });
 $('#sheet').addEventListener('close', () => { if (state.view === 'compose') { draft.text = $('#postForm textarea')?.value ?? draft.text; show('home'); } });
-window.addEventListener('hashchange', () => { if (/invite=/.test(location.hash)) boot(); });
+window.addEventListener('hashchange', () => {
+  if (/invite=/.test(location.hash)) return boot();
+  // A link into the app while it's open (#look, #fitcheck=…, #health…): go there.
+  if (!state.fid || !fam()) return;
+  const fc = location.hash.match(/^#fitcheck=([a-z0-9]{6,16})$/)?.[1];
+  const v = location.hash.match(/^#(home|calendar|me|us|threads|chats|health|fitness|look)$/)?.[1];
+  if (!fc && !v) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  if (fc) state.fitOpen = fc;
+  if (fc && state.view === 'look') return lookView();
+  show(fc ? 'look' : v);
+});
 
 // Errors this phone hits are counted on the connector (message and place only) so the
 // maintainer sees glitches nobody reported.

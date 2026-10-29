@@ -228,8 +228,7 @@ function head() {
     <div class="seg lk-tabs" role="tablist" aria-label="Look">${[['today', 'Today'], ['closet', 'Closet'], ['saved', 'Saved']].map(([k, l]) => `<button type="button" role="tab" aria-selected="${lk.tab === k}" class="${lk.tab === k ? 'on' : ''}" data-lk="tab:${k}">${l}</button>`).join('')}</div></section>`;
 }
 function onboardHtml() {
-  const n = lk.rec.looks.filter((l) => l.saved).length;
-  if (n === 0) {
+  if (!lk.rec.looks.length && !L.closet(lk.rec).length) {
     return `<section class="card lk-welcome"><h3>Build your Work Closet</h3><p>Start with outfits you already wear. You don't need to catalog everything.</p>
       <button type="button" class="wide" data-lk="addlook">Add your first Look</button>
       <p class="small center"><button type="button" class="linkish small" data-lk="additem">Add an individual piece</button></p></section>`;
@@ -255,7 +254,7 @@ function todayHtml() {
       <div class="eyebrow">${worn ? '✓ Today\'s Look' : `Look ${lk.sel + 1}`}</div>
       ${board(worn ? wornLook(worn) : l, 'full', 'hero')}
       <h3 class="lk-name">${E(worn ? worn.name : l.name)}</h3>
-      ${worn ? `<p class="small">${E(worn.name)} — ${new Date().getHours() >= 15 ? 'have a good night' : 'have a good day'}.</p><p class="small"><button type="button" class="linkish small" data-lk="unwear">Change today's Look</button></p>`
+      ${worn ? `<p class="small">${new Date().getHours() >= 15 ? 'Have a good night.' : 'Have a good day.'}</p><p class="small"><button type="button" class="linkish small" data-lk="unwear">Change today's Look</button></p>`
         : `<p class="lk-why"><span class="muted small">Why this works</span><br>${E(l.why)}</p>
       ${lk.undo ? `<p class="small center"><button type="button" class="linkish small" data-lk="undo">↶ Undo ${E(lk.undo.label)}</button></p>` : ''}
       <button type="button" class="wide lk-wear" data-lk="wear">Wear this</button>
@@ -642,7 +641,9 @@ async function sendFit(btn) {
     const k = lk.c.key();
     for (const [n, l] of [a, b].filter(Boolean).entries()) { const jpg = await boardJpeg(l); await lk.c.api.bytes('PUT', `/families/${lk.c.fid}/fitchecks/${fitcheck.id}/img/${n}`, k ? await lk.c.sealBytes(k, jpg) : jpg); }
     await lk.c.api.post(`/families/${lk.c.fid}/fitchecks/${fitcheck.id}/send`);
-    lk.sent = { id: fitcheck.id, looks: [a, b].filter(Boolean) };
+    // Which Look(s) it was about, kept in your own Closet record (so Fix it and Wear this work later).
+    lk.rec = { ...lk.rec, fc: { ...lk.rec.fc, [fitcheck.id]: { look: a.look?.id || null, items: [a, b].filter(Boolean).map((x) => x.items.map((i) => i.id)) } } };
+    save();
     lk.c.closeSheet(); lk.c.toast(`👔 Sent to ${partnerName()}`);
     await fitchecks(true); render();
   } catch (e) { btn.disabled = false; btn.textContent = 'Send Fit Check'; lk.c.toast(e.message); }
@@ -690,9 +691,15 @@ async function answer(verdict, reasons = []) {
   } catch (e) { lk.c.toast(e.message); }
 }
 // Miss → what was off becomes a structured nudge, and today's Looks re-rank around it.
+// The Look(s) a Fit Check you sent was about, from your record.
+function sentLooks(f) {
+  const m = lk.rec.fc[f.id];
+  if (!m) return null;
+  return m.items.map((ids, n) => { const items = ids.map((id) => L.itemById(lk.rec, id)).filter((i) => i && !i.gone); const look = n === 0 && m.look ? lk.rec.looks.find((x) => x.id === m.look) : null; return { name: n ? f.name2 : f.name, items, look, why: '' }; });
+}
 async function fixIt() {
   const f = lk.fcs.find((x) => x.id === lk.fcOpen);
-  const sent = lk.sent?.id === f.id ? lk.sent.looks : null;
+  const sent = sentLooks(f);
   const l = sent?.[0] || current();
   if (l) {
     const byCat = { shoes: l.items.filter((i) => i.cat === 'shoes').map((i) => i.id), outer: l.items.filter((i) => i.cat === 'outer').map((i) => i.id), watch: l.items.filter((i) => i.cat === 'watch').map((i) => i.id) };
@@ -793,7 +800,7 @@ export async function onClick(t) {
     case 'fixit': return fixIt();
     case 'fitwear': {
       const f = lk.fcs.find((x) => x.id === lk.fcOpen);
-      const pick = lk.sent?.id === f.id ? lk.sent.looks[f.verdict === 'b' ? 1 : 0] : current();
+      const pick = sentLooks(f)?.[f.verdict === 'b' ? 1 : 0] || current();
       lk.view = null; lk.tab = 'today';
       if (pick) { await computeToday(); wearNow(pick); }
       render(); return c.toast(pick ? `✓ Today's Look: ${pick.name}` : 'Pick it in Today');
