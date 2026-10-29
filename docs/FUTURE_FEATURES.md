@@ -109,6 +109,85 @@ After the authorized simplification work and Us foundation are stable, prepare a
 
 Review and explicit implementation authorization are required before building any of this.
 
+## Grocery ordering hand-off (research only)
+
+**Status: DESIGN ONLY / NOT AUTHORIZED.** Researched 2026-10-29 from official provider documentation. No retailer buttons or integrations exist in the app.
+
+**Method and limits.** This session's network policy blocked direct page fetches from the provider domains (docs.instacart.com, instacart.com, company.instacart.com and others failed to resolve). Every finding below comes from web-search results restricted to the providers' own domains, which show page excerpts. The pages themselves were not opened, and several had no visible date. Before any build, re-read each cited page directly. "Not confirmed" means the official sources found did not say.
+
+| Provider | Public API | Affiliate / deep link | Partner-only | Unsupported | Notes |
+| --- | --- | --- | --- | --- | --- |
+| Instacart | Developer Platform (IDP): "Create shopping list page" and recipe page; **access is currently invite-only and closed to new applicants** | IDP's Impact affiliate program is only for approved IDP partners; a plain web link has no documented support | Connect APIs (carts, fulfilment, account linking) | Scraping or automating instacart.com | Best technical fit, but you can't get in right now |
+| Amazon Fresh / Whole Foods | None for Fresh or Whole Foods. PA-API 5.0 is retired; its replacement, the Creators API, needs 10 qualifying sales in 30 days | Add-to-Cart form (ASIN + quantity); not confirmed to work for Fresh or Whole Foods carts | Fresh API only through an AWS public-sector programme | Scraping; the Alexa Lists API was retired on 2024-07-01 | Needs ASINs, not item names |
+| Walmart | Affiliate Marketing API (read-only product search and lookup; needs an Impact publisher ID) | Affiliate text and item links via Impact; add-to-cart link format not confirmed | Online Pickup & Delivery / Add To Cart service (Walmart business review, subscription) | Scraping; AI agents must follow the separate Agentic Access Terms | Marketplace APIs are for sellers and solution providers, not shoppers |
+| Safeway (Albertsons) | None found | None found | Not public; partner integrations exist (e.g. the Safeway ChatGPT plugin) | Robots, spiders and scraping are banned without written permission | Also sold on Instacart |
+| Costco | None found | No affiliate programme found | Same-Day delivery is run by Instacart | Terms ban data mining, robots and unapproved software | Costco through Instacart is possible, but IDP doesn't let a developer choose the store |
+
+### Instacart
+IDP's `POST /idp/v1/products/products_link` takes line items. Each item needs only a product name, plus optional quantity or measurements, brand filters and UPCs. It returns a shareable Instacart URL where the shopper chooses a store, fills a cart and checks out. Instacart asks developers to cache and reuse these URLs. A recipe-page endpoint, a nearby-retailers endpoint and an MCP server (authenticated with the same API key) wrap the same function. A developer cannot send the shopper to a particular retailer ("not supported"); Instacart picks a default from location, product matches and the shopper's history.
+
+Development keys come from a dashboard. Production keys stay pending until Instacart reviews a demo recording and checks compliance with the terms. The docs give about 30–40 days from access request to production key. The terms say the integration runs on your server, keys are confidential, and Instacart may set request limits at its discretion. Over-limit calls return HTTP 429. Affiliate commissions go through Impact and are offered only to approved IDP partners; no public commission rate was found. The decisive finding: the developer portal says "Access to IDP is currently invite only", and the company page says "We are currently not accepting new applications" with no waitlist. Neither page shows a date. Eligibility when open: adults, and either a registered business or a resident of the US or Canada. Developer cost: not confirmed (the terms allow future charges). Sources:
+- https://docs.instacart.com/developer_platform_api/api/products/create_shopping_list_page
+- https://docs.instacart.com/developer_platform_api/guide/concepts/shopping_list
+- https://docs.instacart.com/developer_platform_api/faq/ (no store selection; separate cart per retailer)
+- https://docs.instacart.com/developer_platform_api/guide/concepts/launch_activities/approval_process
+- https://docs.instacart.com/developer_platform_api/guide/concepts/launch_activities/conversions_and_payments
+- https://docs.instacart.com/developer_platform_api/guide/terms_and_policies/developer_terms
+- https://docs.instacart.com/developer_platform_api/errors (429 handling)
+- https://docs.instacart.com/developer_platform_api/guide/tutorials/mcp
+- https://developers.instacart.com/ (invite only) and https://company.instacart.com/business/developers (not accepting applications)
+- https://docs.instacart.com/connect/fulfillment_guide/concepts/account_linking (OAuth2 account linking; Connect partners only, via an Instacart representative)
+- https://www.instacart.com/terms (no automated access without express authorization)
+
+### Amazon Fresh / Whole Foods Market
+The documented Add-to-Cart form posts `ASIN.n` and `Quantity.n` plus an `AssociateTag` to `https://www.amazon.com/gp/aws/cart/add.html`. That page belongs to the old PA-API 5.0 docs, which Amazon marks as unmaintained. PA-API 5.0 is retired (end dates of April 30 and May 15, 2026 both appear) and stopped taking new customers. Its successor, the Creators API, uses OAuth 2.0 and requires Associates enrolment plus 10 qualifying sales in the last 30 days. No official source confirmed that the Add-to-Cart form fills Fresh or Whole Foods carts. Amazon's help pages describe those carts as separate from ordinary Amazon items, and its developer forum says it cannot answer Fresh or Whole Foods questions. Associates eligibility conflicts across pages: one rate table lists Amazon Fresh at 0.50%, while the excluded-products page excludes products sold on fresh.amazon.com. Associates sites must be publicly available. Mobile apps need separate approval. Amazon deducts commission on your own purchases, so a household earns nothing ordering for itself. A Fresh API is offered only through an AWS public-sector food-insecurity programme. The Alexa List Management API was retired on 2024-07-01. The Conditions of Use exclude robots and data mining. Sources:
+- https://webservices.amazon.com/paapi5/documentation/add-to-cart-form.html
+- https://affiliate-program.amazon.com/creatorsapi/docs/en-us/paapiv5-deprecation and https://affiliate-program.amazon.com/creatorsapi/docs/en-us/introduction
+- https://affiliate-program.amazon.com/help/operating/policies, https://affiliate-program.amazon.com/help/operating/exclusions/, https://affiliate-program.amazon.com/help/node/topic/GQZMCDD9PB7CXV7N (mobile apps), https://affiliate-program.amazon.com/help/node/topic/G46FTB8KQF8NRUWG (personal use)
+- https://www.amazon.com/gp/help/customer/display.html?nodeId=GQDB7EYYPKGLNG34 (separate Fresh / Whole Foods cart)
+- https://developer.amazon.com/en-US/docs/alexa/ask-overviews/deprecated-features.html
+- https://aws.amazon.com/blogs/publicsector/enabling-public-private-collaborations-innovate-food-insecurity/
+- https://www.amazon.com/gp/help/customer/display.html?nodeId=GLSBYFE9MGKKQXXM (Conditions of Use)
+
+### Walmart
+The walmart.io Affiliate Marketing API is read-only: product search and lookup with price and availability. Setup needs a Walmart.com login, an uploaded public key (which issues a consumer ID), signed requests and an Impact publisher ID. The affiliate programme runs through Impact. Walmart approves each linking website, US sites only, with disclosure required next to links. The affiliate FAQ lists banner, department, category and item links but no add-to-cart link. The commonly cited `affil.walmart.com/cart/addToCart?items=` pattern was not found in the official docs reached (not confirmed). An "Add To Cart" service does exist under Online Pickup & Delivery and Data Ventures. It requires Impact registration and then review by a Walmart business manager, and it is listed as subscription-based, so it is partner-only. developer.walmart.com Marketplace APIs are for sellers and approved solution providers. The Walmart.com terms ban robots and scraping without written consent. Separate Agentic Access Terms require AI agents to identify themselves and respect rate limits. Sources:
+- https://walmart.io/docs/affiliates/v1/affiliate-marketing-api, https://walmart.io/apidocs/affiliates/quickstart
+- https://affiliates.walmart.com/faqs, https://affiliates.walmart.com/terms
+- https://www.walmart.io/docs/opd/product-snapshot/grocery-introduction, https://www.walmart.io/docs/dv-certified-partners/v1/overview/
+- https://developer.walmart.com/us-marketplace/docs/introduction-to-marketplace-apis
+- https://www.walmart.com/help/article/walmart-com-terms-of-use/3b75080af40340d6bbd596f116fae5a0
+
+### Safeway (Albertsons Companies)
+No public developer API or affiliate programme was found. Albertsons offers recipe-to-cart and meal-plan-to-cart features inside its own sites and apps, an AI shopping assistant, and a 2026 Safeway plugin in ChatGPT that adds items to a Safeway cart before checkout on Safeway. These are first-party or negotiated partnerships, not developer programmes. Albertsons banners, Safeway included, also sell through Instacart. The terms ban robots, spiders and crawlers without prior written authorisation, except accessibility tools and search indexing that doesn't enable purchases. Sources:
+- https://www.albertsonscompanies.com/newsroom/press-releases/news-details/2026/Albertsons-Companies-Expands-AI-Powered-Grocery-Shopping-with-New-Safeway-Plugin-in-ChatGPT/default.aspx
+- https://www.albertsonscompanies.com/newsroom/press-releases/news-details/2023/Albertsons-Companies-Unveils-New-Digital-Innovations-to-Meal-Plans-Tool/default.aspx
+- https://company.instacart.com/pressreleases/instacart-and-albertsons-companies-expand-partnership-nationwide-launching-pickup-services-and-convenience-delivery-in-as-fast-as-30-minutes
+- https://www.albertsonscompanies.com/policies-and-disclosures/terms-of-use/default.aspx, https://www.safeway.com/terms-of-use/special-terms-of-use.html
+
+### Costco
+Confirmed: "Same-Day Delivery powered by Instacart" (sameday.costco.com and .ca) has run since 2017. It is members-only, prices are marked up above warehouse prices, and Costco Shop Cards can't be used. Costco also appears as a store on the Instacart marketplace. No Costco developer API or affiliate programme was found (not confirmed either way). The Costco terms ban data mining, robots and software that interacts with the site without written permission. Instacart is therefore the only sanctioned route, but IDP cannot direct the shopper to Costco; the shopper would pick it on the Instacart page. Sources:
+- https://customerservice.costco.com/app/answers/answer_view/a_id/8150/~/same-day-delivery-powered-by-instacart-faqs
+- https://www.instacart.com/company/pressreleases/costco-executive-members-now-get-monthly-credit-for-same-day-delivery-with-instacart
+- https://www.costco.com/f/-/terms-and-conditions-of-use
+
+### What leaves the phone
+- **The list today.** The grocery list stays inside the app and may be end-to-end encrypted. Any hand-off sends that list, in plaintext, to the retailer, and possibly to the connector first. That reveals the household's diet: health, religious and other sensitive details. It needs explicit consent each time, and the privacy page would need updating.
+- **Plain web link (no programme).** Item names go into a retailer URL opened on the phone, so the retailer, the browser history and any link previews see them. No account linking and no developer keys. Nothing passes through the connector.
+- **Instacart IDP.** The API key must stay on a server, so item names, quantities and optional UPCs go from the phone to the connector to Instacart. The connector would see the list in plaintext, which breaks end-to-end encryption for that list; it must not log or keep it. Instacart returns a link and the shopper signs in on Instacart. No OAuth is needed for list pages. Account linking (OAuth2) is Connect-only.
+- **Amazon or Walmart affiliate links.** Items must first be matched to ASINs or Walmart item IDs, either through a product API (a server-side credential, sending search terms) or a manual lookup. The associate or publisher ID ties purchases to the developer's account. Earning commission on your own household's orders isn't allowed (Amazon), so the affiliate route adds tracking without benefit.
+- **Never.** Family keys, member names, health data or the household code must never go to any retailer. Shopper credentials must never be collected (Amazon's Associates policy also forbids it).
+
+### Recommended first step if ever authorized
+1. **Least commitment: copy or share the list, plus plain search links.** Export the list as text through the system share sheet, so the shopper pastes it into any retailer's own list or search. Optionally add per-item links to a retailer's public search page, item name only, with no affiliate tag, opened only on tap. No account, no key and no server path. The ciphertext model is unchanged until the user taps. Caveat: these URLs aren't a documented interface and may change.
+2. **If Instacart reopens IDP: server-side "Create shopping list page".** The connector receives item names and quantities only, calls IDP and returns the link. Cache the link per list version, keep no plaintext, and set up 429 backoff. This needs an approved production key (demo review, about 30–40 days), a privacy-page update and a decision about the plaintext the connector would see. Affiliate attribution stays optional and is probably not worth adding.
+
+### Open questions
+- When, or whether, Instacart will reopen IDP applications; whether a hobby or household app qualifies; and whether developer use stays free.
+- Whether Amazon's Add-to-Cart form works for Fresh or Whole Foods items, and whether it survives the PA-API retirement (not confirmed).
+- Whether Walmart officially documents a public add-to-cart link outside the subscription partner service (not confirmed).
+- Whether the owner accepts item names leaving the device in plaintext. Is a share-sheet hand-off enough, or is a retailer button wanted?
+- Every finding above came from search excerpts, not opened pages. Re-check each cited page directly, with the provider domains allowed, before any decision.
+
 ## Separate future security project
 
 Per-person/per-area cryptographic isolation for Diet/Fitness needs its own design and audit before commercial/external-family launch. It is not authorized here and must not be bundled into Read/Discover work or the currently frozen key system.

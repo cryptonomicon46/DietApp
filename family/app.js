@@ -174,7 +174,7 @@ async function boot() {
   if (!state.families.some((f) => f.fid === state.fid)) state.fid = state.families[0].fid;
   await loadFamily(famEarly?.fid === state.fid ? famEarly.p : null);
   // Older links (#feed, #dogs, notifications sent before 2.0) open Home.
-  const hv = location.hash.match(/^#(home|feed|dogs|calendar|me|us|threads|chats|health|chat=[a-z0-9_]+)$/)?.[1];
+  const hv = location.hash.match(/^#(home|feed|dogs|calendar|me|us|threads|chats|health|fitness|chat=[a-z0-9_]+)$/)?.[1];
   if (hv) { state.view = hv; history.replaceState(null, '', location.pathname + location.search); }
   // ⌚ Back from connecting WHOOP (Health › Devices): open Health and finish there.
   const connecting = /^#connect=/.test(location.hash);
@@ -386,12 +386,27 @@ function show(view, extra) {
 // 💪 Health: your own Diet and Fitness (family/health.js, loaded when you open it).
 async function healthView() {
   $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div><div class="skeleton card"></div>`;
-  const [H, rec, F] = await Promise.all([import(`./health.js?v=${VERSION}`), memberData().catch(() => null), fit().catch(() => null)]);
+  const [H, rec, F, nudges] = await Promise.all([import(`./health.js?v=${VERSION}`), memberData().catch(() => null), fit().catch(() => null), loadNudges().catch(() => null)]);
   if (state.view !== 'health') return;
   const data = await openData(rec);
   if (data.locked) { $('#view').innerHTML = `${demoBanner()}<section class="card"><b>🔒 Locked on this device</b><p class="small muted">This device needs the family key to show your Health. Me › 🔐 Encryption.</p></section>`; return; }
   if (F) F.setLegacy(data, LIFT_NAMES);
-  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), sharing: sharingLine(), fitness: F ? F.card(esc) : undefined, devices: devicesLine() })}</div>`;
+  const w = F?.state.today && F.state.today.status !== 'done' ? F.state.today.status : null;
+  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), hour: new Date().getHours(), workout: w, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), fitness: F ? F.card(esc) : undefined, devices: devicesLine() })}</div>`;
+}
+// ⚖️ Today's weight from Health: saved into your trackers (so Meals and Weight show it too) and
+// it ticks off the morning reminder.
+async function saveWeighIn(f) {
+  const lb = Math.round(parseFloat(f.lb.value) * 10) / 10;
+  if (!(lb >= 60 && lb <= 700)) return toast('Type your weight in pounds (60–700)');
+  const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Saving…';
+  const today = isoLocal();
+  try {
+    await editMine((s) => s.set('weights', [...(s.get('weights', []) || []).filter((x) => x.date !== today), { date: today, weight: lb }].sort((a, b) => a.date.localeCompare(b.date))));
+  } catch (e) { btn.disabled = false; btn.textContent = 'Save'; return toast(e.message); }
+  if (callNudge.all?.weighin) api.post(`/account/nudges/weighin/done?today=${today}`, { date: today }).then(setNudges).catch(() => {});
+  toast(`⚖️ ${lb.toFixed(1)} lb saved — Meals and Weight have it too`);
+  if (state.view === 'health') healthView();
 }
 // ⌚ Devices (Health › Devices): family/deviceScreen.js, loaded when you open Devices or come back
 // from connecting WHOOP.
@@ -413,13 +428,29 @@ function fit() {
     await F.load({
       api, fid: state.fid, me: fam().me, esc, toast, openSheet, closeSheet, iso: () => isoLocal(), confirm: (q) => confirm(q),
       lock: async (v) => (fk() ? { enc: await seal(fk(), v) } : v), unlock: async (v) => (isSealed(v) ? tryOpen(fk(), v, null) : v),
-      el: () => (state.view === 'fitness' ? $('#view') : null), show: () => (state.view === 'fitness' ? F.render() : show('fitness')),
+      el: () => (state.view === 'fitness' ? $('#view') : null), show: () => (state.view === 'fitness' ? F.render() : show('fitness')), editMine,
       // null when the settings couldn't be read (offline): asked again next time, not remembered as off.
       aiReady: async () => { const cfg = await api.liveConfig(); return cfg.missing || cfg.offline ? null : !!cfg.ai; },
     });
     return F;
   })().catch((e) => { fitMod = null; throw e; });
   return fitMod;
+}
+// ✏️ A change to your own trackers made here (a weigh-in on Health, turning on the lifting
+// program): your account copy comes down first, the change is made to this device's copy, then it
+// goes back up — the path ⌚ Devices uses, so a device that has only opened OurPawmily never
+// uploads a partial copy. Returns what change() returns.
+async function editMine(change) {
+  if (fam().e2ee && !fk()) throw new Error('🔒 This device needs the family key first — Me › 🔐 Encryption');
+  const [{ account }, { ownerId, profileStore, global }] = await Promise.all([import(`../js/account.js?v=${VERSION}`), import(`../js/storage.js?v=${VERSION}`)]);
+  if (!account.active()) await account.connect().catch(() => null);
+  if (!account.active() || !ownerId()) throw new Error(navigator.onLine ? "Your trackers aren't set up for you on this device yet — open Today's plan once, then try again" : "You seem to be offline — try again when you're connected");
+  await account.pull().catch(() => { throw new Error("Couldn't save — you seem to be offline. Try again in a moment."); });
+  if (!global.get('account.pulled', false)) throw new Error("Couldn't read your saved copy yet — try again in a moment");
+  const out = change(profileStore(ownerId()));
+  await account.push();
+  shared.clear();
+  return out;
 }
 async function fitnessView() {
   $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div>`;
@@ -4307,7 +4338,8 @@ document.addEventListener('click', (e) => {
   if (d.watchone) { t.disabled = true; return act(() => watchOne(d.watchone)).finally(() => { t.disabled = false; }); }
   if (d.watchopen) return watchDetail(d.watchopen);
   if (d.rd) return act(async () => (await RM()).onClick(t));
-  if (d.fx) return act(async () => { const F = await fit(); if (['open', 'main', 'add'].includes(d.fx) && state.view !== 'fitness') { F.state.view = d.fx === 'open' ? 'log' : 'main'; return show('fitness'); } return F.onClick(t); });
+  // From Health: open Fitness on the right screen (Start Workout starts it and opens Train).
+  if (d.fx) return act(async () => { const F = await fit(); if (['open', 'main', 'add', 'today', 'train', 'start'].includes(d.fx) && state.view !== 'fitness') { if (d.fx === 'start') F.begin(); else F.state.view = { open: 'today', today: 'today', train: 'train' }[d.fx] || 'main'; return show('fitness'); } return F.onClick(t); });
   if (d.discuss) return act(() => discuss(d.discuss, d.dtitle || '💬', d.dbody || ''));
   if (d.watchlife) {
     const [id, st] = d.watchlife.split(':');
@@ -4433,6 +4465,14 @@ document.addEventListener('click', (e) => {
     case 'grocclear': return act(() => grocAct(() => api.post(`/families/${state.fid}/groceries/clear`)));
     case 'devices': return act(async () => (await devices()).sheet());
     case 'devconnect': case 'devsync': case 'devoff': case 'devoffstrava': return act(async () => (await devices()).onAct(d.act, t));
+    case 'weighremind': return act(async () => {
+      if (callNudge.all?.weighin) setNudges(await api.del(`/account/nudges/weighin?today=${isoLocal()}`));
+      // Already weighed in today: the first reminder is tomorrow.
+      else setNudges(await api.put(`/account/nudges/weighin?today=${isoLocal()}`, { every: 1, ...(document.querySelector('[data-weigh]') ? {} : { last: isoLocal() }) }));
+      const noPush = typeof Notification === 'undefined' || Notification.permission !== 'granted';
+      toast(!callNudge.all?.weighin ? 'Morning reminder off' : noPush ? '🔔 Reminder on — turn on notifications in Me › 🔔 Notifications to get it' : '🔔 A calm reminder at 7 each morning, until you weigh in');
+      return healthView();
+    });
     case 'healthshare': return openSheet(`<div class="row between"><h2>💪 Who can see my Health</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>${sharingHtml()}`);
     case 'apptnew': return apptSheet();
     case 'bingonew': return bingoNew();
@@ -4714,6 +4754,7 @@ document.addEventListener('change', async (e) => {
 
 document.addEventListener('submit', (e) => {
   const f = e.target;
+  if (f.dataset.weigh != null) { e.preventDefault(); return saveWeighIn(f); }
   if (['rdManual', 'rdProg', 'rdEdit'].includes(f.id)) { e.preventDefault(); return act(async () => { const R = await RM(); if (!R.onSubmit(f)) await R.onSubmitAsync(f); }); }
   const v = Object.fromEntries(new FormData(f));
   if (f.id === 'chatForm') {

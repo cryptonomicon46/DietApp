@@ -61,6 +61,8 @@ import { chatRoutes, ChatCore, runOp, PAGE as CHAT_PAGE } from './chat.js';
 import { askClaude } from './scout.js';
 import { aiCall, GatewayError } from './aiGateway.js';
 import { readWorkout } from './workoutAi.js';
+import { askPlan } from './planCoach.js';
+import { cleanFacts, cleanTurns } from '../js/planCoach.js';
 import { bookRoutes, bookLookupRoutes, bookCover, forgetReader } from './books.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
@@ -361,6 +363,23 @@ export async function familyApi(req, env, path, ctx = null) {
   // ---- 📚 Read: book lookups (public details) and the family's books ----
   { const r = await bookLookupRoutes({ path, method, env, json, url, req, user, underLimit, db }); if (r) return r; }
   { const r = await bookRoutes({ path, method, body, db, loadFamily, meIn, isCouple, sealed, randomId, json }); if (r) return r; }
+
+  // ---- 📈 Ask about my plan (Claude explains; nothing is changed or kept) ----
+  // The plan's numbers are rebuilt through the allowlist here, whatever the phone sent.
+  if (path === '/ai/plan' && method === 'POST') {
+    if (!aiReady(env)) return json({ error: 'Ask about my plan needs Claude on the connector', off: true }, 501);
+    const question = String(body.question || '').trim();
+    if (question.length < 2) return json({ error: 'ask a question first' }, 400);
+    if (question.length > 500) return json({ error: 'that\'s a long question — try a shorter one' }, 413);
+    const input = { facts: cleanFacts(body.facts), question, turns: cleanTurns(body.turns) };
+    try {
+      return json(await aiCall({ db, purpose: 'diet.coach', input, who: user.uid, underLimit },
+        async (payload) => askPlan(await claude(env), payload, { model: env.PARSE_MODEL || 'claude-sonnet-5-5' })));
+    } catch (e) {
+      if (e instanceof GatewayError) return json({ error: e.message }, e.status);
+      return json({ error: "Claude couldn't answer just now — try again in a moment" }, 502);
+    }
+  }
 
   // ---- 💬📷 Read a workout with Claude ("Describe it" when the phone couldn't, "From a photo") ----
   // Through the AI gateway: only the words or the one image and the weight unit go out; nothing is

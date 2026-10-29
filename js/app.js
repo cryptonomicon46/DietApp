@@ -36,6 +36,8 @@ import { makeZip } from './zip.js';
 import { drawPoster, planCsvRows, drawReportPoster } from './poster.js';
 import { RANGES, PHASE_NAMES, buildReport, reportText, reportCsvRows, weeklyRows, rangeTitle, combosText, combosCsvRows } from './share.js';
 import { programReview } from './review.js';
+import { planProgress, STATUS } from './planProgress.js';
+import { planFacts, factsText } from './planCoach.js';
 
 // ---------- storage ----------
 // Each person's data is kept separately (see storage.js); `store` reads/writes the open profile.
@@ -143,6 +145,84 @@ function plannedDeficitFor(base, burned, t) {
   if (base.lbPerWeek === 0) return 0;
   return Math.max(base.tdee - base.kcal, burned - t.kcal);
 }
+
+// 📈 Above Meals: where you are in the plan and whether recent weigh-ins say it's working
+// (js/planProgress.js). An estimate, worded as one; it never changes targets — the weekly
+// check-in does that, and only when you approve.
+function renderPlanProgress() {
+  const el = $('#planProgress');
+  if (!el) return;
+  if (!state.profile) { el.innerHTML = ''; return; }
+  const r = planProgress({ profile: state.profile, weights: state.weights, days: state.days, today: isoDate(), planned: baseTargets().lbPerWeek });
+  const s = STATUS[r.status];
+  const goal = r.toGo != null && r.goalLb && (r.phase === 'cut' || r.phase === 'gain') && Math.abs(r.toGo) >= 0.1 ? ` · ${Math.abs(r.toGo).toFixed(1)} lb to ${r.goalLb}` : '';
+  el.innerHTML = `<section class="card plan-prog" aria-label="Plan progress">
+    <div class="row between" style="margin-top:0"><span class="eyebrow">${esc(r.phaseLabel)}${r.week ? ` · week ${r.week} of ${r.weeks}` : ''}</span><b class="pp-status ${r.status}">${s.icon} ${s.label}</b></div>
+    <p class="small">${r.daysLeft != null ? `${r.done ? 'This phase is finished' : `${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'} left`}` : 'Plan started'}${goal}</p>
+    ${r.estimate ? `<p class="small">${esc(r.estimate.text)}</p>` : ''}
+    <p class="small"><b>Next:</b> ${esc(r.next)}</p>
+    <details class="pp-why"><summary class="small">Why ${s.label.toLowerCase()}?</summary><ul class="small muted">${r.why.map((w) => `<li>${esc(w)}</li>`).join('')}</ul><p class="tiny muted">Body weight swings day to day with water, salt and food, so this uses the trend over the last few weeks. It's an estimate, and it never changes your targets — the weekly check-in suggests changes and you approve them.</p></details>
+    ${famLinked() && !sync.readOnly() ? `<div class="pp-ask">${coachHtml()}</div>` : ''}
+  </section>`;
+}
+// 💬 Ask about my plan (signed in, your own plan): Claude explains and suggests; it can't change
+// anything. Only your plan's numbers (js/planCoach.js) and your question are sent, and only after
+// you've seen that once. A suggested change to calories or macros opens the weekly check-in, where
+// nothing changes until you approve it. The chat lives only in this screen's memory.
+const coach = { open: false, turns: [], busy: false, error: '', draft: '' };
+const COACH_ASKS = ['Am I on track?', 'Why is my weight not moving?', 'What should I focus on this week?'];
+function coachFactsNow() {
+  const t = targets();
+  const dates = [...state.history.map((w) => String(w.start || w.date || '').slice(0, 10)), ...state.activities.map((a) => a.date), ...(store.get('lift', {}).sessions || []).map((x) => x.date)];
+  return planFacts({ profile: state.profile, weights: state.weights, days: state.days, today: isoDate(), targets: t, planned: baseTargets().lbPerWeek, trainingDates: dates });
+}
+function coachHtml() {
+  if (!coach.open) return '<button type="button" class="ghost small" data-coach="open">💬 Ask about my plan</button>';
+  if (!global.get('coachOk', false)) {
+    return `<p class="small"><b>Sends your plan numbers and your question to Claude.</b> Claude can explain and suggest; it can't change your plan.</p>
+      <details class="pp-sent"><summary class="small">What's sent</summary><ul class="tiny muted">${factsText(coachFactsNow()).map((x) => `<li>${esc(x)}</li>`).join('')}</ul><p class="tiny muted">Never your name, meals, notes, weights, anyone else's data or anything else in the app. Not kept by us; Anthropic doesn't train on it and deletes it after a short safety check period.</p></details>
+      <div class="row"><button type="button" class="small" data-coach="ok">OK</button><button type="button" class="ghost small" data-coach="close">Not now</button></div>`;
+  }
+  return `<div class="pp-chat" role="log" aria-live="polite" aria-label="Ask about my plan">${coach.turns.map((x) => `<p class="pp-q small"><b>You:</b> ${esc(x.q)}</p>${x.a ? `<p class="pp-a small">${esc(x.a)}</p>${x.checkin ? '<button type="button" class="ghost small" data-opencheckin>Review it in your weekly check-in ›</button>' : ''}` : ''}`).join('')}
+      ${coach.busy ? '<p class="small muted">Claude is thinking…</p>' : ''}${coach.error ? `<p class="small" role="alert">${esc(coach.error)}</p>` : ''}</div>
+    ${coach.turns.length ? '' : `<div class="row wrap pp-chips">${COACH_ASKS.map((q) => `<button type="button" class="ghost small" data-coachq="${esc(q)}">${esc(q)}</button>`).join('')}</div>`}
+    <form class="row pp-form" data-coachform><label class="grow"><span class="visually-hidden">Your question</span><input name="q" maxlength="500" autocomplete="off" placeholder="Ask about your plan" value="${esc(coach.draft)}" ${coach.busy ? 'disabled' : ''}></label><button ${coach.busy ? 'disabled' : ''}>Ask</button></form>
+    <p class="tiny muted">Sends your plan numbers and your question to Claude. It can explain and suggest, never change your plan. <button type="button" class="linkish tiny" data-coach="close">Close</button></p>`;
+}
+const redrawCoach = () => { const el = $('#planProgress .pp-ask'); if (el) el.innerHTML = coachHtml(); };
+async function askCoach(q) {
+  q = String(q || '').trim();
+  if (!q || coach.busy) return;
+  if (q.length > 500) { coach.error = "That's a long question — try a shorter one"; return redrawCoach(); }
+  coach.busy = true; coach.error = ''; coach.draft = '';
+  const turn = { q, a: '' };
+  const earlier = coach.turns.filter((x) => x.a).map(({ q: tq, a }) => ({ q: tq, a }));
+  coach.turns.push(turn); redrawCoach();
+  try {
+    const r = await account.askPlan(q, coachFactsNow(), earlier);
+    if (r.ok) { turn.a = r.answer; turn.checkin = !!r.checkin; }
+    else { coach.turns.pop(); coach.draft = q; coach.error = r.status === 501 ? "Ask about my plan isn't set up on this connector yet." : r.error || "Claude couldn't answer just now — try again in a moment"; }
+  } catch { coach.turns.pop(); coach.draft = q; coach.error = "You seem to be offline — try again when you're connected"; }
+  coach.busy = false; redrawCoach();
+  $('#planProgress .pp-form input')?.focus();
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#planProgress [data-coach], #planProgress [data-coachq]');
+  if (!b) return;
+  if (b.dataset.coachq) { if (!coach.open) return; return askCoach(b.dataset.coachq); }
+  const a = b.dataset.coach;
+  if (a === 'open') coach.open = true;
+  if (a === 'close') coach.open = false;
+  if (a === 'ok') global.set('coachOk', true);
+  redrawCoach();
+  if (a === 'ok' || a === 'open') $('#planProgress .pp-form input')?.focus();
+});
+document.addEventListener('submit', (e) => {
+  if (!e.target.matches('#planProgress [data-coachform]')) return;
+  e.preventDefault();
+  askCoach(e.target.q.value);
+});
+document.addEventListener('input', (e) => { if (e.target.closest('#planProgress [data-coachform]')) coach.draft = e.target.value; });
 
 // Weigh-ins since the current phase started (trends shouldn't mix a cut with a gain).
 function phaseWeights() {
@@ -611,6 +691,7 @@ function renderToday() {
       : phase === 'gain' ? `Lean gain · +${-rate} lb/wk${proj.reached ? '' : ` · ${state.profile.goalLb} lb by ${by}`}`
         : proj.reached ? 'Goal reached · maintenance' : `−${rate} lb/wk · ${state.profile.goalLb} lb by ${by}`;
   renderProgram();
+  renderPlanProgress();
   $('#todayMacros').innerHTML = [
     ['p', 'Protein', t.p], ['f', 'Fat', t.f], ['c', 'Carbs', t.c],
   ].map(([k, label, g]) => `<div class="macro ${k}"><b>${g} g</b><span>${label}</span></div>`).join('');
@@ -2027,7 +2108,7 @@ function renderTraining(t) {
   const showMiles = () => { const k = $('#planSport').value; $('#planMiles').hidden = !(k === 'running' || k === 'cycling'); };
   $('#training').querySelectorAll('[data-actpick]').forEach((b) => b.onclick = () => {
     const k = b.dataset.actpick;
-    if (k === 'lift') { $('#liftSession')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    if (k === 'lift') { if (famLinked()) { location.href = 'family/#fitness'; return; } $('#liftSession')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     if (k === 'climb') { openClimb(); return; }
     if (k === 'other') { $('#planSport').value = ''; $('#planSport').focus(); showMiles(); return; }
     $('#planSport').value = k;
@@ -2249,6 +2330,7 @@ function renderWeighStatus() {
   $('#weighStatus').innerHTML = t
     ? `✓ <b>${t.weight.toFixed(1)} lb</b> today${prev ? ` · ${t.weight <= prev.weight ? '−' : '+'}${Math.abs(t.weight - prev.weight).toFixed(1)} since ${fmtShort(prev.date)}` : ''}`
     : `Not logged yet today${prev ? ` · last ${prev.weight.toFixed(1)} lb on ${fmtShort(prev.date)}` : ''}`;
+  if (t) $('#weighStatus').innerHTML = `✓ Logged · ${$('#weighStatus').innerHTML.slice(2)}`;
   // Once today's weight is in, the card folds to one line; Change opens it again.
   if (t) $('#weighStatus').innerHTML += ' <button type="button" class="linkish small" data-weighedit>Change</button>';
   // A word of encouragement for checking in (inline, never a pop-up).
@@ -2737,28 +2819,50 @@ form.addEventListener('submit', () => {
 });
 
 // ---------- tabs & boot ----------
-// Five tabs: Home, Dogs, Food, Train, Us. Food has four pages (Meals, Weight, Groceries,
-// Scan) switched from the bar at its top; the Food tab stays lit on all four.
-const FOOD_PAGES = [['today', '🍽 Meals'], ['weight', '⚖︎ Weight'], ['groceries', '🛒 Groceries'], ['scan', '▦ Scan']];
+// Five tabs: Home, Dogs, Food, Train, Us. Food has three pages (Meals, Weight, Groceries) switched
+// from the bar at its top; Scan opens from Groceries (and #scan still opens it). The Food tab stays
+// lit on all of them.
+const FOOD_PAGES = [['today', '🍽 Meals'], ['weight', '⚖︎ Weight'], ['groceries', '🛒 Groceries']];
+const FOOD_TABS = ['today', 'weight', 'groceries', 'scan'];
+// Signed in: the header says where you are under 💪 Health ("‹ Health · Meals") and goes back there.
+const PAGE_NAMES = { today: 'Meals', weight: 'Weight', groceries: 'Groceries', scan: 'Scan', lift: 'Activity', privacy: 'Privacy', brief: 'Dogs' };
 let currentTab = 'home';
 // Signed in to OurPawmily: the trackers are just 🍽 Food and 🏋︎ Train. Your day, the calendar,
 // the dogs, notes and plans live in OurPawmily; 🔐 Privacy (and Recover) is the header button,
 // and a link from a pet's page still opens 🐕 Dogs for food, meds, vaccines and the vet.
 const famLinked = () => !!account.get();
 document.body.classList.toggle('famlinked', famLinked());
+// Signed in, workouts live in OurPawmily's 🏋️ Fitness (one workout model); this tab keeps the
+// day's activity and training calories, so it's called Activity. The older lifting logger stays
+// for the trackers on their own.
+function famHeader(name) {
+  const pill = $('#toFamily');
+  if (!pill) return;
+  const on = famLinked();
+  pill.href = on ? 'family/#health' : 'family/';
+  pill.querySelector('b').textContent = on ? 'Health' : 'OurPawmily';
+  pill.querySelector('small').textContent = on ? PAGE_NAMES[name] || 'Trackers' : 'Trackers';
+  pill.title = on ? 'Back to 💪 Health' : 'Back to OurPawmily: feed, dogs, calendar, Watch';
+  const tab = document.querySelector('.tabs [data-tab=lift]');
+  if (tab?.lastChild?.nodeType === 3) tab.lastChild.textContent = on ? 'Activity' : 'Train';
+  $('#liftFamily').hidden = !on;
+  for (const id of ['#liftPlan', '#liftSession', '#liftDone']) $(id).hidden = on;
+  document.querySelectorAll('[data-fold=liftHistory], [data-fold=library]').forEach((d) => { d.hidden = on; });
+}
 function showTab(name) {
   if (famLinked() && ['home', 'calendar', 'notes'].includes(name)) name = 'today';
   currentTab = name;
   document.body.dataset.tab = name; // Dogs hides the calorie bar
-  const lit = FOOD_PAGES.some(([k]) => k === name) ? 'today' : name;
+  const lit = FOOD_TABS.includes(name) ? 'today' : name;
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === lit));
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${name}`));
   document.querySelectorAll('[data-subnav]').forEach((el) => {
-    el.innerHTML = FOOD_PAGES.map(([k, label]) => `<button type="button" data-sub="${k}" class="${k === name ? 'on' : ''}">${label}</button>`).join('');
+    el.innerHTML = FOOD_PAGES.map(([k, label]) => `<button type="button" data-sub="${k}" class="${k === name || (k === 'groceries' && name === 'scan') ? 'on' : ''}">${label}</button>`).join('');
   });
+  famHeader(name);
   if (name !== 'scan') stopScan();
   if (name === 'home') { renderHome(); renderBrief(); }
-  if (name === 'lift') { renderLift(); if (state.profile) renderTraining(targets()); renderBrief(); renderClimb(); renderProgress(); }
+  if (name === 'lift') { if (!famLinked()) renderLift(); if (state.profile) renderTraining(targets()); renderBrief(); renderClimb(); renderProgress(); }
   if (name === 'brief') renderBrief();
   if (name === 'calendar') { renderRhythm(); renderCal(); }
   if (name === 'notes') {

@@ -19,7 +19,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawmily">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=295">
+  <link rel="stylesheet" href="styles.css?v=298">
 </head>
 <body>
   <header class="top">
@@ -55,6 +55,7 @@
     <!-- FOOD: meals (+ Weight, Groceries, Scan pages via the bar at the top) -->
     <section id="tab-today" class="tab">
       <div class="seg subnav" data-subnav></div>
+      <div id="planProgress"></div>
       <form id="weighForm" class="card weigh-card">
         <div class="row between" style="margin-top:0">
           <div><div class="eyebrow">Morning weigh-in</div><div class="small" id="weighStatus"></div></div>
@@ -144,6 +145,7 @@
           <h2>This week's groceries</h2>
           <button id="clearChecks" class="ghost small">Uncheck all</button>
         </div>
+        <button type="button" class="ghost wide scan-in" data-goto="scan">▦ Scan a barcode</button>
         <p class="muted small">Quantities cover the next 7 days of your plan. Store picks are suggestions — brands and sizes vary by location.</p>
         <div id="groceryList"></div>
       </div>
@@ -151,6 +153,7 @@
 
     <!-- LIFT -->
     <section id="tab-lift" class="tab">
+      <a class="card fam-fitness" id="liftFamily" href="family/#fitness" hidden><span class="grow"><b>🏋️ Workouts are in Fitness</b><small class="muted">Today's Workout, Train, your lifting program and history</small></span><span class="go">Open Fitness ›</span></a>
       <div id="progressCard"></div>
       <div id="training"></div>
       <div id="climbCard"></div>
@@ -174,6 +177,7 @@
     <section id="tab-scan" class="tab">
       <div class="seg subnav" data-subnav></div>
       <div class="card">
+        <button type="button" class="linkish small" data-goto="groceries">‹ Groceries</button>
         <h2>Scan a food</h2>
         <p class="muted small">Point your camera at the barcode on anything from Sprouts, Safeway or Costco. Nutrition comes from Open Food Facts.</p>
         <div id="reader"></div>
@@ -399,58 +403,61 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/account.js": "./js/account.js?v=295",
-    "./js/accountBoot.js": "./js/accountBoot.js?v=295",
-    "./js/activity.js": "./js/activity.js?v=295",
-    "./js/adopt.js": "./js/adopt.js?v=295",
-    "./js/analytics.js": "./js/analytics.js?v=295",
-    "./js/app.js": "./js/app.js?v=295",
-    "./js/bodycomp.js": "./js/bodycomp.js?v=295",
-    "./js/books.js": "./js/books.js?v=295",
-    "./js/brief.js": "./js/brief.js?v=295",
-    "./js/briefTab.js": "./js/briefTab.js?v=295",
-    "./js/calTab.js": "./js/calTab.js?v=295",
-    "./js/calendar.js": "./js/calendar.js?v=295",
-    "./js/cheer.js": "./js/cheer.js?v=295",
-    "./js/climb.js": "./js/climb.js?v=295",
-    "./js/commands.js": "./js/commands.js?v=295",
-    "./js/devices.js": "./js/devices.js?v=295",
-    "./js/dexa.js": "./js/dexa.js?v=295",
-    "./js/dietDays.js": "./js/dietDays.js?v=295",
-    "./js/dogcal.js": "./js/dogcal.js?v=295",
-    "./js/dogs.js": "./js/dogs.js?v=295",
-    "./js/dress.js": "./js/dress.js?v=295",
-    "./js/dressTab.js": "./js/dressTab.js?v=295",
-    "./js/foods.js": "./js/foods.js?v=295",
-    "./js/healthParts.js": "./js/healthParts.js?v=295",
-    "./js/household.js": "./js/household.js?v=295",
-    "./js/lift.js": "./js/lift.js?v=295",
-    "./js/lifting.js": "./js/lifting.js?v=295",
-    "./js/marketMatch.js": "./js/marketMatch.js?v=295",
-    "./js/nextup.js": "./js/nextup.js?v=295",
-    "./js/notes.js": "./js/notes.js?v=295",
-    "./js/photos.js": "./js/photos.js?v=295",
-    "./js/plan.js": "./js/plan.js?v=295",
-    "./js/plans.js": "./js/plans.js?v=295",
-    "./js/poster.js": "./js/poster.js?v=295",
-    "./js/progress.js": "./js/progress.js?v=295",
-    "./js/recover.js": "./js/recover.js?v=295",
-    "./js/research.js": "./js/research.js?v=295",
-    "./js/review.js": "./js/review.js?v=295",
-    "./js/rewards.js": "./js/rewards.js?v=295",
-    "./js/rhythm.js": "./js/rhythm.js?v=295",
-    "./js/server.js": "./js/server.js?v=295",
-    "./js/share.js": "./js/share.js?v=295",
-    "./js/shows.js": "./js/shows.js?v=295",
-    "./js/showsCore.js": "./js/showsCore.js?v=295",
-    "./js/storage.js": "./js/storage.js?v=295",
-    "./js/sync.js": "./js/sync.js?v=295",
-    "./js/workout.js": "./js/workout.js?v=295",
-    "./js/workoutText.js": "./js/workoutText.js?v=295",
-    "./js/zip.js": "./js/zip.js?v=295"
+    "./js/account.js": "./js/account.js?v=298",
+    "./js/accountBoot.js": "./js/accountBoot.js?v=298",
+    "./js/activity.js": "./js/activity.js?v=298",
+    "./js/adopt.js": "./js/adopt.js?v=298",
+    "./js/analytics.js": "./js/analytics.js?v=298",
+    "./js/app.js": "./js/app.js?v=298",
+    "./js/bodycomp.js": "./js/bodycomp.js?v=298",
+    "./js/books.js": "./js/books.js?v=298",
+    "./js/brief.js": "./js/brief.js?v=298",
+    "./js/briefTab.js": "./js/briefTab.js?v=298",
+    "./js/calTab.js": "./js/calTab.js?v=298",
+    "./js/calendar.js": "./js/calendar.js?v=298",
+    "./js/cheer.js": "./js/cheer.js?v=298",
+    "./js/climb.js": "./js/climb.js?v=298",
+    "./js/commands.js": "./js/commands.js?v=298",
+    "./js/devices.js": "./js/devices.js?v=298",
+    "./js/dexa.js": "./js/dexa.js?v=298",
+    "./js/dietDays.js": "./js/dietDays.js?v=298",
+    "./js/dogcal.js": "./js/dogcal.js?v=298",
+    "./js/dogs.js": "./js/dogs.js?v=298",
+    "./js/dress.js": "./js/dress.js?v=298",
+    "./js/dressTab.js": "./js/dressTab.js?v=298",
+    "./js/foods.js": "./js/foods.js?v=298",
+    "./js/healthParts.js": "./js/healthParts.js?v=298",
+    "./js/household.js": "./js/household.js?v=298",
+    "./js/lift.js": "./js/lift.js?v=298",
+    "./js/lifting.js": "./js/lifting.js?v=298",
+    "./js/marketMatch.js": "./js/marketMatch.js?v=298",
+    "./js/nextup.js": "./js/nextup.js?v=298",
+    "./js/notes.js": "./js/notes.js?v=298",
+    "./js/photos.js": "./js/photos.js?v=298",
+    "./js/plan.js": "./js/plan.js?v=298",
+    "./js/planCoach.js": "./js/planCoach.js?v=298",
+    "./js/planProgress.js": "./js/planProgress.js?v=298",
+    "./js/plans.js": "./js/plans.js?v=298",
+    "./js/poster.js": "./js/poster.js?v=298",
+    "./js/programWorkout.js": "./js/programWorkout.js?v=298",
+    "./js/progress.js": "./js/progress.js?v=298",
+    "./js/recover.js": "./js/recover.js?v=298",
+    "./js/research.js": "./js/research.js?v=298",
+    "./js/review.js": "./js/review.js?v=298",
+    "./js/rewards.js": "./js/rewards.js?v=298",
+    "./js/rhythm.js": "./js/rhythm.js?v=298",
+    "./js/server.js": "./js/server.js?v=298",
+    "./js/share.js": "./js/share.js?v=298",
+    "./js/shows.js": "./js/shows.js?v=298",
+    "./js/showsCore.js": "./js/showsCore.js?v=298",
+    "./js/storage.js": "./js/storage.js?v=298",
+    "./js/sync.js": "./js/sync.js?v=298",
+    "./js/workout.js": "./js/workout.js?v=298",
+    "./js/workoutText.js": "./js/workoutText.js?v=298",
+    "./js/zip.js": "./js/zip.js?v=298"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=295"></script>
+  <script type="module" src="js/app.js?v=298"></script>
 </body>
 </html>

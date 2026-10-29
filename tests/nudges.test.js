@@ -67,3 +67,17 @@ test("Next up's top pick: saved for a nudge 30 minutes before, then sent once", 
   await nudgeRoutes({ path: '/account/nextup', method: 'PUT', body: { at, title: '🏃 Run in 30 min?', body: '3 days since your last run' }, db, user: { uid: 'u' }, json, today: '2026-10-27' });
   assert.deepEqual(m.get('nextup:u'), { at, title: '🏃 Run in 30 min?', body: '3 days since your last run', sent: false });
 });
+
+test('morning weigh-in: opt-in, a calm 7 AM note with nothing private, ticked off by a weigh-in', () => {
+  const today = '2026-10-29';
+  assert.equal(nudgesDue({}, { today, from: 0, to: 9e5, hour: 7 }).length, 0, 'off unless turned on');
+  const [d] = nudgesDue({ weighin: { every: 1, last: '2026-10-28' } }, { today, from: 0, to: 9e5, hour: 7 });
+  assert.deepEqual(d.ids, ['weighin']);
+  assert.equal(d.msg.title, '⚖️ Morning weigh-in');
+  assert.equal(d.msg.url, 'family/#health');
+  assert.doesNotMatch(d.msg.body, /\d/, 'no numbers in the notification');
+  assert.equal(nudgesDue({ weighin: { every: 1, last: today } }, { today, from: 0, to: 9e5, hour: 7 }).length, 0, 'already weighed in today');
+  const both = nudgesDue({ weighin: { every: 1, last: '2026-10-28' }, run: { every: 2, last: '2026-10-25' } }, { today, from: 0, to: 9e5, hour: 7 });
+  assert.equal(both.length, 1);
+  assert.deepEqual(both[0].ids, ['weighin', 'run']);
+});

@@ -1072,6 +1072,20 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .hl-dots i.on { background: var(--brand); border-color: var(--brand); }
 .hl-dots i.off { background: color-mix(in srgb, var(--muted) 35%, transparent); border-color: transparent; }
 .hl-acts { gap: 8px; }
+.hl-nudge { margin: 0 4px 12px; padding: 10px 12px; border-radius: 14px; background: var(--brand-soft); font-size: .92rem; line-height: 1.4; }
+.hl-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hl-go, .hl-plan { color: var(--brand); font-weight: 700; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
+.hl-weigh { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; align-items: center; }
+.hl-weigh label { grid-column: 1 / -1; }
+.hl-weigh-in { display: flex; align-items: center; gap: 6px; }
+.hl-weigh-in input { width: 100%; min-height: 48px; font-size: 1.1rem; }
+.hl-weigh button { min-height: 48px; min-width: 88px; }
+.hl-plan { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; color: var(--ink); font-weight: 500; font-size: .85rem; }
+.hl-status { color: var(--brand); white-space: nowrap; }
+.hl-status.behind { color: var(--warn, #b45309); }
+.hl-status.too-early { color: var(--muted); }
+.hl-sparkl { display: block; color: var(--brand); }
+.hl-card .btn.wide { min-height: 48px; display: grid; place-items: center; }
 .hl-acts .btn { min-height: 44px; display: inline-grid; place-items: center; }
 /* Sharing: a row per person, Diet and Fitness switches */
 .share-grid { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px 14px; margin: 10px 0; }
@@ -1083,14 +1097,23 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .share-sw input:focus-visible + .switch { outline: 2px solid var(--brand); outline-offset: 2px; }
 
 /* 🏋️ Fitness: Today's Workout, three ways to add one, the editor and round-by-round logging */
-.fx-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 4px 4px 10px; }
-.fx-head h2 { margin: 0; }
+.fx-head { display: grid; gap: 0; margin: 0 4px 10px; }
+.fx-head h2 { margin: 0; overflow-wrap: anywhere; }
+.fx-back { justify-self: start; min-height: 44px; padding: 8px 8px 4px 0; font-size: .9rem; }
 .fx-today { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--brand-soft); color: var(--ink); border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line)); border-radius: 14px; padding: 10px 12px; font-weight: 400; min-height: 52px; }
 .fx-today b, .fx-today small { display: block; }
 .fx-today .go { color: var(--brand); font-weight: 700; white-space: nowrap; }
-.fx-paths { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin-top: 8px; }
-.fx-paths button { display: grid; justify-items: center; gap: 4px; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; padding: 14px 6px; font-weight: 700; font-size: .85rem; min-height: 72px; }
-.fx-paths button b { font-size: 1.4rem; }
+.fx-paths { display: grid; gap: 8px; margin-top: 8px; }
+.fx-paths button { display: grid; grid-template-columns: 34px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; padding: 10px 12px; font-weight: 700; font-size: .95rem; min-height: 60px; }
+.fx-paths button b { grid-row: 1 / 3; font-size: 1.4rem; text-align: center; }
+.fx-paths button small { font-weight: 400; font-size: .78rem; color: var(--muted); line-height: 1.3; }
+.fx-plan { display: grid; gap: 2px; padding: 8px 0; border-top: 1px solid var(--line); }
+.fx-plan p { margin: 0; }
+.fx-round.next { box-shadow: inset 3px 0 0 var(--brand); margin-left: -12px; padding-left: 12px; }
+.fx-side { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; }
+.fx-side input { width: 20px; height: 20px; }
+.fx-rename { gap: 6px; margin: 10px 0; }
+.fx-rename input { width: 100%; }
 .fx-hist { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; color: var(--ink); font-weight: 400; }
 .fx-hist b, .fx-hist small { display: block; }
 .fx-title { display: grid; gap: 4px; margin: 0 4px 10px; }
@@ -1122,7 +1145,8 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .fx-progress i { display: block; height: 100%; background: var(--brand); }
 .fx-round { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid var(--line); }
 .fx-logrow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; }
-.fx-logrow .grow { min-width: 0; overflow-wrap: anywhere; }
+.fx-logrow .grow { min-width: 0; overflow-wrap: break-word; hyphens: auto; }
+@media (max-width: 359px) { .fx-logrow input { width: 48px; } .fx-check { min-width: 44px; min-height: 44px; } .fx-logrow { gap: 4px; } }
 .fx-in { display: flex; gap: 4px; }
 .fx-logrow b, .fx-logrow small { display: block; }
 .fx-logrow input { width: 56px; padding: 8px 4px; text-align: center; min-height: 44px; }

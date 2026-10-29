@@ -2,17 +2,20 @@
 // photo is always this shape, so Today's Workout, logging and history only ever handle one thing.
 //
 //   Workout { v: 1, id, title, date, status: 'planned' | 'active' | 'done',
-//             source: 'manual' | 'text' | 'photo' | 'repeat' | 'lift' | 'device',
+//             source: 'manual' | 'text' | 'photo' | 'repeat' | 'lift' | 'device' | 'program',
 //             notes, blocks: [Block], activity?: { kind, minutes, distance, distUnit, kcal },
-//             startedAt?, doneAt? }
+//             program?: { block, day, week } (made from the lifting program), startedAt?, doneAt? }
 //   Block   { id, kind: 'straight' | 'superset' | 'circuit', rounds, rest?, note?, items: [Item],
 //             uncertain?: ['rounds' | 'kind'] }
-//   Item    { id, name, note?, sets: [Set] (one per round), uncertain?: ['name'] }
+//   Item    { id, name, note?, perSide?, ref? (the program's exercise id), sets: [Set] (one per round),
+//             uncertain?: ['name'] }
 //   Set     { reps, weight, unit: 'lb' | 'kg', bw, time, distance, distUnit, done, got?, uncertain? }
 //
 // A block is done in rounds: each round does every item once, in order. Straight sets are a block
 // with one item (rounds = sets); a superset alternates two; a circuit goes through three or more.
 // Every set holds its own target, so 12 / 12 / 11 / 11 reps or 40 / 45 / 50 lb are just four sets.
+// The plan is each set's target; what you actually did goes in its `got` when you log it, so a
+// finished workout keeps both. perSide: the reps are for each side (lunges, single-arm rows).
 // Nothing here guesses: a value nobody gave stays null, and a parser marks what it isn't sure of.
 export const KINDS = { straight: 'Straight sets', superset: 'Superset', circuit: 'Circuit' };
 const UNITS = ['lb', 'kg'], DIST = ['mi', 'km', 'm'];
@@ -41,6 +44,8 @@ export function makeItem(o = {}, rounds = null) {
   if (rounds) sets = sets.slice(0, rounds);
   const item = { id: text(o.id, 12) || newId(), name: text(o.name), sets };
   if (o.note) item.note = text(o.note, 200);
+  if (o.perSide) item.perSide = true;
+  if (o.ref) item.ref = text(o.ref, 40);
   const u = okFields(o.uncertain, ['name']);
   if (!item.name) u.push('name');
   if (u.length) item.uncertain = [...new Set(u)];
@@ -65,10 +70,12 @@ export function normalize(raw = {}) {
   const w = {
     v: 1, id: text(raw.id, 16) || newId(), title: text(raw.title, 80) || 'Workout', date: /^\d{4}-\d{2}-\d{2}$/.test(raw.date || '') ? raw.date : '',
     status: ['planned', 'active', 'done'].includes(raw.status) ? raw.status : 'planned',
-    source: ['manual', 'text', 'photo', 'repeat', 'lift', 'device'].includes(raw.source) ? raw.source : 'manual',
+    source: ['manual', 'text', 'photo', 'repeat', 'lift', 'device', 'program'].includes(raw.source) ? raw.source : 'manual',
     notes: text(raw.notes, 500), blocks: (Array.isArray(raw.blocks) ? raw.blocks : []).slice(0, MAX.blocks).map(makeBlock),
   };
   if (raw.activity && typeof raw.activity === 'object') w.activity = { kind: text(raw.activity.kind, 40) || 'Activity', minutes: int(raw.activity.minutes, 24 * 60), distance: num(raw.activity.distance, MAX.distance), distUnit: DIST.includes(raw.activity.distUnit) ? raw.activity.distUnit : 'mi', kcal: int(raw.activity.kcal, 20000) };
+  const pg = raw.program;
+  if (pg && typeof pg === 'object' && /^[A-Z]$/.test(pg.day || '')) w.program = { block: Math.max(1, int(pg.block, 999) || 1), day: pg.day, week: Math.min(6, Math.max(1, int(pg.week, 6) || 1)) };
   for (const k of ['startedAt', 'doneAt']) if (Number.isFinite(raw[k])) w[k] = raw[k];
   return w;
 }
@@ -153,6 +160,68 @@ export function summary(w) {
   }
   return { exercises: names.size, sets, done, volume: Math.round(volume), minutes: w.activity?.minutes ?? (w.startedAt && w.doneAt ? Math.round((w.doneAt - w.startedAt) / 60000) : null) };
 }
+// Where you are: exercises fully done, and the next set to do (null when everything is ticked).
+export function progress(w) {
+  let exercises = 0, exDone = 0, next = null;
+  w.blocks.forEach((b, bi) => {
+    b.items.forEach((it) => { exercises++; if (it.sets.length && it.sets.every((s) => s.done)) exDone++; });
+    for (let r = 0; r < b.rounds && !next; r++) b.items.forEach((it, ii) => { if (!next && it.sets[r] && !it.sets[r].done) next = { bi, ii, si: r }; });
+  });
+  return { exercises, exDone, next };
+}
+// About how long it takes: ~40 s a set (or its time), plus rest — the block's, else 90 s between
+// straight sets and a short change-over inside a superset or circuit with a minute between rounds.
+export function estMinutes(w) {
+  let sec = 0;
+  for (const b of w.blocks) for (let r = 0; r < b.rounds; r++) b.items.forEach((it, ii) => {
+    const s = it.sets[r] || {};
+    sec += (s.time ?? 40) * (it.perSide ? 2 : 1);
+    sec += b.items.length > 1 ? (ii === b.items.length - 1 ? b.rest ?? 60 : 15) : b.rest ?? 90;
+  });
+  return sec ? Math.max(5, Math.round(sec / 300) * 5) : null;
+}
+
+// ---------- names ----------
+// Words that place an exercise: upper body, lower body, core, or cardio-ish conditioning.
+const AREA = [
+  ['core', /plank|crunch|sit.?up|ab |abs\b|\bab\b|rollout|hollow|v.?up|russian twist|dead ?bug|leg raise|knee raise|pallof|bird.?dog|oblique/i],
+  ['lower', /squat|lunge|deadlift|\brdl\b|leg|calf|calves|glute|hip thrust|step.?up|hamstring|trap bar|good morning|box jump|wall ?sit|split/i],
+  ['upper', /press|bench|push.?up|pull.?up|chin.?up|\brows?\b|curl|tricep|bicep|dip|fly|flye|raise|pulldown|pull.?down|shrug|face pull|extension|skull|chest|shoulder|lat\b|arm/i],
+  ['cond', /burpee|jump|jack|rope|row(ing)? machine|erg|bike|run|sprint|mountain climber|thruster|swing|wall ball|clean|snatch|sled|carry|battle/i],
+];
+const areaOf = (name) => AREA.find(([, re]) => re.test(name))?.[0] || null;
+// "Upper body circuit · 4 rounds", "Lower body · 5 exercises", "Full body superset" — a suggestion
+// you can change; it's only used when you don't type a name.
+export function suggestName(w) {
+  const items = w.blocks.flatMap((b) => b.items).filter((it) => it.name);
+  if (!items.length) return w.activity?.kind || 'Workout';
+  if (items.length === 1) return items[0].name.replace(/^./, (c) => c.toUpperCase());
+  const n = { upper: 0, lower: 0, core: 0, cond: 0 };
+  for (const it of items) { const a = areaOf(it.name); if (a) n[a]++; }
+  const known = n.upper + n.lower + n.core + n.cond;
+  const top = Object.entries(n).sort((a, b) => b[1] - a[1])[0];
+  const area = !known ? 'Strength'
+    : n.upper && n.lower ? 'Full body'
+      : top[0] === 'upper' ? 'Upper body' : top[0] === 'lower' ? 'Lower body' : top[0] === 'core' ? (n.upper || n.lower ? 'Full body' : 'Core') : 'Conditioning';
+  const groups = w.blocks.filter((b) => b.items.length > 1);
+  if (groups.length === 1 && w.blocks.length === 1) {
+    const b = groups[0];
+    return `${area} ${b.kind === 'circuit' ? 'circuit' : 'superset'} · ${b.rounds} round${b.rounds === 1 ? '' : 's'}`;
+  }
+  if (groups.length && groups.length === w.blocks.length) return `${area} ${groups.every((b) => b.kind === 'circuit') ? 'circuits' : 'supersets'}`;
+  return `${area} · ${items.length} exercise${items.length === 1 ? '' : 's'}`;
+}
+// A title nobody chose yet (the editor's default, a parser's placeholder).
+export const untitled = (t) => !t || /^(workout|lifting|today'?s workout)$/i.test(String(t).trim());
+
+// ---------- what counts as Fitness ----------
+// Fitness is for strength and circuit training. A workout with sets always is; a device workout
+// (an activity with no sets) is only when its sport is lifting- or circuit-style. Everything else
+// (runs, rides, climbing…) is still synced and still counts in Diet calories, just shown on one
+// quiet line instead of filling the history.
+const STRENGTH_SPORT = /weight|strength|lift|power|functional|cross ?fit|circuit|hiit|interval|boot ?camp|kettlebell|calisthenic|body ?building|body ?weight|f45|orange ?theory|barry|training/i;
+export const isStrength = (w) => !!w.blocks?.length || STRENGTH_SPORT.test(w.activity?.kind || w.title || '');
+
 // One line per item: "Overhead press 12/12/11/11 @ 35 lb" — previews, history, sharing.
 export function setText(s) {
   const bits = [];
@@ -164,7 +233,7 @@ export function setText(s) {
 export function itemText(it) {
   const reps = it.sets.map((s) => setText(s.done && s.got ? { ...s, ...s.got } : s)).join(' / ');
   const ws = [...new Set(it.sets.map((s) => (s.bw ? 'bodyweight' : s.weight != null ? `${s.weight} ${s.unit}` : '')).filter(Boolean))];
-  return `${it.name || '?'} ${reps}${ws.length === 1 ? ` @ ${ws[0]}` : ws.length > 1 ? ` @ ${it.sets.map((s) => (s.bw ? 'bw' : s.weight ?? '?')).join(' / ')} ${it.sets[0].unit}` : ''}`;
+  return `${it.name || '?'} ${reps}${it.perSide ? ' each side' : ''}${ws.length === 1 ? ` @ ${ws[0]}` : ws.length > 1 ? ` @ ${it.sets.map((s) => (s.bw ? 'bw' : s.weight ?? '?')).join(' / ')} ${it.sets[0].unit}` : ''}`;
 }
 export function describe(w) {
   return w.blocks.map((b) => `${b.items.length > 1 ? `${b.rounds} rounds (${KINDS[b.kind].toLowerCase()}): ` : ''}${b.items.map(itemText).join(' · ')}`);
