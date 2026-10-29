@@ -17,6 +17,12 @@ Last update: 2026-10-28 — Phases 4–11 authorized (master build authorization
 - **Final full-product review:** done (below). **Phases 4–11 are complete; stopped for review.** Not merged, not deployed.
 - **Phase 4 amendment (📚 Read):** done (below); stopped for review.
 
+### Describe it: Claude first (requested 2026-10-29, branch `v2/describe-claude`)
+- **Change:** the Describe screen's main button is now **✨ Read it with Claude** (sends only the typed words, on tap; the privacy line sits under it), with **Read on this phone instead** as a link. Before, the phone always read first and offered Claude only when it couldn't place something — so the Claude option came and went, which was confusing.
+- **Fallback:** if Claude isn't set up, you're offline, it fails, or finds no workout, the phone reads it and says why ("Claude couldn't read it just now, so your phone did."), with **Review it**. Without Claude on the connector, the screen shows a single **Read it** (phone).
+- Only the button area updates once the app knows whether Claude is available (typed text is never wiped). Daily cap unchanged (40 a day per person).
+- **Browser (390 px, mocked `/ai/workout`):** Claude OK → Review Workout, request body = `text, unit, today` only; Claude 502 → phone result with the note, Review it works; "Read on this phone instead" → Review Workout with no request to Claude. `npm test`: 344 pass.
+
 ### Phase 4 amendment — 📚 Read in Us (authorized 2026-10-28)
 - **What's built:** 📚 Read is the second card on Us, directly under 📺 Watch (on screen at 390 × 844 without scrolling): for each of you, what you're reading/listening to now (two at most, "+N more"), your Want to Read count, **Open Books →**, **＋ Book**. Books view: **Reading** (by person) · **Want to Read** (yours first) · **Finished** (by year, ✋ Dropped folded underneath). Book details sheet: your status (Want to Read · Reading · Finished), 📖 / 🎧 / both, optional progress (% · page · chapter · minutes into an audiobook), ★ when finished, 💬 Discuss, ⋯ (Dropped, who sees it, series/narrator/length, take off my list, delete).
 - **Quick logging:** Us › ＋ Book › type › pick › 📖 Reading / 🎧 Listening — **3 taps plus typing** (measured). Nothing bibliographic to type; *Add it by hand* exists for books the catalogue lacks.

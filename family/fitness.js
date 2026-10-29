@@ -85,46 +85,62 @@ function mainHtml() {
     <h3 class="wl-h">History</h3>
     ${h.length ? h.map((w) => { const s = W.summary(w); return `<button type="button" class="card fx-hist" data-fx="hist:${E(w.id)}"><span class="grow"><b>${E(w.title)}</b><small class="muted">${E(w.date || '')}${w.source === 'device' ? ` · ${w.activity?.minutes ?? '?'} min` : ` · ${s.exercises} exercise${s.exercises === 1 ? '' : 's'} · ${s.done || s.sets} sets`}</small></span><span class="go">›</span></button>`; }).join('') : '<p class="small muted pad">Finished workouts show here.</p>'}`;
 }
-// 💬 Describe it: type it the way you'd text it. Your phone reads it first; only if it can't place
-// something does it offer Claude — and only when you tap, with only the words you typed.
+// 💬 Describe it: type it the way you'd text it. ✨ Read it with Claude is the main way (only the
+// words you typed are sent, and only when you tap); your phone can read it instead, and does
+// whenever Claude isn't set up, you're offline or it can't answer.
+const PRIVACY_LINE = '<p class="tiny muted">Sends only the words above to Claude (Anthropic) to read them — nothing else goes with them. We don\'t keep them; Anthropic doesn\'t train on them and deletes them after a short safety check period.</p>';
+function readButtons() {
+  if (fx.ai === false) return '<button type="button" class="wide" data-fx="read">Read it</button>';
+  return `<button type="button" class="wide" data-fx="readai" ${fx.reading ? 'disabled' : ''}>${fx.reading ? 'Reading… a few seconds' : '✨ Read it with Claude'}</button>
+    <p class="small center"><button type="button" class="linkish small" data-fx="read" ${fx.reading ? 'disabled' : ''}>Read on this phone instead</button></p>${PRIVACY_LINE}`;
+}
 function describeHtml() {
   const d = fx.said || { text: '' };
   const got = d.local ? W.summary(d.local.workout).exercises : 0;
   return `<section class="fx-head"><h2><button type="button" class="linkish" data-fx="main" aria-label="Back to Fitness">‹</button> 💬 Describe it</h2></section>
     <section class="card"><label for="fxSaid" class="small">Your workout, the way you'd text it</label>
       <textarea id="fxSaid" rows="6" maxlength="1500" placeholder="Bench 3x10 @ 135, then pull-ups 3x8\n4 rounds: overhead press 12/12/11/11, row 12/13/14/13">${E(d.text)}</textarea>
-      <button type="button" class="wide" data-fx="read">Read it</button></section>
-    ${d.local ? `<section class="card" role="status"><p class="small">${got ? `Read ${got} exercise${got === 1 ? '' : 's'}.` : 'Couldn\'t read a workout in that yet.'}${d.local.unread.length ? ` Couldn't place: ${d.local.unread.map((x) => `“${E(x)}”`).join(', ')}.` : ''}</p>
-      <div class="row wrap">${got ? '<button type="button" class="grow" data-fx="reviewlocal">Review it</button>' : ''}${fx.ai !== false ? `<button type="button" class="${got ? 'ghost ' : ''}grow" data-fx="readai" ${fx.reading ? 'disabled' : ''}>${fx.reading ? 'Reading…' : 'Read it with Claude'}</button>` : ''}</div>
-      ${fx.ai !== false ? '<p class="tiny muted">Sends only the words above to Claude (Anthropic) to read them — nothing else goes with them. We don\'t keep them; Anthropic doesn\'t train on them and deletes them after a short safety check period.</p>' : '<p class="tiny muted">Fix what wasn\'t placed in the review, or say it another way.</p>'}</section>` : ''}`;
+      <div id="fxReadBtns">${readButtons()}</div></section>
+    ${d.local ? `<section class="card" role="status"><p class="small">${d.note ? `${E(d.note)} ` : ''}${got ? `Your phone read ${got} exercise${got === 1 ? '' : 's'}.` : 'Your phone couldn\'t read a workout in that yet.'}${d.local.unread.length ? ` Couldn't place: ${d.local.unread.map((x) => `“${E(x)}”`).join(', ')}.` : ''}</p>
+      ${got ? '<button type="button" class="wide" data-fx="reviewlocal">Review it</button>' : '<p class="tiny muted">Say it another way, or build it by hand.</p>'}</section>` : ''}`;
 }
-async function readSaid() {
-  const text = (document.getElementById('fxSaid')?.value || '').trim();
+// Once the phone knows whether Claude is set up, only the buttons change (what you typed stays).
+async function checkClaude() {
+  if (fx.ai != null) return;
+  fx.ai = await fx.c.aiReady().catch(() => null);
+  const box = document.getElementById('fxReadBtns');
+  if (box && fx.view === 'describe') box.innerHTML = readButtons();
+}
+async function readSaid(note = '') {
+  const text = (document.getElementById('fxSaid')?.value ?? fx.said?.text ?? '').trim();
   if (!text) return fx.c.toast('Type your workout first');
   const T = await import('../js/workoutText.js');
   const local = T.parseWorkout(text, { today: fx.c.iso() });
-  if (!T.needsHelp(local)) { fx.said = null; fx.unread = []; return edit(local.workout); }
-  fx.said = { text, local };
-  if (fx.ai == null) fx.ai = await fx.c.aiReady().catch(() => null);
+  if (!note && !T.needsHelp(local)) { fx.said = null; fx.unread = []; return edit(local.workout); }
+  fx.said = { text, local, note };
   return render();
 }
 async function readWithClaude() {
-  const c = fx.c, text = fx.said?.text;
-  if (!text || fx.reading) return;
+  const c = fx.c;
+  const text = (document.getElementById('fxSaid')?.value ?? fx.said?.text ?? '').trim();
+  if (!text) return c.toast('Type your workout first');
+  if (fx.reading) return null;
+  fx.said = { text };
   fx.reading = true; render();
   const asked = fx.said;
   try {
     const r = await c.api.post('/ai/workout', { text, unit: 'lb', today: c.iso() });
     fx.reading = false;
     if (fx.view !== 'describe' || fx.said !== asked) return null; // left meanwhile: don't replace anything
+    if (!r.workout?.blocks?.length) return readSaid("Claude couldn't find a workout in that.");
     fx.said = null; fx.unread = r.unread || [];
     return edit(r.workout);
   } catch (e) {
     fx.reading = false;
     if (e.status === 501) fx.ai = false;
-    if (fx.view !== 'describe') return null;
-    c.toast(e.status === 501 ? 'Reading with Claude isn\'t set up here — review what your phone read' : !navigator.onLine ? "You're offline — try again when you're connected" : e.message);
-    return render();
+    if (fx.view !== 'describe' || fx.said !== asked) return null;
+    // Claude isn't there right now: your phone reads it instead, and says why.
+    return readSaid(e.status === 501 ? 'Reading with Claude isn\'t set up here.' : e.status === 429 ? e.message : !navigator.onLine ? 'You\'re offline, so your phone read it.' : 'Claude couldn\'t read it just now, so your phone did.');
   } finally { fx.reading = false; }
 }
 
@@ -260,7 +276,7 @@ export async function onClick(t) {
     case 'open': fx.view = 'log'; return c.show();
     case 'add': fx.view = 'main'; return c.show();
     case 'build': return edit({ title: 'Workout', blocks: [blank(1)] });
-    case 'describe': fx.said = null; fx.view = 'describe'; render(); return document.getElementById('fxSaid')?.focus();
+    case 'describe': fx.said = null; fx.view = 'describe'; render(); document.getElementById('fxSaid')?.focus(); return checkClaude();
     case 'read': return readSaid();
     case 'reviewlocal': { const w = fx.said?.local?.workout; fx.unread = fx.said?.local?.unread || []; fx.said = null; return w && edit(w); }
     case 'readai': return readWithClaude();
