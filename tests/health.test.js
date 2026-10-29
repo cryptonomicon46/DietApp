@@ -49,8 +49,41 @@ test('diet summary: phase, goal, today from the trackers (or the plan), weight t
 test('the Health screen: calm, private, escapes what it shows', () => {
   const html = healthHtml({ profile: { sex: 'female', age: 35, heightIn: 64, phase: 'maintain' }, weights: [{ date: today, weight: 140 }], workouts: [{ name: 'Run', start: '2026-10-27T07:00' }] }, { esc, today, sharing: '🔒 Private <b>' });
   assert.match(html, /Maintenance/);
-  assert.match(html, /of the last 7 days/);
+  // Weighed in today: the status and where the trend is, not the form.
+  assert.match(html, /✓ <b>140\.0 lb<\/b> today/);
+  assert.match(html, /href="\.\.\/#weight">Weight trend →/);
+  assert.ok(!html.includes('data-weigh'));
+  assert.match(html, /href="\.\.\/#today">Today's plan →/);
+  assert.match(html, /\/ \d[\d,]* kcal/);
+  assert.match(html, /g protein/);
   assert.ok(!/🪙|coins|streak/i.test(html), 'no coins or streaks');
   assert.ok(html.includes('&#60;b&#62;') && !html.includes('Private <b>'), 'escaped');
   assert.equal(fitnessSummary({ workouts: [{ start: '2026-10-27T07:00' }, { start: '2026-10-01T07:00' }] }, today).week, 1);
+});
+
+test('Health: the weigh-in form until today is in; one calm nudge; plan status from the plan module', () => {
+  const p = { sex: 'female', age: 35, heightIn: 64, phase: 'cut', goalLb: 130, phaseStart: '2026-10-01' };
+  const html = healthHtml({ profile: p, weights: [{ date: '2026-10-20', weight: 141 }] }, { esc, today, hour: 7, sharing: '' });
+  assert.match(html, /<form class="hl-weigh" data-weigh>/);
+  assert.match(html, /placeholder="141\.0"/);
+  assert.match(html, /quick weigh-in before breakfast/);
+  assert.match(html, /week 4 of 8/);
+  assert.match(html, /Too early to tell/);
+  // The reminder link only once its state is known.
+  assert.ok(!html.includes('weighremind'));
+  assert.match(healthHtml({ profile: p, weights: [] }, { esc, today, sharing: '', reminder: false }), /Remind me each morning/);
+  assert.match(healthHtml({ profile: p, weights: [] }, { esc, today, sharing: '', reminder: true }), /Morning reminder on/);
+});
+
+test('nudges are calm and pick the most useful thing', async () => {
+  const { nudgeFor, dietSummary } = await import('../family/health.js');
+  const p = { sex: 'male', age: 40, heightIn: 70, phase: 'cut', goalLb: 170 };
+  const base = dietSummary({ profile: p, weights: [{ date: today, weight: 190 }] }, today);
+  assert.match(nudgeFor(base, { workout: 'active' }), /partway through/);
+  assert.match(nudgeFor({ set: false }), /Set up your plan/);
+  const low = { ...base, today: { ...base.today, p: 40, pTarget: 180, kcal: 1500, kcalTarget: 2200 } };
+  assert.match(nudgeFor(low, { hour: 18 }), /Protein is the one to watch today — about 140 g to go/);
+  const over = { ...base, today: { ...base.today, kcal: 2600, kcalTarget: 2200, p: 180, pTarget: 180 } };
+  assert.match(nudgeFor(over, { hour: 20 }), /one day doesn't move the trend/);
+  for (const h of [7, 13, 20]) assert.ok(!/fail|bad|should have|missed/i.test(nudgeFor(base, { hour: h })));
 });

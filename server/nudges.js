@@ -12,6 +12,8 @@ export const NUDGES = {
   run: { label: 'Run', icon: '🏃', every: 2, sport: 'running' },
   bike: { label: 'Ride', icon: '🚴', every: 3, sport: 'cycling' },
   hotyoga: { label: 'Hot yoga', icon: '🧘', every: 3, sport: 'hotYoga' },
+  // ⚖️ Opt-in from 💪 Health; saving a weigh-in there ticks it off for the day.
+  weighin: { label: 'Morning weigh-in', icon: '⚖️', every: 1, morning: true },
 };
 export const MORNING = 7; // the workout note, local time
 const day = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
@@ -62,8 +64,11 @@ export async function nudgeRoutes({ path, method, body, db, user, json, today })
 export function nudgesDue(all, { today, from, to, hour = null }) {
   const out = [];
   // 🏃 One morning note for the workouts that are due ("Run (3 days) · Hot yoga").
-  const moves = Object.entries(all || {}).filter(([k, n]) => NUDGES[k]?.sport && nudgeState(n, today).due && n.notified !== today);
-  if (moves.length && hour === MORNING) {
+  const moves = Object.entries(all || {}).filter(([k, n]) => (NUDGES[k]?.sport || NUDGES[k]?.morning) && nudgeState(n, today).due && n.notified !== today);
+  // Only the weigh-in: a calm line of its own (no numbers, nothing private).
+  if (moves.length === 1 && moves[0][0] === 'weighin' && hour === MORNING) {
+    out.push({ ids: ['weighin'], kind: 'nudges', msg: { title: '⚖️ Morning weigh-in', body: 'Before breakfast is best. Save it on 💪 Health and that\'s it for today.', url: 'family/#health', tag: 'moves' }, ttl: 6 * 3600 });
+  } else if (moves.length && hour === MORNING) {
     const line = moves.map(([k, n]) => { const st = nudgeState(n, today); return `${NUDGES[k].icon} ${NUDGES[k].label}${n.last ? ` (${st.overdue + n.every} days)` : ''}`; }).join(' · ');
     out.push({ ids: moves.map(([k]) => k), kind: 'nudges', msg: { title: moves.length === 1 ? `${NUDGES[moves[0][0]].icon} Time for a ${NUDGES[moves[0][0]].label.toLowerCase()}` : '💪 Due today', body: `${line} — the app has the best time today. Tick it off when it's done.`, url: 'family/#feed', tag: 'moves' }, ttl: 6 * 3600 });
   }

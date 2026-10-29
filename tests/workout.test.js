@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalize, makeBlock, uncertain, problems, setRounds, editSet, renameItem, logSet, unlogSet, complete, repeatOf, summary, describe, itemText, fromLiftSession, fromDeviceWorkout } from '../js/workout.js';
+import * as W from '../js/workout.js';
 
 const reps = (...r) => r.map((n) => ({ reps: n }));
 
@@ -130,4 +131,58 @@ test("server: Today's Workout and history are yours to write, readable with Fitn
   assert.equal((await call(`${P}/log`, pat, 'PUT', { data: { log: [w] }, base: 0 })).ok, true);
   await call(`/families/${family.fid}/leave`, pat, 'POST');
   assert.ok(![...m.keys()].some((k) => k.includes(`workouts:${family.fid}:${add.member.id}`)), 'leaving deletes them');
+});
+
+// ---------- H5 / H8 / H9: per side, progress, time, names, what counts as Fitness ----------
+test('per-side exercises keep the flag and say so', () => {
+  const w = W.normalize({ blocks: [{ items: [{ name: 'Walking lunge', perSide: true, sets: [{ reps: 10 }, { reps: 10 }] }] }] });
+  assert.equal(w.blocks[0].items[0].perSide, true);
+  assert.match(W.describe(w)[0], /10 \/ 10 each side/);
+  assert.equal(W.normalize({ blocks: [{ items: [{ name: 'Row', sets: [{ reps: 8 }] }] }] }).blocks[0].items[0].perSide, undefined);
+});
+
+test('progress counts finished exercises and finds the next set, round by round', () => {
+  let w = W.normalize({ blocks: [{ rounds: 2, items: [{ name: 'Press', sets: [{ reps: 8 }, { reps: 8 }] }, { name: 'Row', sets: [{ reps: 8 }, { reps: 8 }] }] }, { items: [{ name: 'Curl', sets: [{ reps: 12 }] }] }] });
+  assert.deepEqual(W.progress(w), { exercises: 3, exDone: 0, next: { bi: 0, ii: 0, si: 0 } });
+  w = W.logSet(w, 0, 0, 0); w = W.logSet(w, 0, 1, 0);
+  assert.deepEqual(W.progress(w).next, { bi: 0, ii: 0, si: 1 });
+  w = W.logSet(w, 0, 0, 1); w = W.logSet(w, 0, 1, 1, { reps: 6, weight: 95 });
+  const p = W.progress(w);
+  assert.equal(p.exDone, 2);
+  assert.deepEqual(p.next, { bi: 1, ii: 0, si: 0 });
+  // Planned and actual both kept.
+  assert.equal(w.blocks[0].items[1].sets[1].reps, 8);
+  assert.deepEqual(w.blocks[0].items[1].sets[1].got, { reps: 6, weight: 95, time: null, distance: null });
+});
+
+test('estimated minutes', () => {
+  assert.equal(W.estMinutes(W.normalize({ blocks: [] })), null);
+  const straight = W.normalize({ blocks: [{ rounds: 3, rest: 120, items: [{ name: 'Squat', sets: [{ reps: 5 }] }] }] });
+  assert.equal(W.estMinutes(straight), 10);
+  assert.ok(W.estMinutes(W.normalize({ blocks: Array.from({ length: 7 }, () => ({ rounds: 3, items: [{ name: 'Press', sets: [{ reps: 8 }] }] })) })) >= 40);
+});
+
+test('suggested names', () => {
+  const n = (blocks) => W.suggestName(W.normalize({ blocks }));
+  assert.equal(n([{ rounds: 4, items: [{ name: 'Overhead press', sets: [{}] }, { name: 'Bent-over row', sets: [{}] }, { name: 'Push-ups', sets: [{}] }] }]), 'Upper body circuit · 4 rounds');
+  assert.equal(n([{ items: [{ name: 'Back squat', sets: [{}] }] }, { items: [{ name: 'Romanian deadlift', sets: [{}] }] }, { items: [{ name: 'Calf raise', sets: [{}] }] }]), 'Lower body · 3 exercises');
+  assert.equal(n([{ items: [{ name: 'Bench press', sets: [{}] }] }, { items: [{ name: 'Leg press', sets: [{}] }] }]), 'Full body · 2 exercises');
+  assert.equal(n([{ rounds: 3, items: [{ name: 'Curl', sets: [{}] }, { name: 'Tricep pushdown', sets: [{}] }] }]), 'Upper body superset · 3 rounds');
+  assert.equal(n([{ items: [{ name: 'Plank', sets: [{}] }] }]), 'Core · 1 exercise');
+  assert.equal(n([{ items: [{ name: 'Zercher thing', sets: [{}] }] }]), 'Strength · 1 exercise');
+  assert.equal(n([]), 'Workout');
+  assert.ok(W.untitled('Workout') && W.untitled('') && !W.untitled('Upper body circuit'));
+});
+
+test('Fitness is strength and circuit work; other device activity is not', () => {
+  assert.equal(W.isStrength(W.normalize({ blocks: [{ items: [{ name: 'Run', sets: [{ distance: 1 }] }] }] })), true);
+  for (const k of ['Weightlifting', 'Functional fitness', 'Powerlifting', 'HIIT', 'Strength trainer', 'Crossfit']) assert.equal(W.isStrength(W.fromDeviceWorkout({ id: k, name: k, start: '2026-10-01T10:00:00Z', minutes: 40 })), true, k);
+  for (const k of ['Running', 'Cycling', 'Rock climbing', 'Yoga', 'Walking', 'Swimming']) assert.equal(W.isStrength(W.fromDeviceWorkout({ id: k, name: k, start: '2026-10-01T10:00:00Z', minutes: 40 })), false, k);
+});
+
+test('a program workout keeps its program day and exercise ids', () => {
+  const w = W.normalize({ source: 'program', program: { block: 2, day: 'B', week: 3 }, blocks: [{ items: [{ name: 'Overhead press', ref: 'ohp', sets: [{ reps: 10, weight: 65 }] }] }] });
+  assert.deepEqual(w.program, { block: 2, day: 'B', week: 3 });
+  assert.equal(w.blocks[0].items[0].ref, 'ohp');
+  assert.equal(W.normalize({ program: { day: 'lowercase' } }).program, undefined);
 });

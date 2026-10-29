@@ -36,6 +36,7 @@ import { makeZip } from './zip.js';
 import { drawPoster, planCsvRows, drawReportPoster } from './poster.js';
 import { RANGES, PHASE_NAMES, buildReport, reportText, reportCsvRows, weeklyRows, rangeTitle, combosText, combosCsvRows } from './share.js';
 import { programReview } from './review.js';
+import { planProgress, STATUS } from './planProgress.js';
 
 // ---------- storage ----------
 // Each person's data is kept separately (see storage.js); `store` reads/writes the open profile.
@@ -142,6 +143,25 @@ function plannedDeficitFor(base, burned, t) {
   if (base.lbPerWeek < 0) return base.tdee - base.kcal;
   if (base.lbPerWeek === 0) return 0;
   return Math.max(base.tdee - base.kcal, burned - t.kcal);
+}
+
+// 📈 Above Meals: where you are in the plan and whether recent weigh-ins say it's working
+// (js/planProgress.js). An estimate, worded as one; it never changes targets — the weekly
+// check-in does that, and only when you approve.
+function renderPlanProgress() {
+  const el = $('#planProgress');
+  if (!el) return;
+  if (!state.profile) { el.innerHTML = ''; return; }
+  const r = planProgress({ profile: state.profile, weights: state.weights, days: state.days, today: isoDate(), planned: baseTargets().lbPerWeek });
+  const s = STATUS[r.status];
+  const goal = r.toGo != null && r.goalLb && (r.phase === 'cut' || r.phase === 'gain') && Math.abs(r.toGo) >= 0.1 ? ` · ${Math.abs(r.toGo).toFixed(1)} lb to ${r.goalLb}` : '';
+  el.innerHTML = `<section class="card plan-prog" aria-label="Plan progress">
+    <div class="row between" style="margin-top:0"><span class="eyebrow">${esc(r.phaseLabel)}${r.week ? ` · week ${r.week} of ${r.weeks}` : ''}</span><b class="pp-status ${r.status}">${s.icon} ${s.label}</b></div>
+    <p class="small">${r.daysLeft != null ? `${r.done ? 'This phase is finished' : `${r.daysLeft} day${r.daysLeft === 1 ? '' : 's'} left`}` : 'Plan started'}${goal}</p>
+    ${r.estimate ? `<p class="small">${esc(r.estimate.text)}</p>` : ''}
+    <p class="small"><b>Next:</b> ${esc(r.next)}</p>
+    <details class="pp-why"><summary class="small">Why ${s.label.toLowerCase()}?</summary><ul class="small muted">${r.why.map((w) => `<li>${esc(w)}</li>`).join('')}</ul><p class="tiny muted">Body weight swings day to day with water, salt and food, so this uses the trend over the last few weeks. It's an estimate, and it never changes your targets — the weekly check-in suggests changes and you approve them.</p></details>
+  </section>`;
 }
 
 // Weigh-ins since the current phase started (trends shouldn't mix a cut with a gain).
@@ -611,6 +631,7 @@ function renderToday() {
       : phase === 'gain' ? `Lean gain · +${-rate} lb/wk${proj.reached ? '' : ` · ${state.profile.goalLb} lb by ${by}`}`
         : proj.reached ? 'Goal reached · maintenance' : `−${rate} lb/wk · ${state.profile.goalLb} lb by ${by}`;
   renderProgram();
+  renderPlanProgress();
   $('#todayMacros').innerHTML = [
     ['p', 'Protein', t.p], ['f', 'Fat', t.f], ['c', 'Carbs', t.c],
   ].map(([k, label, g]) => `<div class="macro ${k}"><b>${g} g</b><span>${label}</span></div>`).join('');
@@ -2027,7 +2048,7 @@ function renderTraining(t) {
   const showMiles = () => { const k = $('#planSport').value; $('#planMiles').hidden = !(k === 'running' || k === 'cycling'); };
   $('#training').querySelectorAll('[data-actpick]').forEach((b) => b.onclick = () => {
     const k = b.dataset.actpick;
-    if (k === 'lift') { $('#liftSession')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    if (k === 'lift') { if (famLinked()) { location.href = 'family/#fitness'; return; } $('#liftSession')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     if (k === 'climb') { openClimb(); return; }
     if (k === 'other') { $('#planSport').value = ''; $('#planSport').focus(); showMiles(); return; }
     $('#planSport').value = k;
@@ -2249,6 +2270,7 @@ function renderWeighStatus() {
   $('#weighStatus').innerHTML = t
     ? `✓ <b>${t.weight.toFixed(1)} lb</b> today${prev ? ` · ${t.weight <= prev.weight ? '−' : '+'}${Math.abs(t.weight - prev.weight).toFixed(1)} since ${fmtShort(prev.date)}` : ''}`
     : `Not logged yet today${prev ? ` · last ${prev.weight.toFixed(1)} lb on ${fmtShort(prev.date)}` : ''}`;
+  if (t) $('#weighStatus').innerHTML = `✓ Logged · ${$('#weighStatus').innerHTML.slice(2)}`;
   // Once today's weight is in, the card folds to one line; Change opens it again.
   if (t) $('#weighStatus').innerHTML += ' <button type="button" class="linkish small" data-weighedit>Change</button>';
   // A word of encouragement for checking in (inline, never a pop-up).
@@ -2737,28 +2759,50 @@ form.addEventListener('submit', () => {
 });
 
 // ---------- tabs & boot ----------
-// Five tabs: Home, Dogs, Food, Train, Us. Food has four pages (Meals, Weight, Groceries,
-// Scan) switched from the bar at its top; the Food tab stays lit on all four.
-const FOOD_PAGES = [['today', '🍽 Meals'], ['weight', '⚖︎ Weight'], ['groceries', '🛒 Groceries'], ['scan', '▦ Scan']];
+// Five tabs: Home, Dogs, Food, Train, Us. Food has three pages (Meals, Weight, Groceries) switched
+// from the bar at its top; Scan opens from Groceries (and #scan still opens it). The Food tab stays
+// lit on all of them.
+const FOOD_PAGES = [['today', '🍽 Meals'], ['weight', '⚖︎ Weight'], ['groceries', '🛒 Groceries']];
+const FOOD_TABS = ['today', 'weight', 'groceries', 'scan'];
+// Signed in: the header says where you are under 💪 Health ("‹ Health · Meals") and goes back there.
+const PAGE_NAMES = { today: 'Meals', weight: 'Weight', groceries: 'Groceries', scan: 'Scan', lift: 'Activity', privacy: 'Privacy', brief: 'Dogs' };
 let currentTab = 'home';
 // Signed in to OurPawmily: the trackers are just 🍽 Food and 🏋︎ Train. Your day, the calendar,
 // the dogs, notes and plans live in OurPawmily; 🔐 Privacy (and Recover) is the header button,
 // and a link from a pet's page still opens 🐕 Dogs for food, meds, vaccines and the vet.
 const famLinked = () => !!account.get();
 document.body.classList.toggle('famlinked', famLinked());
+// Signed in, workouts live in OurPawmily's 🏋️ Fitness (one workout model); this tab keeps the
+// day's activity and training calories, so it's called Activity. The older lifting logger stays
+// for the trackers on their own.
+function famHeader(name) {
+  const pill = $('#toFamily');
+  if (!pill) return;
+  const on = famLinked();
+  pill.href = on ? 'family/#health' : 'family/';
+  pill.querySelector('b').textContent = on ? 'Health' : 'OurPawmily';
+  pill.querySelector('small').textContent = on ? PAGE_NAMES[name] || 'Trackers' : 'Trackers';
+  pill.title = on ? 'Back to 💪 Health' : 'Back to OurPawmily: feed, dogs, calendar, Watch';
+  const tab = document.querySelector('.tabs [data-tab=lift]');
+  if (tab?.lastChild?.nodeType === 3) tab.lastChild.textContent = on ? 'Activity' : 'Train';
+  $('#liftFamily').hidden = !on;
+  for (const id of ['#liftPlan', '#liftSession', '#liftDone']) $(id).hidden = on;
+  document.querySelectorAll('[data-fold=liftHistory], [data-fold=library]').forEach((d) => { d.hidden = on; });
+}
 function showTab(name) {
   if (famLinked() && ['home', 'calendar', 'notes'].includes(name)) name = 'today';
   currentTab = name;
   document.body.dataset.tab = name; // Dogs hides the calorie bar
-  const lit = FOOD_PAGES.some(([k]) => k === name) ? 'today' : name;
+  const lit = FOOD_TABS.includes(name) ? 'today' : name;
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === lit));
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === `tab-${name}`));
   document.querySelectorAll('[data-subnav]').forEach((el) => {
-    el.innerHTML = FOOD_PAGES.map(([k, label]) => `<button type="button" data-sub="${k}" class="${k === name ? 'on' : ''}">${label}</button>`).join('');
+    el.innerHTML = FOOD_PAGES.map(([k, label]) => `<button type="button" data-sub="${k}" class="${k === name || (k === 'groceries' && name === 'scan') ? 'on' : ''}">${label}</button>`).join('');
   });
+  famHeader(name);
   if (name !== 'scan') stopScan();
   if (name === 'home') { renderHome(); renderBrief(); }
-  if (name === 'lift') { renderLift(); if (state.profile) renderTraining(targets()); renderBrief(); renderClimb(); renderProgress(); }
+  if (name === 'lift') { if (!famLinked()) renderLift(); if (state.profile) renderTraining(targets()); renderBrief(); renderClimb(); renderProgress(); }
   if (name === 'brief') renderBrief();
   if (name === 'calendar') { renderRhythm(); renderCal(); }
   if (name === 'notes') {

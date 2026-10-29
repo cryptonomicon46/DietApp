@@ -1,11 +1,15 @@
-// 🏋️ Fitness (2.0 Phase 7): Today's Workout, adding a workout (build it, describe it, or from a
-// photo — all the same workout model, js/workout.js), logging it round by round, and history.
+// 🏋️ Fitness: strength and circuit training. Add a workout (build it, describe it, a photo, a saved
+// one or the lifting program — all the same workout model, js/workout.js) → Today's Workout (the
+// plan) → Start Workout → Train (what you actually did, set by set) → Complete → History.
 // Loaded only when you open Fitness. Your workouts are locked with the family key and stored as two
-// records of yours: Today's Workout (with saved workouts) and the history.
+// records of yours: Today's Workout (with saved workouts) and the history. A workout in progress is
+// also kept on this phone (locked the same way) until it's finished, so leaving or reloading
+// never loses a set.
 import * as W from '../js/workout.js';
 
-const fx = { c: null, today: null, templates: [], log: [], todayAt: 0, logAt: 0, loaded: false, draft: null, draftFrom: null, legacy: [], timer: null, view: 'main', said: null, unread: [], reading: false, ai: null, pic: null };
+const fx = { c: null, today: null, templates: [], log: [], todayAt: 0, logAt: 0, loaded: false, draft: null, draftFrom: null, legacy: [], others: [], lift: null, timer: null, view: 'main', said: null, unread: [], reading: false, ai: null, pic: null };
 export const state = fx;
+import * as PG from '../js/programWorkout.js';
 
 // ctx: { api, fid, me, lock, unlock, esc, toast, openSheet, closeSheet, confirm, iso, el: () => #view, show, aiReady: () => Promise<bool> }
 export async function load(c) {
@@ -18,12 +22,44 @@ export async function load(c) {
   fx.templates = (td?.templates || []).map(W.normalize).slice(0, 30);
   fx.log = (ld?.log || []).map(W.normalize);
   fx.todayAt = t?.savedAt || 0; fx.logAt = l?.savedAt || 0; fx.loaded = true;
+  await recover();
+}
+// ---------- the in-progress copy on this phone ----------
+const BK = () => `fam.fx.active.${fx.c.fid}.${fx.c.me}`;
+async function backup() {
+  try {
+    if (fx.today?.status === 'active') localStorage.setItem(BK(), JSON.stringify({ at: Date.now(), data: await fx.c.lock(fx.today) }));
+    else localStorage.removeItem(BK());
+  } catch { /* storage full or blocked: the saved copy still has it */ }
+}
+// After a reload or a save that didn't reach the connector: this phone's copy wins only when it's
+// newer than what's saved and it's the same workout (or nothing newer was saved in its place).
+async function recover() {
+  let b = null;
+  try { b = JSON.parse(localStorage.getItem(BK()) || 'null'); } catch { /* none */ }
+  if (!b?.data) return;
+  const w = await fx.c.unlock(b.data.enc ?? b.data).catch(() => null);
+  if (!w || b.at <= fx.todayAt || (fx.today && fx.today.id !== w.id && fx.today.status !== 'done')) { if (!w || b.at <= fx.todayAt) localStorage.removeItem(BK()); return; }
+  if (fx.log.some((x) => x.id === w.id)) { localStorage.removeItem(BK()); return; } // finished on another phone
+  fx.today = W.normalize(w);
+  saveToday();
 }
 // Older workouts (the trackers' lifting sessions and device workouts), read-only in history.
+// Device workouts that aren't strength or circuit work stay out of the history (one quiet line
+// instead); they're still synced and still count in your Diet calories.
 export function setLegacy(data, names = {}) {
-  fx.legacy = [...(data?.lift?.sessions || []).map((s) => W.fromLiftSession(s, names)), ...(data?.workoutHistory || []).filter((x) => x?.start).slice(-200).map(W.fromDeviceWorkout)];
+  const all = [...(data?.lift?.sessions || []).map((s) => W.fromLiftSession(s, names)), ...(data?.workoutHistory || []).filter((x) => x?.start).slice(-200).map(W.fromDeviceWorkout)];
+  fx.legacy = all.filter(W.isStrength);
+  fx.others = all.filter((w) => !W.isStrength(w));
+  fx.lift = data?.lift || null;
 }
-const history = () => [...fx.log, ...fx.legacy.filter((x) => !fx.log.some((y) => y.id === x.id))].filter((w) => w.status === 'done').sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.doneAt || 0) - (a.doneAt || 0));
+Object.defineProperties(fx, {
+  programOn: { get: () => PG.programOn(fx.lift) },
+  programNext: { get: () => (PG.programOn(fx.lift) ? PG.programNext(fx.lift, fx.log) : null) },
+});
+const allDone = () => [...fx.log, ...fx.legacy.filter((x) => !fx.log.some((y) => y.id === x.id))].filter((w) => w.status === 'done');
+const history = () => allDone().filter(W.isStrength).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.doneAt || 0) - (a.doneAt || 0));
+const open = () => (fx.today && fx.today.status !== 'done' ? fx.today : null);
 
 // ---------- saving (batched; never over a newer copy from another phone) ----------
 async function put(which, payload, base) {
@@ -40,6 +76,7 @@ export function saveToday(now = false) {
       await load(fx.c); fx.c.toast('Updated from your other device'); render();
     }
   };
+  backup();
   if (now) return go();
   fx.timer = setTimeout(go, 1200);
   return null;
@@ -52,14 +89,21 @@ async function appendLog(w) {
 }
 if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && fx.timer) saveToday(true); });
 
-// ---------- the Health card ----------
+// ---------- the Health card: status and the next action ----------
+// "4 of 7 exercises · 12 of 21 sets" (sets too: a circuit finishes its exercises only at the end).
+const doneText = (w) => { const p = W.progress(w), s = W.summary(w); return `${p.exDone} of ${p.exercises} exercises · ${s.done} of ${s.sets} sets`; };
+const meta = (w) => { const n = W.progress(w).exercises, m = W.estMinutes(w); return `${n} exercise${n === 1 ? '' : 's'}${m ? ` · ~${m} min` : ''}`; };
 export function card(esc) {
-  const t = fx.today && fx.today.status !== 'done' ? fx.today : null, s = t ? W.summary(t) : null;
-  const last = history()[0];
-  return `${t ? `<button type="button" class="fx-today" data-fx="open"><span class="grow"><b>Today's Workout · ${esc(t.title)}</b><small class="muted">${s.done} of ${s.sets} sets${t.status === 'active' ? ' · in progress' : ''}</small></span><span class="go">${t.status === 'active' ? 'Continue' : 'Start'} ›</span></button>` : ''}
-    <button type="button" class="${t ? 'ghost ' : ''}wide" data-fx="add">＋ Add Workout</button>
+  const t = open(), last = history()[0];
+  if (t) {
+    const p = W.progress(t), going = t.status === 'active';
+    return `<button type="button" class="fx-today" data-fx="${going ? 'train' : 'today'}"><span class="grow"><b>${esc(t.title)}</b><small class="muted">${going ? esc(doneText(t)) : esc(meta(t))}</small></span><span class="go">${going ? 'Resume Workout' : "Today's Workout"} →</span></button>
+      ${going ? '' : '<button type="button" class="wide" data-fx="start">Start Workout →</button>'}
+      <button type="button" class="linkish small" data-fx="main">Fitness and history ›</button>`;
+  }
+  return `<button type="button" class="wide" data-fx="add">＋ Add Workout</button>
     ${last ? `<p class="tiny muted">Last: ${esc(last.title)} · ${esc(last.date || '')}</p>` : ''}
-    <button type="button" class="linkish small" data-fx="main">All workouts and history ›</button>`;
+    <button type="button" class="linkish small" data-fx="main">Fitness and history ›</button>`;
 }
 
 // ---------- screens ----------
@@ -70,20 +114,56 @@ export function render() {
   if (fx.view === 'edit' && fx.draft) el.innerHTML = editorHtml();
   else if (fx.view === 'describe') el.innerHTML = describeHtml();
   else if (fx.view === 'photo') el.innerHTML = photoHtml();
-  else if (fx.view === 'log' && fx.today) el.innerHTML = loggerHtml();
+  else if ((fx.view === 'train' || fx.view === 'log') && open()) { fx.view = 'train'; el.innerHTML = trainHtml(); }
+  else if (fx.view === 'today' && open()) el.innerHTML = todayHtml();
   else { fx.view = 'main'; el.innerHTML = mainHtml(); }
 }
+// Every screen says where it sits: "‹ Fitness" above "Today's Workout", so the way back is always
+// on the screen (never only the browser's Back).
+const head = (back, label, title, extra = '') => `<section class="fx-head"><button type="button" class="fx-back linkish" ${back}>‹ ${E(label)}</button><div class="row between"><h2>${title}</h2>${extra}</div></section>`;
+const TILES = [
+  ['build', '✍️', 'Build it', 'Pick the exercises, sets, reps and weights yourself.'],
+  ['describe', '💬', 'Describe it', "Type or paste it the way you'd text it — a WOD, a coach's plan."],
+  ['photo', '📷', 'Photo', 'A photo or screenshot of a WOD, a whiteboard or a workout app.'],
+];
+function othersLine() {
+  const since = new Date(Date.parse(`${fx.c.iso()}T12:00:00Z`) - 30 * 864e5).toISOString().slice(0, 10);
+  const o = fx.others.filter((w) => (w.date || '') >= since);
+  if (!o.length) return '';
+  const kinds = [...new Set(o.map((w) => w.activity?.kind || w.title))].slice(0, 3).map((k) => k.toLowerCase()).join(', ');
+  return `<p class="tiny muted pad">Also ${o.length} other activit${o.length === 1 ? 'y' : 'ies'} from your device in the last 30 days (${E(kinds)}) — not listed here, still counted in your Diet calories.</p>`;
+}
+function programLine() {
+  if (!fx.programOn) return '<p class="small center"><button type="button" class="linkish small" data-fx="program">Set up a lifting program</button></p>';
+  const n = fx.programNext;
+  return `<button type="button" class="card fx-hist" data-fx="fromprogram"><span class="grow"><b>📋 From my program</b><small class="muted">${E(n ? `${n.title} · ${n.weekLabel}` : 'The next day of your program')}</small></span><span class="go">›</span></button>`;
+}
 function mainHtml() {
-  const t = fx.today && fx.today.status !== 'done' ? fx.today : null;
+  const t = open();
   const h = history().slice(0, 25);
-  return `<section class="fx-head"><h2><button type="button" class="linkish" data-view="health" aria-label="Back to Health">‹</button> 🏋️ Fitness</h2></section>
-    ${t ? `<section class="card fx-todaycard"><div class="eyebrow">Today's Workout</div><h3>${E(t.title)}</h3>${W.describe(t).map((l) => `<p class="small">${E(l)}</p>`).join('')}
-      <div class="row"><button type="button" class="grow" data-fx="open">${t.status === 'active' ? 'Continue' : 'Start'} ›</button><button type="button" class="ghost" data-fx="edittoday">Edit</button></div></section>` : ''}
+  return `${head('data-view="health"', 'Health', '🏋️ Fitness')}
+    ${t ? `<section class="card fx-todaycard"><div class="eyebrow">Today's Workout</div><h3>${E(t.title)}</h3><p class="small muted">${t.status === 'active' ? `${E(doneText(t))} · in progress` : E(meta(t))}</p>
+      <div class="row"><button type="button" class="grow" data-fx="${t.status === 'active' ? 'train' : 'start'}">${t.status === 'active' ? 'Resume Workout' : 'Start Workout'} →</button><button type="button" class="ghost" data-fx="today">View</button></div></section>` : ''}
     <section class="card"><h3 class="card-h">＋ Add Workout</h3>
-      <div class="fx-paths"><button type="button" data-fx="build"><b>✍️</b>Build it</button><button type="button" data-fx="describe"><b>💬</b>Describe it</button>${fx.ai !== false ? '<button type="button" data-fx="photo"><b>📷</b>Photo</button>' : ''}</div>
-      ${fx.templates.length ? `<p class="small muted">Saved: ${fx.templates.slice(0, 6).map((w, i) => `<button type="button" class="linkish small" data-fx="tpl:${i}">${E(w.title)}</button>`).join(' · ')}</p>` : ''}</section>
+      <div class="fx-paths">${TILES.filter(([k]) => k !== 'photo' || fx.ai !== false).map(([k, i, l, d]) => `<button type="button" data-fx="${k}"><b aria-hidden="true">${i}</b><span>${l}</span><small>${d}</small></button>`).join('')}</div>
+      ${fx.templates.length ? `<p class="small muted">Saved: ${fx.templates.slice(0, 6).map((w, i) => `<button type="button" class="linkish small" data-fx="tpl:${i}">${E(w.title)}</button>`).join(' · ')}</p>` : ''}
+      ${programLine()}</section>
     <h3 class="wl-h">History</h3>
-    ${h.length ? h.map((w) => { const s = W.summary(w); return `<button type="button" class="card fx-hist" data-fx="hist:${E(w.id)}"><span class="grow"><b>${E(w.title)}</b><small class="muted">${E(w.date || '')}${w.source === 'device' ? ` · ${w.activity?.minutes ?? '?'} min` : ` · ${s.exercises} exercise${s.exercises === 1 ? '' : 's'} · ${s.done || s.sets} sets`}</small></span><span class="go">›</span></button>`; }).join('') : '<p class="small muted pad">Finished workouts show here.</p>'}`;
+    ${h.length ? h.map((w) => { const s = W.summary(w); return `<button type="button" class="card fx-hist" data-fx="hist:${E(w.id)}"><span class="grow"><b>${E(w.title)}</b><small class="muted">${E(w.date || '')}${w.source === 'device' ? ` · ${w.activity?.minutes ?? '?'} min · from your device` : ` · ${s.exercises} exercise${s.exercises === 1 ? '' : 's'} · ${s.done || s.sets} sets`}</small></span><span class="go">›</span></button>`; }).join('') : '<p class="small muted pad">Finished workouts show here.</p>'}
+    ${othersLine()}`;
+}
+// Today's Workout: the plan, before and between training.
+const blockLabel = (b) => (b.items.length > 1 ? `${b.kind === 'circuit' ? '🔁 Circuit' : '🔗 Superset'} · ${b.rounds} round${b.rounds === 1 ? '' : 's'}` : '');
+function todayHtml() {
+  const t = open(), going = t.status === 'active', p = W.progress(t);
+  const pg = t.program ? `From your program · week ${t.program.week}` : t.source === 'photo' ? 'Read from a photo' : t.source === 'text' ? 'Read from what you wrote' : '';
+  return `${head('data-fx="main"', 'Fitness', "Today's Workout")}
+    <section class="card"><h3>${E(t.title)}</h3><p class="small muted">${going ? E(doneText(t)) : E(meta(t))}${pg ? ` · ${E(pg)}` : ''}</p>
+      ${t.notes ? `<p class="tiny muted">${E(t.notes)}</p>` : ''}
+      ${t.blocks.map((b) => `<div class="fx-plan">${blockLabel(b) ? `<b class="small">${blockLabel(b)}</b>` : ''}${b.items.map((it) => `<p class="small">${E(W.itemText(it))}</p>${it.note ? `<p class="tiny muted">${E(it.note)}</p>` : ''}`).join('')}${b.note ? `<p class="tiny muted">${E(b.note)}</p>` : ''}</div>`).join('')}
+    </section>
+    <div class="fx-foot"><button type="button" class="ghost" data-fx="edittoday">Edit</button><button type="button" data-fx="${going ? 'train' : 'start'}">${going ? 'Resume Workout' : 'Start Workout'} →</button></div>
+    <p class="small center"><button type="button" class="linkish small" data-fx="droptoday">Remove from today</button></p>`;
 }
 // 💬 Describe it: type it the way you'd text it. ✨ Read it with Claude is the main way (only the
 // words you typed are sent, and only when you tap); your phone can read it instead, and does
@@ -97,7 +177,7 @@ function readButtons() {
 function describeHtml() {
   const d = fx.said || { text: '' };
   const got = d.local ? W.summary(d.local.workout).exercises : 0;
-  return `<section class="fx-head"><h2><button type="button" class="linkish" data-fx="main" aria-label="Back to Fitness">‹</button> 💬 Describe it</h2></section>
+  return `${head('data-fx="main"', 'Fitness', '💬 Describe it')}
     <section class="card"><label for="fxSaid" class="small">Your workout, the way you'd text it</label>
       <textarea id="fxSaid" rows="6" maxlength="1500" placeholder="Bench 3x10 @ 135, then pull-ups 3x8\n4 rounds: overhead press 12/12/11/11, row 12/13/14/13">${E(d.text)}</textarea>
       <div id="fxReadBtns">${readButtons()}</div></section>
@@ -149,9 +229,9 @@ async function readWithClaude() {
 // camera details — and it isn't kept anywhere: not on the connector, not in your workouts.
 function photoHtml() {
   const p = fx.pic;
-  if (fx.ai === false) return `<section class="fx-head"><h2><button type="button" class="linkish" data-fx="main" aria-label="Back to Fitness">‹</button> 📷 From a photo</h2></section>
+  if (fx.ai === false) return `${head('data-fx="main"', 'Fitness', '📷 From a photo')}
     <section class="card"><p class="small">Reading photos isn't set up here yet. 💬 Describe it or ✍️ Build it work the same way.</p><div class="row"><button type="button" class="grow" data-fx="describe">💬 Describe it</button><button type="button" class="ghost grow" data-fx="build">✍️ Build it</button></div></section>`;
-  return `<section class="fx-head"><h2><button type="button" class="linkish" data-fx="main" aria-label="Back to Fitness">‹</button> 📷 From a photo</h2></section>
+  return `${head('data-fx="main"', 'Fitness', '📷 From a photo')}
     <section class="card">
       ${p?.url ? `<img class="fx-pic" src="${p.url}" alt="The photo you chose">` : '<p class="small">A photo or screenshot of a workout — handwritten, on a whiteboard, or from an app or a message.</p>'}
       <input type="file" accept="image/*" data-fxpick hidden><button type="button" class="wide ${p?.url ? 'ghost' : ''}" data-fx="pickpic">${p?.url ? 'Choose another' : 'Choose a photo or screenshot'}</button>
@@ -212,11 +292,11 @@ function setCell(bi, ii, si, s, m) {
 function editorHtml() {
   const w = fx.draft, u = W.uncertain(w), p = W.problems(w);
   const fromAi = w.source === 'text' || w.source === 'photo';
-  return `<section class="fx-head"><h2><button type="button" class="linkish" data-fx="cancel" aria-label="Back">‹</button> ${fromAi ? 'Review Workout' : fx.draftFrom === 'today' ? 'Edit workout' : 'Build a workout'}</h2></section>
+  return `${head('data-fx="cancel"', fx.draftFrom === 'today' ? "Today's Workout" : 'Fitness', fromAi ? 'Review Workout' : fx.draftFrom === 'today' ? 'Edit workout' : 'Build a workout')}
     ${fromAi ? `<p class="small muted pad">${w.source === 'photo' ? 'Read from your photo' : 'Read from what you wrote'}. Check it before adding — nothing is saved until you tap Add.</p>` : ''}
     ${fromAi && fx.unread.length ? `<p class="small pad">Not placed: ${fx.unread.map((x) => `“${E(x)}”`).join(', ')}</p>` : ''}
     ${u.length ? `<div class="note warn" role="status">⚠️ ${u.length} thing${u.length === 1 ? '' : 's'} to check — highlighted below.</div>` : ''}
-    <label class="fx-title">Name<input data-fxe="title" value="${E(w.title)}" maxlength="80"></label>
+    <label class="fx-title">Name<input data-fxe="title" value="${W.untitled(w.title) ? '' : E(w.title)}" placeholder="${E(W.suggestName(w))}" maxlength="80"><small class="tiny muted">Leave it blank to use the suggested name, or type your own.</small></label>
     ${w.blocks.map((b, bi) => `<section class="card fx-block">
       <div class="row between"><b class="${unsure(b, 'kind') ? 'unsure-t' : ''}">${b.items.length > 1 ? (b.kind === 'circuit' ? '🔁 Circuit' : '🔗 Superset') : '🏋️ Straight sets'}</b>
         <span class="fx-rounds ${unsure(b, 'rounds') ? 'unsure-t' : ''}"><button type="button" class="icon-btn" data-fx="rounds:${bi}:-1" aria-label="One ${b.items.length > 1 ? 'round' : 'set'} fewer">−</button><span>${b.rounds} ${b.items.length > 1 ? 'round' : 'set'}${b.rounds === 1 ? '' : 's'}</span><button type="button" class="icon-btn" data-fx="rounds:${bi}:1" aria-label="One more">＋</button></span>
@@ -224,58 +304,88 @@ function editorHtml() {
       ${b.items.map((it, ii) => { const m = measureOf(it); return `<div class="fx-item">
         <div class="row"><input class="fx-name ${unsure(it, 'name') ? 'unsure' : ''}" data-fxe="name:${bi}:${ii}" value="${E(it.name)}" placeholder="Exercise" aria-label="Exercise name${unsure(it, 'name') ? ' — check this' : ''}">
           ${b.items.length > 1 || w.blocks.length > 1 ? `<button type="button" class="icon-btn" data-fx="delitem:${bi}:${ii}" aria-label="Remove ${E(it.name || 'exercise')}">✕</button>` : ''}</div>
-        <select class="fx-measure" data-fxe="measure:${bi}:${ii}" aria-label="Measured in">${[['reps', 'Reps × weight'], ['bw', 'Reps (bodyweight)'], ['time', 'Time'], ['distance', 'Distance']].map(([k, l]) => `<option value="${k}" ${m === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <div class="row wrap"><select class="fx-measure" data-fxe="measure:${bi}:${ii}" aria-label="Measured in">${[['reps', 'Reps × weight'], ['bw', 'Reps (bodyweight)'], ['time', 'Time'], ['distance', 'Distance']].map(([k, l]) => `<option value="${k}" ${m === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <label class="fx-side small"><input type="checkbox" data-fxe="perside:${bi}:${ii}" ${it.perSide ? 'checked' : ''}> Each side</label></div>
         <div class="fx-sets"><div class="fx-set fx-lab" aria-hidden="true"><small>${b.items.length > 1 ? 'round' : 'set'}</small>${m === 'time' ? '<span>sec</span>' : m === 'distance' ? `<span>${E(it.sets[0]?.distUnit || 'mi')}</span>` : '<span>reps</span>'}${m === 'reps' ? `<span>${E(it.sets[0]?.unit || 'lb')}</span>` : ''}</div>${it.sets.map((s, si) => setCell(bi, ii, si, s, m)).join('')}</div></div>`; }).join('')}
       <button type="button" class="linkish small" data-fx="additem:${bi}">＋ Add an exercise to this ${b.items.length > 1 ? (b.kind === 'circuit' ? 'circuit' : 'superset') : 'part (makes a superset)'}</button></section>`).join('')}
     <div class="row wrap fx-add"><button type="button" class="ghost small" data-fx="addblock:1">＋ Exercise</button><button type="button" class="ghost small" data-fx="addblock:2">＋ Superset</button><button type="button" class="ghost small" data-fx="addblock:3">＋ Circuit</button></div>
     <p class="small muted pad" id="fxProblems">${p.map(E).join(' ')}</p>
     <div class="fx-foot"><button type="button" class="ghost" data-fx="cancel">Cancel</button><button type="button" data-fx="savedraft" ${p.length ? 'disabled' : ''}>${fx.draftFrom === 'today' ? 'Save' : "Add to Today's Workout"}</button></div>`;
 }
-// Logging: round by round; a done round folds away. ✓ logs it as planned, or with what you typed.
-function loggerHtml() {
-  const w = fx.today, s = W.summary(w);
-  const target = (x) => [x.reps != null ? `${x.reps}${x.bw ? '' : ''} reps` : '', x.time != null ? W.setText({ time: x.time }) : '', x.distance != null ? `${x.distance} ${x.distUnit}` : '', x.bw ? 'bodyweight' : x.weight != null ? `${x.weight} ${x.unit}` : ''].filter(Boolean).join(' · ');
-  return `<section class="fx-head"><h2><button type="button" class="linkish" data-fx="main" aria-label="Back to Fitness">‹</button> ${E(w.title)}</h2><span class="small muted">${s.done} of ${s.sets} sets</span></section>
-    <div class="fx-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${s.sets}" aria-valuenow="${s.done}"><i style="width:${s.sets ? Math.round((s.done / s.sets) * 100) : 0}%"></i></div>
-    ${w.blocks.map((b, bi) => `<section class="card fx-block"><b>${b.items.length > 1 ? `${b.kind === 'circuit' ? '🔁 Circuit' : '🔗 Superset'} · ${b.rounds} rounds` : `🏋️ ${E(b.items[0]?.name || '')}`}</b>
+// Train: doing Today's Workout. Each set shows the plan; ✓ records it as planned or with what you
+// typed (the plan is kept beside it). A done round folds to one line, e.g. "Set 3 — 8 × 135 ✓".
+const planText = (x) => [x.reps != null ? `${x.reps} reps` : '', x.time != null ? W.setText({ time: x.time }) : '', x.distance != null ? `${x.distance} ${x.distUnit}` : '', x.bw ? 'bodyweight' : x.weight != null ? `${x.weight} ${x.unit}` : ''].filter(Boolean).join(' · ');
+export function didText(x) {
+  const g = { ...x, ...(x.got || {}) };
+  const reps = g.reps != null ? String(g.reps) : '';
+  const load = x.bw ? 'bodyweight' : g.weight != null ? `${g.weight}${x.unit === 'kg' ? ' kg' : ''}` : '';
+  return [reps && load ? (x.bw ? `${reps} reps · bodyweight` : `${reps} × ${load}`) : reps ? `${reps} reps` : load, g.time != null ? W.setText({ time: g.time }) : '', g.distance != null ? `${g.distance} ${x.distUnit}` : ''].filter(Boolean).join(' · ') || 'done';
+}
+const changed = (x) => x.got && ((x.got.reps != null && x.got.reps !== x.reps) || (x.got.weight != null && x.got.weight !== x.weight) || (x.got.time != null && x.got.time !== x.time) || (x.got.distance != null && x.got.distance !== x.distance));
+function trainHtml() {
+  const w = fx.today, s = W.summary(w), p = W.progress(w), nx = p.next;
+  return `${head('data-fx="today"', "Today's Workout", `Train · ${E(w.title)}`)}
+    <p class="small pad" role="status"><b>${p.exDone} of ${p.exercises} exercises</b> · ${s.done} of ${s.sets} sets${nx ? ` · next: ${E(w.blocks[nx.bi].items[nx.ii].name || 'exercise')}` : ' · all done'}</p>
+    <div class="fx-progress" role="progressbar" aria-label="Sets done" aria-valuemin="0" aria-valuemax="${s.sets}" aria-valuenow="${s.done}"><i style="width:${s.sets ? Math.round((s.done / s.sets) * 100) : 0}%"></i></div>
+    ${w.blocks.map((b, bi) => `<section class="card fx-block"><b>${b.items.length > 1 ? blockLabel(b) : `🏋️ ${E(b.items[0]?.name || '')}${b.items[0]?.perSide ? ' <small class="muted">each side</small>' : ''}`}</b>${b.note ? `<small class="muted">${E(b.note)}</small>` : ''}
       ${[...Array(b.rounds).keys()].map((r) => { const all = b.items.every((it) => it.sets[r]?.done);
-        return all ? `<p class="small muted fx-rdone">✓ ${b.items.length > 1 ? `Round ${r + 1}` : `Set ${r + 1}`} — ${b.items.map((it) => E(W.setText({ ...it.sets[r], ...it.sets[r].got }))).join(' · ')} <button type="button" class="linkish tiny" data-fx="undo:${bi}:${r}">undo</button></p>`
-          : `<div class="fx-round">${b.items.length > 1 ? `<div class="small"><b>Round ${r + 1}</b></div>` : ''}${b.items.map((it, ii) => { const x = it.sets[r], g = x.got || {}, m = measureOf(it); return `<div class="fx-logrow ${x.done ? 'done' : ''}">
-            <span class="grow"><b>${b.items.length > 1 ? E(it.name) : `Set ${r + 1}`}</b><small class="muted">${E(target(x)) || 'as you like'}</small></span>
-            ${x.done ? `<span class="small">✓ ${E(W.setText({ ...x, ...g }))}</span>` : `<span class="fx-in">${m === 'time' ? `<input inputmode="numeric" data-fxl="time:${bi}:${ii}:${r}" value="${x.time ?? ''}" aria-label="Seconds" placeholder="sec">` : m === 'distance' ? `<input inputmode="decimal" data-fxl="distance:${bi}:${ii}:${r}" value="${x.distance ?? ''}" aria-label="Distance" placeholder="${x.distUnit}">` : `<input inputmode="numeric" data-fxl="reps:${bi}:${ii}:${r}" value="${x.reps ?? ''}" aria-label="Reps" placeholder="reps">${m === 'reps' ? `<input inputmode="decimal" data-fxl="weight:${bi}:${ii}:${r}" value="${x.weight ?? ''}" aria-label="Weight (${x.unit})" placeholder="${x.unit}">` : ''}`}</span>
+        const lab = b.items.length > 1 ? `Round ${r + 1}` : `Set ${r + 1}`;
+        return all ? `<p class="small fx-rdone">${lab} — ${b.items.map((it) => `${b.items.length > 1 ? `${E(it.name)} ` : ''}${E(didText(it.sets[r]))}${changed(it.sets[r]) ? ` <small class="muted">(plan ${E(planText(it.sets[r]))})</small>` : ''}`).join(' · ')} ✓ <button type="button" class="linkish tiny" data-fx="undo:${bi}:${r}" aria-label="Undo ${lab}">undo</button></p>`
+          : `<div class="fx-round ${nx && nx.bi === bi && nx.si === r ? 'next' : ''}">${b.items.length > 1 ? `<div class="small"><b>${lab}</b></div>` : ''}${b.items.map((it, ii) => { const x = it.sets[r], m = measureOf(it); return `<div class="fx-logrow ${x.done ? 'done' : ''}">
+            <span class="grow"><b>${b.items.length > 1 ? `${E(it.name)}${it.perSide ? ' <small class="muted">each side</small>' : ''}` : lab}</b><small class="muted">${E(planText(x)) || 'as you like'}</small></span>
+            ${x.done ? `<span class="small">${E(didText(x))} ✓</span>` : `<span class="fx-in">${m === 'time' ? `<input inputmode="numeric" data-fxl="time:${bi}:${ii}:${r}" value="${x.time ?? ''}" aria-label="Seconds, ${E(it.name)} ${lab}" placeholder="sec">` : m === 'distance' ? `<input inputmode="decimal" data-fxl="distance:${bi}:${ii}:${r}" value="${x.distance ?? ''}" aria-label="Distance, ${E(it.name)} ${lab}" placeholder="${x.distUnit}">` : `<input inputmode="numeric" data-fxl="reps:${bi}:${ii}:${r}" value="${x.reps ?? ''}" aria-label="Reps, ${E(it.name)} ${lab}" placeholder="reps">${m === 'reps' ? `<input inputmode="decimal" data-fxl="weight:${bi}:${ii}:${r}" value="${x.weight ?? ''}" aria-label="Weight (${x.unit}), ${E(it.name)} ${lab}" placeholder="${x.unit}">` : ''}`}</span>
               <button type="button" class="fx-check" data-fx="log:${bi}:${ii}:${r}" aria-label="Done: ${E(it.name)}, ${b.items.length > 1 ? 'round' : 'set'} ${r + 1}">✓</button>`}</div>`; }).join('')}</div>`; }).join('')}
     </section>`).join('')}
-    <div class="fx-foot"><button type="button" class="ghost" data-fx="edittoday">Edit</button><button type="button" data-fx="finish">Finish workout</button></div>`;
+    <div class="fx-foot"><button type="button" class="ghost" data-fx="edittoday">Edit</button><button type="button" data-fx="finish">Complete Workout</button></div>`;
 }
 
 // ---------- actions ----------
 function setToday(w) { fx.today = w; saveToday(); }
+// A new Today's Workout (from any of the ways in): shown as the plan first; Start Workout begins it.
 async function startWith(w, source) {
   const fresh = W.normalize({ ...w, date: fx.c.iso(), status: 'planned', source: source || w.source });
-  if (fx.today && fx.today.status !== 'done' && W.summary(fx.today).done && !fx.c.confirm(`Replace "${fx.today.title}"? What you've logged in it is kept only if you finish it first.`)) return;
+  if (W.untitled(fresh.title)) fresh.title = W.suggestName(fresh);
+  if (open() && W.summary(fx.today).done && !fx.c.confirm(`Replace "${fx.today.title}"? What you've logged in it is kept only if you complete it first.`)) return;
   fx.today = fresh; await saveToday(true);
-  fx.view = 'log'; render(); fx.c.toast(`🏋️ ${fresh.title} is Today's Workout`);
+  fx.view = 'today'; render(); fx.c.toast(`🏋️ ${fresh.title} is Today's Workout`);
+}
+// Start Workout: the clock starts and Train opens (Health's button calls this too).
+export function begin() {
+  if (!open()) return;
+  if (fx.today.status === 'planned') { fx.today = { ...fx.today, status: 'active', startedAt: Date.now() }; saveToday(); }
+  fx.view = 'train';
 }
 export function edit(w, from = 'new') { fx.draft = W.normalize(w); fx.draftFrom = from; fx.view = 'edit'; render(); }
 const blank = (n) => ({ items: Array.from({ length: n }, () => ({ name: '', sets: [{}, {}, {}] })), rounds: 3 });
+// One finished workout: what you planned and did, its name (yours to change), do it again, save it.
 function histSheet(id) {
   const w = history().find((x) => x.id === id);
   if (!w) return;
   const s = W.summary(w);
+  const lines = w.blocks.flatMap((b) => b.items.map((it) => `<p class="small"><b>${E(it.name || '?')}</b>${it.perSide ? ' <small class="muted">each side</small>' : ''} ${it.sets.map((x) => (x.done ? `${E(didText(x))}${changed(x) ? ` <small class="muted">(plan ${E(planText(x))})</small>` : ''}` : `<s class="muted" title="Not done">${E(planText(x)) || '—'}</s>`)).join(' · ')}</p>`));
   fx.c.openSheet(`<div class="row between"><h2>${E(w.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
-    <p class="small muted">${E(w.date || '')}${s.minutes ? ` · ${s.minutes} min` : ''}${s.volume ? ` · ${s.volume.toLocaleString()} lb lifted` : ''}${w.source === 'device' ? ' · from your device' : w.source === 'lift' ? ' · lifting program' : ''}</p>
-    ${W.describe(w).map((l) => `<p class="small">${E(l)}</p>`).join('') || (w.activity ? `<p class="small">${E(w.activity.kind)}${w.activity.minutes ? ` · ${w.activity.minutes} min` : ''}${w.activity.kcal ? ` · ${w.activity.kcal} kcal` : ''}</p>` : '')}
+    <p class="small muted">${E(w.date || '')}${s.minutes ? ` · ${s.minutes} min` : ''}${s.volume ? ` · ${s.volume.toLocaleString()} lb lifted` : ''}${w.source === 'device' ? ' · from your device' : w.source === 'lift' || w.program ? ' · lifting program' : ''}</p>
+    ${lines.join('') || (w.activity ? `<p class="small">${E(w.activity.kind)}${w.activity.minutes ? ` · ${w.activity.minutes} min` : ''}${w.activity.kcal ? ` · ${w.activity.kcal} kcal` : ''}</p>` : '')}
+    <div class="row fx-rename"><label class="grow"><span class="visually-hidden">Name</span><input id="fxRename" value="${E(w.title)}" maxlength="80" aria-label="Workout name"></label><button type="button" class="ghost" data-fx="rename:${E(w.id)}">Rename</button></div>
     ${w.blocks.length ? `<div class="row"><button type="button" class="grow" data-fx="repeat:${E(w.id)}">🔁 Do it again today</button><button type="button" class="ghost" data-fx="savetpl:${E(w.id)}">Save it</button></div>` : ''}`);
+}
+// 📋 The lifting program is optional: until you choose it, Fitness only offers to set it up.
+function programSheet() {
+  fx.c.openSheet(`<div class="row between"><h2>📋 Lifting program</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <p class="small"><b>Full body, 3 days a week, in 6-week blocks.</b> Day A is heavy, Day B moderate, Day C light. Weights go up once you reach the top of each rep range; week 6 is an easier deload week.</p>
+    <p class="small muted">Optional — your own workouts work without it. Once it's on, ＋ Add Workout offers the next program day as Today's Workout, with weights from what you last lifted.</p>
+    <button type="button" class="wide" data-fx="programon">Use this program</button>`);
 }
 const num = (v) => (v === '' || v == null ? null : +v);
 export async function onClick(t) {
   const [a, ...r] = t.dataset.fx.split(':'), n = r.map(Number);
   const c = fx.c;
   switch (a) {
-    case 'main': dropPic(); fx.view = 'main'; return c.show();
-    case 'open': fx.view = 'log'; return c.show();
-    case 'add': fx.view = 'main'; return c.show();
-    case 'build': return edit({ title: 'Workout', blocks: [blank(1)] });
+    case 'main': case 'add': dropPic(); fx.view = 'main'; return c.show();
+    case 'open': case 'today': fx.view = open() ? 'today' : 'main'; return c.show();
+    case 'start': begin(); return c.show();
+    case 'train': fx.view = open() ? 'train' : 'main'; return c.show();
+    case 'build': return edit({ title: '', blocks: [blank(1)] });
     case 'describe': fx.said = null; fx.view = 'describe'; render(); document.getElementById('fxSaid')?.focus(); return checkClaude();
     case 'read': return readSaid();
     case 'reviewlocal': { const w = fx.said?.local?.workout; fx.unread = fx.said?.local?.unread || []; fx.said = null; return w && edit(w); }
@@ -284,11 +394,28 @@ export async function onClick(t) {
     case 'readpic': return readPic();
     case 'pickpic': return document.querySelector('[data-fxpick]')?.click();
     case 'tpl': return startWith(fx.templates[n[0]], 'repeat');
+    case 'program': return programSheet();
+    case 'programon': {
+      await c.editMine((s) => { const l = s.get('lift', {}) || {}; s.set('lift', { ...l, on: true, block: l.block || 1 }); return s.get('lift', {}); }).then((lift) => { fx.lift = lift; });
+      c.closeSheet(); render(); return c.toast('📋 Program on — find the next day under ＋ Add Workout');
+    }
+    case 'fromprogram': return startWith(PG.programWorkout(fx.lift || {}, fx.log, { date: c.iso() }), 'program');
     case 'hist': return histSheet(r.join(':'));
+    case 'rename': {
+      const id = r.join(':'), w = history().find((x) => x.id === id), name = document.getElementById('fxRename')?.value.trim();
+      if (!w || !name || name === w.title) return null;
+      // An older workout (the trackers' program, a device) gets a renamed copy in your history.
+      await appendLog(W.normalize({ ...w, title: name }));
+      c.closeSheet(); render(); return c.toast('Renamed');
+    }
     case 'repeat': { const w = history().find((x) => x.id === r.join(':')); c.closeSheet(); return w && startWith(W.repeatOf(w, c.iso()), 'repeat'); }
     case 'savetpl': { const w = history().find((x) => x.id === r.join(':')); if (!w) return; fx.templates = [W.repeatOf(w, ''), ...fx.templates.filter((x) => x.title !== w.title)].slice(0, 30); await saveToday(true); c.closeSheet(); return c.toast(`Saved "${w.title}" — find it under Add Workout`); }
     case 'edittoday': return edit(fx.today, 'today');
-    case 'cancel': fx.draft = null; fx.unread = []; fx.view = fx.draftFrom === 'today' ? 'log' : 'main'; return render();
+    case 'droptoday': {
+      if (W.summary(fx.today).done && !c.confirm(`Remove "${fx.today.title}"? The sets you've logged in it go too.`)) return null;
+      fx.today = null; await saveToday(true); fx.view = 'main'; return render();
+    }
+    case 'cancel': fx.draft = null; fx.unread = []; fx.view = fx.draftFrom === 'today' && open() ? (fx.today.status === 'active' ? 'train' : 'today') : 'main'; return render();
     case 'rounds': fx.draft = W.setRounds(fx.draft, n[0], fx.draft.blocks[n[0]].rounds + n[1]); return render();
     case 'delblock': fx.draft.blocks.splice(n[0], 1); return render();
     case 'delitem': { const b = fx.draft.blocks[n[0]]; b.items.splice(n[1], 1); if (!b.items.length) fx.draft.blocks.splice(n[0], 1); else b.kind = W.kindFor(b.items.length); return render(); }
@@ -297,23 +424,32 @@ export async function onClick(t) {
     case 'savedraft': {
       const w = W.normalize(fx.draft);
       if (W.problems(w).length) return render();
-      if (fx.draftFrom === 'today') { fx.today = { ...w, status: fx.today?.status || 'planned', startedAt: fx.today?.startedAt }; fx.draft = null; await saveToday(true); fx.view = 'log'; return render(); }
+      if (W.untitled(w.title)) w.title = W.suggestName(w);
+      if (fx.draftFrom === 'today' && open()) {
+        fx.today = { ...w, id: fx.today.id, status: fx.today.status, startedAt: fx.today.startedAt, program: fx.today.program };
+        if (!fx.today.program) delete fx.today.program;
+        if (!fx.today.startedAt) delete fx.today.startedAt;
+        fx.draft = null; await saveToday(true); fx.view = fx.today.status === 'active' ? 'train' : 'today'; return render();
+      }
       fx.draft = null; fx.unread = [];
       return startWith(w, w.source === 'text' || w.source === 'photo' ? w.source : 'manual');
     }
     case 'log': {
       const [bi, ii, si] = n, row = t.closest('.fx-logrow');
       const got = {}; for (const inp of row.querySelectorAll('[data-fxl]')) got[inp.dataset.fxl.split(':')[0]] = num(inp.value);
-      setToday(W.logSet(fx.today, bi, ii, si, got)); return render();
+      setToday(W.logSet(fx.today, bi, ii, si, got)); render();
+      document.querySelector('.fx-round.next')?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+      return null;
     }
     case 'undo': { let w = fx.today; for (let ii = 0; ii < w.blocks[n[0]].items.length; ii++) w = W.unlogSet(w, n[0], ii, n[1]); setToday(w); return render(); }
     case 'finish': {
       const s = W.summary(fx.today);
-      if (!s.done && !c.confirm('Nothing is ticked yet. Finish anyway?')) return;
+      if (!s.done && !c.confirm('Nothing is ticked yet. Complete it anyway?')) return;
       const done = W.complete(fx.today);
       await appendLog(done);
       fx.today = null; await saveToday(true);
-      fx.view = 'main'; render(); return c.toast(`💪 ${done.title} — ${s.done} sets. Nice work.`);
+      fx.view = 'main'; render(); histSheet(done.id);
+      return c.toast(`💪 ${done.title} — ${s.done} sets. Nice work.`);
     }
     default: return null;
   }
@@ -328,7 +464,12 @@ function refreshFoot() {
 export function onInput(t) {
   const [f, ...r] = t.dataset.fxe.split(':'), [bi, ii, si] = r.map(Number);
   if (f === 'title') { fx.draft.title = t.value; return; }
-  if (f === 'name') { fx.draft = W.renameItem(fx.draft, bi, ii, t.value); t.classList.toggle('unsure', !t.value.trim()); return refreshFoot(); }
+  if (f === 'perside') { const it = fx.draft.blocks[bi].items[ii]; if (t.checked) it.perSide = true; else delete it.perSide; return; }
+  if (f === 'name') {
+    fx.draft = W.renameItem(fx.draft, bi, ii, t.value); t.classList.toggle('unsure', !t.value.trim());
+    const title = document.querySelector('[data-fxe=title]'); if (title) title.placeholder = W.suggestName(fx.draft);
+    return refreshFoot();
+  }
   if (f === 'measure') {
     const it = fx.draft.blocks[bi].items[ii];
     it.sets = it.sets.map((s) => W.makeSet({ ...s, bw: t.value === 'bw', weight: t.value === 'reps' ? s.weight : null, time: t.value === 'time' ? s.time ?? null : null, distance: t.value === 'distance' ? s.distance ?? null : null, reps: t.value === 'time' || t.value === 'distance' ? null : s.reps }));
