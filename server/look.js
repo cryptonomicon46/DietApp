@@ -85,7 +85,7 @@ export async function lookRoutes({ path, method, body, bytes, db, user, loadFami
   const all = ((await db.get(key)) || []).filter((f) => now - f.at < FC_DAYS * 864e5 && ids.has(f.by) && ids.has(f.to));
   const save = () => db.put(key, all);
   const sees = (f) => f.by === me.id || (f.to === me.id && f.status !== 'draft');
-  const out = (f) => ({ id: f.id, by: f.by, to: f.to, at: f.at, kind: f.kind, names: f.names, msg: f.msg, status: f.status, verdict: f.verdict || null, reasons: f.reasons || [], answeredAt: f.answeredAt || null, imgs: f.kind === 'ab' ? 2 : 1, thread: f.thread || null });
+  const out = (f) => ({ id: f.id, by: f.by, to: f.to, at: f.at, kind: f.kind, names: f.names, msg: f.msg, status: f.status, verdict: f.verdict || null, reasons: f.reasons || [], answeredAt: f.answeredAt || null, imgs: f.kind === 'ab' ? 2 : 1 });
   if (!m[2] && method === 'GET') return json({ fitchecks: all.filter(sees).sort((a, b) => b.at - a.at).slice(0, 30).map(out) });
   if (!m[2] && method === 'POST') {
     // Your other half only (a parent or a grown-up child in the family isn't).
@@ -137,13 +137,6 @@ export async function lookRoutes({ path, method, body, bytes, db, user, loadFami
     const by = fam.members.find((x) => x.id === f.by);
     const said = { hit: '🔥 Hit', miss: '🙈 Miss', a: 'A', b: 'B', neither: 'Neither' }[verdict];
     if (by?.uid) tell([by.uid], 'us', { title: `👔 ${me.name} says ${said}`, body: 'Your Fit Check has an answer', url: `family/#fitcheck=${f.id}`, tag: `fc${f.id}` });
-    return json({ fitcheck: out(f) });
-  }
-  // Linking a Thread for "Discuss" (the thread itself is made the usual way).
-  if (!m[3] && method === 'PATCH') {
-    if (!/^[a-z0-9]{6,16}$/.test(body.thread || '')) return json({ error: 'which thread?' }, 400);
-    f.thread = body.thread;
-    await save();
     return json({ fitcheck: out(f) });
   }
   if (!m[3] && method === 'DELETE') {
