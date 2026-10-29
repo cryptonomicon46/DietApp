@@ -1262,3 +1262,4 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .lk-hero .eyebrow { margin: 0; }
 .lk-wideonly { display: none; }
 @media (min-width: 900px) { .lk-wideonly { display: block; } .lk-narrowonly { display: none; } }
+.lk-unsure { color: var(--warn); font-weight: 600; }

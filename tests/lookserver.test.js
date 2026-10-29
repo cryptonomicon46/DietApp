@@ -132,3 +132,34 @@ test('leaving the family: their Closet, pictures and Fit Checks go; they can\'t 
   const idx = JSON.parse(m.get('blobidx') || m.get('v2:blobidx') || '{}');
   assert.ok(!Object.keys(idx).some((k) => k.includes(`/look/${id.pat}/`) || k.includes(`/fc/${fitcheck.id}`)), 'their pictures and the check\'s picture');
 });
+
+test('Look with Claude: only the one picture goes, answers tidied, nothing kept, off without Claude', async () => {
+  const { PURPOSES } = await import('../server/aiGateway.js');
+  const { PIECES_SCHEMA, ITEM_SCHEMA, tidyPieces } = await import('../server/lookAi.js');
+  assert.deepEqual(Object.keys(PURPOSES['look.pieces'].fields).sort(), ['image', 'mime']);
+  assert.equal(PURPOSES['look.item'].payload, 'personal-image');
+  const objs = []; (function walk(x) { if (x && typeof x === 'object') { if (x.type === 'object') objs.push(x); Object.values(x).forEach(walk); } })([PIECES_SCHEMA, ITEM_SCHEMA]);
+  assert.ok(objs.every((o) => o.additionalProperties === false && o.required.length === Object.keys(o.properties).length));
+  assert.deepEqual(tidyPieces({ pieces: [{ name: 'Navy blazer', cat: 'outer', sub: 'Blazer', color: 'Navy', pattern: 'solid', formality: 9, warmth: -2, sure: true, box: { x: -1, y: 0.2, w: 2, h: 0.5 } }, { name: '', cat: 'x' }] }),
+    [{ name: 'Navy blazer', cat: 'outer', sub: 'blazer', color: 'navy', pattern: 'solid', formality: 5, warmth: 0, sure: true, box: { x: 0, y: 0.2, w: 1, h: 0.5 } }]);
+
+  const m = new Map();
+  let asked;
+  const client = { messages: { create: async (req) => { asked = req; return { stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ pieces: [{ name: 'Watch', cat: 'watch', sub: 'watch', color: 'silver', pattern: 'solid', formality: 3, warmth: 0, sure: false, box: { x: 0.8, y: 0.5, w: 0.1, h: 0.1 } }] }) }] }; } } };
+  const env = { DEMO: true, __anthropic: client, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
+  const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path); return { status: r.status, ...(r.data || {}) }; };
+  assert.equal((await call('/ai/look/pieces', null, 'POST', { image: 'AAAA', mime: 'image/jpeg' })).status, 401);
+  const { token } = await call('/auth/demo', null, 'POST', { email: 'sam@example.com' });
+  await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true });
+  const before = new Set(m.keys());
+  const r = await call('/ai/look/pieces', token, 'POST', { image: 'AAAA', mime: 'image/jpeg', closet: ['Zorblax coat'], name: 'Quentin' });
+  assert.equal(r.status, 200);
+  assert.deepEqual([r.pieces[0].name, r.pieces[0].sure], ['Watch', false]);
+  const sent = JSON.stringify(asked.messages);
+  assert.ok(sent.includes('"data":"AAAA"') && !sent.includes('Zorblax') && !sent.includes('Quentin'));
+  assert.match(asked.messages[0].content[1].text, /Never describe the person/);
+  assert.ok([...m.keys()].filter((k) => !before.has(k)).every((k) => /^v2:(aiaudit:|ai:look\.pieces:|rate:)/.test(k)));
+  assert.equal((await call('/ai/look/item', token, 'POST', { image: 'AAAA', mime: 'image/gif' })).status, 400);
+  delete env.__anthropic;
+  assert.equal((await call('/ai/look/item', token, 'POST', { image: 'AAAA', mime: 'image/jpeg' })).status, 501);
+});

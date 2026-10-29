@@ -63,6 +63,7 @@ import { aiCall, GatewayError } from './aiGateway.js';
 import { readWorkout } from './workoutAi.js';
 import { askPlan } from './planCoach.js';
 import { lookRoutes, isLookBytes, forgetLooks, LOOK_IMG } from './look.js';
+import { nameItem, findPieces } from './lookAi.js';
 import { cleanFacts, cleanTurns } from '../js/planCoach.js';
 import { bookRoutes, bookLookupRoutes, bookCover, forgetReader } from './books.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
@@ -373,6 +374,22 @@ export async function familyApi(req, env, path, ctx = null) {
     const blobs = blobStore(env);
     const r = await lookRoutes({ path, method, body, bytes, db, user, loadFamily, meIn, partnerOf, isCouple, sealed, randomId, tell, json, url: () => url(req), blobs, usage: () => familyUsage(blobs, path.split('/')[2]), quota: quotaBytes(env) });
     if (r) return r;
+  }
+
+  // ---- 👔 Look with Claude: name one piece, or find the pieces in an outfit photo ----
+  // Only that one picture goes, through the gateway; nothing is kept; the phone confirms each piece.
+  if ((path === '/ai/look/item' || path === '/ai/look/pieces') && method === 'POST') {
+    if (!aiReady(env)) return json({ error: 'this needs Claude on the connector', off: true }, 501);
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(body.mime)) return json({ error: 'a JPEG, PNG or WebP picture' }, 400);
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(String(body.image || '').slice(-4096))) return json({ error: 'that picture didn\'t arrive whole' }, 400);
+    const pieces = path.endsWith('pieces');
+    try {
+      return json(await aiCall({ db, purpose: pieces ? 'look.pieces' : 'look.item', input: { image: String(body.image), mime: body.mime }, who: user.uid, underLimit },
+        async (payload) => (pieces ? findPieces : nameItem)(await claude(env), payload, { model: env.PARSE_MODEL || 'claude-sonnet-5-5' })));
+    } catch (e) {
+      if (e instanceof GatewayError) return json({ error: e.status === 413 ? 'that picture is too large' : e.message }, e.status);
+      return json({ error: "Claude couldn't read that picture just now" }, 502);
+    }
   }
 
   // ---- 📈 Ask about my plan (Claude explains; nothing is changed or kept) ----

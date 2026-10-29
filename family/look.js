@@ -352,7 +352,8 @@ function addItemHtml() {
     <div class="lk-chips">${it.color ? `<span class="chip">${E(cap(it.color))}</span>` : ''}<span class="chip">${E(cap(it.sub || L.CATS[it.cat].label))}</span><span class="chip">${E(FORMAL[it.formality - 1])}</span></div>
     ${dup ? `<div class="note" role="status">Looks like your <b>${E(dup.item.name)}</b>${dup.sure ? '' : ' (maybe)'}.<div class="row"><button type="button" class="ghost grow" data-lk="usedup:${dup.item.id}">Use existing</button><button type="button" class="ghost grow" data-lk="adddup">Add new</button></div></div>` : ''}
     ${d.edit ? itemForm(it, 'new') : `<div class="row"><button type="button" class="grow" data-lk="itemok" ${failed || dup ? 'disabled' : ''}>Looks right</button><button type="button" class="ghost" data-lk="itemedit">Edit</button></div>`}
-    ${lk.ai === true && !d.named ? `<p class="small center"><button type="button" class="linkish small" data-lk="nameai">✨ Name it with Claude</button></p><p class="tiny muted center">Sends only this cut-out picture to Claude (Anthropic) to name the piece. Not kept.</p>` : ''}</section>`;
+    ${lk.ai === true && !d.named && !d.reading ? `<p class="small center"><button type="button" class="linkish small" data-lk="nameai">✨ Name it with Claude</button></p><p class="tiny muted center">Sends only this cut-out picture to Claude (Anthropic) to name the piece. Not kept.</p>` : ''}
+    ${d.byClaude ? '<p class="tiny muted center">Named by Claude from this picture only. Not kept.</p>' : ''}</section>`;
 }
 const cap = (s) => String(s || '').replace(/^./, (c) => c.toUpperCase());
 const FORMAL = ['Casual', 'Relaxed', 'Smart casual', 'Business', 'Formal'];
@@ -386,6 +387,8 @@ async function cutItem(tolerance, original = false) {
   d.item = L.makeItem({ ...(d.item || {}), name: d.named ? d.item.name : L.suggestName(color, d.item?.sub || g.sub, d.item?.cat || g.cat), cat: d.item?.cat || g.cat, color: d.named ? d.item.color : color, hex: p.colors[0]?.hex, colors: p.colors.map((c) => c.name), hash: p.hash });
   if (lk.ai == null) lk.ai = await lk.c.aiReady().catch(() => null);
   render();
+  // Once you've had Claude name a piece, it names the next ones too (just their picture goes).
+  if (lk.ai === true && !d.named && !original && LS.get('fam.look.aiName')) nameWithClaude();
 }
 async function addItem(dupOf = null) {
   const d = lk.draft;
@@ -420,7 +423,7 @@ function piecesHtml() {
   return `${backTo}<section class="card"><p>${list.length ? 'We found' : 'No pieces found.'}</p>
     ${list.map((c, i) => { const dup = c.dupOf && L.itemById(lk.rec, c.dupOf); return `<div class="lk-cand${c.skip ? ' skip' : ''}">
       <div class="lk-cut small${c.pic?.alpha ? ' alpha' : ''}">${c.pic ? `<img src="${c.pic.preview}" alt="">` : '<span aria-hidden="true">…</span>'}</div>
-      <div class="grow"><input data-lke="cand:${i}" value="${E(c.name)}" aria-label="Name of piece ${i + 1}" maxlength="80">${c.sure ? '' : '<small class="muted">Possible — check it</small>'}
+      <div class="grow">${c.sure ? '' : `<small class="lk-unsure">Possible ${E((c.item.sub || L.CATS[c.item.cat].label).toLowerCase())} — check it</small>`}<input data-lke="cand:${i}" value="${E(c.name)}" aria-label="Name of piece ${i + 1}" maxlength="80">
         ${dup && !c.decided ? `<div class="small">Looks like your <b>${E(dup.name)}</b><div class="row"><button type="button" class="ghost small" data-lk="cuse:${i}">Use existing</button><button type="button" class="ghost small" data-lk="cnew:${i}">Add new</button></div></div>` : c.use ? `<small>Using your ${E(L.itemById(lk.rec, c.use)?.name || '')}</small>` : ''}</div>
       <label class="lk-inc"><input type="checkbox" data-lke="inc:${i}" ${c.skip ? '' : 'checked'}> <span class="visually-hidden">Include</span></label></div>`; }).join('')}
     <button type="button" class="wide" data-lk="addpieces" ${list.some((c) => !c.skip && c.dupOf && !c.decided) || !list.some((c) => !c.skip) ? 'disabled' : ''}>Add selected to Closet</button>
@@ -452,7 +455,7 @@ async function findPieces() {
     for (const c of (r.pieces || []).slice(0, 10)) {
       const box = { x: Math.round(c.box.x * bmp.width), y: Math.round(c.box.y * bmp.height), w: Math.max(8, Math.round(c.box.w * bmp.width)), h: Math.max(8, Math.round(c.box.h * bmp.height)) };
       const pic = await piece(bmp, { box }).catch(() => null);
-      const item = L.makeItem({ name: c.sure ? c.name : `Possible ${c.sub || L.CATS[c.cat]?.label.toLowerCase() || 'piece'}`, cat: c.cat, sub: c.sub, color: c.color || pic?.colors[0]?.name, formality: c.formality, warmth: c.warmth });
+      const item = L.makeItem({ name: c.name, cat: c.cat, sub: c.sub, color: c.color || pic?.colors[0]?.name, formality: c.formality, warmth: c.warmth });
       const dup = L.likelySame({ ...item, hash: pic?.hash }, lk.rec.items);
       p.list.push({ name: item.name, item, pic, sure: !!c.sure, dupOf: dup?.item.id || null });
     }
@@ -807,7 +810,8 @@ async function nameWithClaude() {
     let s = ''; const b = await encode(canvasOf(await bitmap(new Blob([d.pic.full], { type: sniff(d.pic.full) })), 800), false, 0.85);
     for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
     const r = await lk.c.api.post('/ai/look/item', { image: btoa(s), mime: 'image/jpeg' });
-    d.item = L.makeItem({ ...d.item, ...r.item, hash: d.pic.hash }); d.named = true;
+    if (r.item) { d.item = L.makeItem({ ...d.item, ...r.item, hash: d.pic.hash }); d.named = true; d.byClaude = true; LS.set('fam.look.aiName', 1); }
+    else lk.c.toast("Claude couldn't see a piece of clothing in that");
   } catch (e) { lk.c.toast(e.status === 501 ? 'Naming with Claude isn\'t set up here' : e.message); if (e.status === 501) lk.ai = false; }
   d.reading = false; render();
 }
