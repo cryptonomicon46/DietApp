@@ -451,7 +451,8 @@ function looks() {
       el: () => (state.view === 'look' ? $('#view') : null), show: () => (state.view === 'look' ? L.render() : show('look')),
       lock: async (v) => (fk() ? { enc: await seal(fk(), v) } : v), unlock: async (v) => (isSealed(v) ? tryOpen(fk(), v, null) : v),
       seal: (v) => lockBox(v), open: (v) => openBox(v), key: () => fk(), sealBytes, openBytes,
-      partner: () => partnerMember(), name: (id) => member(id)?.name || '', dayEntries,
+      // Today's events, with the calendar loaded first (Look can be opened before Calendar ever was).
+      partner: () => partnerMember(), name: (id) => member(id)?.name || '', dayEntries: async (d) => { if (!calm.loadedAt) await loadCal({ golden: false }).catch(() => {}); return dayEntries(d); },
       discuss: (ref, title, body) => discuss(ref, title, body),
       prev: () => { const v = LOOK_FROM[state.lookFrom] ? state.lookFrom : 'calendar'; return { view: v, label: LOOK_FROM[v] }; },
       aiReady: async () => { const cfg = await api.liveConfig(); return cfg.missing || cfg.offline ? null : !!cfg.ai; },
@@ -3076,6 +3077,7 @@ async function loadCal({ golden = true } = {}) {
   calm.events = await Promise.all(r.events.map(async (e) => ({ ...e, ...((await unlock(e.body)) || { title: '🔒 Locked', locked: true }) })));
   calm.feeds = (await Promise.all(r.feeds.map(async (f) => ({ ...f, ...((await unlock(f.body)) || {}) })))).filter((f) => f.url);
   if (golden) calm.golden = stats?.goldenDays || [];
+  calm.loadedAt = Date.now();
   refreshFeeds().catch(() => {});
 }
 // Linked calendars (iCloud, Google): fetched through the connector, kept on this device for 30 minutes.

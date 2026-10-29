@@ -282,3 +282,28 @@ test('which Look a Fit Check was about stays in your own record, bounded', () =>
   const r = L.normalize({ fc: { fc00000001: { look: 'look0001', items: [['blazer01', 'BAD'], ['oxford01'], ['x']] }, 'BAD KEY': {} } });
   assert.deepEqual(r.fc, { fc00000001: { look: 'look0001', items: [['blazer01'], ['oxford01']] } });
 });
+
+test('more days: an ordinary business day, date night, a cold rainy day', () => {
+  const work = L.recommend(rec(), ctx('work', 2), today).looks;
+  assert.match(work[0].why, /^Business casual for the office/);
+  assert.ok(!work[0].items.some((i) => i.id === 'tee00001'), 'no tee at the office');
+  const date = L.recommend(rec(), ctx('date', 2), today).looks[0];
+  assert.match(date.why, /date night/);
+  assert.match(date.name, /Date Night$/);
+  const cold = L.recommend(rec(), ctx('work', 4, { rain: true }), today).looks[0];
+  assert.ok(cold.items.some((i) => i.id === 'coat0001' || i.id === 'blazer01'));
+  assert.match(cold.why, /rain/);
+});
+
+test('recommendations stay fast with a big Closet', () => {
+  const many = [];
+  const kinds = [['outer', 'blazer'], ['top', 'oxford'], ['top', 'tee'], ['bottom', 'chinos'], ['bottom', 'trousers'], ['shoes', 'loafers'], ['shoes', 'sneakers'], ['watch', 'watch']];
+  const colors = ['navy', 'charcoal', 'white', 'light blue', 'khaki', 'brown', 'olive', 'grey', 'black', 'tan'];
+  for (let i = 0; i < 120; i++) { const [cat, sub] = kinds[i % kinds.length]; many.push(L.makeItem({ id: `item${String(i).padStart(4, '0')}`, name: `${colors[i % 10]} ${sub}`, cat, sub, color: colors[i % 10] })); }
+  const r = L.normalize({ items: many });
+  const t0 = performance.now();
+  for (let k = 0; k < 5; k++) L.recommend(r, ctx('dinner', 3), today);
+  const ms = (performance.now() - t0) / 5;
+  assert.ok(ms < 150, `${ms.toFixed(1)} ms per recommendation`);
+  console.log(`# recommend: ${ms.toFixed(1)} ms with 120 pieces`);
+});

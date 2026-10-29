@@ -188,6 +188,28 @@ Confirmed: "Same-Day Delivery powered by Instacart" (sameday.costco.com and .ca)
 - Whether the owner accepts item names leaving the device in plaintext. Is a share-sheet hand-off enough, or is a retailer button wanted?
 - Every finding above came from search excerpts, not opened pages. Re-check each cited page directly, with the provider domains allowed, before any decision.
 
+## 👔 Look — Preview on Me (design only)
+
+**Status: DESIGN ONLY / NOT AUTHORIZED.** The Look MVP shows each Look as a flat-lay of the person's own garment pictures and is complete without any try-on.
+
+- **Extension point:** a Look (`js/look.js` `makeLook`) is a name, tags, item ids and an optional outfit photo; a preview would be a separate, optional rendering of that Look, never part of how Looks are chosen or ranked. Nothing in the recommender depends on an image provider.
+- **Possible modes:** *Quick Preview* (fast, approximate) and *Realistic Preview* (higher quality, slower). Both would need reference photos of the person — the most sensitive data in the app — so: explicit opt-in, the person's own references only, never shared by a Fit Check unless they choose, deletable, and a clear statement of which provider sees what.
+- **Providers to evaluate when authorized:** OpenAI image generation/editing, Google's virtual try-on, other production providers — through the AI gateway with a Look-preview purpose and its own allowlist; family keys never leave the phone; nothing kept by default.
+- **Not decided:** whether previews are stored (and where), cost per preview, and how a preview is marked as generated.
+
+## 👔 Look — Wishlist and shopping (design only)
+
+**Status: DESIGN ONLY / NOT AUTHORIZED.** No Wishlist, retailer, affiliate or checkout code exists.
+
+- **Closet vs Wishlist:** Closet = I own it. Wishlist = I'm considering it. Same item shape (`makeItem`) with a source (product link or screenshot) and no wear history; never mixed into "what to wear today" until moved to the Closet.
+- **The question it answers:** *Would I actually wear this?* — e.g. "This blazer works with 6 things you already own", three Looks combining it with owned pieces (the existing recommender with the wishlist piece pinned), then Ask your partner (Fit Check) → Hit / Miss → buy externally → *Move to Closet*.
+- **Retailer-neutral:** a link or screenshot from any shop (Banana Republic, Zara, Amazon…); product details read the way Add an item is (cut-out on the phone, optional Claude naming). No retailer APIs, affiliate tags or checkout; any later retailer integration needs its own research (see Grocery ordering hand-off for the approach) and authorization.
+- **Privacy:** wishlist items are as private as the Closet; a Fit Check about a wishlist Look shares only that Look.
+
+## 👔 Look — later (design only)
+
+Casual / non-work wardrobe bulk onboarding, seasonal Closet rotation, packing lists from the calendar, and per-person cryptographic isolation of the Closet (today every grown-up holds the family key; the connector's checks keep Closets apart — see the security project below).
+
 ## Separate future security project
 
 Per-person/per-area cryptographic isolation for Diet/Fitness needs its own design and audit before commercial/external-family launch. It is not authorized here and must not be bundled into Read/Discover work or the currently frozen key system.

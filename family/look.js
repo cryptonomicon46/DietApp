@@ -717,7 +717,7 @@ async function fixIt() {
 // The small card on Calendar (today only): what today is, a small preview, how many Looks.
 export async function calendarCard(dateIso) {
   if (dateIso !== today()) return '';
-  const d = await computeToday();
+  const d = await computeToday(true);
   const top = d.looks[0];
   const n = d.looks.length;
   const preview = d.worn ? board(wornLook(d.worn), 'thumb', 'tiny') : top ? board(top, 'thumb', 'tiny') : '';
@@ -805,7 +805,7 @@ export async function onClick(t) {
       if (pick) { await computeToday(); wearNow(pick); }
       render(); return c.toast(pick ? `✓ Today's Look: ${pick.name}` : 'Pick it in Today');
     }
-    case 'discuss': { const f = lk.fcs.find((x) => x.id === lk.fcOpen); return c.discuss(`lk:${f.id}`, `👔 ${f.kind === 'ab' ? `${f.name} or ${f.name2}` : f.name}`, f.note || 'Fit Check'); }
+    case 'discuss': { const f = lk.fcs.find((x) => x.id === lk.fcOpen); return c.discuss(`f:${f.id}`, `👔 ${f.kind === 'ab' ? `${f.name} or ${f.name2}` : f.name}`, f.note || 'Fit Check'); }
     default: return null;
   }
 }
