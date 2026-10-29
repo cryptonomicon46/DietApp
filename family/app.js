@@ -174,8 +174,11 @@ async function boot() {
   if (!state.families.some((f) => f.fid === state.fid)) state.fid = state.families[0].fid;
   await loadFamily(famEarly?.fid === state.fid ? famEarly.p : null);
   // Older links (#feed, #dogs, notifications sent before 2.0) open Home.
-  const hv = location.hash.match(/^#(home|feed|dogs|calendar|me|us|threads|chats|health|fitness|chat=[a-z0-9_]+)$/)?.[1];
+  const hv = location.hash.match(/^#(home|feed|dogs|calendar|me|us|threads|chats|health|fitness|look|chat=[a-z0-9_]+)$/)?.[1];
   if (hv) { state.view = hv; history.replaceState(null, '', location.pathname + location.search); }
+  // 👔 A Fit Check notification opens it in Look.
+  const fc = location.hash.match(/^#fitcheck=([a-z0-9]{6,16})$/)?.[1];
+  if (fc) { state.view = 'look'; state.fitOpen = fc; history.replaceState(null, '', location.pathname + location.search); }
   // ⌚ Back from connecting WHOOP (Health › Devices): open Health and finish there.
   const connecting = /^#connect=/.test(location.hash);
   if (connecting) state.view = 'health';
@@ -371,6 +374,7 @@ function show(view, extra) {
   // A part of the family you haven't been given: Home instead.
   if ((view === 'calendar' && !can('calendar')) || (view === 'threads' && !can('threads'))) view = 'home';
   if (view !== 'compose') state.prevView = view;
+  if (view === 'look' && state.view !== 'look') state.lookFrom = state.view;
   state.view = view;
   if (view === 'member') state.memberId = extra;
   if (view === 'compose') { state.view = state.prevView || 'home'; return plusMenu(); }
@@ -381,7 +385,7 @@ function show(view, extra) {
   if (view !== 'bingo') clearInterval(bingo.timer);
   $('#chatTop')?.classList.toggle('on', view === 'chats' || view === 'chat');
   if (view === 'chats' || view === 'chat') return dms().then((d) => (view === 'chat' ? d.convView(extra) : d.listView())).catch((e) => toast(e.message));
-  ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, read: () => RM().then((R) => R.readView()), us: usView, health: healthView, fitness: fitnessView })[view]?.();
+  ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, read: () => RM().then((R) => R.readView()), us: usView, health: healthView, fitness: fitnessView, look: lookView })[view]?.();
 }
 // 💪 Health: your own Diet and Fitness (family/health.js, loaded when you open it).
 async function healthView() {
@@ -435,6 +439,36 @@ function fit() {
     return F;
   })().catch((e) => { fitMod = null; throw e; });
   return fitMod;
+}
+// 👔 Look (family/look.js): loaded the first time it's needed — Look itself, or its card on Calendar.
+let lookMod = null;
+const LOOK_FROM = { home: 'Home', calendar: 'Calendar', us: 'Us', threads: 'Threads', health: 'Health', me: 'Me' };
+function looks() {
+  lookMod ||= (async () => {
+    const L = await import(`./look.js?v=${VERSION}`);
+    await L.load({
+      api, fid: state.fid, me: fam().me, esc, toast, openSheet, closeSheet, iso: (d) => isoLocal(d), confirm: (q) => confirm(q),
+      el: () => (state.view === 'look' ? $('#view') : null), show: () => (state.view === 'look' ? L.render() : show('look')),
+      lock: async (v) => (fk() ? { enc: await seal(fk(), v) } : v), unlock: async (v) => (isSealed(v) ? tryOpen(fk(), v, null) : v),
+      seal: (v) => lockBox(v), open: (v) => openBox(v), key: () => fk(), sealBytes, openBytes,
+      partner: () => partnerMember(), name: (id) => member(id)?.name || '', dayEntries,
+      discuss: (ref, title, body) => discuss(ref, title, body),
+      prev: () => { const v = LOOK_FROM[state.lookFrom] ? state.lookFrom : 'calendar'; return { view: v, label: LOOK_FROM[v] }; },
+      aiReady: async () => { const cfg = await api.liveConfig(); return cfg.missing || cfg.offline ? null : !!cfg.ai; },
+    });
+    try { LS.set(`fam.look.used.${state.fid}.${fam().me}`, '1'); } catch { /* full */ }
+    return L;
+  })().catch((e) => { lookMod = null; throw e; });
+  return lookMod;
+}
+async function lookView() {
+  $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div><div class="skeleton card"></div>`;
+  if (lockedHere()) { $('#view').innerHTML = `${demoBanner()}<section class="card"><b>🔒 Locked on this device</b><p class="small muted">This device needs the family key to show your Closet. Me › 🔐 Encryption.</p></section>`; return; }
+  const L = await act(looks);
+  if (!L || state.view !== 'look') return;
+  if (state.fitOpen) { const id = state.fitOpen; state.fitOpen = null; return L.openFit(id); }
+  if (L.state.view === 'fit') L.state.view = null;
+  L.render();
 }
 // ✏️ A change to your own trackers made here (a weigh-in on Health, turning on the lifting
 // program): your account copy comes down first, the change is made to this device's copy, then it
@@ -515,6 +549,7 @@ async function homeView() {
   const h = new Date().getHours(), first = esc((me()?.name || state.user?.name || '').split(' ')[0]);
   const top = `<h1 class="home-hi">${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}. Here’s your ${esc(new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))}.</h1>
     <div id="hello"></div><section class="nextup" id="nextUp" style="${homeH('nextUp')}" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section>
+    ${homeLook()}
     <section class="card attn" id="attn" aria-labelledby="attnH" style="${homeH('attn')}"><div class="skeleton line"></div></section>
     <section class="card groc" id="groc" aria-labelledby="grocH" style="${homeH('groc')}"><div class="skeleton line"></div></section>
     <div id="goldNews"></div><section class="card movies" id="moviesCard" hidden></section>`;
@@ -537,6 +572,15 @@ async function homeView() {
   await dogsDone;
 }
 
+// 👔 Today's Look on Home — only when Look has something for today, from what Look left on this
+// phone (no request, no pictures at start-up).
+function homeLook() {
+  let d = null;
+  try { d = JSON.parse(LS.get(`fam.look.${state.fid}.${fam().me}`) || 'null'); } catch { /* none */ }
+  if (!d || d.date !== isoLocal() || (!d.n && !d.worn) || new Date().getHours() >= 22) return '';
+  const tonight = /PM/.test(d.label) && new Date().getHours() < 21;
+  return `<button type="button" class="card lk-home" data-view="look"><span class="grow"><span class="eyebrow">👔 ${tonight ? 'Tonight\'s' : 'Today\'s'} Look</span><b>${esc(d.worn ? `✓ ${d.worn}` : d.label)}</b><small class="muted">${d.worn ? 'Worn today' : `${d.n} look${d.n === 1 ? '' : 's'} ready`}</small></span><span class="go">${d.worn ? '›' : 'View →'}</span></button>`;
+}
 // Home without the household's lists (the family's creator didn't give you Home): your own day.
 function homeOwnView() {
   const h = new Date().getHours(), first = esc((me()?.name || state.user?.name || '').split(' ')[0]);
@@ -3162,8 +3206,8 @@ async function renderCal() {
     ${dayMarks.length ? `<ul class="mark-list">${dayMarks.join('')}</ul>` : ''}
     ${sel.length ? `<ul class="ev-list">${sel.map((e) => calRow(e)).join('')}</ul>` : dayMarks.length ? '' : '<p class="small muted">Nothing planned. Tap ＋ to add something.</p>'}
     ${calm.day <= today ? `<button type="button" class="ghost small logdate" data-act="lognew">❤️ Log a date on this day</button>` : ''}</section>
-    <div id="calDress"></div>`;
-  renderCalDress(calm.day).catch(() => {});
+    <div id="calLook"></div>`;
+  renderCalLook(calm.day).catch(() => { const el = $('#calLook'); if (el) el.innerHTML = ''; });
   // Coming up: the next two weeks after the chosen day.
   const next = [];
   for (let i = 1, d = shiftLocal(calm.day, 1); i <= 14 && next.length < 8; i++, d = shiftLocal(d, 1)) for (const e of await dayEntries(d)) next.push({ ...e, day: d });
@@ -3178,88 +3222,19 @@ async function renderCal() {
   rhythmLine().catch(() => {});
 }
 
-// 👔 Dress for the day, for each grown-up: where the calendar puts them (else home), and how to
-// layer for that place's feels-like temperatures from leaving to getting home.
-const dressPicks = () => { try { return JSON.parse(LS.get('fam.dressPicks') || '{}'); } catch { return {}; } };
-async function dressHours(place, date) {
-  const B = await import('../js/brief.js');
-  let cache = {};
-  try { cache = JSON.parse(LS.get('fam.dressWx') || '{}'); } catch { /* none */ }
-  let c = cache[place.id];
-  if (!c || Date.now() - c.at > 60 * 60000) {
-    const r = await fetch(B.weatherUrls(place, 7).forecast);
-    if (!r.ok) throw new Error(`weather ${r.status}`);
-    c = { at: Date.now(), forecast: await r.json() };
-    cache[place.id] = c;
-    try { LS.set('fam.dressWx', JSON.stringify(cache)); } catch { /* full */ }
-  }
-  return B.parseWeather(c.forecast, null).filter((h) => isoLocal(h.time) === date);
-}
-// Towns from the day's event addresses (Hayward, Sausalito…), looked up once with Open-Meteo's
-// free place search and kept on this phone, so the weather is for where you'll actually be.
-async function eventPlaces(D, entries) {
-  let geo = {}; try { geo = JSON.parse(LS.get('fam.geo') || '{}'); } catch { /* none */ }
-  const out = [];
-  for (const town of [...new Set(entries.map((e) => D.townOf(e.place)).filter(Boolean))]) {
-    if (D.matchPlace(town)) continue;
-    const k = town.toLowerCase();
-    if (!(k in geo)) {
-      const j = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({ name: town, count: '5', language: 'en' })}`).then((r) => r.json()).catch(() => null);
-      const hit = (j?.results || []).find((x) => x.country_code === 'US' && x.admin1 === 'California') || (j?.results || []).find((x) => x.country_code === 'US') || j?.results?.[0];
-      geo[k] = hit ? { lat: hit.latitude, lon: hit.longitude, name: hit.name } : null;
-      try { LS.set('fam.geo', JSON.stringify(geo)); } catch { /* full */ }
-    }
-    if (geo[k]) out.push({ id: `g-${k.replace(/[^a-z0-9]+/g, '')}`, name: geo[k].name || town, lat: geo[k].lat, lon: geo[k].lon, keys: [k] });
-  }
-  return out;
-}
-async function renderCalDress(date) {
-  const el = $('#calDress');
+// 👔 Today's Look, small, under today's events: how many Looks are ready for today's plans and
+// weather (Look itself works it out). Someone who hasn't used Look gets a one-line way in, and
+// nothing is loaded for them.
+async function renderCalLook(date) {
+  const el = $('#calLook');
   if (!el) return;
-  const today = isoLocal(), last = shiftLocal(today, 6);
-  const people = calPeople().filter((m) => m.status === 'active' || m.id === fam().me).slice(0, 2);
-  if (!people.length || date < today || date > last) { el.innerHTML = ''; return; }
-  const D = await import('../js/dress.js');
-  const entries = (await dayEntries(date)).filter((e) => e.cls === 'fam');
-  const label = date === today ? 'today' : new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-  if (!el.innerHTML) el.innerHTML = `<section class="card dress-card"><div class="eyebrow">👔 Dress for ${esc(label)}</div><p class="small muted">Getting the weather…</p></section>`;
-  const picks = dressPicks();
-  const temps = (t) => `<div class="dress-temps"><span>🌅 ${D.hourLabel(t.leave.hour)} <b>${t.leave.f}°</b></span><i>→</i><span>☀️ ${D.hourLabel(t.peak.hour)} <b>${t.peak.f}°</b></span><i>→</i><span>🌆 ${D.hourLabel(t.back.hour)} <b>${t.back.f}°</b></span></div>`;
-  let body;
-  try {
-    // Where each of you will be; the same place for both of you is one box for both, dressed
-    // for the longer day (the earlier start to the later finish).
-    const places = [...D.PLACES, ...(await eventPlaces(D, entries).catch(() => []))];
-    const wheres = people.map((m) => {
-      const evs = entries.map((e) => ({ title: e.title, place: e.place, start: e.time, end: e.end, allDay: e.allDay || !e.time, who: e.who === 'both' || e.who === m.id ? m.id : '-' }));
-      return { m, where: D.whereOn(evs, m.id, places, picks[`${m.id}|${date}`] || null) };
-    });
-    const groups = [];
-    for (const w of wheres) {
-      const g = groups.find((x) => x.place.id === w.where.place.id);
-      if (g) g.list.push(w); else groups.push({ place: w.where.place, list: [w] });
-    }
-    const why = (where) => (where.picked ? 'picked by hand' : where.fromCalendar ? `📅 from “${esc(where.event.title)}”${where.placeFound ? '' : ` (no town in it — ${esc(where.place.name)} weather)`}` : 'nothing on the calendar — home');
-    const parts = await Promise.all(groups.map(async (g) => {
-      const leave = Math.min(...g.list.map((w) => w.where.leave)), back = Math.max(...g.list.map((w) => w.where.back));
-      const plan = D.dressFor(await dressHours(g.place, date), leave, back);
-      const ids = g.list.map((w) => w.m.id);
-      const names = g.list.map((w) => `<i class="who-dot ${whoCls(w.m.id)}"></i> ${esc(w.m.name)}`).join(' &amp; ');
-      const whys = [...new Set(g.list.map((w) => why(w.where)))];
-      const reason = whys.length === 1 ? whys[0] : g.list.map((w) => `${esc(w.m.name)}: ${why(w.where)}`).join(' · ');
-      const picked = g.list.some((w) => w.where.picked);
-      return `<div class="dress-person${g.list.length > 1 ? ' together' : ''}">
-        <div class="row between dress-who"><b>${names}${g.list.length > 1 ? ' <span class="pill">together</span>' : ''}</b>
-          <select data-dresspick="${ids.join(',')}" data-dressdate="${date}" aria-label="Where ${g.list.map((w) => esc(w.m.name)).join(' and ')} will be">${places.map((p) => `<option value="${p.id}" ${p.id === g.place.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}${picked ? '<option value="">↺ Use the calendar</option>' : ''}</select></div>
-        <small class="muted">${reason} · out ${D.hourLabel(leave)}–${D.hourLabel(back)}</small>
-        ${plan ? `${temps(plan.temps)}<div class="dress-shape">${esc(plan.label)}</div>
-          <ul class="dress-layers">${plan.layers.map((l) => `<li><span>${l.icon}</span><span>${esc(l.text)}${l.carry ? ' <em class="dress-carry">take off later</em>' : ''}</span></li>`).join('')}</ul>
-          ${plan.when ? `<p class="small dress-when">⏱ ${esc(plan.when)}</p>` : ''}${plan.extras.length ? `<p class="small muted">${plan.extras.map(esc).join(' · ')}</p>` : ''}`
-        : '<p class="small muted">No forecast for this day yet.</p>'}</div>`;
-    }));
-    body = parts.join('');
-  } catch (err) { body = `<p class="small tone-warn">Couldn't get the weather (${esc(err.message)}).</p>`; }
-  if ($('#calDress') && calm.day === date) $('#calDress').innerHTML = `<section class="card dress-card"><div class="eyebrow">👔 Dress for ${esc(label)}</div>${body}<p class="tiny muted">Feels-like temperatures from when you leave to when you're home (from the calendar, else 8 AM–6 PM). An event whose title or place names San Francisco or Oakland puts that person there. Weather: Open-Meteo.</p></section>`;
+  if (date !== isoLocal()) { el.innerHTML = ''; return; }
+  let used = false;
+  try { used = !!LS.get(`fam.look.used.${state.fid}.${fam().me}`); } catch { /* none */ }
+  if (!used && !lookMod) { el.innerHTML = '<button type="button" class="card lk-calcard" data-view="look"><span class="grow"><span class="eyebrow">👔 Today\'s Look</span><small class="muted">What to wear today, from clothes you own</small></span><span class="go">Start →</span></button>'; return; }
+  const L = await looks();
+  const html = await L.calendarCard(date);
+  if ($('#calLook') && calm.day === date) { $('#calLook').innerHTML = html; L.hydrateIn($('#calLook')); }
 }
 // 💞 2-2-2-2 moments: kept in each person's own trackers ({entries, removed}, end-to-end
 // encrypted), combined with your partner's when they share their trackers with you.
@@ -4339,6 +4314,7 @@ document.addEventListener('click', (e) => {
   if (d.watchopen) return watchDetail(d.watchopen);
   if (d.rd) return act(async () => (await RM()).onClick(t));
   // From Health: open Fitness on the right screen (Start Workout starts it and opens Train).
+  if (d.lk) return act(async () => (await looks()).onClick(t));
   if (d.fx) return act(async () => { const F = await fit(); if (['open', 'main', 'add', 'today', 'train', 'start'].includes(d.fx) && state.view !== 'fitness') { if (d.fx === 'start') F.begin(); else F.state.view = { open: 'today', today: 'today', train: 'train' }[d.fx] || 'main'; return show('fitness'); } return F.onClick(t); });
   if (d.discuss) return act(() => discuss(d.discuss, d.dtitle || '💬', d.dbody || ''));
   if (d.watchlife) {
@@ -4643,13 +4619,6 @@ document.addEventListener('change', async (e) => {
     draft.photo = await shrinkPhoto(t.files[0]).catch(() => '');
     if (!draft.photo) draft.file = null;
     return compose();
-  }
-  if (t.dataset.dresspick) {
-    // A shared box changes it for both of you.
-    const picks = dressPicks();
-    for (const id of t.dataset.dresspick.split(',')) { const k = `${id}|${t.dataset.dressdate}`; if (t.value) picks[k] = t.value; else delete picks[k]; }
-    LS.set('fam.dressPicks', JSON.stringify(picks));
-    return renderCalDress(t.dataset.dressdate);
   }
   if (t.name === 'theme') {
     LS.set('pawmily.theme', t.value === 'auto' ? null : t.value);
@@ -5170,5 +5139,9 @@ document.addEventListener('toggle', (e) => {
 document.addEventListener('input', (e) => { if (e.target.name === 'body' && e.target.closest?.('#writeForm')) atSuggest(e.target); if (e.target.dataset?.wcap) { const x = ws.shots[+e.target.dataset.wcap]; if (x) x.cap = e.target.value; return; } if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); if (e.target.closest?.('#writeForm')) { clearTimeout(saveDraft.t); saveDraft.t = setTimeout(saveDraft, 400); } });
 // 🏋️ The workout editor follows what you type.
 document.addEventListener('change', (e) => { if (e.target.dataset?.fxpick != null && fitMod) fitMod.then((F) => F.onPick(e.target)).catch(() => {}); });
+// 👔 Look's own inputs, photo pickers and the box you drag over a piece.
+document.addEventListener('change', (e) => { if (!lookMod) return; if (e.target.dataset?.lkpick != null) lookMod.then((L) => L.onPick(e.target)).catch((err) => toast(err.message)); else if (e.target.dataset?.lke && e.target.tagName !== 'INPUT') lookMod.then((L) => L.onInput(e.target)).catch(() => {}); else if (e.target.dataset?.lke && e.target.type === 'checkbox') lookMod.then((L) => L.onInput(e.target)).catch(() => {}); });
+document.addEventListener('input', (e) => { if (e.target.dataset?.lke && e.target.type !== 'checkbox' && lookMod) lookMod.then((L) => L.onInput(e.target)).catch(() => {}); });
+document.addEventListener('pointerdown', (e) => { if (e.target.closest?.('[data-lkmark]') && lookMod) lookMod.then((L) => L.onPointer(e)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.rdq != null) RM().then((R) => R.onInput(e.target)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.fxe && fitMod) fitMod.then((F) => F.onInput(e.target)).catch(() => {}); });
