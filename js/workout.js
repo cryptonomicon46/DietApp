@@ -195,6 +195,7 @@ const areaOf = (name) => AREA.find(([, re]) => re.test(name))?.[0] || null;
 export function suggestName(w) {
   const items = w.blocks.flatMap((b) => b.items).filter((it) => it.name);
   if (!items.length) return w.activity?.kind || 'Workout';
+  if (items.length === 1) return items[0].name.replace(/^./, (c) => c.toUpperCase());
   const n = { upper: 0, lower: 0, core: 0, cond: 0 };
   for (const it of items) { const a = areaOf(it.name); if (a) n[a]++; }
   const known = n.upper + n.lower + n.core + n.cond;

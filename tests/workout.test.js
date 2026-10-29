@@ -168,8 +168,9 @@ test('suggested names', () => {
   assert.equal(n([{ items: [{ name: 'Back squat', sets: [{}] }] }, { items: [{ name: 'Romanian deadlift', sets: [{}] }] }, { items: [{ name: 'Calf raise', sets: [{}] }] }]), 'Lower body · 3 exercises');
   assert.equal(n([{ items: [{ name: 'Bench press', sets: [{}] }] }, { items: [{ name: 'Leg press', sets: [{}] }] }]), 'Full body · 2 exercises');
   assert.equal(n([{ rounds: 3, items: [{ name: 'Curl', sets: [{}] }, { name: 'Tricep pushdown', sets: [{}] }] }]), 'Upper body superset · 3 rounds');
-  assert.equal(n([{ items: [{ name: 'Plank', sets: [{}] }] }]), 'Core · 1 exercise');
-  assert.equal(n([{ items: [{ name: 'Zercher thing', sets: [{}] }] }]), 'Strength · 1 exercise');
+  assert.equal(n([{ items: [{ name: 'goblet squat', sets: [{}] }] }]), 'Goblet squat');
+  assert.equal(n([{ items: [{ name: 'Plank', sets: [{}] }] }, { items: [{ name: 'Dead bug', sets: [{}] }] }]), 'Core · 2 exercises');
+  assert.equal(n([{ items: [{ name: 'Zercher thing', sets: [{}] }] }, { items: [{ name: 'Odd lift', sets: [{}] }] }]), 'Strength · 2 exercises');
   assert.equal(n([]), 'Workout');
   assert.ok(W.untitled('Workout') && W.untitled('') && !W.untitled('Upper body circuit'));
 });

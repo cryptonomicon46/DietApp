@@ -444,7 +444,7 @@ async function editMine(change) {
   if (fam().e2ee && !fk()) throw new Error('🔒 This device needs the family key first — Me › 🔐 Encryption');
   const [{ account }, { ownerId, profileStore, global }] = await Promise.all([import(`../js/account.js?v=${VERSION}`), import(`../js/storage.js?v=${VERSION}`)]);
   if (!account.active()) await account.connect().catch(() => null);
-  if (!account.active() || !ownerId()) throw new Error("Couldn't reach your account — check you're online and try again");
+  if (!account.active() || !ownerId()) throw new Error(navigator.onLine ? "Your trackers aren't set up for you on this device yet — open Today's plan once, then try again" : "You seem to be offline — try again when you're connected");
   await account.pull().catch(() => { throw new Error("Couldn't save — you seem to be offline. Try again in a moment."); });
   if (!global.get('account.pulled', false)) throw new Error("Couldn't read your saved copy yet — try again in a moment");
   const out = change(profileStore(ownerId()));

@@ -43,7 +43,7 @@ export const SLIDES = [
     ['❤️', 'Plans and dates', 'A plan you both said yes to goes on both your calendars.'],
   ] },
   { id: 'me', eyebrow: 'Health and Me', title: 'Each person’s own', go: 'me', cards: [
-    ['💪', 'Health', 'Diet (today, weight trend, 5 of 7 days on target) and Fitness (Today’s Workout — build it, describe it or snap a photo of it — logged round by round). Private unless you share.'],
+    ['💪', 'Health', 'Your day: today’s weight, calories and protein, how your plan is going, and today’s workout — Start Workout opens Train, and Resume picks it up. Private unless you share.'],
     ['👤', 'Me', 'Your family, people and pets, notifications, light or dark, and your account.'],
     ['🔑', 'Recovery phrase', 'Write it down: it unlocks your family on a new phone if you lose this one.'],
   ] },
@@ -61,17 +61,16 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-12a',
-  title: 'New: Watch, Read, Health and Fitness',
-  text: 'Watch and Read on Us, your Diet and workouts in Health, workouts from words or a photo, and WHOOP',
+  id: '2026-12b',
+  title: 'New: Health is your day, and Train',
+  text: 'Weigh in on Health, see how your plan is going, and Start Workout → Train → Complete',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'Watch, Health and Fitness', cards: [
-  ['📺', 'Watch, first on Us', 'Want to Watch → Watching → Watched, one tap to log an episode, and Discuss opens a thread.'],
-  ['📚', 'Read, right under it', 'What each of you is reading or listening to, Want to Read and Finished. ＋ Book takes a few taps.'],
-  ['💪', 'Health and Fitness', 'Your Diet on one calm screen, and Today’s Workout logged round by round — build it, 💬 describe it, or 📷 snap a photo of it. You check it before it’s added.'],
-  ['⌚', 'WHOOP in Devices', 'Health › Devices brings in your workouts and calories burned. Connecting shares nothing by itself.'],
-  ['🔑', 'Who sees what', 'Diet and Fitness are private until you share each one, person by person. The family’s creator chooses who uses Home, Calendar and Threads.'],
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'Health is your day', cards: [
+  ['⚖️', 'Weigh in on Health', 'Type today’s weight on 💪 Health and it’s in Meals and Weight too. A 7 AM reminder is there if you want it.'],
+  ['📈', 'How your plan is going', 'Week, days left, On track / Behind / Ahead — or Too early to tell — with an estimate, the next step and why. It never changes your targets.'],
+  ['🏋️', 'Today’s Workout → Train', 'Add a workout, Start Workout, record what you actually did set by set, leave and Resume any time, then Complete. Names are suggested; rename them later.'],
+  ['🛒', 'Scan is in Groceries', 'Food is Meals · Weight · Groceries; ▦ Scan a barcode is at the top of Groceries.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);
