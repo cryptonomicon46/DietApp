@@ -118,7 +118,15 @@ export async function getFile(id, type = '') {
   if (local) return local;
   let blob = account.active() ? await account.getFile(id, type).catch(() => null) : null;
   const url = !blob && legacyUrl(id);
-  if (url) { const res = await fetch(url).catch(() => null); if (res?.ok) blob = await res.blob(); }
+  if (url) {
+    const res = await fetch(url).catch(() => null);
+    if (res?.ok) {
+      blob = await res.blob();
+      // 2.0 Phase 10: a file shared the old way moves into the family's file store (locked with the
+      // family key) the first time a signed-in phone opens it. The old copy stays until deleted.
+      if (account.active()) await account.putFile(id, blob).catch(() => false);
+    }
+  }
   if (blob) await idb('readwrite', (st) => st.put(blob, id)).catch(() => {});
   return blob;
 }

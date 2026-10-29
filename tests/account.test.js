@@ -82,13 +82,16 @@ test('trackers follow your account to a new device, and partners see them only w
   await sync.pull();
   assert.deepEqual(J('lp.p.amani.weights'), [{ date: '2026-10-01', weight: 130 }]);
 
-  // The household code retires once you're both on accounts and share with each other.
+  // 2.0 Phase 10: a signed-in phone never uploads to the household code — who sees your trackers
+  // is only what you chose in the family — and never reads someone who moved to their account.
   cur.set('lp.g.sync', JSON.stringify({ url: 'https://c.test', code: 'household-test-code' }));
   assert.equal((await account.connect()).householdOff, false, "Sam doesn't share with Pat yet");
-  assert.equal(sync.household(), true);
+  assert.equal(sync.household(), false, 'signed in: no household uploads, whatever is shared');
+  assert.equal(sync.householdReads(), true, 'a partner who has not moved could still be read');
+  assert.equal(sync.movedToAccount('amani'), true, "Pat's trackers are on Pat's account: never read from the code");
   await api(`/families/${family.fid}/members/${family.members[0].id}`, sam, 'PATCH', { shareWith: [add.member.id] });
   assert.equal((await account.connect()).householdOff, true);
-  assert.equal(sync.household(), false, 'no more household uploads');
+  assert.equal(sync.householdReads(), false, 'both moved and sharing: the code is not even read');
   // Ask Claude goes through the account, not the household code.
   env.__assist = async (_, { text }) => ({ actions: [{ type: 'note', text }], note: 'ok' });
   const out = await account.assist('bench 3x8 at 135', { today: '2026-10-24' });

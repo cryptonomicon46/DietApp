@@ -109,7 +109,10 @@ export async function sendTo(db, env, uids, kind, msg, ttl) {
 
 // Family members → their accounts (people with an account only, never `me`).
 export const uidsOf = (fam, ids, notUid) => fam.members.filter((x) => ids.includes(x.id) && x.uid && x.uid !== notUid).map((x) => x.uid);
-export const adultsOf = (fam, notUid) => fam.members.filter((x) => x.kind === 'person' && x.uid && x.relation !== 'child' && x.uid !== notUid).map((x) => x.uid);
+// 🔑 The same area rule as the API (family.js hasArea): no list = all; the creator always all.
+const areaOk = (m, area) => !area || m.role === 'owner' || !Array.isArray(m.access) || m.access.includes(area);
+// Grown-ups with accounts (but `notUid`), and only those given `area` (home | calendar | threads).
+export const adultsOf = (fam, notUid, area = null) => fam.members.filter((x) => x.kind === 'person' && x.uid && x.relation !== 'child' && x.uid !== notUid && areaOk(x, area)).map((x) => x.uid);
 
 // ---------- reminders (the 15-minute cron) ----------
 // "YYYY-MM-DDTHH:MM" on the wall clock in `tz` → UTC milliseconds.
@@ -237,7 +240,8 @@ export async function runReminders(env, at = Date.now(), { db }) {
       const f = await famData(fid);
       const me = f?.fam.members.find((x) => x.uid === uid);
       if (!me || me.relation === 'child') continue;
-      for (const d of dueFor({ ...f, memberId: me.id, tz: user.tz || 'America/Los_Angeles' }, from, to)) sent += await sendTo(db, env, [uid], d.kind, d.msg, d.ttl);
+      // Calendar reminders need Calendar; the dogs' appointments and vaccines need Home.
+      for (const d of dueFor({ ...f, memberId: me.id, tz: user.tz || 'America/Los_Angeles' }, from, to)) if (areaOk(me, d.kind === 'events' ? 'calendar' : 'home')) sent += await sendTo(db, env, [uid], d.kind, d.msg, d.ttl);
     }
   }
   return sent;

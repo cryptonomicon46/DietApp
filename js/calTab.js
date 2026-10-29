@@ -3,6 +3,7 @@
 // into Apple or Google Calendar — or subscribe to the whole shared calendar there.
 import { PROFILES, ownerId, profileStore, seenItems, global } from './storage.js';
 import { sync, pushNow } from './sync.js';
+import { account } from './account.js';
 import { goldenDays } from './briefTab.js';
 import { dressCard, renderDress } from './dressTab.js';
 import { strongDaysByPerson } from './cheer.js';
@@ -43,7 +44,9 @@ const fresh = (f) => Date.now() - (feedCache()[f.id]?.fetchedAt || 0) < 30 * 600
 let refreshing = false;
 export async function refreshFeeds(force = false) {
   const s = sync.settings();
-  if (refreshing || !s?.url || !s?.code) return;
+  // Signed in: through your account (2.0 Phase 10); otherwise the old way, if this phone has it.
+  const viaAccount = account.active();
+  if (refreshing || (!viaAccount && (!s?.url || !s?.code))) return;
   const due = allFeeds().filter((f) => force || !fresh(f));
   if (!due.length) return;
   refreshing = true;
@@ -52,9 +55,17 @@ export async function refreshFeeds(force = false) {
     for (const f of due) {
       const cache = feedCache();
       try {
-        const res = await fetch(`${s.url}/ics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: s.code, url: f.url }) });
-        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `error ${res.status}`);
-        const events = parseIcs(await res.text(), { localTz: localTz(), from, who: f.who, source: f.name }).slice(0, 1500);
+        let text;
+        if (viaAccount) {
+          const r = await account.ics(f.url);
+          if (!r.ok) throw new Error(r.error || `error ${r.status}`);
+          text = r.text;
+        } else {
+          const res = await fetch(`${s.url}/ics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: s.code, url: f.url }) });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `error ${res.status}`);
+          text = await res.text();
+        }
+        const events = parseIcs(text, { localTz: localTz(), from, who: f.who, source: f.name }).slice(0, 1500);
         cache[f.id] = { fetchedAt: Date.now(), events };
       } catch (err) {
         cache[f.id] = { ...(cache[f.id] || {}), fetchedAt: Date.now(), error: /fetch/i.test(err.message) ? "couldn't reach the server" : err.message };

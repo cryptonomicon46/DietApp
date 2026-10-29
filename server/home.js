@@ -47,7 +47,7 @@ export async function homeRoutes(c) {
       // Done ones older than a week make room first.
       const keep = all.filter(recent).slice(-(MAX_REQUESTS - 1));
       await db.put(key, [...keep, r]);
-      const to = fam.members.filter((x) => x.uid && x.uid !== user.uid && x.kind === 'person' && x.relation !== 'child').map((x) => x.uid);
+      const to = fam.members.filter((x) => x.uid && x.uid !== user.uid && x.kind === 'person' && x.relation !== 'child' && (c.hasArea ? c.hasArea(x, 'home') : true)).map((x) => x.uid);
       if (to.length) await tell(to, 'requests', { title: `🙋 ${me.name} could use a hand`, body: `${REQUEST_KINDS[kind]}${r.day ? ` · ${r.day}` : ''}`, url: 'family/#home', tag: `req-${r.id}` });
       return json({ request: reqOut(r) });
     }

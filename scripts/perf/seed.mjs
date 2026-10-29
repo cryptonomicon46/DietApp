@@ -48,7 +48,7 @@ for (let i = 0; i < 9; i++) {
 for (let i = 0; i < 14; i++) await call(`/families/${fid}/events`, who(i), 'POST', { date: iso(-i), start: '18:00', end: '19:00', who: [me], body: await L({ title: `Synthetic event ${i}`, where: 'Somewhere' }) });
 for (let i = 0; i < 4; i++) await call(`/families/${fid}/us/notes`, [sam, pat][i % 2], 'POST', { body: await L({ text: `Synthetic note ${i}` }) });
 for (let d = 0; d < 7; d++) for (const kind of ['breakfast', 'walk', 'dinner']) await call(`/families/${fid}/care`, [mom, pat][(d + kind.length) % 2], 'POST', { kind, date: iso(d), pets: [] });
-const trk = (miss) => { const days = [...Array(60).keys()].filter((n) => n % miss); return { profile: { name: 'x', goalLb: 168, weight: 182 }, weights: days.map((n) => ({ date: iso(n), weight: 180 - n / 20 })), mealLog: Object.fromEntries(days.map((n) => [iso(n), { extras: [], meals: { breakfast: true, lunch: n % 3 > 0, dinner: true } }])), eaten: {} }; };
+const trk = (miss) => { const days = [...Array(60).keys()].filter((n) => n % miss); return { profile: { name: 'x', goalLb: 168, weight: 182, sex: 'male', age: 40, heightIn: 70, phase: 'cut', phaseStart: iso(20), pace: 'steady' }, days: Object.fromEntries(days.slice(0, 10).map((n) => [iso(n), { eaten: n ? 2000 + (n % 3) * 180 : 900, target: 2050, protein: n ? 170 : 70, proteinTarget: 175, meals: n ? 3 : 1, left: { kcal: 1150, p: 105, c: 110, f: 35 } }])), weights: days.map((n) => ({ date: iso(n), weight: 180 - n / 20 })), mealLog: Object.fromEntries(days.map((n) => [iso(n), { extras: [], meals: { breakfast: true, lunch: n % 3 > 0, dinner: true } }])), eaten: {} }; };
 await call(`/families/${fid}/members/${me}/data`, sam, 'PUT', { data: { enc: await L(trk(7)) } });
 await call(`/families/${fid}/members/${ids.Pat}/data`, pat, 'PUT', { data: { enc: await L(trk(5)) } });
 await call(`/families/${fid}/members/${me}`, sam, 'PATCH', { shareWith: [ids.Pat] });
@@ -58,5 +58,14 @@ for (let i = 0; i < 12; i++) await call(`/families/${fid}/chats/${i % 3 ? dm : '
 // 🙋 A request from Pat and a few groceries, as a household would have.
 await call(`/families/${fid}/requests`, pat, 'POST', { kind: 'ride', box: await L('A ride to the airport on Friday') });
 await call(`/families/${fid}/groceries`, sam, 'POST', { items: await Promise.all(['Milk', 'Eggs', 'Bread', 'Dog food'].map(L)) });
+// 📺 Watch: two on the go (one with history), an Up Next, a Want to Watch, a finished one, and
+// an older movie with no status (read as Watched, as before 2.0).
+const W = `/families/${fid}/watch`;
+const shows = [['Severance', 'appletv', 'show', 'watching'], ['The Bear', 'hulu', 'show', 'watching'], ['Silo', 'appletv', 'show', 'upnext'], ['Slow Horses', 'appletv', 'show', 'want'], ['Shogun', 'hulu', 'show', 'finished'], ['Past Lives', 'other', 'movie', null]];
+for (const [title, service, kind, status] of shows) {
+  const { show } = await call(W + '/shows', sam, 'POST', { aud: 'us', ...(status ? { status } : {}), body: await L({ title, service, kind, date: '2026-10-01' }) });
+  if (title === 'Severance') await call(`${W}/shows/${show.id}`, sam, 'PATCH', { progress: { s: 2, e: 3 }, night: '2026-10-20' });
+  if (title === 'The Bear') await call(`${W}/shows/${show.id}`, pat, 'PATCH', { progress: { s: 1, e: 5 }, night: '2026-10-25' });
+}
 writeFileSync(OUT, JSON.stringify({ fid, k, sam, pat }));
 console.log('seeded', fid);

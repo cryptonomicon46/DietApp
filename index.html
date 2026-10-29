@@ -19,7 +19,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="OurPawmily">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="stylesheet" href="styles.css?v=273">
+  <link rel="stylesheet" href="styles.css?v=294">
 </head>
 <body>
   <header class="top">
@@ -309,10 +309,10 @@
   <dialog id="devicesDialog">
     <form method="dialog">
       <h2>Devices</h2>
-      <p class="muted small">Workouts from a connected device adjust today's calories and carbs.</p>
+      <p class="muted small">Workouts from a connected device adjust today's calories and carbs. Connecting shares nothing with your family; the sign-in stays on this device.</p>
       <div class="device"><div><b>WHOOP</b><div class="small muted" id="whoopStatus"></div></div><button type="button" class="ghost small" id="whoopConnect" hidden>Connect</button></div>
       <div class="device" id="stravaRow" hidden><div><b>Strava</b><div class="small muted" id="stravaStatus"></div></div><button type="button" class="ghost small" id="stravaConnect">Disconnect</button></div>
-      <div class="device"><div><b>Garmin</b><div class="small muted">Coming later.</div></div></div>
+      <div class="device"><div><b>Garmin</b><div class="small muted">Not available — Garmin only opens its data to approved companies.</div></div></div>
       <div class="device"><div><b>Apple Health</b><div class="small muted">Needs the iPhone app, which isn't available yet.</div></div></div>
       <div class="row end"><button>Done</button></div>
     </form>
@@ -399,53 +399,58 @@
   <script type="importmap" id="versions">
 {
   "imports": {
-    "./js/account.js": "./js/account.js?v=273",
-    "./js/accountBoot.js": "./js/accountBoot.js?v=273",
-    "./js/activity.js": "./js/activity.js?v=273",
-    "./js/adopt.js": "./js/adopt.js?v=273",
-    "./js/analytics.js": "./js/analytics.js?v=273",
-    "./js/app.js": "./js/app.js?v=273",
-    "./js/bodycomp.js": "./js/bodycomp.js?v=273",
-    "./js/brief.js": "./js/brief.js?v=273",
-    "./js/briefTab.js": "./js/briefTab.js?v=273",
-    "./js/calTab.js": "./js/calTab.js?v=273",
-    "./js/calendar.js": "./js/calendar.js?v=273",
-    "./js/cheer.js": "./js/cheer.js?v=273",
-    "./js/climb.js": "./js/climb.js?v=273",
-    "./js/commands.js": "./js/commands.js?v=273",
-    "./js/devices.js": "./js/devices.js?v=273",
-    "./js/dexa.js": "./js/dexa.js?v=273",
-    "./js/dogcal.js": "./js/dogcal.js?v=273",
-    "./js/dogs.js": "./js/dogs.js?v=273",
-    "./js/dress.js": "./js/dress.js?v=273",
-    "./js/dressTab.js": "./js/dressTab.js?v=273",
-    "./js/foods.js": "./js/foods.js?v=273",
-    "./js/household.js": "./js/household.js?v=273",
-    "./js/lift.js": "./js/lift.js?v=273",
-    "./js/lifting.js": "./js/lifting.js?v=273",
-    "./js/marketMatch.js": "./js/marketMatch.js?v=273",
-    "./js/nextup.js": "./js/nextup.js?v=273",
-    "./js/notes.js": "./js/notes.js?v=273",
-    "./js/photos.js": "./js/photos.js?v=273",
-    "./js/plan.js": "./js/plan.js?v=273",
-    "./js/plans.js": "./js/plans.js?v=273",
-    "./js/poster.js": "./js/poster.js?v=273",
-    "./js/progress.js": "./js/progress.js?v=273",
-    "./js/recover.js": "./js/recover.js?v=273",
-    "./js/research.js": "./js/research.js?v=273",
-    "./js/review.js": "./js/review.js?v=273",
-    "./js/rewards.js": "./js/rewards.js?v=273",
-    "./js/rhythm.js": "./js/rhythm.js?v=273",
-    "./js/server.js": "./js/server.js?v=273",
-    "./js/share.js": "./js/share.js?v=273",
-    "./js/shows.js": "./js/shows.js?v=273",
-    "./js/showsCore.js": "./js/showsCore.js?v=273",
-    "./js/storage.js": "./js/storage.js?v=273",
-    "./js/sync.js": "./js/sync.js?v=273",
-    "./js/zip.js": "./js/zip.js?v=273"
+    "./js/account.js": "./js/account.js?v=294",
+    "./js/accountBoot.js": "./js/accountBoot.js?v=294",
+    "./js/activity.js": "./js/activity.js?v=294",
+    "./js/adopt.js": "./js/adopt.js?v=294",
+    "./js/analytics.js": "./js/analytics.js?v=294",
+    "./js/app.js": "./js/app.js?v=294",
+    "./js/bodycomp.js": "./js/bodycomp.js?v=294",
+    "./js/books.js": "./js/books.js?v=294",
+    "./js/brief.js": "./js/brief.js?v=294",
+    "./js/briefTab.js": "./js/briefTab.js?v=294",
+    "./js/calTab.js": "./js/calTab.js?v=294",
+    "./js/calendar.js": "./js/calendar.js?v=294",
+    "./js/cheer.js": "./js/cheer.js?v=294",
+    "./js/climb.js": "./js/climb.js?v=294",
+    "./js/commands.js": "./js/commands.js?v=294",
+    "./js/devices.js": "./js/devices.js?v=294",
+    "./js/dexa.js": "./js/dexa.js?v=294",
+    "./js/dietDays.js": "./js/dietDays.js?v=294",
+    "./js/dogcal.js": "./js/dogcal.js?v=294",
+    "./js/dogs.js": "./js/dogs.js?v=294",
+    "./js/dress.js": "./js/dress.js?v=294",
+    "./js/dressTab.js": "./js/dressTab.js?v=294",
+    "./js/foods.js": "./js/foods.js?v=294",
+    "./js/healthParts.js": "./js/healthParts.js?v=294",
+    "./js/household.js": "./js/household.js?v=294",
+    "./js/lift.js": "./js/lift.js?v=294",
+    "./js/lifting.js": "./js/lifting.js?v=294",
+    "./js/marketMatch.js": "./js/marketMatch.js?v=294",
+    "./js/nextup.js": "./js/nextup.js?v=294",
+    "./js/notes.js": "./js/notes.js?v=294",
+    "./js/photos.js": "./js/photos.js?v=294",
+    "./js/plan.js": "./js/plan.js?v=294",
+    "./js/plans.js": "./js/plans.js?v=294",
+    "./js/poster.js": "./js/poster.js?v=294",
+    "./js/progress.js": "./js/progress.js?v=294",
+    "./js/recover.js": "./js/recover.js?v=294",
+    "./js/research.js": "./js/research.js?v=294",
+    "./js/review.js": "./js/review.js?v=294",
+    "./js/rewards.js": "./js/rewards.js?v=294",
+    "./js/rhythm.js": "./js/rhythm.js?v=294",
+    "./js/server.js": "./js/server.js?v=294",
+    "./js/share.js": "./js/share.js?v=294",
+    "./js/shows.js": "./js/shows.js?v=294",
+    "./js/showsCore.js": "./js/showsCore.js?v=294",
+    "./js/storage.js": "./js/storage.js?v=294",
+    "./js/sync.js": "./js/sync.js?v=294",
+    "./js/workout.js": "./js/workout.js?v=294",
+    "./js/workoutText.js": "./js/workoutText.js?v=294",
+    "./js/zip.js": "./js/zip.js?v=294"
   }
 }
   </script>
-  <script type="module" src="js/app.js?v=273"></script>
+  <script type="module" src="js/app.js?v=294"></script>
 </body>
 </html>

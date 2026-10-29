@@ -26,7 +26,8 @@ and 🛟 Recover can still read those copies. The `/household/…` routes stay f
 
 1. **Create the apps**
    - WHOOP: <https://developer-dashboard.whoop.com> → create app. Scopes:
-     `read:workout`, `read:cycles`, `read:recovery`, `offline`.
+     `read:workout`, `read:cycles`, `offline` (the app asks for no more; `read:recovery` is no longer
+     needed and can be unticked).
      Redirect URL: `https://<your-worker>.workers.dev/whoop/callback`
    - Strava (legacy, only for phones already connected): <https://www.strava.com/settings/api> → create app.
      Authorization Callback Domain: `<your-worker>.workers.dev`
@@ -46,7 +47,11 @@ and 🛟 Recover can still read those copies. The `/household/…` routes stay f
 3. **Household sharing** (legacy): nothing to set up. New phones don't use it; phones that
    already shared through a code keep syncing until their migration.
 4. **WHOOP (optional):** once the two WHOOP secrets are set, **Devices** shows **Connect WHOOP**
-   on every phone — no URL to paste. The STRAVA secrets only matter for phones that already
+   on every phone — no URL to paste. Routes: `/whoop/login?state=` (the phone's state; ending `.f`
+   returns to `family/`), `/whoop/callback` (tokens back in the URL fragment with the state; a "no"
+   on WHOOP's page comes back as an error), `/whoop/refresh` (401 when WHOOP refuses: reconnect),
+   `/whoop/workouts` and `/whoop/cycles` (one page of 25, `nextToken`), `/whoop/revoke` (POST →
+   WHOOP `DELETE /v2/user/access`). The connector stores nothing for WHOOP. The STRAVA secrets only matter for phones that already
    connected Strava.
 
 ## Ask Claude (optional)
@@ -134,6 +139,8 @@ The family app at `/family/` (families, invites by email, pets, threads, chats, 
 11. **🧭 Plan an outing:** uses Claude only (the same `ANTHROPIC_API_KEY` and `SCOUT_MODEL`), never Gemini. Each plan is one Claude turn with up to 8 web searches; swapping a stop is a small one with 3. `OUTING_MAX_RUNS` caps plans per family per month (20; swaps get three times that). Only the place, day, chips and the family's home town are sent, plus the taste line when 💞 Use our taste is on.
 12. **🔗 Links:** links Claude finds (places, events, theatre pages, outing stops) are opened once by the connector before they're saved; a page that's gone becomes a Google search for the place. Me › Maintainer › 🔗 Check links re-opens every link in this week's ideas. On GitHub, the **Check** workflow (`.github/workflows/check.yml`) runs the tests and opens a sample of every kind of link the app builds (OpenTable, Google Maps, Fandango, Ticketmaster, TMDB) plus the app's own pages in a real browser on every push — wait for its green ✓ before you deploy. Screenshots are in the run's *link-report* artifact.
 13. **📖 Threads:** stored as `thread:<fid>:<id>` with an index `threads:<fid>` (one KV write per new thread, reply, vote or pin, and one when someone opens a thread with something new in it). ✨ Tidy it up uses `ANTHROPIC_API_KEY` without web search (`TIDY_MODEL`, Haiku by default; `TIDY_MAX_RUNS`, 60 per family a month).
+13b. **📚 Read:** book search, details and covers come from Open Library through the connector — no key, nothing to set up. Answers are kept in Cloudflare's cache (searches a day, work details a week, covers 30 days), not in storage. The family's books are one record, `books:<fid>` (one KV write per add or status change).
+14. **🤖 AI requests** all go through `aiGateway.js` (allowed fields only, personal content to Anthropic only, a 30-day audit record per request `aiaudit:<day>:<id>` with no values — one KV write per request, plus one for the per-person daily count). 💬 Describe it / 📷 From a photo use `ANTHROPIC_API_KEY` with `PARSE_MODEL` (optional `[vars]`; Sonnet by default); without the key the app reads typed workouts on the phone only.
 14. **📰 News (hidden in 2.0):** the app doesn't show news, and the edition runs only when the plain var `NEWS_ON` is set — e.g. `npx wrangler deploy --var NEWS_ON:1`, or `NEWS_ON = "1"` under `[vars]` in `wrangler.toml`. The code and stored editions are kept. When on: at about 6:45 AM and 3:45 PM Pacific (from the 15-minute cron) the connector reads public RSS feeds — Politics (NPR, PBS NewsHour, CalMatters), Tech (The Verge, Ars Technica, TechCrunch, Hacker News) and Bay Area (KQED, SF Standard, SFGate, San José Spotlight, ABC7) — keeps the newest stories from the last 36 hours, and has Gemini (or Claude Haiku without `GEMINI_API_KEY`; `NEWS_MODEL` picks it) choose six per topic and sum each up in a line. Once a day it also looks up 🐶 California Doodle Rescue's adoptable dogs and events with a search, and opens those links before saving them. One shared copy (`news:latest`, two KV writes a day); about 20 outside requests an edition. Without any AI key the feeds' own blurbs are used and there's no rescue news. Me › Maintainer shows the last edition and can make one now; `node scripts/check-links.mjs` checks the feeds.
 15. **📷 Albums:** each family's albums live in one KV record (`albums:<fid>`); photos copied in are stored like other photos (locked on the phone, two sizes in R2, counted in the family's photo space). Titles and Google Photos links are end-to-end encrypted in an encrypted family. **📥 From Google Photos** uses Google's Photos Picker on the phone (apps can't read your library or shared albums any more, only photos you pick): in Google Cloud console, for the same project as `GOOGLE_CLIENT_ID`, open APIs & Services › Library › **Google Photos Picker API** › Enable, then OAuth consent screen › Data access › Add scope `.../auth/photospicker.mediaitems.readonly`. No connector change or secret is needed; the photos go from Google straight to the phone, then up locked.
 16. **💬 Chats:** each family's chats live in a Cloudflare **Durable Object** (`ChatHub` in `chatHub.js`), SQLite-backed so it's on the free plan. `wrangler.toml` already binds it as `CHAT` with its migration (`chat-v1`); the first `npx wrangler deploy` (or `pawdeploy`) after pulling creates it — nothing to set up by hand. Messages are stored there, sealed on the phone; phones keep a live connection while the app is open (it sleeps between messages, so idle costs nothing), and chat messages cost no KV writes. Without the binding (the demo), chats are kept in the family's own storage and phones check every few seconds.

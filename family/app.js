@@ -96,7 +96,7 @@ async function openPost(p) {
   return { ...p, text: text ?? '', photo: photo ?? '', comments, help, locked: text === null || photo === null, _key: k };
 }
 // What only family members can read on an appointment: where, notes, how it went.
-const openAppt = async (a) => ({ ...a, place: (await unlock(a.place)) ?? '🔒', notes: (await unlock(a.notes)) ?? '', outcome: (await unlock(a.outcome)) ?? '' });
+const openAppt = async (a) => ({ ...a, place: (await unlock(a.place)) ?? '🔒', notes: (await unlock(a.notes)) ?? '', outcome: (await unlock(a.outcome)) ?? '', vaccine: a.vaccine ? (await unlock(a.vaccine)) ?? '' : '' });
 // How someone shows up: relations are as the person who added them described them.
 const relLabel = (m) => (m.id === fam()?.me ? 'You' : m.kind === 'pet' ? SPECIES[m.species] || 'Pet' : m.relation === 'self' ? 'Family creator' : RELATION[m.relation] || 'Family');
 const me = () => fam()?.members.find((m) => m.id === fam().me);
@@ -174,9 +174,13 @@ async function boot() {
   if (!state.families.some((f) => f.fid === state.fid)) state.fid = state.families[0].fid;
   await loadFamily(famEarly?.fid === state.fid ? famEarly.p : null);
   // Older links (#feed, #dogs, notifications sent before 2.0) open Home.
-  const hv = location.hash.match(/^#(home|feed|dogs|calendar|me|us|threads|chats|chat=[a-z0-9_]+)$/)?.[1];
+  const hv = location.hash.match(/^#(home|feed|dogs|calendar|me|us|threads|chats|health|chat=[a-z0-9_]+)$/)?.[1];
   if (hv) { state.view = hv; history.replaceState(null, '', location.pathname + location.search); }
+  // ⌚ Back from connecting WHOOP (Health › Devices): open Health and finish there.
+  const connecting = /^#connect=/.test(location.hash);
+  if (connecting) state.view = 'health';
   show(state.view === 'member' && !member(state.memberId) ? 'home' : state.view === 'us' && !partnerMember() ? 'home' : state.view === 'chat' ? 'chats' : state.view);
+  if (connecting) devices().then((D) => D.back()).catch(() => {});
   refreshPush();
   startChats();
   if (partnerMember() && state.view !== 'us') loadUs().then(usBadge).catch(() => {});
@@ -192,12 +196,42 @@ async function loadFamily(early = null) {
 }
 // Once the family is encrypted: lock anything of yours still stored readable (e.g. data saved
 // before this device had the key).
+// 💪 Your own copy, saved together with its Diet / Fitness / Us parts (each part only when it
+// changed) — the parts are what the family can be given, separately.
+const HP = () => import('../js/healthParts.js');
+async function saveMine(data) {
+  await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData(data) });
+  const { splitHealth, sigOf, PART_NAMES } = await HP();
+  const parts = splitHealth(data);
+  for (const part of PART_NAMES) {
+    const k = `fam.partSig.${state.fid}.${part}`, sig = sigOf(parts[part]);
+    if (LS.get(k) === sig) continue;
+    await api.put(`/families/${state.fid}/members/${fam().me}/health/${part}`, { data: await sealData(parts[part]) }).then(() => LS.set(k, sig), () => {});
+  }
+}
+// Someone's parts that they share with you (their partner also gets Us). Before their phone has
+// split them: their full copy, if you could see it before. null when nothing's shared.
+async function theirParts(id, parts) {
+  const got = await Promise.all(parts.map((part) => shared(`/families/${state.fid}/members/${id}/health/${part}`).catch((e) => (e.status === 403 || e.status === 404 ? null : Promise.reject(e)))));
+  const ok = got.filter((r) => r && !r.none);
+  if (ok.length) {
+    const { joinParts } = await HP();
+    const opened = await Promise.all(ok.map((r) => openData(r)));
+    return { data: opened.some((x) => x.locked) ? { locked: true } : joinParts(...opened), savedAt: Math.max(...ok.map((r) => r.savedAt || 0)) };
+  }
+  const full = await memberData(id).catch(() => null);
+  return full ? { data: await openData(full), savedAt: full.savedAt } : null;
+}
 async function lockMyData() {
   if (!fam().e2ee || !fk() || state.lockedMine === state.fid) return;
   state.lockedMine = state.fid;
   const rec = await memberData().catch(() => null);
-  if (rec?.data && rec.data.enc == null && Object.keys(rec.data).length) await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData(rec.data) });
+  if (rec?.data && rec.data.enc == null && Object.keys(rec.data).length) await saveMine(rec.data);
 }
+// 🔑 Household areas the family's creator gave you (Home, Calendar, Threads; all unless chosen).
+// The server enforces them; this only keeps the screens tidy.
+const AREAS = { home: '🏠 Home', calendar: '📅 Calendar', threads: '📖 Threads' };
+const can = (area) => { const m = me(); return !m || m.role === 'owner' || !Array.isArray(m.access) || m.access.includes(area); };
 function chrome(on) {
   $('#bar').hidden = !on; $('#nav').hidden = !on;
   const lb = $('#lockBanner');
@@ -211,6 +245,8 @@ function chrome(on) {
   if (on) {
     $('#navMe').hidden = !$('#navTrackers').hidden;
     document.querySelector('#nav [data-view=us]').hidden = !partnerMember();
+    document.querySelector('#nav [data-view=calendar]').hidden = !can('calendar');
+    document.querySelector('#nav [data-view=threads]').hidden = !can('threads');
     const m = me(), pic = m?.avatar?.startsWith('data:') || m?.avatar?.startsWith('http') ? m.avatar : state.user?.picture;
     $('#meTop').innerHTML = pic ? `<img src="${esc(pic)}" alt="">` : esc((m?.name || '?')[0]);
   }
@@ -332,18 +368,82 @@ function show(view, extra) {
   if (view !== 'chat' && view !== 'chats') dmMod?.leave();
   // 2.0: the feed is retired (its posts are kept) and Dogs & chores is part of Home.
   if (view === 'feed' || view === 'pets' || view === 'dogs' || !view) view = 'home';
+  // A part of the family you haven't been given: Home instead.
+  if ((view === 'calendar' && !can('calendar')) || (view === 'threads' && !can('threads'))) view = 'home';
   if (view !== 'compose') state.prevView = view;
   state.view = view;
   if (view === 'member') state.memberId = extra;
   if (view === 'compose') { state.view = state.prevView || 'home'; return plusMenu(); }
   chrome(true);
-  const lit = view === 'member' || view === 'family' ? 'me' : view === 'watch' || view === 'bingo' ? 'us' : view;
+  const lit = view === 'member' || view === 'family' ? 'me' : view === 'watch' || view === 'read' || view === 'bingo' ? 'us' : view === 'fitness' ? 'health' : view;
   document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === lit));
   window.scrollTo(0, 0);
   if (view !== 'bingo') clearInterval(bingo.timer);
   $('#chatTop')?.classList.toggle('on', view === 'chats' || view === 'chat');
   if (view === 'chats' || view === 'chat') return dms().then((d) => (view === 'chat' ? d.convView(extra) : d.listView())).catch((e) => toast(e.message));
-  ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, us: usView })[view]?.();
+  ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, read: () => RM().then((R) => R.readView()), us: usView, health: healthView, fitness: fitnessView })[view]?.();
+}
+// 💪 Health: your own Diet and Fitness (family/health.js, loaded when you open it).
+async function healthView() {
+  $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div><div class="skeleton card"></div>`;
+  const [H, rec, F] = await Promise.all([import(`./health.js?v=${VERSION}`), memberData().catch(() => null), fit().catch(() => null)]);
+  if (state.view !== 'health') return;
+  const data = await openData(rec);
+  if (data.locked) { $('#view').innerHTML = `${demoBanner()}<section class="card"><b>🔒 Locked on this device</b><p class="small muted">This device needs the family key to show your Health. Me › 🔐 Encryption.</p></section>`; return; }
+  if (F) F.setLegacy(data, LIFT_NAMES);
+  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), sharing: sharingLine(), fitness: F ? F.card(esc) : undefined, devices: devicesLine() })}</div>`;
+}
+// ⌚ Devices (Health › Devices): family/deviceScreen.js, loaded when you open Devices or come back
+// from connecting WHOOP.
+let devUi = null;
+const devices = () => (devUi ||= import(`./deviceScreen.js?v=${VERSION}`).then((m) => { m.init({ esc, openSheet, toast, api, VERSION, state, clearShared: () => shared.clear(), refresh: () => state.view === 'health' && healthView(), $ }); return m; }).catch((e) => { devUi = null; throw e; }));
+// The Health card's line, without loading anything: what this device knows about its connection.
+function devicesLine() {
+  let w = null;
+  try { const owner = JSON.parse(localStorage.getItem('lp.g.owner')); w = owner && JSON.parse(localStorage.getItem(`lp.p.${owner}.devices`))?.whoop; } catch { /* none */ }
+  const line = !w ? 'No device connected' : w.problem === 'reconnect' ? '⚠️ WHOOP needs reconnecting' : `WHOOP connected${w.lastSync ? ` · synced ${new Date(w.lastSync).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : ''}`;
+  return `<button type="button" class="hl-row" data-act="devices"><span class="grow">${esc(line)}</span><span class="go">Devices ›</span></button>`;
+}
+// 🏋️ Fitness (family/fitness.js): loaded with your workouts the first time it's needed.
+let fitMod = null;
+const LIFT_NAMES = {};
+function fit() {
+  fitMod ||= (async () => {
+    const F = await import(`./fitness.js?v=${VERSION}`);
+    await F.load({
+      api, fid: state.fid, me: fam().me, esc, toast, openSheet, closeSheet, iso: () => isoLocal(), confirm: (q) => confirm(q),
+      lock: async (v) => (fk() ? { enc: await seal(fk(), v) } : v), unlock: async (v) => (isSealed(v) ? tryOpen(fk(), v, null) : v),
+      el: () => (state.view === 'fitness' ? $('#view') : null), show: () => (state.view === 'fitness' ? F.render() : show('fitness')),
+      // null when the settings couldn't be read (offline): asked again next time, not remembered as off.
+      aiReady: async () => { const cfg = await api.liveConfig(); return cfg.missing || cfg.offline ? null : !!cfg.ai; },
+    });
+    return F;
+  })().catch((e) => { fitMod = null; throw e; });
+  return fitMod;
+}
+async function fitnessView() {
+  $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div>`;
+  const F = await act(fit);
+  if (!F || state.view !== 'fitness') return;
+  if (!F.state.legacy.length) F.setLegacy(await openData(await memberData().catch(() => null)), LIFT_NAMES);
+  F.render();
+}
+// 💪 Who sees my Diet and my Fitness: two switches per person, private by default. Only you can
+// change these (nobody can share someone else's with themselves).
+function sharingHtml() {
+  const s = me()?.share || { diet: [], fitness: [] };
+  const others = fam().members.filter((o) => o.kind === 'person' && o.id !== fam().me && o.status === 'active');
+  if (!others.length) return '<p class="small muted">Private. Once someone accepts their invite, you can choose here.</p>';
+  const sw = (part, o) => `<label class="share-sw"><input type="checkbox" data-sharepart="${part}:${o.id}" ${s[part].includes(o.id) ? 'checked' : ''} aria-label="Share my ${part === 'diet' ? 'Diet' : 'Fitness'} with ${esc(o.name)}"><i class="switch"></i></label>`;
+  return `<p class="small muted">Private until you turn it on — for each person, Diet and Fitness separately.</p>
+    <div class="share-grid" role="group" aria-label="Who can see my Diet and Fitness"><span></span><b class="tiny">🥗 Diet</b><b class="tiny">🏋️ Fitness</b>
+    ${others.map((o) => `<span class="share-who">${avatar(o, 28)}<span>${esc(o.name)}<small class="muted"> ${esc(relLabel(o))}</small></span></span>${sw('diet', o)}${sw('fitness', o)}`).join('')}</div>
+    <p class="tiny muted">Diet: your goal, meals, macros and weight. Fitness: your workouts and activity. Connecting a device never shares anything by itself.</p>`;
+}
+// "🔒 Private" or "Shared: Diet with Pat · Fitness with Pat".
+function sharingLine() {
+  const s = me()?.share || { diet: [], fitness: [] }, n = (ids) => ids.map((id) => member(id)?.name).filter(Boolean).join(', ');
+  return !s.diet.length && !s.fitness.length ? '🔒 Private' : `Shared: ${[s.diet.length ? `Diet with ${n(s.diet)}` : '', s.fitness.length ? `Fitness with ${n(s.fitness)}` : ''].filter(Boolean).join(' · ')}`;
 }
 // 💬 Chats (chat.js): loaded once the app is on screen, so it never slows the start.
 let dmMod = null;
@@ -379,10 +479,11 @@ WIDE?.addEventListener?.('change', () => {
 // asked for, a ride without a driver, a thread you're tagged in), the shared 🛒 groceries, the
 // house and the dogs' care, and pinned threads. Dog details wait behind "More about the dogs".
 async function homeView() {
+  if (!can('home')) return homeOwnView();
   const { house, dogPart, fame } = petsParts();
   const h = new Date().getHours(), first = esc((me()?.name || state.user?.name || '').split(' ')[0]);
   const top = `<h1 class="home-hi">${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}. Here’s your ${esc(new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))}.</h1>
-    <div id="hello"></div><section class="nextup" id="nextUp" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section>
+    <div id="hello"></div><section class="nextup" id="nextUp" style="${homeH('nextUp')}" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section>
     <section class="card attn" id="attn" aria-labelledby="attnH" style="${homeH('attn')}"><div class="skeleton line"></div></section>
     <section class="card groc" id="groc" aria-labelledby="grocH" style="${homeH('groc')}"><div class="skeleton line"></div></section>
     <div id="goldNews"></div><section class="card movies" id="moviesCard" hidden></section>`;
@@ -405,12 +506,21 @@ async function homeView() {
   await dogsDone;
 }
 
+// Home without the household's lists (the family's creator didn't give you Home): your own day.
+function homeOwnView() {
+  const h = new Date().getHours(), first = esc((me()?.name || state.user?.name || '').split(' ')[0]);
+  $('#view').innerHTML = `${demoBanner()}<h1 class="home-hi">${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}.</h1>
+    <div id="hello"></div><section class="nextup" id="nextUp" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section>
+    <section class="card"><p class="small muted">The household's lists, chores and the dogs are in Home for the people ${esc(fam().name)}'s creator chose. Ask them if you'd like to see it.</p></section>`;
+  helloCard();
+  renderNextUp().catch(() => { const el = $('#nextUp'); if (el?.querySelector('.skeleton')) el.hidden = true; });
+}
 // ---------- 🙋 requests and 🛒 groceries: what each says is locked with the family key ----------
 const home = { requests: [], groceries: [], all: false, loaded: false, at: 0 };
 const REQ_KINDS = { ride: '🚗 A ride', petsit: '🐾 Pet sitting', walk: '🦮 A dog walk', babysit: '🧸 Babysitting', meal: '🍲 A meal', errand: '🛒 An errand', other: '🙋 A hand' };
 // The cards' last height on this phone (a number, nothing they said): the space is kept while they load.
 const homeHKey = () => `fam.homeH.${state.fid}`;
-const homeH = (id) => { let h = 0; try { h = JSON.parse(LS.get(homeHKey()) || '{}')[id]; } catch { /* none */ } return `min-height:${Math.min(h || { attn: 140, groc: 330 }[id], 900)}px`; };
+const homeH = (id) => { let h = 0; try { h = JSON.parse(LS.get(homeHKey()) || '{}')[id]; } catch { /* none */ } return `min-height:${Math.min(h || { attn: 140, groc: 330, nextUp: 131 }[id], 900)}px`; };
 function keepH(el) {
   el.style.minHeight = '';
   try { const all = JSON.parse(LS.get(homeHKey()) || '{}'); all[el.id] = Math.round(el.getBoundingClientRect().height); LS.set(homeHKey(), JSON.stringify(all)); } catch { /* none */ }
@@ -836,6 +946,7 @@ const timeText = (at) => (at && at.length > 10 ? new Date(at).toLocaleTimeString
 const who = (id) => (id === fam().me ? 'You' : member(id)?.name || '');
 const daysTo = (d) => Math.round((Date.parse(`${d}T12:00:00`) - Date.parse(`${isoLocal()}T12:00:00`)) / 864e5);
 async function loadAppts() {
+  if (!can('home')) return dogsHub.appts; // the dogs are part of Home
   const r = await shared(`/families/${state.fid}/appts?today=${isoLocal()}`).catch(() => null);
   if (r) { dogsHub.appts = await Promise.all(r.appts.map(openAppt)); dogsHub.spending = r.spending; }
   return dogsHub.appts;
@@ -1217,13 +1328,18 @@ async function memberView() {
       ${m.status === 'invited' ? `<p class="small">💌 Invited (${esc(m.email)}) <button type="button" class="linkish" data-act="reinvite" data-id="${m.id}">Send the invite again</button></p>` : ''}
       ${m.status === 'managed' && m.kind === 'person' ? `<p class="small muted">No account yet. <button type="button" class="linkish" data-act="reinvite" data-id="${m.id}">Invite by email</button> — or keep managing them here (kids).</p>` : ''}
     </section>
+    ${!self && m.kind === 'person' && m.role !== 'owner' && me().role === 'owner' ? `<section class="card areas-card"><b>🔑 What ${esc(m.name)} can use</b>
+      <ul class="list toggles">${Object.entries(AREAS).map(([k, l]) => `<li><label class="switch-row"><span>${l}</span><input type="checkbox" data-access="${k}:${m.id}" ${(m.access || Object.keys(AREAS)).includes(k) ? 'checked' : ''}><i class="switch"></i></label></li>`).join('')}</ul>
+      <p class="tiny muted">You choose these as the family's creator. ${esc(m.name)}'s 💪 Health is theirs to share, and 💞 Us is just for a couple.</p></section>` : ''}
     <section class="card" id="memberData"><div class="skeleton line"></div></section>
     ${theirPosts.length ? `<h3>Posts</h3><div class="grid">${theirPosts.map((p) => (p.photoId ? photoBox(p, 'grid') : `<img src="${p.photo}" alt="" loading="lazy">`)).join('')}</div>` : ''}
     ${!self && m.role !== 'owner' && (me().role === 'owner' || m.status !== 'active') ? `<button type="button" class="danger linkish small pad" data-act="removemember" data-id="${m.id}">Remove ${esc(m.name)} from ${esc(fam().name)}</button>` : ''}`;
   const el = $('#memberData');
   try {
-    const rec = await api.get(`/families/${state.fid}/members/${m.id}/data`);
-    const data = await openData(rec), savedAt = rec.savedAt;
+    // Someone else's: only the Diet / Fitness they share with you (your own and a pet's: the whole copy).
+    let data, savedAt;
+    if (self || m.kind === 'pet') { const rec = await api.get(`/families/${state.fid}/members/${m.id}/data`); data = await openData(rec); savedAt = rec.savedAt; }
+    else { const r = await theirParts(m.id, ['diet', 'fitness']); if (!r) throw Object.assign(new Error('private'), { data: { locked: true } }); ({ data, savedAt } = r); }
     el.innerHTML = data.locked ? '<div class="locked">🔒 <b>Locked on this device</b><p class="small muted">This device needs the family key to show it.</p></div>'
       : m.kind === 'pet' ? petDetails(m, data) : healthCard(m, data, savedAt, self);
   } catch (err) {
@@ -1274,9 +1390,7 @@ function meView() {
       <div class="chips">${['Dad', 'Mom'].map((x) => `<button type="button" class="chip" data-petcalls="${x}">${x}</button>`).join('')}</div>
       <p class="tiny muted">Used when the dogs thank you for a ⭐ golden day. Until you choose, they write to "Mom &amp; Dad".</p></section>` : ''}
     <h3>Privacy</h3>
-    <section class="card"><b>Who can see my diet & fitness</b><p class="small muted">Weight, meals and training. Off for everyone until you turn it on.</p>
-      ${others.length ? `<ul class="list toggles">${others.map((o) => `<li><label class="switch-row">${avatar(o, 32)}<span>${esc(o.name)} <small class="muted">${esc(relLabel(o))}</small></span><input type="checkbox" data-share="${o.id}" ${(my.shareWith || []).includes(o.id) ? 'checked' : ''}><i class="switch"></i></label></li>`).join('')}</ul>`
-        : '<p class="small muted">Once someone accepts their invite, you can choose here.</p>'}
+    <section class="card" id="shareCard"><b>💪 Who can see my Health</b>${sharingHtml()}
       <p class="tiny muted">Pets, family threads and the calendar are seen by your whole family. Threads you share with connected families are also seen by them.</p></section>
     ${hasLegacy ? `<h3>Your data</h3><section class="card"><b>Bring over the current app</b><p class="small muted">Copies everything from the current app on this phone into ${esc(f.name)}: your meals, weigh-ins, training and dog duties, your partner's shared data, and your dogs. Nothing is removed from the current app, and you can run it again to refresh.</p>
       <div class="row wrap"><button type="button" data-act="import">Bring it over</button><button type="button" class="ghost" data-act="backup">Download a backup</button></div><div id="importLog" class="small"></div></section>` : ''}
@@ -1597,46 +1711,50 @@ function usBadge() {
   b.hidden = !n || state.view === 'us';
   b.textContent = n > 9 ? '9+' : String(n);
 }
+// 💞 Us: what the two of you want to do together — 📺 Watch first (what are we watching, what's
+// next), then what's waiting on you, ❤️ Dates, ✨ Ideas for Us and 💌 notes.
 async function usView() {
   const p = partnerMember();
-  if (!p) { $('#view').innerHTML = `${demoBanner()}<section class="card stack"><h2>💞 Us</h2><p class="small">A private space for you and your partner: love notes, plans, date nights and what you're watching. Add your spouse or partner to the family (Me › ＋ Person) to start.</p></section>`; return; }
+  if (!p) { $('#view').innerHTML = `${demoBanner()}<section class="card stack"><h2>💞 Us</h2><p class="small">A private space for you and your partner: what you're watching, date nights, ideas and love notes. Add your spouse or partner to the family (Me › ＋ Person) to start.</p></section>`; return; }
   $('#view').innerHTML = `${demoBanner()}<div class="us-page">
     <div class="us-title"><h2>💞 ${esc(me().name)} &amp; ${esc(p.name)}</h2><span class="small muted" id="usSub">🔒 Just you two</span></div>
+    <section class="card us-watch" id="usWatch" aria-labelledby="usWatchH"><h2 class="card-h" id="usWatchH">📺 Watch</h2><div class="skeleton line"></div><div class="skeleton line"></div></section>
+    <section class="card us-read" id="usRead" aria-labelledby="usReadH"><h2 class="card-h" id="usReadH">📚 Read</h2><div class="skeleton line"></div><div class="skeleton line"></div></section>
     <section id="usFor"></section>
-    <section class="card" id="usNotesC"><div class="skeleton line"></div></section>
-    <section class="card" id="usBookC"></section>
-    <section class="card" id="usPlansC"></section>
+    <section class="card" id="usDatesC"></section>
     <section class="card" id="usIdeasC" hidden></section>
-    <section class="card" id="usOutC"></section>
-    <section class="card" id="usRhythmC"></section>
-    <section id="usTonight"></section></div>`;
+    <section class="card" id="usNotesC"><div class="skeleton line"></div></section>
+    <div id="usBook"></div></div>`;
   importUs().catch(() => {});
-  await Promise.all([loadUs(), loadRhythm().then((r) => { calm.rhythm = r; }).catch(() => {}), loadWatch().catch(() => {}), loadIdeas().catch(() => {}), loadThreads().catch(() => {})]);
+  // Read draws as soon as its books are in (its own request; covers aren't on this card).
+  RM().then((R) => R.loadBooks().then(() => { if (state.view === 'us') R.renderUsRead(); })).catch(() => { const el = $('#usRead'); if (el) el.innerHTML = '<h2 class="card-h">📚 Read</h2><p class="small muted">Couldn\'t load your books — pull to refresh.</p>'; });
+  // Watch draws as soon as it's in; the rest when everything has arrived.
+  const w = loadWatch().then(() => { if (state.view === 'us') renderUsWatch(); }).catch(() => { const el = $('#usWatch'); if (el) el.innerHTML = '<h2 class="card-h">📺 Watch</h2><p class="small muted">Couldn\'t load the watchlist just now.</p><button type="button" class="ghost wide" data-view="watch">Open Watchlist →</button>'; });
+  await Promise.all([loadUs(), loadRhythm().then((r) => { calm.rhythm = r; }).catch(() => {}), w, loadIdeas().catch(() => {}), loadThreads().catch(() => {})]);
   if (state.view !== 'us') return;
   renderUs();
-  loadTv().then(() => { if (state.view === 'us' && $('#usNotesC')) { renderUs(); usBadge(); } }).catch(() => {});
+  loadTv().then(() => { if (state.view === 'us' && $('#usWatch')) { renderUsWatch(); usBadge(); } }).catch(() => {});
   // Opening Us counts its new notes as seen (after this visit's "new" marks are drawn).
   LS.set(usSeenKey(), String(Date.now()));
   usBadge();
 }
 function renderUs() {
   if (!$('#usNotesC')) return;
+  renderUsWatch();
+  if (readMod) readMod.then((R) => { if (R.rd.fid === state.fid) R.renderUsRead(); }).catch(() => {});
   const meId = fam().me, f = forYou(), pName = partnerName();
   const wn = (p) => (KINDS[p.kind] || KINDS.other);
   $('#usSub').textContent = `🔒 Just you two${us.streak > 1 ? ` · 💌 ${us.streak}-day note streak` : ''}`;
   // For you
-  $('#usFor').innerHTML = f.ask.length || f.notes.length || f.after.length ||  f.matches.length || f.letters.length || f.eps.length ? `<div class="foryou"><div class="row between"><b class="small up">For you</b>${f.count ? `<span class="small" style="color:var(--like);font-weight:800">${f.count}</span>` : ''}</div>
-    ${f.eps.map((x) => `<div class="fy"><span class="fy-i">🆕</span><div><b>${esc(x.title)}: ${x.ep.newCount} new episode${x.ep.newCount === 1 ? '' : 's'}</b><small>E${x.ep.from}${x.ep.to !== x.ep.from ? `–${x.ep.to}` : ''} out ${x.ep.latest === isoLocal() ? 'today' : shortDay(x.ep.latest)}${x.ep.nextDrop ? ` · next ${shortDay(x.ep.nextDrop)}` : ''}</small>
-      <div class="ans"><button type="button" class="small" data-watchnight="${x.id}">📺 Watching tonight</button><button type="button" class="ghost small" data-epseen="${x.id}:${x.ep.latest}">Later</button></div></div></div>`).join('')}
-    ${f.letters.map((t) => `<div class="fy"><span class="fy-i">📓</span><div><b>${t.mine ? `${esc(t.lastByName)} added a note to “${esc(t.title)}”` : `${esc(t.byName)} wrote: ${esc(t.title)}`}</b><small>${t.mins} min read${t.replies ? ` · ${t.replies} note${t.replies === 1 ? '' : 's'}` : ''}${LS.get(`fam.tonight.${t.id}`) ? ' · 🌙 saved for tonight' : ''}</small>
-      <div class="ans"><button type="button" class="small" data-thread="${t.fid}:${t.id}">Read</button>${LS.get(`fam.tonight.${t.id}`) ? '' : `<button type="button" class="ghost small" data-tonightlater="${t.id}">🌙 Tonight</button>`}</div></div></div>`).join('')}
+  // (New episodes show on the Watch card above, not here as well.)
+  // Only what needs an answer from you: new notes and write-ups show in Notes and Our notebook.
+  $('#usFor').innerHTML = f.ask.length || f.after.length || f.matches.length ? `<div class="foryou"><div class="row between"><b class="small up">For you</b>${f.ask.length + f.after.length + f.matches.length > 1 ? `<span class="small" style="color:var(--like);font-weight:800">${f.ask.length + f.after.length + f.matches.length}</span>` : ''}</div>
     ${f.matches.map((m) => `<div class="fy"><span class="fy-i">💞</span><div><b>It's a match: ${esc(m.idea.title)}</b><small>You both 💗 it${m.idea.day ? ` · ${esc(dayText(m.idea.day, m.idea.time))}` : ''}</small>
-      <div class="ans"><button type="button" class="small" data-match="${esc(m.t)}">📅 Make it a plan</button></div></div></div>`).join('')}
+      <div class="ans"><button type="button" class="small" data-match="${esc(m.t)}">📅 Make it a plan</button><button type="button" class="ghost small" data-discuss="i:${esc(m.t)}" data-dtitle="${esc(`💡 ${m.idea.title}`)}">💬 Discuss</button></div></div></div>`).join('')}
     ${f.ask.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>${esc(member(x.by)?.name || pName)} suggested ${esc(planTitle(x).toLowerCase().startsWith('date night') ? 'a date night' : planTitle(x))}</b><small>${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}${x.note ? ` · “${esc(x.note)}”` : ''}</small>
       ${x.idea ? ideaStrip(x) : ''}
       ${x.outing ? `<small class="muted">${x.outing.stops.map((st) => `${STOP_ICON[st.kind] || '📍'} ${esc(hm(st.time))}`).join(' → ')}</small><button type="button" class="linkish small" data-outplan="${x.id}">🧭 See the plan</button>` : ''}
       <div class="ans">${Object.entries(ANSWERS).map(([k, t], i) => `<button type="button" class="${i ? 'ghost' : ''} small" data-answer="${x.id}:${k}">${t}</button>`).join('')}</div></div></div>`).join('')}
-    ${f.notes.map((n) => `<div class="fy"><span class="fy-i">💌</span><div><b>New note from ${esc(member(n.by)?.name || pName)}</b><small>“${esc(n.text)}”</small></div><button type="button" class="heart" data-noteheart="${n.id}" aria-label="Heart">${n.hearts?.includes(meId) ? '❤️' : '🤍'}</button></div>`).join('')}
     ${f.after.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>How was ${esc(x.outing ? x.outing.title : (FOOD_KINDS.includes(x.kind) && x.where) || planTitle(x))}?</b><small>${esc(planWhen(x))}</small>
       <div class="ans"><button type="button" class="small" data-rate="${x.id}">⭐ Rate it</button><button type="button" class="ghost small" data-rateskip="${x.id}">Skip</button></div></div></div>`).join('')}</div>` : '';
   // Notes
@@ -1651,33 +1769,27 @@ function renderUs() {
   const status = (x) => (x.agreed ? '<span class="tag tg">You\'re both in 🎉</span>'
     : x.by === meId ? (x.to.map((id) => x.replies?.[id]?.r).find(Boolean) ? `<span class="tag tw">${esc(pName)}: ${esc(ANSWERS[x.to.map((id) => x.replies?.[id]?.r).find(Boolean)].replace(/^\S+ /, '').toLowerCase())}</span>` : `<span class="tag">waiting for ${esc(pName)}</span>`)
       : `<span class="tag">you: ${esc((ANSWERS[x.replies?.[meId]?.r] || '').replace(/^\S+ /, '').toLowerCase())}</span>`);
-  $('#usPlansC').innerHTML = `<div class="row between"><b class="us-h">✨ Plans</b><button type="button" class="linkish small" data-act="feel">＋ Suggest</button></div>
-    ${up.length ? up.map((x) => `<div class="planrow" data-plan="${x.id}"><span>${wn(x)[0]} <b>${esc(planTitle(x))}</b> <small class="muted">· ${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}</small>${x.outing ? ` <button type="button" class="linkish small" data-outplan="${x.id}">See plan</button>` : ''}${x.agreed && x.idea?.reserve ? ` <a class="linkish small" href="${esc(x.idea.reserve)}" target="_blank" rel="noopener">🍽 Reserve</a>` : ''}${x.agreed && x.idea?.kind === 'movie' && x.idea.url ? ` <a class="linkish small" href="${esc(x.idea.url)}" target="_blank" rel="noopener">🎟 Book seats</a>` : ''}</span>${status(x)}
-      ${x.by === meId && !x.agreed ? `<span class="planacts"><button type="button" class="linkish small" data-planmove="${x.id}">Another day</button> · <button type="button" class="linkish small" data-plandel="${x.id}">Cancel</button></span>` : ''}</div>`).join('')
-      : `<p class="small muted">Nothing planned. <button type="button" class="linkish" data-act="feel">Suggest something for this weekend ✨</button></p>`}`;
-  // 2-2-2-2
+  // ❤️ Dates: what's planned, the 2-2-2-2 rhythm, and the three ways to make a plan.
   const R = calm.R, list = calm.rhythm || [];
+  let rhythm = '';
   if (R) {
     const st = R.rhythmStatus(list, isoLocal());
     const chip = (k) => { const x = st[k]; const r = R.RHYTHMS[k]; if (k === 'close') return `<span class="rchip">${r.icon} ${x.count} of 2 this week</span>`; const name = r.label.replace('Multi-night ', '').toLowerCase(); return `<span class="rchip ${x.last && x.level === 'due' ? 'due' : ''}">${r.icon} ${!x.last ? `${name} · not yet` : x.level === 'due' ? `${name} due` : x.level === 'soon' ? `${name} soon` : `${name} ✓`}</span>`; };
     const dates = list.filter((e) => e.kind !== 'close').slice().reverse();
-    $('#usRhythmC').innerHTML = `<div class="row between"><b class="us-h">💞 2-2-2-2</b><button type="button" class="linkish small" data-act="lognew">❤️ Log a date</button></div>
-      <div class="rchips">${['date', 'close', 'overnight', 'getaway'].map(chip).join('')}</div>
-      ${dates.length ? `<details class="small"><summary>Last: ${R.momentIcon(dates[0])} ${esc(R.momentText(dates[0]))} · ${esc(new Date(`${dates[0].date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</summary><ul class="list">${dates.slice(0, 12).map((e) => `<li class="row between"><span>${R.momentIcon(e)} ${esc(R.momentText(e))}</span><span><small class="muted">${esc(new Date(`${e.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: e.date.slice(0, 4) !== isoLocal().slice(0, 4) ? 'numeric' : undefined }))}</small> <button type="button" class="linkish small" data-momentedit="${esc(e.id)}">✎</button></span></li>`).join('')}</ul></details>`
-        : '<p class="small muted">Log your dates and it keeps the rhythm: a date every 2 weeks, us time twice a week, an overnight twice a year, a getaway every 2 years.</p>'}`;
-  } else $('#usRhythmC').hidden = true;
-  renderIdeasCard(); renderOutingCard();
-  // 📓 Our notebook: the write-ups just for the two of you, newest first.
-  const book = th.list.filter((t) => t.aud === 'us').sort((a, b) => (b.pinned - a.pinned) || b.lastAt - a.lastAt);
-  $('#usBookC').innerHTML = `<div class="row between"><b class="us-h">📓 Our notebook</b><button type="button" class="linkish small" data-act="writeup">✍️ Write</button></div>
-    ${book.length ? book.slice(0, 6).map((t) => `<button type="button" class="nbrow" data-thread="${t.fid}:${t.id}"><span class="fp-i">${(THREAD_CATS[t.cat] || THREAD_CATS.learned)[0]}</span><span class="grow"><b>${t.unread ? '<i class="dot"></i>' : ''}${esc(t.title)}</b><small class="muted">${esc(t.mine ? 'You' : t.byName)} · ${ago(t.lastAt)}${t.replies ? ` · ✍️ ${t.replies}` : ''}${t.pinned ? ' · 📌' : ''}</small></span></button>`).join('')
-      : `<p class="small muted">Read something, tried something, had an idea? Write ${esc(pName)} about it while it's fresh — it waits here until they have a moment.</p>`}
-    ${book.length > 6 ? '<button type="button" class="linkish small" data-board="us" data-famtab="threads">All of it ›</button>' : ''}`;
-  // Tonight's show
-  const on = (watch.shows || []).filter((x) => x.status === 'watching').sort((a, b) => (b.ep?.newCount ? 1 : 0) - (a.ep?.newCount ? 1 : 0) || (watch.S?.lastActive(b) || '').localeCompare(watch.S?.lastActive(a) || ''))[0];
-  const tonightLogged = on?.nights.some((n) => n.date === isoLocal());
-  $('#usTonight').innerHTML = `<section class="card tonightc"><span class="big">🍿</span><div class="grow">${on ? `<b>${esc(on.title)}</b>${on.progress ? ` <small class="muted">S${on.progress.s || 1} · E${on.progress.e}</small>` : ''}${on.ep?.newCount ? ` <small class="ep-new">🆕 ${on.ep.newCount} new</small>` : ''}<br><small class="muted">${on.aud === 'family' ? '👨‍👩‍👧 shared with the family' : '🔒 just you two'}</small>` : '<b>Watching together</b><br><small class="muted">Add what you two are watching</small>'}</div>
-    ${on ? `<button type="button" class="${tonightLogged ? '' : 'ghost'} small" data-watchnight="${on.id}">${tonightLogged ? '✓ Tonight' : '📺 Tonight'}</button>` : ''}<button type="button" class="linkish small" data-view="watch">All ›</button></section>`;
+    rhythm = `<div class="rchips">${['date', 'close', 'overnight', 'getaway'].map(chip).join('')}</div>
+      ${dates.length ? `<details class="small"><summary>Last: ${R.momentIcon(dates[0])} ${esc(R.momentText(dates[0]))} · ${esc(new Date(`${dates[0].date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</summary><ul class="list">${dates.slice(0, 12).map((e) => `<li class="row between"><span>${R.momentIcon(e)} ${esc(R.momentText(e))}</span><span><small class="muted">${esc(new Date(`${e.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: e.date.slice(0, 4) !== isoLocal().slice(0, 4) ? 'numeric' : undefined }))}</small> <button type="button" class="linkish small" data-momentedit="${esc(e.id)}" aria-label="Edit">✎</button></span></li>`).join('')}</ul></details>` : ''}`;
+  }
+  $('#usDatesC').innerHTML = `<h2 class="card-h">❤️ Dates</h2>
+    ${up.length ? up.map((x) => `<div class="planrow" data-plan="${x.id}"><span>${wn(x)[0]} <b>${esc(planTitle(x))}</b> <small class="muted">· ${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}</small>${x.outing ? ` <button type="button" class="linkish small" data-outplan="${x.id}">See plan</button>` : ''}${x.agreed && x.idea?.reserve ? ` <a class="linkish small" href="${esc(x.idea.reserve)}" target="_blank" rel="noopener">🍽 Reserve</a>` : ''}${x.agreed && x.idea?.kind === 'movie' && x.idea.url ? ` <a class="linkish small" href="${esc(x.idea.url)}" target="_blank" rel="noopener">🎟 Book seats</a>` : ''}</span>${status(x)}
+      ${x.by === meId && !x.agreed ? `<span class="planacts"><button type="button" class="linkish small" data-planmove="${x.id}">Another day</button> · <button type="button" class="linkish small" data-plandel="${x.id}">Cancel</button></span>` : ''}</div>`).join('')
+      : '<p class="small muted">Nothing planned yet.</p>'}
+    ${rhythm}
+    <div class="row wrap us-acts"><button type="button" class="small" data-act="feel">✨ Suggest</button><button type="button" class="ghost small" data-act="outing">🧭 Plan an outing</button><button type="button" class="ghost small" data-act="lognew">❤️ Log a date</button></div>
+    ${savedOutings().length ? `<p class="tiny muted">Recent outings: ${savedOutings().slice(0, 3).map((o, i) => `<button type="button" class="linkish tiny" data-outsaved="${i}">${esc(o.title)}</button>`).join(' · ')}</p>` : ''}`;
+  renderIdeasCard();
+  // 📓 Your write-ups for each other live in Threads (Just us): one line here, not a second list.
+  const book = th.list.filter((t) => t.aud === 'us'), fresh = book.filter((t) => t.unread).length;
+  $('#usBook').innerHTML = `<button type="button" class="card nbrow us-book" data-board="us" data-famtab="threads"><span class="fp-i">📓</span><span class="grow"><b>Our notebook</b><small class="muted">${book.length ? `${book.length} write-up${book.length === 1 ? '' : 's'} just for you two${fresh ? ` · ${fresh} new` : ''}` : 'Write-ups just for you two, in Threads'}</small></span><span class="go">›</span></button>`;
 }
 // When you both say yes, the plan goes on the calendar for both of you (once).
 async function planToCalendar(p) {
@@ -1723,8 +1835,8 @@ function ideasCard() {
   const st = calm.R ? calm.R.rhythmStatus(calm.rhythm || [], isoLocal()).date : null;
   const due = st && (!st.last || st.level === 'due' || st.level === 'soon');
   const top = ideaDeck('all').filter((x) => !picked(x)).slice(0, 3);
-  return `<div class="row between"><b class="us-h">${due ? '💡 Time for a date?' : '💡 Date ideas'}</b><span><button type="button" class="linkish small" data-act="ideaset" aria-label="Date idea settings">⚙︎</button> <button type="button" class="linkish small" data-act="ideas">All ›</button></span></div>
-    ${due ? `<p class="small muted">${st.last ? 'It\'s been a while since your last date.' : 'Your first date on the 2-2-2-2 is waiting.'} 💗 what you'd like — when you both pick the same one, it's a match.</p>` : '<p class="tiny muted">🔒 Your 💗 stay private until you both pick the same one.</p>'}
+  return `<div class="row between"><h2 class="card-h">✨ Ideas for Us</h2><span><button type="button" class="linkish small" data-act="ideaset" aria-label="Date idea settings">⚙︎</button> <button type="button" class="linkish small" data-act="ideas">All ›</button></span></div>
+    ${due ? `<p class="small muted">${st.last ? 'Time for a date? It\'s been a while.' : 'Time for a date? Your first on the 2-2-2-2 is waiting.'} 💗 what you'd like — when you both pick the same one, it's a match.</p>` : '<p class="tiny muted">🔒 Your 💗 stay private until you both pick the same one.</p>'}
     <div class="idealist">${top.map((x) => `<div class="idearow"><span class="ii">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : ideaIcon(x)}</span><div class="grow"><b>${esc(x.title)}</b><small class="muted">${ideaMeta(x) || esc(x.why || '')}${scoreLine(x) ? ` · ${scoreLine(x)}` : ''}</small></div>
       <button type="button" class="icon-btn" data-idea="${esc(x.id)}:pass" aria-label="Not for us">✕</button><button type="button" class="icon-btn pick" data-idea="${esc(x.id)}:pick" aria-label="Pick">💗</button></div>`).join('') || '<p class="small muted">You\'ve been through them all — new ones come every Wednesday.</p>'}</div>
     ${ideas.week ? `<p class="tiny muted">This week around ${esc(ideas.week.area?.label || ideas.settings?.label || 'you')} · ${ideas.week.ideas.length} ideas</p>` : '<p class="tiny muted">Movies, events and new places for your area arrive every Wednesday morning.</p>'}`;
@@ -1746,7 +1858,7 @@ function ideasSheet() {
       ${ideaMeta(x) ? `<p class="small">${ideaMeta(x)}</p>` : ''}${scoreLine(x) ? `<p class="small"><b>${scoreLine(x)}</b> <span class="tiny muted">critics · audiences</span></p>` : ''}
       ${x.why ? `<p class="small muted">${esc(x.why)}</p>` : ''}${taste() && ideas.I.fit(x, taste()).why ? `<p class="fitwhy small">${esc(ideas.I.fit(x, taste()).why)}</p>` : ''}${times}
       ${links ? `<div class="row wrap">${links}</div>` : ''}
-      <button type="button" class="linkish small" data-ideasuggest="${esc(x.id)}">✨ Suggest it to ${esc(partnerName())} now</button>
+      <div class="row wrap"><button type="button" class="linkish small" data-ideasuggest="${esc(x.id)}">✨ Suggest it to ${esc(partnerName())} now</button>${ideas.tok[x.id] ? `<button type="button" class="linkish small" data-discuss="i:${ideas.tok[x.id]}" data-dtitle="${esc(`💡 ${x.title}`)}" data-dbody="${esc([x.why || '', x.url || ''].filter(Boolean).join('\n'))}">💬 Discuss</button>` : ''}</div>
       <div class="deckbtns"><button type="button" class="ghost" data-idea="${esc(x.id)}:pass">✕ Not for us</button><button type="button" class="ghost" data-idea="${esc(x.id)}:later">⏭ Later</button>${picked(x) ? `<button type="button" data-idea="${esc(x.id)}:unpick">💗 Picked</button>` : `<button type="button" class="hot" data-idea="${esc(x.id)}:pick">💗 I'd love this</button>`}</div>
       <p class="tiny muted center">${ideas.i + 1} of ${list.length}${x.src ? ` · ${esc(x.src)}` : ''}</p></article>`
       : ideasEmpty()}
@@ -2751,7 +2863,7 @@ async function nextUpCtx() {
     .filter((c) => c.type === 'yoga').map((c) => ({ at: new Date(`${d}T${c.time}`), label: c.name || 'Yoga class', place: B.GYMS[c.gym]?.short || '' })));
   const callWindows = me()?.legacyId && B.CALL.who === me().legacyId ? [...B.callWindows(today), ...B.callWindows(tomorrow)] : [];
   let dogs = null;
-  if ((fam().modules || []).includes('dogs') && dogsOf().length) {
+  if ((fam().modules || []).includes('dogs') && dogsOf().length && can('home')) {
     const c = await shared(`/families/${state.fid}/care?to=${today}&days=1`).catch(() => null);
     dogs = { enabled: true, walkedToday: (c?.days?.[today] || []).some((e) => e.kind === 'walk' || e.kind === 'park') };
   }
@@ -2773,13 +2885,14 @@ async function renderNextUp() {
   // 📞 The call line (only for whoever it's set up for) sits at the bottom of Next up.
   const call = await callLine().catch(() => '');
   if (!$('#nextUp')) return;
-  if (!top) { el.hidden = false; el.innerHTML = `<div class="nu-k">✨ Next up</div><p class="small muted">Nothing due right now. ${Object.keys(callNudge.all || {}).length ? '' : '<button type="button" class="linkish small" data-act="habits">🔁 Set up runs, rides or hot yoga</button>'}</p>${call}`; return; }
+  if (!top) { el.hidden = false; el.innerHTML = `<div class="nu-k">✨ Next up</div><p class="small muted">Nothing due right now. ${Object.keys(callNudge.all || {}).length ? '' : '<button type="button" class="linkish small" data-act="habits">🔁 Set up runs, rides or hot yoga</button>'}</p>${call}`; keepH(el); return; }
   el.hidden = false;
   el.innerHTML = `<div class="row between"><span class="nu-k">✨ Next up · ${esc(top.when)}</span><span><button type="button" class="linkish tiny" data-act="nuplan">📅 Today's plan</button> <button type="button" class="linkish tiny" data-act="nuknows" aria-label="What Next up knows">⋯</button></span></div>
     <h3 class="nu-t">${top.icon} ${esc(top.title)}</h3>
     <p class="nu-why">${top.why.map(esc).join(' · ')}</p>
     <div class="row wrap nu-acts"><button type="button" class="small" data-nu="done:0">✓ Done</button><button type="button" class="ghost small" data-nu="later:0">⏰ Later</button><button type="button" class="ghost small" data-nu="skip:0">✕ Not today</button><button type="button" class="linkish small" data-nu="why:0">Why?</button></div>
     ${alts.map((a, i) => `<div class="nu-alt"><span>${a.icon}</span><span class="grow"><b>${esc(a.title)}</b> <small class="muted">${esc(a.when)} · ${esc(a.why[0] || '')}</small></span><button type="button" class="linkish tiny" data-nu="done:${i + 1}">✓</button><button type="button" class="linkish tiny" data-nu="skip:${i + 1}">✕</button></div>`).join('')}${call}`;
+  keepH(el);
   nuSendNudge(top);
 }
 // 🔔 Optional: a notification 30 minutes before the top pick (sent by the connector).
@@ -2849,7 +2962,6 @@ async function nuKnows() {
     <p class="tiny muted">Worked out on this phone from your reminders, workouts, calendar, the weather, class times and your Watch list. Nothing extra leaves the phone (the 30-minute nudge sends just that one suggestion to the connector so it can notify you).</p>`);
 }
 
-// Bringing over the trackers' "Feeling like" plans, answers and notes (once per family, each
 // person their own, locked before they're sent).
 async function importUs() {
   const flag = `fam.usImported.${state.fid}`;
@@ -2882,7 +2994,7 @@ async function loadCal({ golden = true } = {}) {
   calm.C ||= await calModule();
   const [r, stats] = await Promise.all([
     shared(`/families/${state.fid}/events`).catch(() => ({ events: [], feeds: [] })),
-    golden && (fam().modules || []).includes('dogs') ? shared(`/families/${state.fid}/dogstats?today=${isoLocal()}`).catch(() => null) : null,
+    golden && (fam().modules || []).includes('dogs') && can('home') ? shared(`/families/${state.fid}/dogstats?today=${isoLocal()}`).catch(() => null) : null,
     loadAppts(), loadUs(),
   ]);
   calm.events = await Promise.all(r.events.map(async (e) => ({ ...e, ...((await unlock(e.body)) || { title: '🔒 Locked', locked: true }) })));
@@ -3123,7 +3235,7 @@ async function renderCalDress(date) {
 async function loadRhythm() {
   const R = await import('../js/rhythm.js');
   const partner = us.partner;
-  const [mine, theirs] = await Promise.all([myTrackers(), partner ? memberData(partner.id).then(openData).catch(() => null) : null]);
+  const [mine, theirs] = await Promise.all([myTrackers(), partner ? theirParts(partner.id, ['us']).then((r) => r?.data || null).catch(() => null) : null]);
   calm.R = R;
   calm.myRatings = mine?.taste?.ratings || [];
   calm.ratings = [...calm.myRatings, ...(theirs && !theirs.locked ? theirs.taste?.ratings || [] : [])];
@@ -3175,7 +3287,7 @@ async function saveRhythm(change, changeData = null) {
   change(r);
   data.rhythm = { entries: r.entries.slice(-400), removed: [...new Set(r.removed)].slice(-400) };
   if (changeData) changeData(data);
-  await api.put(`/families/${state.fid}/members/${fam().me}/data`, { data: await sealData(data) });
+  await saveMine(data);
   mineCache = null;
 }
 function eventSheet(ev = null, day = calm.day || isoLocal()) {
@@ -3234,79 +3346,29 @@ async function saveFeeds(list) {
 // ---------- 🍿 what we watch: shows and movies, nights together, progress, the year ----------
 // Titles and services are end-to-end encrypted; the merging and the recap are the trackers' own
 // (js/showsCore.js), run over everyone in the family.
-const watch = { data: null, shows: [], tab: 'now', S: null, adding: { kind: 'show', service: 'netflix' } };
-async function loadWatch() {
-  watch.S ||= await import('../js/showsCore.js');
-  const w = await api.get(`/families/${state.fid}/watch`);
-  const bodies = await Promise.all(w.shows.map(async (x) => ({ ...x, ...((await unlock(x.body)) || {}) })));
-  const people = fam().members.filter((m) => m.kind === 'person');
-  const records = people.map((m) => ({
-    person: m.id,
-    shows: bodies.filter((x) => x.by === m.id).map((x) => ({ id: x.id, title: x.title || '🔒 Locked', service: x.service || 'other', kind: x.kind || 'show', date: x.date || isoLocal(new Date(x.at)), at: x.at, locked: !x.title })),
-    nights: w.nights.filter((n) => n.by === m.id),
-    status: Object.fromEntries(Object.entries(w.status).filter(([, v]) => v.by === m.id)),
-    ratings: Object.fromEntries(Object.entries(w.ratings).filter(([, r]) => r[m.id]).map(([k, r]) => [k, r[m.id]])),
-  }));
-  // Shows added by someone who's since left: still on the list.
-  const orphans = bodies.filter((x) => !people.some((m) => m.id === x.by));
-  if (orphans.length) records.push({ person: 'gone', shows: orphans.map((x) => ({ id: x.id, title: x.title || '🔒 Locked', service: x.service || 'other', kind: x.kind || 'show', date: x.date || isoLocal(new Date(x.at)), at: x.at })), nights: [], status: {}, ratings: {} });
-  watch.data = w;
-  const before = new Map((watch.shows || []).map((x) => [x.id, x]));
-  watch.shows = watch.S.mergeShows(records).map((x) => ({ ...x, progress: w.progress[x.id] || null, aud: w.shows.find((y) => y.id === x.id)?.aud || 'family' }));
-  // Episode dates already looked up stay, worked out again against the new progress.
-  for (const x of watch.shows) { const b = before.get(x.id); if (b?.tv && watch.tvm) { x.tv = b.tv; x.ep = watch.tvm.episodeStatus(x.tv, x.progress, isoLocal()); } }
-}
+const watch = { data: null, shows: [], tab: '', S: null, adding: { kind: 'show', service: 'netflix', status: 'want' } };
+// 📚 Read's screens (family/read.js) load the first time Us or Books needs them.
+let readMod = null;
+const RM = () => (readMod ||= import(`./read.js?v=${VERSION}`).then((m) => { m.init({ $, api, state, fam, me, member, partnerMember, esc, openSheet, closeSheet, toast, act, show, unlock, lock, discuss, isoLocal, demoBanner, lockedHere, LOCKED_MSG }); return m; }).catch((e) => { readMod = null; throw e; }));
+// 📺 Watch's screens (family/watch.js) load the first time Us or Watch needs them.
+let watchMod = null;
+const WM = () => (watchMod ||= import(`./watch.js?v=${VERSION}`).then((m) => { m.init({ $, LS, act, api, bingo, bingoNew, can, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide }); return m; }).catch((e) => { watchMod = null; throw e; }));
+const loadTv = (...a) => WM().then((m) => m.loadTv(...a));
+const loadWatch = (...a) => WM().then((m) => m.loadWatch(...a));
+const renderUsWatch = (...a) => WM().then((m) => m.renderUsWatch(...a));
+const renderWatch = (...a) => WM().then((m) => m.renderWatch(...a));
+const tvFixSheet = (...a) => WM().then((m) => m.tvFixSheet(...a));
+const watchAddSheet = (...a) => WM().then((m) => m.watchAddSheet(...a));
+const watchBingo = (...a) => WM().then((m) => m.watchBingo(...a));
+const watchDetail = (...a) => WM().then((m) => m.watchDetail(...a));
+const watchOne = (...a) => WM().then((m) => m.watchOne(...a));
+const watchSaved = (...a) => WM().then((m) => m.watchSaved(...a));
+const watchView = (...a) => WM().then((m) => m.watchView(...a));
 // 📺 Episode dates for the shows you're watching (or have up next), from TMDB through the
 // connector. Which TMDB show each one is, and the dates, are kept on this phone.
 const tvMapKey = () => `fam.tmdbMap.${state.fid}`;
 const tvMap = () => { try { return JSON.parse(LS.get(tvMapKey()) || '{}'); } catch { return {}; } };
-async function tvInfo(id) {
-  let c = null; try { c = JSON.parse(LS.get(`fam.tv.${id}`) || 'null'); } catch { /* none */ }
-  if (c && Date.now() - c.at < 6 * 3600e3) return c.show;
-  const r = await api.get(`/tv/${id}`).catch(() => null);
-  if (r?.show) { try { LS.set(`fam.tv.${id}`, JSON.stringify({ at: Date.now(), show: r.show })); } catch { /* full */ } return r.show; }
-  return c?.show || null;
-}
-async function loadTv() {
-  watch.tvm ||= await import('../server/tv.js');
-  const { episodeStatus } = watch.tvm;
-  const map = tvMap();
-  const list = watch.shows.filter((x) => x.kind !== 'movie' && !x.locked && ['watching', 'upnext'].includes(x.status)).slice(0, 15);
-  await Promise.all(list.map(async (x) => {
-    if (map[x.id] === undefined) {
-      const r = await api.get(`/tv/search?q=${encodeURIComponent(x.title)}`).catch(() => null);
-      if (!r) return;
-      map[x.id] = r.results[0]?.id || 0;
-    }
-    if (!map[x.id]) return;
-    x.tv = await tvInfo(map[x.id]);
-    x.ep = episodeStatus(x.tv, x.progress, isoLocal());
-  }));
-  try { LS.set(tvMapKey(), JSON.stringify(map)); } catch { /* full */ }
-  watch.tvAt = Date.now();
-}
 const shortDay = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-// "🆕 3 new · E9–11 · next Wed, Nov 4 (E12)"
-function epLine(x) {
-  const e = x.ep;
-  if (!e) return '';
-  const bits = [];
-  if (x.status === 'upnext' && e.latest) bits.push(`📺 Season ${e.season} is out`);
-  else if (e.newCount) bits.push(`<b class="ep-new">🆕 ${e.newCount} new${e.from ? ` · E${e.from}${e.to !== e.from ? `–${e.to}` : ''}` : ''}</b>`);
-  else if (e.newSeason) bits.push(`<b class="ep-new">🆕 Season ${e.newSeason} is out</b>`);
-  else if (x.status === 'watching' && e.latest) bits.push('✓ Caught up');
-  if (e.nextDrop) bits.push(`next ${shortDay(e.nextDrop)}${e.nextBatch.length ? ` (E${e.nextBatch[0]}${e.nextBatch.length > 1 ? `–${e.nextBatch[e.nextBatch.length - 1]}` : ''})` : ''}`);
-  else if (e.ended) bits.push('ended');
-  return bits.length ? `<div class="ep-line small">${bits.join(' · ')} <button type="button" class="linkish tiny" data-tvfix="${x.id}" aria-label="Not this show?">ⓘ</button></div>` : '';
-}
-async function tvFixSheet(id) {
-  const x = watch.shows.find((y) => y.id === id);
-  if (!x) return;
-  const r = await api.get(`/tv/search?q=${encodeURIComponent(x.title)}`);
-  openSheet(`<h2>Which show is “${esc(x.title)}”?</h2><p class="small muted">For new-episode dates (from TMDB).</p>
-    ${r.results.map((s) => `<button type="button" class="fpick" data-tvpick="${id}:${s.id}"><span class="fp-i">${s.poster ? `<img src="${esc(s.poster)}" alt="">` : '📺'}</span><span class="grow"><b>${esc(s.name)}</b><small class="muted">${esc(s.year || '')}</small></span>${tvMap()[id] === s.id ? '✓' : ''}</button>`).join('') || '<p class="small muted">No match on TMDB.</p>'}
-    <button type="button" class="linkish small" data-tvpick="${id}:0">It isn't on TMDB — stop looking</button>`);
-}
 // ---------- 📖 the tour, ❓ help everywhere, and "what's new" ----------
 const tour = { list: TOUR, i: 0 };
 function tourSheet(list = TOUR, at = 0) {
@@ -3577,114 +3639,21 @@ async function movieSheet(id) {
       ${out ? `<a class="btn ghost small" href="https://www.fandango.com/search?q=${encodeURIComponent(d.title)}" target="_blank" rel="noopener">🎟 Showtimes</a>` : ''}</div>
     <p class="tiny muted">Movie data from TMDB; where to watch from JustWatch. Scores: Rotten Tomatoes and IMDb via OMDb.</p>`);
 }
-async function watchView() {
-  $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div>`;
-  importWatch().catch(() => {});
-  await act(loadWatch);
-  if (state.view !== 'watch') return;
-  renderWatch();
-  loadTv().then(() => { if (state.view === 'watch') renderWatch(); }).catch(() => {});
-}
-const svcBadge = (k) => { const v = watch.S.SERVICES[k] || watch.S.SERVICES.other; return `<span class="svc" style="background:${v.bg};color:${v.fg}">${esc(v.name)}</span>`; };
-const monthLabel = (ym, month = 'long') => new Date(`${ym}-15T12:00:00`).toLocaleDateString(undefined, { month, year: 'numeric' });
-function watchCard(x, opts = {}) {
-  const S = watch.S, my = fam().me, today = isoLocal();
-  const tonight = x.nights.find((n) => n.date === today);
-  const mine = x.ratings[my] || 0;
-  const theirs = Object.entries(x.ratings).filter(([p]) => p !== my);
-  const pg = x.progress;
-  const nights = x.kind === 'movie' ? `🍿 Movie${x.statusDate ? ` · ${new Date(`${x.statusDate}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}`
-    : `${x.nights.length} night${x.nights.length === 1 ? '' : 's'} together${opts.monthNights != null ? ` · ${opts.monthNights} this month` : ''}`;
-  return `<div class="show-card ${x.status}" data-watchshow="${x.id}">
-    <div class="show-top">${svcBadge(x.service)}<span class="show-status">${S.STATUS[x.status] || ''}</span></div>
-    <div class="show-title">${esc(x.title)}</div>${epLine(x)}
-    <div class="small muted">${nights}${x.rating ? ` · ${x.rating}★ avg` : ''}</div>
-    ${x.kind !== 'movie' && x.status === 'watching' ? `<div class="row wrap progress-row"><span class="pill">${pg ? `S${pg.s || 1} · E${pg.e}` : 'Not started'}</span><button type="button" class="ghost small" data-watchep="${x.id}">＋ Episode</button><button type="button" class="linkish small" data-watchpg="${x.id}">Set…</button></div>
-      <button type="button" class="${tonight ? 'tonight on' : 'tonight'}" data-watchnight="${x.id}">${tonight ? `✓ Watched tonight${tonight.by === my ? '' : ` (${esc(member(tonight.by)?.name || '')})`}` : '📺 We watched tonight'}</button>` : ''}
-    <div class="show-rate"><span class="small muted">You</span>${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="star ${n <= mine ? 'on' : ''}" data-watchrate="${x.id}:${n}" aria-label="Rate ${n} of 5">★</button>`).join('')}
-      ${theirs.map(([p, r]) => `<span class="small muted">· ${esc(member(p)?.name || '')} <span class="stars">${'★'.repeat(r)}${'☆'.repeat(5 - r)}</span></span>`).join('')}</div>
-    <div class="show-actions">
-      ${x.kind !== 'movie' ? Object.entries(S.STATUS).filter(([k]) => k !== x.status).map(([k, label]) => `<button type="button" class="linkish small" data-watchstatus="${x.id}:${k}">${label}</button>`).join('') : ''}
-      ${x.locked ? '' : `<button type="button" class="linkish small" data-watchbingo="${x.id}">🎲 Bingo</button>`}
-      <button type="button" class="linkish small muted" data-watchaud="${x.id}:${x.aud === 'family' ? 'us' : 'family'}">${x.aud === 'family' ? '👨‍👩‍👧 family · make it just us' : '🔒 just us · share with family'}</button>
-      ${x.by === fam().me || me().role === 'owner' ? `<button type="button" class="linkish small muted" data-watchdel="${x.id}">Delete</button>` : ''}
-    </div>
-  </div>`;
-}
-function renderWatch() {
-  const S = watch.S, shows = watch.shows, ym = isoLocal().slice(0, 7), year = ym.slice(0, 4);
-  const tabs = [['now', 'Now'], ['month', 'By month'], ['year', `${year} recap`]];
-  let body = '';
-  if (watch.tab === 'now') {
-    const on = shows.filter((x) => x.status === 'watching').sort((a, b) => (b.ep?.newCount || 0) - (a.ep?.newCount || 0));
-    const next = shows.filter((x) => x.status === 'upnext');
-    const also = S.monthShows(shows, ym).filter((x) => x.status !== 'watching' && x.status !== 'upnext');
-    body = `${on.length ? on.map((x) => watchCard(x)).join('') : '<p class="small muted">Nothing on the go. Add what you\'re watching together.</p>'}
-      ${next.length ? `<h3>🕐 Up next</h3>${next.map((x) => watchCard(x)).join('')}` : ''}
-      ${also.length ? `<details class="us-more"><summary>Also in ${monthLabel(ym).split(' ')[0]} · ${also.length}</summary>${also.map((x) => watchCard(x, { monthNights: x.monthNights })).join('')}</details>` : ''}
-      <button type="button" class="ghost wide" data-act="watchadd">＋ Add a show or movie</button>`;
-  } else if (watch.tab === 'month') {
-    const months = [...new Set(shows.flatMap(S.showMonths))].sort().reverse();
-    body = months.length ? months.map((mo) => {
-      const list = S.monthShows(shows, mo), n = list.reduce((a, x) => a + x.monthNights, 0);
-      return `<details class="card month-shows" ${mo === ym ? 'open' : ''}><summary><b>${monthLabel(mo)}</b> <span class="small muted">${list.length} title${list.length === 1 ? '' : 's'} · ${n} night${n === 1 ? '' : 's'}</span></summary>
-        <ul class="list month-list">${list.map((x) => `<li class="row between">${svcBadge(x.service)}<span class="grow">${esc(x.title)}${x.status === 'finished' && (x.statusDate || '').startsWith(mo) ? ' 🎉' : ''}</span><span class="small muted">${x.kind === 'movie' ? '🍿' : `${x.monthNights}×`}${x.rating ? ` · ${x.rating}★` : ''}</span></li>`).join('')}</ul></details>`;
-    }).join('') : '<p class="small muted">Nothing logged yet.</p>';
-  } else {
-    const r = S.yearRecap(shows, year);
-    const rows = Object.entries(r.perService).sort((a, b) => b[1] - a[1]), max = rows[0]?.[1] || 1;
-    body = r.titles ? `<section class="card recap">
-        <div class="eyebrow">🍿 ${year} together</div>
-        <div class="recap-stats"><div><b>${r.nights}</b><small>nights</small></div><div><b>${r.shows}</b><small>shows</small></div><div><b>${r.movies}</b><small>movies</small></div><div><b>${r.finished}</b><small>finished</small></div></div>
-        ${r.mostWatched ? `<p>🏆 Most watched: <b>${esc(r.mostWatched.title)}</b> (${r.mostWatched.nights.filter((n) => n.date.startsWith(year)).length} nights)</p>` : ''}
-        ${r.topRated ? `<p>⭐ Our favourite: <b>${esc(r.topRated.title)}</b> (${r.topRated.rating}★)</p>` : ''}
-        ${r.topService ? `<p>Most of it on ${svcBadge(r.topService)}</p>` : ''}
-        <div class="svc-bars">${rows.map(([k, n]) => { const v = S.SERVICES[k] || S.SERVICES.other; return `<div class="svc-bar"><span class="small">${esc(v.name)}</span><span class="track"><span style="width:${Math.round((n / max) * 100)}%;background:${v.bg}"></span></span><span class="small muted">${n}</span></div>`; }).join('')}</div></section>
-      <h3>Month by month</h3>
-      <ul class="card list year-months">${r.months.map((mo) => `<li><b>${monthLabel(mo.month, 'short').split(' ')[0]}</b> <span>${mo.shows.map((x) => esc(x.title)).join(', ')}</span></li>`).join('')}</ul>`
-      : '<p class="small muted">Nothing logged this year yet.</p>';
-  }
-  $('#view').innerHTML = `${demoBanner()}
-    <section class="watch-head"><h2><button type="button" class="linkish" data-view="us" aria-label="Back to Us">‹</button> 🍿 Watching</h2><button type="button" class="ghost small" data-act="games">🎲 Bingo &amp; 💑 picks ›</button></section>
-    <div class="seg">${tabs.map(([k, l]) => `<button type="button" class="${watch.tab === k ? 'on' : ''}" data-watchtab="${k}">${l}</button>`).join('')}</div>
-    ${body}`;
-}
-function watchAddSheet() {
-  const S = watch.S, a = watch.adding;
-  openSheet(`<h2>Add to Watch</h2>
-    <form id="watchForm" class="stack">
-      <div class="seg">${[['show', '📺 Show'], ['movie', '🍿 Movie']].map(([k, l]) => `<label class="segopt"><input type="radio" name="kind" value="${k}" ${a.kind === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
-      <label>Title<input name="title" maxlength="80" required placeholder="e.g. The Bear" autocomplete="off"></label>
-      <fieldset class="svc-pick"><legend class="small">Where</legend>${Object.entries(S.SERVICES).map(([k, v]) => `<label class="svc-opt-l"><input type="radio" name="service" value="${k}" ${a.service === k ? 'checked' : ''}><span class="svc-opt" style="--svc:${v.bg}">${esc(v.name)}</span></label>`).join('')}</fieldset>
-      <label class="small">Started / watched on<input type="date" name="date" value="${isoLocal()}"></label>
-      <label class="check"><input type="checkbox" name="family"><span>👨‍👩‍👧 Share with the family (otherwise it's just you two)</span></label>
-      <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Add</button></div>
-    </form>`);
-}
-const watchSaved = async () => { await loadWatch(); if (state.view === 'watch') renderWatch(); };
-// Bingo for this show: its live game, or a new game from its card set, or a new card set.
-async function watchBingo(title) {
-  const r = await api.get(`/families/${state.fid}/bingo`);
-  const same = (t) => t.trim().toLowerCase() === title.trim().toLowerCase();
-  const live = r.games.find((g) => g.status === 'live' && same(g.title));
-  if (live) { bingo.game = live.id; state.view = 'bingo'; return show('bingo'); }
-  const pack = r.packs.find((p) => same(p.title));
-  if (pack) { const g = await api.post(`/families/${state.fid}/bingo/games`, { packId: pack.id }); bingo.game = g.game.id; return show('bingo'); }
-  return bingoNew({ title });
+// rating, sharing, bingo, status, delete) is in its details (tap the card).
+// 📺 Details: progress, rating, history, status, sharing, bingo, discuss, delete.
+// 💬 Discuss: the thread about a show or a date idea — the one either of you already started, or a
+// new one (just you two; the family's when there's no partner). Threads are the one place to talk.
+async function discuss(ref, title, body = '') {
+  if (lockedHere()) return toast(LOCKED_MSG);
+  const had = th.list.find((t) => t.ref === ref && t.fid === state.fid);
+  closeSheet();
+  if (had) return threadView(had.fid, had.id);
+  const aud = partnerMember() ? 'us' : 'family', k = fk(), L = (x) => (k ? seal(k, x) : x);
+  const r = await api.post(`/families/${state.fid}/threads`, { aud, board: aud === 'us' ? 'us' : 'family', cat: 'talk', title: await L(title), body: await L(body), mins: 1, ref });
+  await loadThreads().catch(() => {});
+  return threadView(state.fid, r.thread.id);
 }
 // Bringing over the trackers' 📺 Watching (once per family; each person their own).
-async function importWatch() {
-  const flag = `fam.watchImported.${state.fid}`;
-  if (LS.get(flag) || lockedHere()) return;
-  const data = await openData(await api.get(`/families/${state.fid}/members/${fam().me}/data`).catch(() => null));
-  if (!data || data.locked) return;
-  const shows = await Promise.all((data.shows || []).filter((x) => x?.id && x.title).map(async (x) => ({ id: x.id, at: x.at, body: await lock({ title: x.title, service: x.service || 'other', kind: x.kind === 'movie' ? 'movie' : 'show', date: x.date || '' }) })));
-  if (shows.length || (data.showNights || []).length || Object.keys(data.showStatus || {}).length || Object.keys(data.showRatings || {}).length) {
-    const r = await api.post(`/families/${state.fid}/watch/import`, { shows, nights: data.showNights || [], status: data.showStatus || {}, ratings: data.showRatings || {} });
-    if (r.imported) await watchSaved();
-  }
-  LS.set(flag, '1');
-}
 
 // ---------- 🎲 show bingo ----------
 // Card sets are lists of squares anyone can add (pasted from a chatbot, a file, or written by
@@ -4058,6 +4027,8 @@ function addPerson() {
       <label>Name<input name="name" required maxlength="40"></label>
       <label>They are your…<select name="relation">${['spouse', 'partner', 'child', 'parent', 'sibling', 'grandparent', 'relative', 'friend'].map((r) => `<option value="${r}">${RELATION[r].toLowerCase()}</option>`).join('')}</select></label>
       <label>Email for their invite <small class="muted">(their Google account)</small><input name="email" type="email" maxlength="120" placeholder="Leave empty for a young child you manage"></label>
+      ${me()?.role === 'owner' ? `<fieldset class="chips plain"><legend>What they can use</legend>${Object.entries(AREAS).map(([k, l]) => `<label class="chipcheck"><input type="checkbox" name="area" value="${k}" checked><span>${l}</span></label>`).join('')}
+        <p class="tiny muted">💪 Health stays each person's own (they choose who sees it), and 💞 Us is just for a couple.</p></fieldset>` : ''}
       <div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Add</button></div>
     </form>`);
 }
@@ -4333,6 +4304,25 @@ document.addEventListener('click', (e) => {
   if (d.momentedit) return momentSheet({ id: d.momentedit });
   if (d.watchaud) { const [id, aud] = d.watchaud.split(':'); return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { aud }); await watchSaved(); toast(aud === 'family' ? '👨‍👩‍👧 Shared with the family' : '🔒 Just you two now'); }); }
   if (d.watchtab) { watch.tab = d.watchtab; return renderWatch(); }
+  if (d.watchone) { t.disabled = true; return act(() => watchOne(d.watchone)).finally(() => { t.disabled = false; }); }
+  if (d.watchopen) return watchDetail(d.watchopen);
+  if (d.rd) return act(async () => (await RM()).onClick(t));
+  if (d.fx) return act(async () => { const F = await fit(); if (['open', 'main', 'add'].includes(d.fx) && state.view !== 'fitness') { F.state.view = d.fx === 'open' ? 'log' : 'main'; return show('fitness'); } return F.onClick(t); });
+  if (d.discuss) return act(() => discuss(d.discuss, d.dtitle || '💬', d.dbody || ''));
+  if (d.watchlife) {
+    const [id, st] = d.watchlife.split(':');
+    return act(async () => {
+      await api.patch(`/families/${state.fid}/watch/shows/${id}`, { status: st, date: isoLocal() });
+      await watchSaved();
+      toast({ finished: '🎉 Watched — it goes in your history', dropped: '✋ Dropped — find it under Watched › Dropped', upnext: '⭐ Up Next', watching: '▶️ Watching', want: 'Want to Watch' }[st]);
+    });
+  }
+  if (d.watchpgstep) {
+    const [id, n] = d.watchpgstep.split(':'), x = watch.shows.find((y) => y.id === id), pg = x?.progress;
+    if (!x) return;
+    const next = +n > 0 ? watch.S.nextEpisode(pg, x.tv) : { s: pg?.s || 1, e: Math.max(0, (pg?.e || 0) - 1) };
+    return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { progress: next }); await watchSaved(); });
+  }
   if (d.watchnight) return act(async () => { await api.post(`/families/${state.fid}/watch/shows/${d.watchnight}/night`, { date: isoLocal() }); await watchSaved(); });
   if (d.watchrate) { const [id, n] = d.watchrate.split(':'); const cur = watch.shows.find((x) => x.id === id)?.ratings[fam().me]; return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { rating: cur === +n ? null : +n }); await watchSaved(); }); }
   if (d.watchstatus) { const [id, st] = d.watchstatus.split(':'); return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { status: st, date: isoLocal() }); await watchSaved(); if (st === 'finished') toast('🎉 Finished — it goes in the recap'); }); }
@@ -4441,6 +4431,9 @@ document.addEventListener('click', (e) => {
     case 'asknew': return askSheet();
     case 'grocall': home.all = true; return renderGroc();
     case 'grocclear': return act(() => grocAct(() => api.post(`/families/${state.fid}/groceries/clear`)));
+    case 'devices': return act(async () => (await devices()).sheet());
+    case 'devconnect': case 'devsync': case 'devoff': case 'devoffstrava': return act(async () => (await devices()).onAct(d.act, t));
+    case 'healthshare': return openSheet(`<div class="row between"><h2>💪 Who can see my Health</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>${sharingHtml()}`);
     case 'apptnew': return apptSheet();
     case 'bingonew': return bingoNew();
     case 'games': bingo.game = null; bingo.season = null; return show('bingo');
@@ -4698,9 +4691,20 @@ document.addEventListener('change', async (e) => {
     const share = { kids: !!document.querySelector('[data-sharewhat=kids]')?.checked, pets: !!document.querySelector('[data-sharewhat=pets]')?.checked };
     return act(async () => { await api.patch(`/families/${state.fid}`, { share }); await loadFamily(); toast(`Friends' families ${share.kids ? 'can' : "can't"} see the kids, ${share.pets ? 'can' : "can't"} see the pets`); });
   }
-  if (t.dataset.share) {
-    const ids = [...document.querySelectorAll('[data-share]')].filter((x) => x.checked).map((x) => x.dataset.share);
-    return act(async () => { await api.patch(`/families/${state.fid}/members/${fam().me}`, { shareWith: ids }); await loadFamily(); toast(ids.length ? 'Sharing updated' : 'Your diet & fitness is private'); });
+  if (t.dataset.access) {
+    const [, id] = t.dataset.access.split(':');
+    const access = [...t.closest('.areas-card').querySelectorAll('[data-access]')].filter((x) => x.checked).map((x) => x.dataset.access.split(':')[0]);
+    return act(async () => { await api.patch(`/families/${state.fid}/members/${id}`, { access }); await loadFamily(); toast(`${member(id)?.name || ''} can use: ${access.map((a) => AREAS[a]).join(', ') || 'only their own Health and Us'}`); });
+  }
+  if (t.dataset.sharepart) {
+    const box = t.closest('.share-grid'), share = { diet: [], fitness: [] };
+    for (const x of box.querySelectorAll('[data-sharepart]')) if (x.checked) { const [part, id] = x.dataset.sharepart.split(':'); share[part].push(id); }
+    const [part, id] = t.dataset.sharepart.split(':');
+    return act(async () => {
+      await api.patch(`/families/${state.fid}/members/${fam().me}`, { share }); await loadFamily();
+      toast(`${t.checked ? '✓' : '🔒'} ${member(id)?.name || ''} ${t.checked ? 'can now see' : 'no longer sees'} your ${part === 'diet' ? 'Diet' : 'Fitness'}`);
+      if (state.view === 'health') healthView();
+    });
   }
   if (t.name === 'fid' && t.form?.id === 'connectForm') {
     const nf = t.form.querySelector('[data-newfam]');
@@ -4710,6 +4714,7 @@ document.addEventListener('change', async (e) => {
 
 document.addEventListener('submit', (e) => {
   const f = e.target;
+  if (['rdManual', 'rdProg', 'rdEdit'].includes(f.id)) { e.preventDefault(); return act(async () => { const R = await RM(); if (!R.onSubmit(f)) await R.onSubmitAsync(f); }); }
   const v = Object.fromEntries(new FormData(f));
   if (f.id === 'chatForm') {
     e.preventDefault();
@@ -4807,8 +4812,10 @@ document.addEventListener('submit', (e) => {
     if (lockedHere()) return toast('🔒 This device needs the family key first — Me › 🔐 Encryption');
     watch.adding = { kind: v.kind, service: v.service };
     return act(async () => {
-      await api.post(`/families/${state.fid}/watch/shows`, { aud: v.family ? 'family' : 'us', body: await lock({ title: v.title.trim(), service: v.service || 'other', kind: v.kind === 'movie' ? 'movie' : 'show', date: v.date || isoLocal() }) });
-      closeSheet(); watch.tab = 'now';
+      const status = ['want', 'watching', 'finished'].includes(v.status) ? v.status : 'want';
+      watch.adding.status = status;
+      await api.post(`/families/${state.fid}/watch/shows`, { aud: v.family ? 'family' : 'us', status, date: isoLocal(), body: await lock({ title: v.title.trim(), service: v.service || 'other', kind: v.kind === 'movie' ? 'movie' : 'show', date: isoLocal() }) });
+      closeSheet(); watch.tab = { want: 'want', watching: 'watching', finished: 'watched' }[status];
       if (state.view === 'watch') await watchSaved(); else show('watch');
       toast(`🍿 ${v.title.trim()} added`);
     });
@@ -4909,7 +4916,7 @@ document.addEventListener('submit', (e) => {
     e.preventDefault();
     const fd = new FormData(f);
     const body = { ...v, pets: fd.getAll('pets'), repeatWeeks: +v.repeatWeeks };
-    const sealIt = async () => { body.place = await lock(body.place); body.notes = await lock(body.notes); };
+    const sealIt = async () => { body.place = await lock(body.place); body.notes = await lock(body.notes); if (body.vaccine) body.vaccine = await lock(body.vaccine); };
     return act(async () => {
       await sealIt();
       if (f.dataset.id) await api.patch(`/families/${state.fid}/appts/${f.dataset.id}`, { edit: body });
@@ -4980,7 +4987,9 @@ document.addEventListener('submit', (e) => {
   if (f.id === 'personForm') {
     e.preventDefault();
     return act(async () => {
-      const r = await api.post(`/families/${state.fid}/members`, { kind: 'person', ...v });
+      const areas = new FormData(f).getAll('area');
+      delete v.area;
+      const r = await api.post(`/families/${state.fid}/members`, { kind: 'person', ...v, ...(me()?.role === 'owner' ? { access: areas } : {}) });
       await loadFamily(); show('family');
       if (r.invite) inviteSheet(r.invite, v.name); else { closeSheet(); toast(`${v.name} added`); }
     });
@@ -5118,3 +5127,7 @@ document.addEventListener('toggle', (e) => {
   if (e.target.id === 'dogMore' && e.target.open) { dogMore().catch(() => {}); return; }
   if (e.target.matches?.('details[data-house]')) { LS.set(`fam.${e.target.dataset.house || 'house'}Open`, e.target.open ? '1' : '0'); const f = e.target.querySelector('.fold'); if (f) f.textContent = e.target.open ? 'Hide' : 'Show'; return; } const c = e.target.closest?.('[data-couple]'); if (c && e.target === c) bingo.open[c.dataset.couple] = c.open; }, true);
 document.addEventListener('input', (e) => { if (e.target.name === 'body' && e.target.closest?.('#writeForm')) atSuggest(e.target); if (e.target.dataset?.wcap) { const x = ws.shots[+e.target.dataset.wcap]; if (x) x.cap = e.target.value; return; } if (e.target.closest?.('#bingoForm') && e.target.name === 'text') bingoCountLine(); if (e.target.closest?.('#writeForm')) { clearTimeout(saveDraft.t); saveDraft.t = setTimeout(saveDraft, 400); } });
+// 🏋️ The workout editor follows what you type.
+document.addEventListener('change', (e) => { if (e.target.dataset?.fxpick != null && fitMod) fitMod.then((F) => F.onPick(e.target)).catch(() => {}); });
+document.addEventListener('input', (e) => { if (e.target.dataset?.rdq != null) RM().then((R) => R.onInput(e.target)).catch(() => {}); });
+document.addEventListener('input', (e) => { if (e.target.dataset?.fxe && fitMod) fitMod.then((F) => F.onInput(e.target)).catch(() => {}); });

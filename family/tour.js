@@ -31,18 +31,19 @@ export const SLIDES = [
     ['🧒', 'Grown-ups only', 'Never pets or kids: only people with their own account who are 18 or over.'],
   ] },
   { id: 'us', eyebrow: '💞 Us', title: 'Just the two of you', go: 'us', cards: [
-    ['💌', 'Notes and plans', 'Little notes, and plans you answer 🙌 / 🤔 / ⏰.'],
-    ['💡', 'Date ideas', 'Movies, new restaurants and events. 💗 privately; a match becomes a plan.'],
-    ['🧭', 'Plan an outing', 'Pick a Bay Area spot and a day; get a timeline with trains, tables and maps.'],
-    ['⭐', 'How was it?', 'Rate places after a plan; suggestions learn what you like.'],
+    ['📺', 'Watch', 'What you’re watching and what’s next. ＋ Episode logs tonight; Want to Watch → Watching → Watched.'],
+    ['📚', 'Read', 'What each of you is reading or listening to. ＋ Book, pick it, 📖 Reading or 🎧 Listening — done.'],
+    ['❤️', 'Dates', 'Plans you answer 🙌 / 🤔 / ⏰, 🧭 Plan an outing, and the 2-2-2-2 rhythm.'],
+    ['✨', 'Ideas for Us', 'A few movies, new restaurants and events. 💗 privately, 💬 discuss, and a match becomes a plan.'],
+    ['💌', 'Notes', 'Little notes just for the two of you.'],
   ] },
-  { id: 'calendar', eyebrow: 'Calendar and 🍿 Watch', title: 'Your days, and your shows', go: 'calendar', cards: [
+  { id: 'calendar', eyebrow: '📅 Calendar', title: 'When it’s happening', go: 'calendar', cards: [
     ['📅', 'One family calendar', 'Everyone’s events, ⭐ golden days, ❤️ dates, 🐾 appointments, linked phone calendars.'],
     ['👔', 'Dress for the day', 'What each of you should wear, from the weather where you’ll be.'],
-    ['🍿', 'Watch', 'In 💞 Us: where you’re up to, 🆕 new episodes, 🕐 up next, bingo and couples picks.'],
+    ['❤️', 'Plans and dates', 'A plan you both said yes to goes on both your calendars.'],
   ] },
   { id: 'me', eyebrow: 'Health and Me', title: 'Each person’s own', go: 'me', cards: [
-    ['🥗', 'Health', 'Diet (meal plans, logging, groceries) and fitness (lifting, runs, rides). Private until you share.'],
+    ['💪', 'Health', 'Diet (today, weight trend, 5 of 7 days on target) and Fitness (Today’s Workout — build it, describe it or snap a photo of it — logged round by round). Private unless you share.'],
     ['👤', 'Me', 'Your family, people and pets, notifications, light or dark, and your account.'],
     ['🔑', 'Recovery phrase', 'Write it down: it unlocks your family on a new phone if you lose this one.'],
   ] },
@@ -60,20 +61,20 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-11b',
-  title: 'New on Home: Needs you and Groceries',
-  text: 'Ask the family for a hand, share one grocery list, and search your threads',
+  id: '2026-12a',
+  title: 'New: Watch, Read, Health and Fitness',
+  text: 'Watch and Read on Us, your Diet and workouts in Health, workouts from words or a photo, and WHOOP',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'A simpler OurPawmily', cards: [
-  ['🔔', 'Needs you, on Home', '🙋 Ask for a hand (a ride, pet sitting, a meal…), see who can help, and the rides nobody’s driving yet.'],
-  ['🛒', 'Groceries', 'One list the household shares on Home. Type “milk, eggs” to add both.'],
-  ['🔎', 'Search and ★ Save threads', 'Search every thread on your phone, save the ones to find again, edit your replies and add pictures to them.'],
-  ['🏠', 'Home', 'Next up, what needs you, groceries, chores and the Gold Card, the dogs — dog details under More about the dogs.'],
-  ['🗂', 'Five places along the bottom', 'Home · Us · Calendar · Threads (with 📷 Photos) · Health. Old posts are kept, not deleted.'],
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'Watch, Health and Fitness', cards: [
+  ['📺', 'Watch, first on Us', 'Want to Watch → Watching → Watched, one tap to log an episode, and Discuss opens a thread.'],
+  ['📚', 'Read, right under it', 'What each of you is reading or listening to, Want to Read and Finished. ＋ Book takes a few taps.'],
+  ['💪', 'Health and Fitness', 'Your Diet on one calm screen, and Today’s Workout logged round by round — build it, 💬 describe it, or 📷 snap a photo of it. You check it before it’s added.'],
+  ['⌚', 'WHOOP in Devices', 'Health › Devices brings in your workouts and calories burned. Connecting shares nothing by itself.'],
+  ['🔑', 'Who sees what', 'Diet and Fitness are private until you share each one, person by person. The family’s creator chooses who uses Home, Calendar and Threads.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);
 export const slide = (id) => SLIDES.find((s) => s.id === id) || null;
 // The tour page for the screen you're on.
-export const SCREEN = { home: 'home', threads: 'threads', us: 'us', watch: 'calendar', calendar: 'calendar', me: 'me', family: 'me', member: 'me', chats: 'chats', chat: 'chats' };
+export const SCREEN = { home: 'home', threads: 'threads', us: 'us', watch: 'us', read: 'us', calendar: 'calendar', me: 'me', family: 'me', member: 'me', chats: 'chats', chat: 'chats' };

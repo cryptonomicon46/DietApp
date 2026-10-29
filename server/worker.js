@@ -25,7 +25,9 @@ const WHOOP = {
   auth: 'https://api.prod.whoop.com/oauth/oauth2/auth',
   token: 'https://api.prod.whoop.com/oauth/oauth2/token',
   api: 'https://api.prod.whoop.com/developer',
-  scope: 'offline read:workout read:cycles read:recovery',
+  // Only what feeds the app: workouts (Fitness) and each day's total burn (Diet). Not recovery,
+  // sleep or body measurements.
+  scope: 'offline read:workout read:cycles',
 };
 const STRAVA = {
   auth: 'https://www.strava.com/oauth/authorize',
@@ -195,25 +197,49 @@ export default {
 
       switch (url.pathname) {
         // ---- WHOOP ----
+        // The phone makes the state (and checks it when it comes back), so a sign-in someone else
+        // started can't be slipped into your app. A state ending ".f" returns to the family app.
         case '/whoop/login':
+          if (!env.WHOOP_CLIENT_ID) return json({ error: 'WHOOP is not set up on this connector' }, 501);
           return Response.redirect(`${WHOOP.auth}?${new URLSearchParams({
             client_id: env.WHOOP_CLIENT_ID, redirect_uri: callback, response_type: 'code',
-            scope: WHOOP.scope, state: crypto.randomUUID(),
+            scope: WHOOP.scope, state: okState(url.searchParams.get('state')) || crypto.randomUUID(),
           })}`, 302);
-        case '/whoop/callback':
-          return backToApp(env, 'whoop', await tokenRequest(WHOOP.token, {
-            grant_type: 'authorization_code', code: url.searchParams.get('code'),
-            client_id: env.WHOOP_CLIENT_ID, client_secret: env.WHOOP_CLIENT_SECRET, redirect_uri: callback,
-          }));
+        case '/whoop/callback': {
+          const state = okState(url.searchParams.get('state'));
+          // Said no on WHOOP's page, or WHOOP had a problem: back to the app, which says so.
+          if (!url.searchParams.get('code')) return backToApp(env, 'whoop', { error: url.searchParams.get('error') === 'access_denied' ? 'denied' : 'failed' }, state);
+          let tokens;
+          try {
+            tokens = await tokenRequest(WHOOP.token, {
+              grant_type: 'authorization_code', code: url.searchParams.get('code'),
+              client_id: env.WHOOP_CLIENT_ID, client_secret: env.WHOOP_CLIENT_SECRET, redirect_uri: callback,
+            });
+          } catch { tokens = { error: 'failed' }; }
+          return backToApp(env, 'whoop', tokens, state);
+        }
+        // A refused refresh means the sign-in was removed (on WHOOP's side) or ran out: 401, reconnect.
         case '/whoop/refresh':
-          return json(await tokenRequest(WHOOP.token, {
-            grant_type: 'refresh_token', refresh_token: (await req.json()).refresh_token,
-            client_id: env.WHOOP_CLIENT_ID, client_secret: env.WHOOP_CLIENT_SECRET, scope: 'offline',
-          }));
-        case '/whoop/workouts': {
-          const q = new URLSearchParams({ start: url.searchParams.get('start'), limit: '25' });
-          const res = await fetch(`${WHOOP.api}/v2/activity/workout?${q}`, { headers: { Authorization: req.headers.get('Authorization') } });
-          return json(await res.json(), res.status);
+          try {
+            return json(await tokenRequest(WHOOP.token, {
+              grant_type: 'refresh_token', refresh_token: (await req.json()).refresh_token,
+              client_id: env.WHOOP_CLIENT_ID, client_secret: env.WHOOP_CLIENT_SECRET, scope: 'offline',
+            }));
+          } catch (e) { return json({ error: e.message, reconnect: !e.unavailable }, e.unavailable ? 502 : 401); }
+        // One page (25) of workouts or of days (cycles) since `start`; the phone follows nextToken.
+        case '/whoop/workouts':
+        case '/whoop/cycles': {
+          const q = new URLSearchParams({ start: url.searchParams.get('start') || '', limit: '25' });
+          const next = url.searchParams.get('nextToken');
+          if (next) q.set('nextToken', next.slice(0, 500));
+          const res = await fetch(`${WHOOP.api}/v2/${url.pathname === '/whoop/cycles' ? 'cycle' : 'activity/workout'}?${q}`, { headers: { Authorization: req.headers.get('Authorization') || '' } });
+          return json(await res.json().catch(() => ({})), res.status);
+        }
+        // Disconnect: ask WHOOP to drop this app's access too (the phone forgets the tokens either way).
+        case '/whoop/revoke': {
+          if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+          const res = await fetch(`${WHOOP.api}/v2/user/access`, { method: 'DELETE', headers: { Authorization: req.headers.get('Authorization') || '' } });
+          return json({ ok: res.ok }, res.ok ? 200 : res.status);
         }
 
         // ---- STRAVA (Garmin) ----
@@ -257,8 +283,8 @@ async function tokenRequest(endpoint, params) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error_description || data.message || 'token request failed');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error_description || data.message || 'token request failed'), { unavailable: res.status >= 500 });
   return {
     access_token: data.access_token,
     refresh_token: data.refresh_token,
@@ -266,8 +292,9 @@ async function tokenRequest(endpoint, params) {
   };
 }
 
-// Send tokens back to the app in the URL fragment (never hits a server log).
-function backToApp(env, provider, tokens) {
+// Send tokens back to the app in the URL fragment (never hits a server log), with the phone's state.
+const okState = (s) => (/^[A-Za-z0-9_-]{16,64}(\.f)?$/.test(s || '') ? s : '');
+function backToApp(env, provider, tokens, state = '') {
   const payload = btoa(JSON.stringify(tokens));
-  return Response.redirect(`${env.APP_ORIGIN}#connect=${provider}:${payload}`, 302);
+  return Response.redirect(`${env.APP_ORIGIN}${state.endsWith('.f') ? 'family/' : ''}#connect=${provider}:${payload}${state ? `:${state}` : ''}`, 302);
 }

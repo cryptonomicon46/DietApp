@@ -10,7 +10,7 @@ import {
   SESSION_TYPES, SPORTS, INTENSITY, trainingDay, applyTraining,
   sportStats, estimateActivity, sessionType,
 } from './activity.js';
-import { devices } from './devices.js';
+import { devices, syncOwner } from './devices.js';
 import { RESEARCH } from './research.js';
 import { initNotes, renderNotes, updateNotesBadge, openUs, homeUs } from './notes.js';
 import { syncLine } from './plans.js';
@@ -19,6 +19,7 @@ import { initBrief, renderBrief, renderFeed, homeDogs, homeGym } from './briefTa
 import { initDress } from './dressTab.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
+import { consistency } from './dietDays.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
 import { sync, pushNow } from './sync.js';
 import { account } from './account.js';
@@ -125,11 +126,15 @@ function burnedToday() {
   const today = isoDate();
   const typed = state.whoopTotal[today];
   if (typed) return { kcal: typed, source: 'WHOOP (you entered)' };
+  const synced = store.get('deviceTotal', {})[today];
   const base = baseTargets();
-  if (!activityOf(state.profile).tracked) return { kcal: base.tdee, source: 'estimate from your activity level' };
+  if (!activityOf(state.profile).tracked) return synced > base.tdee ? { kcal: synced, source: 'WHOOP (so far today)' } : { kcal: base.tdee, source: 'estimate from your activity level' };
   const day = todaysTraining();
   const exercise = day.sessions.reduce((a, w) => a + Math.max((w.kcal || 0) - (base.bmr / 1440) * w.minutes, 0), 0);
-  return { kcal: Math.round(base.tdee + exercise), source: 'estimate: daily life + your activities' };
+  const est = Math.round(base.tdee + exercise);
+  // WHOOP's total so far today counts once it's past the estimate (in the morning it's only partial).
+  if (synced > est) return { kcal: synced, source: 'WHOOP (so far today)' };
+  return { kcal: est, source: 'estimate: daily life + your activities' };
 }
 
 // Positive while cutting, 0 at maintenance or on a diet break, negative on a lean gain.
@@ -182,7 +187,7 @@ function renderDayBar() {
   bar.hidden = false;
   const g = pastTally();
   bar.innerHTML = `
-    <div class="daybar-game"><span title="Gold coins">🪙 ${g.coins}</span><span title="Protein cookies">🍪 ${g.cookies}</span><span title="Deficit streak">🔥 ${g.streak}</span></div>
+    <div class="daybar-game"><span title="Days with your meals logged and calories near your target">✓ ${consistency(state.days, isoDate()).on} of the last 7 days on target</span></div>
     <div class="daybar-nums">
       <span><small>Eaten</small><b>${Math.round(ate.kcal)}</b></span>
       <span class="${left < 0 ? 'over' : ''}"><small>${left < 0 ? 'Over' : 'Left'}</small><b>${Math.abs(left)}</b></span>
@@ -562,7 +567,6 @@ function renderPastDay(day) {
       <p class="small">${[
         burned ? `Burned ~${burned} kcal → ${burned - Math.round(ate.kcal) >= 0 ? `${burned - Math.round(ate.kcal)} kcal deficit` : `${Math.round(ate.kcal) - burned} kcal over`}` : '',
         weigh ? `Weigh-in ${weigh.weight} lb` : '',
-        status?.coins ? `Earned 🪙 ${status.coins}${status.cookies ? ' + 🍪' : ''}` : '',
       ].filter(Boolean).join(' · ') || '<span class="muted">No totals saved for this day.</span>'}</p>
     </div>
     ${items.length ? items.sort((a, b) => order[a.slot] - order[b.slot]).map((m) => `
@@ -1627,7 +1631,7 @@ function openReview() {
       <div class="stat"><b>${w.ratePerWeek != null ? signed(-w.ratePerWeek, ' lb/wk') : '—'}</b><span>average rate${w.pctBody != null ? ` · ${signed(w.pctBody, '%')} body weight` : ''}</span></div>
       <div class="stat"><b>${n.daysLogged}/${n.days}</b><span>days fully logged</span></div>
       <div class="stat"><b>${n.onTargetPct ?? '—'}${n.onTargetPct != null ? '%' : ''}</b><span>meals on target (${n.mealsLogged} logged)</span></div>
-      <div class="stat"><b>${n.daysOnTrack}</b><span>days on track · 🪙 ${n.coins}</span></div>
+      <div class="stat"><b>${n.daysOnTrack}</b><span>days on track</span></div>
       <div class="stat"><b>${n.proteinDays}</b><span>days protein goal hit</span></div>
       <div class="stat"><b>${tr.workouts}</b><span>lifting workouts</span></div>
       <div class="stat"><b>${tr.activities}</b><span>activities · ${tr.activityHours} h</span></div>
@@ -1684,32 +1688,32 @@ function renderDeficit() {
   const name = firstName();
   const pct = Math.max(0, Math.min(100, Math.round((eaten / burned.kcal) * 100)));
 
-  let kudos;
-  if (g.streak >= 1) kudos = `${name ? `${esc(name)}, ` : ''}${g.streak}-day deficit streak 🔥${g.next ? ` — ${g.next.days - g.streak} more for “${g.next.badge}” (+${g.next.coins} 🪙)` : ''}`;
-  else kudos = `${name ? `${esc(name)}, s` : 'S'}tart a streak today: finish in a deficit to earn 🪙 ${projected.coins || 15}.`;
+  // Calm feedback: how many of the last 7 days were on target (no coins or streaks).
+  const cons = consistency(state.days, today);
+  const kudos = cons.logged ? `${name ? `${esc(name)}, ` : ''}${cons.on} of the last 7 days on target.` : 'Log your meals and each day shows here.';
 
   const atGoal = d.plannedDeficit === 0;
   const gaining = d.plannedDeficit < 0;
   const loggedMeals = Object.keys(todaysLog().meals).length;
   const status = gaining
-    ? `Lean gain: eat about ${-d.plannedDeficit} kcal more than you burn (now ${burned.kcal}). Finish within 100 under to ${Math.max(400, Math.round(-d.plannedDeficit * 1.5))} over for 🪙 15.`
+    ? `Lean gain: eat about ${-d.plannedDeficit} kcal more than you burn (now ${burned.kcal}). Finishing within 100 under to ${Math.max(400, Math.round(-d.plannedDeficit * 1.5))} over is on plan.`
     : atGoal
-    ? `${(state.profile.phase || 'cut') === 'break' ? 'Diet break' : 'Maintenance'}: today's aim is holding steady. Finish within 200 kcal of what you burn (now ${burned.kcal}) for 🪙 15.`
+    ? `${(state.profile.phase || 'cut') === 'break' ? 'Diet break' : 'Maintenance'}: today's aim is holding steady. Finishing within 200 kcal of what you burn (now ${burned.kcal}) is on plan.`
     : !eaten
-    ? `Log your meals as you eat. Finish at your target (${t.kcal}) for about a <b>${burned.kcal - t.kcal} kcal</b> deficit and 🪙 ${projected.coins}${projected.cookies ? ' + 🍪' : ''}.`
+    ? `Log your meals as you eat. Finish at your target (${t.kcal}) for about a <b>${burned.kcal - t.kcal} kcal</b> deficit.`
     : now <= 0
       ? `You're <b>${-now} kcal over</b> what you've burned today. Some extra activity could still flip it to a deficit.`
       : eaten < t.kcal
-        ? `${t.kcal - eaten} kcal left in your plan. Finish there for a <b>${burned.kcal - t.kcal} kcal</b> deficit → 🪙 ${projected.coins}${projected.cookies ? ' + 🍪' : ''}.`
+        ? `${t.kcal - eaten} kcal left in your plan. Finish there for a <b>${burned.kcal - t.kcal} kcal</b> deficit.`
         : loggedMeals < 3
-          ? `Log the rest of your meals to lock in today's coins.`
-          : `Deficit locked in so far: 🪙 ${actual.coins}${actual.cookies ? ' + 🍪' : ''} if you stop here.`;
+          ? `Log the rest of your meals and today counts.`
+          : `A deficit so far — on plan if you stop here.`;
 
   const last7 = Array.from({ length: 7 }, (_, i) => {
     const dt = new Date(); dt.setDate(dt.getDate() - (6 - i));
     const key = isoDate(dt);
     const s = key === today ? null : scoreDay(state.days[key]);
-    const icon = key === today ? '⏳' : s.status === 'deficit' || s.status === 'maintained' ? '🪙' : s.status === 'too-big' ? '⚠️' : s.status === 'surplus' ? '▲' : s.status === 'incomplete' ? '½' : '·';
+    const icon = key === today ? '⏳' : s.status === 'deficit' || s.status === 'maintained' ? '✓' : s.status === 'too-big' ? '⚠️' : s.status === 'surplus' ? '▲' : s.status === 'incomplete' ? '½' : '·';
     return `<span class="d7 ${s?.status || 'today'}" title="${key}"><b>${icon}</b><small>${dt.toLocaleDateString(undefined, { weekday: 'narrow' })}</small></span>`;
   }).join('');
 
@@ -1718,7 +1722,6 @@ function renderDeficit() {
       <div class="row between" style="margin-top:0">
         <div><div class="eyebrow">${gaining ? "Today's balance so far" : "Today's deficit so far"}</div>
           <div class="big ${now < 0 ? 'neg' : ''}">${now >= 0 ? '' : '+'}${Math.abs(now)} <small>kcal ${now >= 0 ? 'under' : 'over'}</small></div></div>
-        <div class="coins-total"><b>🪙 ${g.coins}</b><small>🍪 ${g.cookies} · best 🔥 ${g.best}</small></div>
       </div>
       <div class="def-track"><i style="width:${pct}%"></i></div>
       <div class="def-nums small"><span>Eaten <b>${eaten}</b></span><span>Burned <b>${burned.kcal}</b> <span class="muted">(${esc(burned.source)})</span></span></div>
@@ -1731,9 +1734,8 @@ function renderDeficit() {
       </form>
       <p class="kudos">${kudos}</p>
       <div class="d7row" aria-label="Last 7 days">${last7}</div>
-      ${g.badges.length ? `<p class="small muted">Badges: ${[...new Set(g.badges.map((b) => b.badge))].map(esc).join(' · ')}</p>` : ''}
-      <details class="small"><summary>How scoring works</summary>
-        <p>A day counts once all three meals are logged. Each counted day that finishes under the calories you burned earns 🪙 10, plus 🪙 5 if the deficit stays sustainable (under ~${Math.max(750, Math.round((d.plannedDeficit || 500) * 1.5))} kcal and not below ${d.floor} kcal eaten). Hitting 90% of your protein earns a 🍪. Streaks of ${MILESTONES.map((m) => `${m.days}`).join(', ')} days pay ${MILESTONES.map((m) => `+${m.coins}`).join(', ')} 🪙. Once you reach your goal weight, finishing within 200 kcal of what you burned earns 🪙 15 instead. Today's coins are added after midnight. Legend: 🪙 earned · ▲ over · ⚠️ too big · ½ not fully logged.</p>
+      <details class="small"><summary>How days are counted</summary>
+        <p>A day counts once your meals are logged (all three, or most of your target). It's <b>on target</b> when you finish within 10% of the day's calorie target (at least 150 kcal either way). ✓ marks a day that finished in the deficit your plan wanted (or held steady on a diet break or maintenance); ⚠️ a deficit too big to be sustainable (over ~${Math.max(750, Math.round((d.plannedDeficit || 500) * 1.5))} kcal, or below ${d.floor} kcal eaten).</p>
       </details>
     </div>`;
 
@@ -2081,35 +2083,18 @@ function renderTraining(t) {
   };
 }
 
-// Keep a compact copy of every imported workout to learn your burn rate per sport.
-function addHistory(list) {
-  const byId = new Map(state.history.map((w) => [w.id, w]));
-  for (const w of list) byId.set(w.id, { id: w.id, name: w.name, start: w.start, minutes: w.minutes, kcal: w.kcal, strain: w.strain ?? null });
-  state.history = [...byId.values()];
-  store.set('workoutHistory', state.history);
-}
 
-function mergeWorkouts(list) {
-  addHistory(list);
-  const cutoff = Date.now() - 14 * 86400000;
-  const byId = new Map(state.workouts.map((w) => [w.id, w]));
-  for (const w of list) byId.set(w.id, w);
-  state.workouts = [...byId.values()].filter((w) => new Date(w.start).getTime() > cutoff)
-    .sort((a, b) => a.start.localeCompare(b.start));
-  store.set('workouts', state.workouts);
-}
-
+// Your connected devices → your trackers (only on your own profile; the sign-in stays on this device).
 async function syncDevices(manual = false) {
   const d = devices.get();
-  if (!d.server || (!d.whoop && !d.strava)) return;
+  if (sync.readOnly() || (!d.whoop && !d.strava)) return;
   const status = $('#syncStatus');
   if (manual && status) status.textContent = 'Syncing…';
-  const start = new Date(); start.setDate(start.getDate() - 2); start.setHours(0, 0, 0, 0);
-  const { workouts, errors } = await devices.sync(start);
-  mergeWorkouts(workouts);
-  store.set('lastSync', Date.now());
+  const { errors } = await syncOwner(3);
+  state.history = store.get('workoutHistory', []);
+  state.workouts = store.get('workouts', []);
   renderAll();
-  if (errors.length) $('#syncStatus').textContent = `Sync problem — ${errors.join('; ')}`;
+  if (errors.length && $('#syncStatus')) $('#syncStatus').textContent = errors.map((e) => e.message).join('; ');
 }
 
 // ---------- DEVICES ----------
@@ -2117,10 +2102,10 @@ async function syncDevices(manual = false) {
 // existing link. The connector's address is built in (js/server.js); no URL, CSV or code here.
 const devDialog = $('#devicesDialog');
 async function openDevices() {
-  const d = devices.get();
-  $('#whoopStatus').textContent = d.whoop ? 'Connected' : 'Checking…';
+  const d = devices.get(), st = devices.status('whoop');
+  $('#whoopStatus').textContent = d.whoop ? st.text : 'Checking…';
   $('#whoopConnect').hidden = !d.whoop;
-  $('#whoopConnect').textContent = d.whoop ? 'Disconnect' : 'Connect';
+  $('#whoopConnect').textContent = st.needsReconnect ? 'Reconnect' : d.whoop ? 'Disconnect' : 'Connect';
   $('#stravaRow').hidden = !d.strava;
   $('#stravaStatus').textContent = d.strava ? 'Connected (no longer offered — you can disconnect it)' : '';
   devDialog.showModal();
@@ -2131,7 +2116,8 @@ async function openDevices() {
 }
 for (const p of ['whoop', 'strava']) {
   $(`#${p}Connect`).onclick = () => {
-    if (devices.get()[p]) { devices.disconnect(p); openDevices(); renderAll(); return; }
+    if (p === 'whoop' && devices.status('whoop').needsReconnect) { location.href = devices.connectUrl(p); return; }
+    if (devices.get()[p]) { devices.disconnect(p).finally(() => { openDevices(); renderAll(); }); return; }
     if (p === 'whoop') location.href = devices.connectUrl(p);
   };
 }
@@ -2940,7 +2926,7 @@ $('#exportData').onclick = async () => {
     files.push({ name: 'README.txt', text: [
       'OurPawmily export — open the CSV files in Excel, Numbers or Google Sheets.',
       'meals.csv: every logged meal with its macros, its target and on_target (yes/no).',
-      'days.csv: daily calories eaten vs burned, deficit, protein, coins and weight.',
+      'days.csv: daily calories eaten vs burned, deficit, protein and weight (and the old coins column).',
       'activities.csv: activities you added plus imported WHOOP/Garmin workouts.',
       'lifting_sessions.csv / lifting_sets.csv: finished workouts and every set (weight x reps).',
       'weigh_ins.csv, checkins.csv: weigh-ins and weekly check-ins.',
@@ -3171,11 +3157,16 @@ window.addEventListener('lp:assistant', async (e) => {
 });
 $('#dayBar').onclick = () => { document.querySelector('[data-tab=today]').click(); };
 $('#weighDate').value = isoDate();
-const justConnected = devices.takeRedirect();
+const connected = devices.takeRedirect();
+const justConnected = connected?.ok;
+if (connected?.error) setTimeout(() => alert(connected.error === 'denied' ? 'WHOOP wasn\'t connected — you said no on WHOOP\'s page.' : connected.error === 'state' ? 'WHOOP wasn\'t connected — that sign-in didn\'t start on this device. Try Connect again.' : 'WHOOP wasn\'t connected — something went wrong on WHOOP\'s side. Try again.'), 300);
 // #dogs opens the Dogs tab. An old one-tap link (#link=…) no longer links phones: sharing is
 // through your OurPawmily family now, so it's just cleared from the address bar.
 function takeHash() {
   if (location.hash === '#dogs') { history.replaceState(null, '', location.pathname + location.search); setTimeout(() => showTab('brief')); }
+  // 💪 Health (in the family app) opens a screen here directly: #today, #weight, #lift, #groceries, #scan.
+  const tab = location.hash.slice(1);
+  if (['today', 'weight', 'lift', 'groceries', 'scan'].includes(tab)) { history.replaceState(null, '', location.pathname + location.search); setTimeout(() => showTab(tab)); }
   if (/^#link=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
 }
 takeHash();

@@ -59,6 +59,9 @@ import { albumRoutes } from './albums.js';
 import { marketRoutes } from './market.js';
 import { chatRoutes, ChatCore, runOp, PAGE as CHAT_PAGE } from './chat.js';
 import { askClaude } from './scout.js';
+import { aiCall, GatewayError } from './aiGateway.js';
+import { readWorkout } from './workoutAi.js';
+import { bookRoutes, bookLookupRoutes, bookCover, forgetReader } from './books.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
@@ -133,11 +136,37 @@ const store = (kv) => ({
   del: (k) => kv.delete(`v2:${k}`),
 });
 
+// 💪 Who sees a person's Diet and Fitness: two lists they set themselves (private by default).
+// Before 2.0 there was one list ("shareWith"); it counts for both until they change either.
+export const shareOf = (m) => ({ diet: m.share?.diet ?? m.shareWith ?? [], fitness: m.share?.fitness ?? m.shareWith ?? [] });
+// Can `viewer` read `owner`'s part ('diet' | 'fitness' | 'us')? 'us' is the partner's alone.
+export function canSeePart(fam, owner, viewer, part) {
+  if (!owner || !viewer || owner.kind !== 'person') return false;
+  if (owner.id === viewer.id) return true;
+  if (part === 'us') return isCouple(fam, owner, viewer);
+  return (part === 'diet' || part === 'fitness') && shareOf(owner)[part].includes(viewer.id);
+}
+// The couple, strictly: the family's creator and their spouse or partner, each the other's partner
+// (partnerOf alone falls back to "someone" — fine for showing Us, not for granting data). Never a child.
+export function isCouple(fam, a, b) {
+  if (!a || !b || a.id === b.id || a.relation === 'child' || b.relation === 'child') return false;
+  const couple = (x, y) => x.relation === 'self' && ['spouse', 'partner'].includes(y.relation);
+  return (couple(a, b) || couple(b, a)) && partnerOf(fam, a)?.id === b.id && partnerOf(fam, b)?.id === a.id;
+}
+const HEALTH_PARTS = ['diet', 'fitness', 'us'];
+// 🔑 Household areas (2.0 Phase 6): which parts of the family each member can use, chosen by the
+// family's creator. No list = all of them (everyone who joined before keeps what they had); the
+// creator always has all. Us stays the couple's, Health stays each person's own (above).
+export const AREAS = ['home', 'calendar', 'threads'];
+export const hasArea = (m, area) => !!m && (m.role === 'owner' || !Array.isArray(m.access) || m.access.includes(area));
+const accessOf = (v) => (Array.isArray(v) ? AREAS.filter((a) => v.includes(a)) : null);
+// The family routes each area covers.
+const AREA_OF = { home: 'home', requests: 'home', groceries: 'home', chores: 'home', care: 'home', appts: 'home', dogstats: 'home', vaxdue: 'home', tidy: 'home', posts: 'home', events: 'calendar', calfeeds: 'calendar', threads: 'threads', boards: 'threads', albums: 'threads' };
 // What a member looks like to someone else (no emails for people outside the family).
 const memberView = (m, inside) => ({
   id: m.id, kind: m.kind, name: m.name, relation: m.relation, species: m.species, breed: m.breed, born: m.born,
   avatar: m.avatar, status: m.uid ? 'active' : m.email ? 'invited' : 'managed', role: m.role,
-  ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], legacyId: m.legacyId || '', petCalls: m.petCalls || '', ...(m.kind === 'pet' ? { editedAt: m.editedAt || m.addedAt || 0 } : {}) } : {}),
+  ...(inside ? { email: m.email || '', shareWith: m.shareWith || [], share: m.kind === 'person' ? shareOf(m) : undefined, access: m.kind === 'person' ? AREAS.filter((a) => hasArea(m, a)) : undefined, legacyId: m.legacyId || '', petCalls: m.petCalls || '', ...(m.kind === 'pet' ? { editedAt: m.editedAt || m.addedAt || 0 } : {}) } : {}),
 });
 
 export async function familyApi(req, env, path, ctx = null) {
@@ -159,7 +188,10 @@ export async function familyApi(req, env, path, ctx = null) {
 
   if (path === '/config') return json({ googleClientId: env.GOOGLE_CLIENT_ID || '', ready: !!env.GOOGLE_CLIENT_ID, supportEmail: env.SUPPORT_EMAIL || '', termsVersion: TERMS_VERSION, photos: !!blobStore(env),
     // 🔌 Which device connections are set up here (only whether; never the keys), so the app never offers a Connect that can't work.
-    devices: { whoop: !!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET) } });
+    devices: { whoop: !!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET) }, ai: aiReady(env) });
+
+  // 📚 A book cover (an image tag, so no sign-in): passed through from Open Library and cached.
+  if (path.startsWith('/books/cover/') && method === 'GET') { const r = await bookCover({ path, env }); if (r) return r; }
 
   // ---- sign in ----
   if (path === '/auth/google' && method === 'POST') {
@@ -206,7 +238,7 @@ export async function familyApi(req, env, path, ctx = null) {
       let client = env.__anthropic;
       if (!client) { const { default: Anthropic } = await import('@anthropic-ai/sdk'); client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }); }
       try {
-        const r = await runHelpAgent({ client, messages, run, tools: user ? ACCOUNT_TOOLS : GUEST_TOOLS, system: helpSystem({ signedIn: !!user, name: user?.name, supportEmail }) });
+        const r = await aiCall({ db, purpose: 'help.chat', input: { messages } }, (p) => runHelpAgent({ client, messages: p.messages, run, tools: user ? ACCOUNT_TOOLS : GUEST_TOOLS, system: helpSystem({ signedIn: !!user, name: user?.name, supportEmail }) }));
         return json({ reply: r.reply, ...extra });
       } catch {
         return json({ ...offlineAnswer(messages.at(-1).content, { supportEmail }), note: 'The assistant is unavailable right now, so here is the guide.' });
@@ -256,7 +288,8 @@ export async function familyApi(req, env, path, ctx = null) {
   // families are still connected, not from someone you blocked, and not tagging anyone kept private.
   const sharedFile = async (fid, pid, ref) => {
     const [, kind, id] = /^(post|thread):([a-z0-9]{4,40})$/.exec(ref || '') || [];
-    if (!kind || !/^[a-z0-9]{6,24}$/.test(fid) || !(await families()).some((f) => (f.connections || []).includes(fid))) return false;
+    // Reached through one of your families where you have Threads (the old feed's posts: any of them).
+    if (!kind || !/^[a-z0-9]{6,24}$/.test(fid) || !(await families()).some((f) => (f.connections || []).includes(fid) && (kind === 'post' || hasArea(meIn(f), 'threads')))) return false;
     const blocked = new Set((user.blocked || []).map((b) => b.uid));
     if (kind === 'post') {
       const [p, owner] = await Promise.all([db.get(`post:${fid}:${id}`), db.get(`family:${fid}`)]);
@@ -270,6 +303,14 @@ export async function familyApi(req, env, path, ctx = null) {
     const fam = /^[a-z0-9]{6,24}$/.test(fid) ? await db.get(`family:${fid}`) : null;
     return fam && meIn(fam) ? fam : null;
   };
+  // 🔑 One check for every route of a household area (not just hidden buttons).
+  {
+    const am = path.match(/^\/families\/([a-z0-9]+)\/([a-z]+)/);
+    if (am && AREA_OF[am[2]]) {
+      const fam = await loadFamily(am[1]);
+      if (fam && !hasArea(meIn(fam), AREA_OF[am[2]])) return json({ error: "The family's creator hasn't given you this part of the family.", area: AREA_OF[am[2]] }, 403);
+    }
+  }
 
   if (path === '/me' && method === 'GET') {
     const fams = await families();
@@ -313,7 +354,33 @@ export async function familyApi(req, env, path, ctx = null) {
     if (!text || text.length > 500) return json({ error: 'say a short command' }, 400);
     if (!(await underLimit(db, `rate:${user.uid}:assist:${new Date().toISOString().slice(0, 10)}`, 150, 86400 * 2))) return json({ error: "that's a lot of commands today — try again tomorrow" }, 429);
     const assist = env.__assist || (await import('./assistant.js')).assist;
-    return json(await assist(env, { text, context: body.context && typeof body.context === 'object' ? body.context : {} }));
+    const context = body.context && typeof body.context === 'object' ? { day: body.context.day, exercises: body.context.exercises } : {};
+    return json(await aiCall({ db, purpose: 'tracker.command', input: { text, context } }, (p) => assist(env, { text: p.text, context: p.context || {} })));
+  }
+
+  // ---- 📚 Read: book lookups (public details) and the family's books ----
+  { const r = await bookLookupRoutes({ path, method, env, json, url, req, user, underLimit, db }); if (r) return r; }
+  { const r = await bookRoutes({ path, method, body, db, loadFamily, meIn, isCouple, sealed, randomId, json }); if (r) return r; }
+
+  // ---- 💬📷 Read a workout with Claude ("Describe it" when the phone couldn't, "From a photo") ----
+  // Through the AI gateway: only the words or the one image and the weight unit go out; nothing is
+  // kept here — the answer goes back to the phone's "Review Workout", which saves only when asked.
+  if (path === '/ai/workout' && method === 'POST') {
+    if (!aiReady(env)) return json({ error: 'reading workouts needs Claude on the connector', off: true }, 501);
+    const photo = body.image != null;
+    if (photo && !['image/jpeg', 'image/png', 'image/webp'].includes(body.mime)) return json({ error: 'a JPEG, PNG or WebP photo' }, 400);
+    if (photo && !/^[A-Za-z0-9+/]+={0,2}$/.test(String(body.image).slice(-4096))) return json({ error: 'that photo didn\'t arrive whole' }, 400);
+    if (!photo && String(body.text || '').trim().length < 3) return json({ error: 'describe the workout first' }, 400);
+    const unit = body.unit === 'kg' ? 'kg' : 'lb';
+    const input = photo ? { image: String(body.image), mime: body.mime, unit } : { text: String(body.text).trim(), unit };
+    try {
+      const out = await aiCall({ db, purpose: photo ? 'workout.photo' : 'workout.text', input, who: user.uid, underLimit },
+        async (payload) => readWorkout(await claude(env), payload, { model: env.PARSE_MODEL || 'claude-sonnet-5-5', today: /^\d{4}-\d{2}-\d{2}$/.test(body.today || '') ? body.today : '' }));
+      return json(out);
+    } catch (e) {
+      if (e instanceof GatewayError) return json({ error: e.status === 413 ? (photo ? 'that photo is too large' : 'that\'s a lot of words — try a shorter description') : e.message }, e.status);
+      return json({ error: photo ? "Couldn't read that photo — try a clearer one, or type it" : "Couldn't read that — try saying it another way" }, 502);
+    }
   }
 
   // ---- the maintainer's desk: problems people filed, app glitches, the nightly check ----
@@ -531,7 +598,7 @@ export async function familyApi(req, env, path, ctx = null) {
       if (!idx.includes(date)) await db.put(`careidx:${fam.fid}`, [...idx, date].slice(-800));
       // ⭐ The day just turned golden: the dogs say thank you.
       const golden = ['walk', 'park', 'treat'].includes(entry.kind) && !isGolden(list.slice(0, -1)) && isGolden(list) ? await goldenDay(db, fam, date, list) : null;
-      if (golden) await tell(adultsOf(fam, user.uid), 'fun', { title: `⭐ A golden day! — ${golden.byName}`, body: golden.text, url: 'family/#home', tag: `golden-${date}` });
+      if (golden) await tell(adultsOf(fam, user.uid, 'home'), 'fun', { title: `⭐ A golden day! — ${golden.byName}`, body: golden.text, url: 'family/#home', tag: `golden-${date}` });
       return json({ entry, ...(golden ? { golden } : {}) });
     }
     // Bringing over the current app's history: replaces what an earlier import added, day by day.
@@ -771,7 +838,8 @@ export async function familyApi(req, env, path, ctx = null) {
     const save = () => db.put(key, { ...w, shows: w.shows.slice(-500), nights: w.nights.slice(-3000) });
     const bodyOf = (v) => sealed(v, 4000) ?? (fam.e2ee ? null : (typeof v === 'object' && v ? JSON.stringify(v).slice(0, 2000) : null));
     const day = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '');
-    const STATUSES = ['watching', 'upnext', 'finished', 'dropped'];
+    // 2.0: Want to Watch ('want'; 'upnext' is its ⭐ Up Next) → Watching → Watched ('finished'); 'dropped' kept apart.
+    const STATUSES = ['want', 'watching', 'upnext', 'finished', 'dropped'];
     // 🔒 A show is the couple's own unless it's shared with the family ("aud": "family"). Older
     // shows (no aud) stay as they were: the family's.
     const couple = [me.id, partnerOf(fam, me)?.id].filter(Boolean);
@@ -785,8 +853,11 @@ export async function familyApi(req, env, path, ctx = null) {
       const b = bodyOf(body.body);
       if (!b) return json({ error: 'this family is end-to-end encrypted — update the app and try again' }, 400);
       const show = { id: randomId(8), by: me.id, body: b, at: Date.now(), aud: body.aud === 'family' ? 'family' : 'us', to: body.aud === 'family' ? [] : couple };
-      w.shows.push(show); await save();
-      return json({ show });
+      w.shows.push(show);
+      // Where it starts: Want to Watch, Watching or Watched (older apps send nothing).
+      if (STATUSES.includes(body.status)) w.status[show.id] = { s: body.status, at: Date.now(), date: day(body.date) || new Date().toISOString().slice(0, 10), by: me.id };
+      await save();
+      return json({ show, status: w.status[show.id] || null });
     }
     // Bringing over the trackers' 📺 Watching: your shows, your nights, your ratings and status changes.
     if (what === 'import' && method === 'POST') {
@@ -837,8 +908,11 @@ export async function familyApi(req, env, path, ctx = null) {
         const se = Math.max(0, Math.min(99, Math.round(+body.progress.s || 0))), ep = Math.max(0, Math.min(999, Math.round(+body.progress.e || 0)));
         w.progress[id] = { s: se, e: ep, at: Date.now(), by: me.id };
       }
+      // "＋ Watched an episode": tonight is logged once (never un-logged by a second episode).
+      const night = day(body.night);
+      if (night && !w.nights.some((x) => x.show === id && x.date === night)) w.nights.push({ show: id, date: night, by: me.id, at: Date.now() });
       await save();
-      return json({ show, status: w.status[id] || null, ratings: w.ratings[id] || {}, progress: w.progress[id] || null });
+      return json({ show, status: w.status[id] || null, ratings: w.ratings[id] || {}, progress: w.progress[id] || null, nights: w.nights.filter((x) => x.show === id) });
     }
     if (!act && method === 'DELETE') {
       if (show.by !== me.id && me.role !== 'owner') return json({ error: 'only who added it can delete it' }, 403);
@@ -868,7 +942,8 @@ export async function familyApi(req, env, path, ctx = null) {
     const job = /^[a-z0-9]{8,40}$/.test(body.job || '') ? body.job : null;
     if (job) { const done = await db.get(jkey(job)); if (done) return json({ ...done, cached: true }); }
     const work = (async () => {
-      const r = await (swap ? swapStop : planOuting)(env, db, fam, body, (fam.ideas?.label || DEFAULT_AREA.label));
+      const { job: _, ...asked } = body;
+      const r = await aiCall({ db, purpose: swap ? 'outing.swap' : 'outing.plan', input: asked, who: user.uid, underLimit }, (p) => (swap ? swapStop : planOuting)(env, db, fam, p, (fam.ideas?.label || DEFAULT_AREA.label)));
       if (job && !r.error && !r.demo) {
         await db.put(jkey(job), { ...r, at: Date.now() }, 86400);
         const n = await db.get(`jobnotify:${fam.fid}:${job}`);
@@ -877,7 +952,7 @@ export async function familyApi(req, env, path, ctx = null) {
       return r;
     })();
     ctx?.waitUntil?.(work.catch(() => {}));
-    const r = await work;
+    const r = await work.catch((e) => { if (e instanceof GatewayError) return { error: e.status === 413 ? 'that\'s a lot — say it more briefly' : e.message }; throw e; });
     return json(r, r.error ? 400 : 200);
   }
 
@@ -968,7 +1043,7 @@ export async function familyApi(req, env, path, ctx = null) {
       await save([...list, a]);
       const open = (a.dropAt && !a.dropBy) || (a.pickAt && !a.pickBy);
       const start = startOf(a);
-      await tell(adultsOf(fam, user.uid), 'appts', { title: `${APPT_TYPES[a.type].icon} ${me.name} booked ${APPT_TYPES[a.type].label.toLowerCase()} for ${a.pets.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ')}`,
+      await tell(adultsOf(fam, user.uid, 'home'), 'appts', { title: `${APPT_TYPES[a.type].icon} ${me.name} booked ${APPT_TYPES[a.type].label.toLowerCase()} for ${a.pets.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ')}`,
         body: `${new Date(`${start.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}${open ? ' — can you drive?' : ''}`, url: 'family/#home', tag: `appt-${a.id}` });
       return json({ appt: a });
     }
@@ -979,7 +1054,7 @@ export async function familyApi(req, env, path, ctx = null) {
       // I'll take it: the drop-off or the pick-up (or let it go again).
       if (body.claim === 'drop' || body.claim === 'pick') {
         a[`${body.claim}By`] = body.release ? '' : me.id;
-        await tell(adultsOf(fam, user.uid), 'appts', { title: body.release ? `🚗 ${me.name} can't do the ${body.claim === 'drop' ? 'drop-off' : 'pick-up'} after all` : `🚗 ${me.name} will do the ${body.claim === 'drop' ? 'drop-off' : 'pick-up'}`,
+        await tell(adultsOf(fam, user.uid, 'home'), 'appts', { title: body.release ? `🚗 ${me.name} can't do the ${body.claim === 'drop' ? 'drop-off' : 'pick-up'} after all` : `🚗 ${me.name} will do the ${body.claim === 'drop' ? 'drop-off' : 'pick-up'}`,
           body: `${APPT_TYPES[a.type].label} for ${a.pets.map((id) => fam.members.find((x) => x.id === id)?.name).filter(Boolean).join(' & ')}`, url: 'family/#home', tag: `appt-${a.id}` });
       }
       if (body.edit) Object.assign(a, cleanAppt({ ...a, ...body.edit }, ctx));
@@ -1079,12 +1154,12 @@ export async function familyApi(req, env, path, ctx = null) {
       let client = env.__anthropic;
       if (!client) { const { default: Anthropic } = await import('@anthropic-ai/sdk'); client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }); }
       try {
-        const res = await client.beta.messages.create({ model: 'claude-opus-5-5', max_tokens: 2000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'low' },
-          system: 'You write playful, family-friendly bingo squares for couples watching TV together.', messages: [{ role: 'user', content: bingoPrompt(show) }] });
+        const res = await aiCall({ db, purpose: 'bingo.squares', input: { show }, who: user.uid, underLimit }, (p) => client.beta.messages.create({ model: 'claude-opus-5-5', max_tokens: 2000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', output_config: { effort: 'low' },
+          system: 'You write playful, family-friendly bingo squares for couples watching TV together.', messages: [{ role: 'user', content: bingoPrompt(p.show) }] }));
         const squares = parseSquares((res.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n'));
         if (squares.length < NEED) return json({ error: 'Claude came back with too few squares — try again', prompt: bingoPrompt(show) }, 502);
         return json({ squares });
-      } catch { return json({ error: 'Claude is unavailable right now — copy the prompt into any chatbot instead', prompt: bingoPrompt(show) }, 502); }
+      } catch (e) { return json({ error: e instanceof GatewayError ? e.message : 'Claude is unavailable right now — copy the prompt into any chatbot instead', prompt: bingoPrompt(show) }, e instanceof GatewayError ? e.status : 502); }
     }
     if (what === 'packs' && !id && method === 'POST') {
       const title = clean(body.title, 60);
@@ -1290,6 +1365,8 @@ export async function familyApi(req, env, path, ctx = null) {
       relation: kind === 'pet' ? 'pet' : RELATIONS.includes(body.relation) ? body.relation : 'other',
       ...(kind === 'pet' ? { species: SPECIES.includes(body.species) ? body.species : 'dog', breed: clean(body.breed, 40), born: /^\d{4}-\d{2}-\d{2}$/.test(body.born || '') ? body.born : '' } : {}),
       ...(email ? { email } : {}), legacyId: clean(body.legacyId, 40), avatar: avatarOf(body.avatar), shareWith: [], addedBy: me.id, addedAt: Date.now(),
+      // Only the family's creator chooses areas when adding someone (everyone else adds with all).
+      ...(kind === 'person' && me.role === 'owner' && accessOf(body.access) && accessOf(body.access).length < AREAS.length ? { access: accessOf(body.access) } : {}),
     };
     fam.members.push(member);
     await db.put(`family:${fam.fid}`, fam);
@@ -1304,6 +1381,16 @@ export async function familyApi(req, env, path, ctx = null) {
     const t = fam.members.find((x) => x.id === m[2]);
     if (!t) return json({ error: 'not found' }, 404);
     const self = t.id === me.id;
+    // 🔑 The family's creator chooses each person's household areas (never their own, never the
+    // creator's); nobody else can, and it changes nothing about their Health sharing.
+    if (method === 'PATCH' && body.access !== undefined) {
+      if (me.role !== 'owner' || t.kind !== 'person' || t.role === 'owner') return json({ error: "only the family's creator chooses this" }, 403);
+      const a = accessOf(body.access);
+      if (!a) return json({ error: 'expected a list of areas' }, 400);
+      if (a.length === AREAS.length) delete t.access; else t.access = a;
+      await db.put(`family:${fam.fid}`, fam);
+      return json({ member: memberView(t, true) });
+    }
     // You edit yourself; grown-ups edit pets, kids and people who haven't joined yet.
     const canEdit = self || (me.relation !== 'child' && (t.kind === 'pet' || !t.uid));
     if (!canEdit) return json({ error: 'only they can change that' }, 403);
@@ -1324,8 +1411,17 @@ export async function familyApi(req, env, path, ctx = null) {
       if (body.breed != null) t.breed = clean(body.breed, 40);
       if (body.born != null && /^(\d{4}-\d{2}-\d{2})?$/.test(body.born)) t.born = body.born;
     } else if (body.relation != null && !self && RELATIONS.includes(body.relation)) t.relation = body.relation;
-    // Only you decide who sees your diet & fitness.
-    if (self && Array.isArray(body.shareWith)) t.shareWith = body.shareWith.filter((id) => fam.members.some((x) => x.id === id && x.kind === 'person' && x.id !== me.id));
+    // Only you decide who sees your Diet and your Fitness — separately. (Nobody can grant
+    // themselves someone else's: only the person's own PATCH changes these lists.)
+    const people = (ids) => (Array.isArray(ids) ? [...new Set(ids)].filter((id) => fam.members.some((x) => x.id === id && x.kind === 'person' && x.id !== t.id)) : null);
+    if (self && body.share && typeof body.share === 'object') {
+      const cur = shareOf(t), diet = people(body.share.diet) ?? cur.diet, fitness = people(body.share.fitness) ?? cur.fitness;
+      t.share = { diet, fitness };
+      t.shareWith = diet.filter((id) => fitness.includes(id)); // older apps: "both" is what they understand
+    } else if (self && Array.isArray(body.shareWith)) {
+      // An older app's single list: both parts, as before.
+      t.shareWith = people(body.shareWith); t.share = { diet: t.shareWith, fitness: t.shareWith };
+    }
     await db.put(`family:${fam.fid}`, fam);
     return json({ member: memberView(t, true) });
   }
@@ -1351,8 +1447,12 @@ export async function familyApi(req, env, path, ctx = null) {
     const self = t.id === me.id;
     if (method === 'GET') {
       // Not joined yet: whoever added them (and brought their data over) holds it until they do.
-      const can = self || t.kind === 'pet' || (t.shareWith || []).includes(me.id) || (!t.uid && t.addedBy === me.id);
-      if (!can) return json({ error: `${t.name} hasn't shared this with you`, locked: true }, 403);
+      // Someone else's full copy only until their phone has split it into Diet / Fitness / Us
+      // (then those parts are what's shared), and only for who could see both before.
+      const sh = shareOf(t);
+      const legacy = !t.healthSplit && sh.diet.includes(me.id) && sh.fitness.includes(me.id);
+      const can = self || t.kind === 'pet' || legacy || (!t.uid && t.addedBy === me.id);
+      if (!can) return json({ error: `${t.name} hasn't shared this with you`, locked: true, ...(t.healthSplit ? { parts: true } : {}) }, 403);
       return json((await db.get(`data:${fam.fid}:${t.id}`)) || { savedAt: 0, data: {} });
     }
     if (method === 'PUT') {
@@ -1367,6 +1467,61 @@ export async function familyApi(req, env, path, ctx = null) {
       const size = (x) => JSON.stringify(x || {}).length;
       if (old && size(old.data) > 500 && size(body.data) < size(old.data) * 0.7) await db.put(`dataprev:${fam.fid}:${t.id}`, old, 90 * 86400);
       await db.put(`data:${fam.fid}:${t.id}`, { savedAt, data: body.data });
+      return json({ ok: true, savedAt });
+    }
+  }
+
+  // ---- 💪 a person's Diet, Fitness and Us parts, each shared on its own ----
+  m = path.match(/^\/families\/([a-z0-9]+)\/members\/([a-z0-9]+)\/health\/(diet|fitness|us)$/);
+  if (m) {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const me = meIn(fam), part = m[3];
+    const t = fam.members.find((x) => x.id === m[2] && x.kind === 'person');
+    if (!t) return json({ error: 'not found' }, 404);
+    const key = `health:${fam.fid}:${t.id}:${part}`;
+    const holder = !t.uid && t.addedBy === me.id;
+    if (method === 'GET') {
+      if (!canSeePart(fam, t, me, part) && !holder) return json({ error: part === 'us' ? 'just for their partner' : `${t.name} hasn't shared their ${part === 'diet' ? 'Diet' : 'Fitness'} with you`, locked: true }, 403);
+      return json((await db.get(key)) || { savedAt: 0, data: {}, none: true });
+    }
+    if (method === 'PUT') {
+      if (!(t.id === me.id || holder)) return json({ error: 'not allowed' }, 403);
+      if (!body || typeof body.data !== 'object' || body.data === null) return json({ error: 'expected {data}' }, 400);
+      if (body.data.enc != null && (!sealed(body.data.enc, 6_000_000) || Object.keys(body.data).length !== 1)) return json({ error: 'expected {data: {enc}}' }, 400);
+      if (fam.e2ee && body.data.enc == null) return json({ error: 'this family is end-to-end encrypted — update the app and try again' }, 400);
+      if (body.data.enc == null && JSON.stringify(body.data).length > 4_000_000) return json({ error: 'too big' }, 413);
+      const savedAt = Date.now();
+      await db.put(key, { savedAt, data: body.data });
+      // From now on others read these parts, never the full copy.
+      if (!t.healthSplit) { t.healthSplit = savedAt; await db.put(`family:${fam.fid}`, fam); }
+      return json({ ok: true, savedAt });
+    }
+  }
+
+  // ---- 🏋️ workouts: Today's Workout (with saved templates) and the history, each sealed ----
+  // Yours to write; read by you and whoever you share your Fitness with.
+  m = path.match(/^\/families\/([a-z0-9]+)\/members\/([a-z0-9]+)\/workouts\/(today|log)$/);
+  if (m) {
+    const fam = await loadFamily(m[1]);
+    if (!fam) return json({ error: 'not found' }, 404);
+    const me = meIn(fam), t = fam.members.find((x) => x.id === m[2] && x.kind === 'person');
+    if (!t) return json({ error: 'not found' }, 404);
+    const key = `workouts:${fam.fid}:${t.id}:${m[3]}`;
+    if (method === 'GET') {
+      if (!canSeePart(fam, t, me, 'fitness')) return json({ error: `${t.name} hasn't shared their Fitness with you`, locked: true }, 403);
+      return json((await db.get(key)) || { savedAt: 0, data: null });
+    }
+    if (method === 'PUT') {
+      if (t.id !== me.id) return json({ error: 'not allowed' }, 403);
+      const max = m[3] === 'today' ? 600_000 : 6_000_000;
+      if (!body || typeof body.data !== 'object' || body.data === null) return json({ error: 'expected {data}' }, 400);
+      if (body.data.enc != null ? !sealed(body.data.enc, max) || Object.keys(body.data).length !== 1 : fam.e2ee || JSON.stringify(body.data).length > max) return json({ error: fam.e2ee ? 'this family is end-to-end encrypted — update the app and try again' : 'too big' }, 400);
+      const savedAt = Date.now();
+      // Two phones saving at once: the older copy can't overwrite a newer one.
+      const old = await db.get(key);
+      if (old && Number.isFinite(body.base) && old.savedAt > body.base) return json({ error: 'changed on another device', savedAt: old.savedAt }, 409);
+      await db.put(key, { savedAt, data: body.data });
       return json({ ok: true, savedAt });
     }
   }
@@ -1454,9 +1609,9 @@ export async function familyApi(req, env, path, ctx = null) {
   }
 
   // ---- 🏠 Home: requests and groceries ----
-  { const r = await homeRoutes({ path, method, body, db, user, loadFamily, meIn, sealed, clean, randomId, tell, json }); if (r) return r; }
+  { const r = await homeRoutes({ path, method, body, db, user, loadFamily, meIn, sealed, clean, randomId, tell, json, hasArea }); if (r) return r; }
   // ---- 📖 threads ----
-  { const r = await threadRoutes({ path, method, body, db, user, saveUser, families, loadFamily, meIn, partnerOf, sealed, clean, randomId, tell, json, url: () => url(req), blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
+  { const r = await threadRoutes({ path, method, body, db, user, saveUser, families, loadFamily, meIn, partnerOf, hasArea, sealed, clean, randomId, tell, json, url: () => url(req), blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 📷 albums (family only) ----
   { const r = await albumRoutes({ path, method, body, db, loadFamily, meIn, sealed, clean, randomId, json, blobs: blobStore(env), owns: (fid, ids, memberId) => ownsFiles(db, fid, ids, memberId) }); if (r) return r; }
   // ---- 🛒 the Market (family, and friends' families by default) ----
@@ -1475,13 +1630,17 @@ export async function familyApi(req, env, path, ctx = null) {
     const month = new Date().toISOString().slice(0, 7), key = `tidyruns:${fam.fid}:${month}`;
     const n = (await db.get(key)) || 0;
     if (n >= Math.max(1, +env.TIDY_MAX_RUNS || 60)) return json({ error: "that's a lot of tidying this month — more next month" }, 400);
-    const { text } = await askClaude(env, `Tidy up these rough notes someone wrote to share with their family. Keep their words, facts, numbers and links exactly; don't add anything new or give advice. Fix typos, group related points under short "## " headings, and use "- " bullets. Plain text only (no bold, no tables). Answer with only the tidied notes.\n\n${raw}`, { search: false, maxTokens: 3000, model: env.TIDY_MODEL || 'claude-haiku-5-5' });
+    let text;
+    try {
+      ({ text } = await aiCall({ db, purpose: 'thread.tidy', input: { text: raw }, who: user.uid, underLimit }, (p) => askClaude(env, `Tidy up these rough notes someone wrote to share with their family. Keep their words, facts, numbers and links exactly; don't add anything new or give advice. Fix typos, group related points under short "## " headings, and use "- " bullets. Plain text only (no bold, no tables). Answer with only the tidied notes.\n\n${p.text}`, { search: false, maxTokens: 3000, model: env.TIDY_MODEL || 'claude-haiku-5-5' })));
+    } catch (e) { if (e instanceof GatewayError) return json({ error: e.status === 413 ? 'that\'s a lot of text — tidy part of it' : e.message }, e.status); throw e; }
     await db.put(key, n + 1, 62 * 86400);
     return json({ text: String(text || '').trim().slice(0, 12000) });
   }
   // ---- the feed ----
   if (path === '/feed' && method === 'GET') {
-    const fams = await families();
+    // The old feed showed on Home: only families where you have Home (and friends' through them).
+    const fams = (await families()).filter((f) => hasArea(meIn(f), 'home'));
     const mineIds = new Set(fams.map((f) => f.fid));
     const sources = [...fams.map((f) => ({ fid: f.fid, own: true }))];
     for (const f of fams) for (const c of f.connections || []) if (!mineIds.has(c) && !sources.some((s) => s.fid === c)) sources.push({ fid: c, own: false });
@@ -1607,7 +1766,7 @@ export async function familyApi(req, env, path, ctx = null) {
     const [, fid, id, action] = m;
     const p = await db.get(`post:${fid}:${id}`);
     if (!p) return json({ error: 'not found' }, 404);
-    const fams = await families();
+    const fams = (await families()).filter((f) => hasArea(meIn(f), 'home'));
     const own = fams.find((f) => f.fid === fid);
     const viaConnection = !own && p.audience === 'connections' && fams.some((f) => (f.connections || []).includes(fid));
     if (!own && !viaConnection) return json({ error: 'not found' }, 404);
@@ -1872,9 +2031,15 @@ async function stillReaches(db, uid, leaving) {
 }
 async function removeMember(db, fam, t, { keepPosts = true, reach = null } = {}) {
   fam.members = fam.members.filter((x) => x.id !== t.id);
-  for (const x of fam.members) x.shareWith = (x.shareWith || []).filter((id) => id !== t.id);
+  for (const x of fam.members) {
+    x.shareWith = (x.shareWith || []).filter((id) => id !== t.id);
+    if (x.share) x.share = { diet: x.share.diet.filter((id) => id !== t.id), fitness: x.share.fitness.filter((id) => id !== t.id) };
+  }
   await db.put(`family:${fam.fid}`, fam);
   await db.del(`data:${fam.fid}:${t.id}`);
+  for (const part of HEALTH_PARTS) await db.del(`health:${fam.fid}:${t.id}:${part}`);
+  for (const w of ['today', 'log']) await db.del(`workouts:${fam.fid}:${t.id}:${w}`);
+  await forgetReader(db, fam.fid, t.id);
   await db.del(`dataprev:${fam.fid}:${t.id}`);
   for (const g of (await db.get(`bingogames:${fam.fid}`)) || []) await db.del(`bingocard:${fam.fid}:${g.id}:${t.id}`);
   for (const s of (await db.get(`picks:${fam.fid}`)) || []) await db.del(`pickcard:${fam.fid}:${s.id}:${t.id}`);
@@ -1956,7 +2121,8 @@ async function deleteFamily(db, fam) {
   // Who uploaded each file goes with the files.
   for (const o of (await db.blobs?.list(`f/${fam.fid}/`).catch(() => [])) || []) { const pid = o.key.split('/')[2]?.replace(/-(full|thumb|doc)$/, ''); if (pid) await db.del(blobMetaKey(fam.fid, pid)); }
   await deleteFamilyPhotos(db.blobs, fam.fid).catch(() => {});
-  for (const x of fam.members) { await db.del(`data:${fam.fid}:${x.id}`); await db.del(`dataprev:${fam.fid}:${x.id}`); }
+  for (const x of fam.members) { await db.del(`data:${fam.fid}:${x.id}`); await db.del(`dataprev:${fam.fid}:${x.id}`); for (const part of HEALTH_PARTS) await db.del(`health:${fam.fid}:${x.id}:${part}`); for (const w of ['today', 'log']) await db.del(`workouts:${fam.fid}:${x.id}:${w}`); }
+  await db.del(`books:${fam.fid}`);
   for (const d of (await db.get(`careidx:${fam.fid}`)) || []) await db.del(`care:${fam.fid}:${d}`);
   await db.del(`careidx:${fam.fid}`);
   await db.del(`goldenmsg:${fam.fid}`);
@@ -2009,6 +2175,14 @@ export async function deleteAccount(db, user) {
   await db.del(`pushsub:${user.uid}`);
   await db.del(`user:${user.uid}`);
   return { deleted: true, ...summary };
+}
+
+// ---------- 🤖 Claude ----------
+const aiReady = (env) => !!(env.__anthropic || (env.ANTHROPIC_API_KEY && !env.DEMO));
+async function claude(env) {
+  if (env.__anthropic) return env.__anthropic;
+  const { default: Anthropic } = await import('@anthropic-ai/sdk');
+  return new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 }
 
 // ---------- help desk ----------

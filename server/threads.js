@@ -22,7 +22,7 @@ export async function threadRoutes(c) {
   // 🏷️ Who's tagged: grown-ups and kids with accounts in your own family who can see the thread
   // (a just-us thread: only your partner). Stored as member ids; their accounts stay on the server.
   const tagsOf = (fam, me, aud, ids) => {
-    const ok = fam.members.filter((x) => x.kind === 'person' && x.uid && x.id !== me.id && (aud !== 'us' || x.id === partnerOf(fam, me)?.id));
+    const ok = fam.members.filter((x) => x.kind === 'person' && x.uid && x.id !== me.id && (c.hasArea ? c.hasArea(x, 'threads') : true) && (aud !== 'us' || x.id === partnerOf(fam, me)?.id));
     const pick = [...new Set(Array.isArray(ids) ? ids : [])].map((id) => ok.find((x) => x.id === id)).filter(Boolean).slice(0, 20);
     return { tags: pick.map((x) => x.id), uids: pick.map((x) => x.uid) };
   };
@@ -36,11 +36,15 @@ export async function threadRoutes(c) {
   const visible = (t, own) => (t.aud === 'us' ? (t.to || []).includes(user.uid) : own || t.aud === 'connections');
   const blocked = new Set((user.blocked || []).map((b) => b.uid)), hidden = new Set(user.hidden || []), favs = new Set(user.favThreads || []);
   const saveUser = c.saveUser || (async () => {});
-  // A family's thread you can see: your own family's, or a friends' family's shared with friends.
+  // 🔑 Families where you have the Threads area (the family's creator chooses; all by default).
+  const hasArea = c.hasArea || (() => true);
+  const threadFamilies = async () => (await families()).filter((f) => hasArea(meIn(f), 'threads'));
+  // A family's thread you can see: your own family's, or a friends' family's shared with friends
+  // (reached through one of your families where you have Threads).
   const access = async (fid) => {
     const fam = await loadFamily(fid);
-    if (fam) return { fam, own: true };
-    const fams = await families();
+    if (fam) return hasArea(meIn(fam), 'threads') ? { fam, own: true } : null;
+    const fams = await threadFamilies();
     if (fams.some((f) => (f.connections || []).includes(fid))) return { fam: await db.get(`family:${fid}`), own: false };
     return null;
   };
@@ -48,7 +52,7 @@ export async function threadRoutes(c) {
     id: t.id, fid: t.fid, aud: t.aud, board: t.board, movedBy: t.movedBy || '', cat: t.cat, title: t.title, by: t.by, byName: t.byName, byAvatar: t.byAvatar, mine: t.byUid === user.uid,
     at: t.at, lastAt: t.lastAt, lastByName: t.lastByName, replies: t.replies.filter((r) => !blocked.has(r.uid) && !hidden.has(r.id)).length, mins: t.mins || 1, pinned: !!t.pinned, shotCount: (t.shots || []).length, docCount: (t.docs || []).length, tagged: (t.tagUids || []).includes(user.uid),
     unread: (t.reads?.[user.uid] || 0) < t.lastAt && t.lastByUid !== user.uid, following: (t.followers || []).includes(user.uid), fav: favs.has(`${t.fid}:${t.id}`), own, familyName: famName,
-    best: !!t.best, poll: t.poll ? { closes: t.poll.closes, voted: t.poll.votes?.[user.uid] != null, n: Object.keys(t.poll.votes || {}).length } : null, ...(t.pk ? { pk: t.pk } : {}),
+    best: !!t.best, poll: t.poll ? { closes: t.poll.closes, voted: t.poll.votes?.[user.uid] != null, n: Object.keys(t.poll.votes || {}).length } : null, ...(t.pk ? { pk: t.pk } : {}), ...(t.ref ? { ref: t.ref } : {}),
   });
   const full = (t, own, fam) => ({
     ...summary(t, own, fam?.name || ''), body: t.body, editedAt: t.editedAt || null, shots: t.shots || [], docs: t.docs || [], tags: t.tags || [],
@@ -69,7 +73,7 @@ export async function threadRoutes(c) {
   // searches them in memory. Doesn't count as reading them.
   if (path === '/threads' && method === 'GET') {
     const withAll = url().searchParams.get('full') === '1';
-    const fams = await families();
+    const fams = await threadFamilies();
     const mine = new Set(fams.map((f) => f.fid));
     const sources = fams.map((f) => ({ fid: f.fid, own: true, fam: f }));
     for (const f of fams) for (const x of f.connections || []) if (!mine.has(x) && !sources.some((s) => s.fid === x)) sources.push({ fid: x, own: false });
@@ -138,10 +142,19 @@ export async function threadRoutes(c) {
     // The same thread sent again (a retry): the one already saved.
     const cid = /^[a-z0-9]{8,24}$/.test(body.cid || '') ? body.cid : null;
     if (cid) { const had = await db.get(`threadcid:${user.uid}:${cid}`); const t = had && await db.get(`thread:${fam.fid}:${had}`); if (t) return json({ thread: full(t, true, fam), dup: true }); }
+    // 💬 Discuss from a show or a date idea: `ref` names the thing (an id, never its title), and
+    // the thread already started about it — by either of you — is the one you get.
+    const ref = /^[a-z]:[A-Za-z0-9_-]{4,64}$/.test(body.ref || '') ? body.ref : null;
+    if (ref) {
+      for (const id of (await db.get(`threads:${fam.fid}`)) || []) {
+        const t = await db.get(`thread:${fam.fid}:${id}`);
+        if (t?.ref === ref && visible(t, true)) return json({ thread: full(t, true, fam), dup: true });
+      }
+    }
     const now = Date.now();
     const t = { id: `${(1e13 - now).toString(36)}${randomId(3)}`, fid: fam.fid, by: me.id, byUid: user.uid, byName: me.name, byAvatar: me.avatar || '', aud, to: aud === 'us' ? [user.uid, partner.uid] : [],
       board: aud === 'us' ? 'us' : aud === 'connections' ? 'friends' : boardOk(fam, body.board) ? body.board : 'family', cat, title, body: b, mins: Math.max(1, Math.min(60, Math.round(+body.mins || 1))),
-      at: now, lastAt: now, lastByUid: user.uid, lastByName: me.name, replies: [], reads: { [user.uid]: now }, followers: [user.uid], ...(poll ? { poll } : {}), ...(pk ? { pk } : {}) };
+      at: now, lastAt: now, lastByUid: user.uid, lastByName: me.name, replies: [], reads: { [user.uid]: now }, followers: [user.uid], ...(poll ? { poll } : {}), ...(pk ? { pk } : {}), ...(ref ? { ref } : {}) };
     const shots = blobs ? shotsOf(fam, body.shots) : [];
     if (shots.length) t.shots = shots;
     const docs = blobs ? docsOf(fam, body.docs) : [];
@@ -222,7 +235,9 @@ export async function threadRoutes(c) {
     t.reads = { ...(t.reads || {}), [user.uid]: r.at };
     if (!(t.followers || []).includes(user.uid)) t.followers = [...(t.followers || []), user.uid];
     await save();
-    const to = (t.followers || []).filter((u) => u !== user.uid && !blocked.has(u));
+    // Followers who've since lost Threads in this family aren't told.
+    const memberOf = (u) => a.fam?.members?.find((x) => x.uid === u);
+    const to = (t.followers || []).filter((u) => u !== user.uid && !blocked.has(u) && (!memberOf(u) || !c.hasArea || c.hasArea(memberOf(u), 'threads')));
     if (to.length) await tell(to, t.aud === 'us' ? 'us' : 'feed', { title: `💬 ${myName} replied`, body: 'Tap to read it', url: t.aud === 'us' ? 'family/#us' : 'family/#threads', tag: `thread-${id}` });
     return json({ thread: full(t, a.own, a.fam) });
   }
