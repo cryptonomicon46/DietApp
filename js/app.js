@@ -37,6 +37,7 @@ import { drawPoster, planCsvRows, drawReportPoster } from './poster.js';
 import { RANGES, PHASE_NAMES, buildReport, reportText, reportCsvRows, weeklyRows, rangeTitle, combosText, combosCsvRows } from './share.js';
 import { programReview } from './review.js';
 import { planProgress, STATUS } from './planProgress.js';
+import { planFacts, factsText } from './planCoach.js';
 
 // ---------- storage ----------
 // Each person's data is kept separately (see storage.js); `store` reads/writes the open profile.
@@ -161,8 +162,67 @@ function renderPlanProgress() {
     ${r.estimate ? `<p class="small">${esc(r.estimate.text)}</p>` : ''}
     <p class="small"><b>Next:</b> ${esc(r.next)}</p>
     <details class="pp-why"><summary class="small">Why ${s.label.toLowerCase()}?</summary><ul class="small muted">${r.why.map((w) => `<li>${esc(w)}</li>`).join('')}</ul><p class="tiny muted">Body weight swings day to day with water, salt and food, so this uses the trend over the last few weeks. It's an estimate, and it never changes your targets — the weekly check-in suggests changes and you approve them.</p></details>
+    ${famLinked() && !sync.readOnly() ? `<div class="pp-ask">${coachHtml()}</div>` : ''}
   </section>`;
 }
+// 💬 Ask about my plan (signed in, your own plan): Claude explains and suggests; it can't change
+// anything. Only your plan's numbers (js/planCoach.js) and your question are sent, and only after
+// you've seen that once. A suggested change to calories or macros opens the weekly check-in, where
+// nothing changes until you approve it. The chat lives only in this screen's memory.
+const coach = { open: false, turns: [], busy: false, error: '', draft: '' };
+const COACH_ASKS = ['Am I on track?', 'Why is my weight not moving?', 'What should I focus on this week?'];
+function coachFactsNow() {
+  const t = targets();
+  const dates = [...state.history.map((w) => String(w.start || w.date || '').slice(0, 10)), ...state.activities.map((a) => a.date), ...(store.get('lift', {}).sessions || []).map((x) => x.date)];
+  return planFacts({ profile: state.profile, weights: state.weights, days: state.days, today: isoDate(), targets: t, planned: baseTargets().lbPerWeek, trainingDates: dates });
+}
+function coachHtml() {
+  if (!coach.open) return '<button type="button" class="ghost small" data-coach="open">💬 Ask about my plan</button>';
+  if (!global.get('coachOk', false)) {
+    return `<p class="small"><b>Sends your plan numbers and your question to Claude.</b> Claude can explain and suggest; it can't change your plan.</p>
+      <details class="pp-sent"><summary class="small">What's sent</summary><ul class="tiny muted">${factsText(coachFactsNow()).map((x) => `<li>${esc(x)}</li>`).join('')}</ul><p class="tiny muted">Never your name, meals, notes, weights, anyone else's data or anything else in the app. Not kept by us; Anthropic doesn't train on it and deletes it after a short safety check period.</p></details>
+      <div class="row"><button type="button" class="small" data-coach="ok">OK</button><button type="button" class="ghost small" data-coach="close">Not now</button></div>`;
+  }
+  return `<div class="pp-chat" role="log" aria-live="polite" aria-label="Ask about my plan">${coach.turns.map((x) => `<p class="pp-q small"><b>You:</b> ${esc(x.q)}</p>${x.a ? `<p class="pp-a small">${esc(x.a)}</p>${x.checkin ? '<button type="button" class="ghost small" data-opencheckin>Review it in your weekly check-in ›</button>' : ''}` : ''}`).join('')}
+      ${coach.busy ? '<p class="small muted">Claude is thinking…</p>' : ''}${coach.error ? `<p class="small" role="alert">${esc(coach.error)}</p>` : ''}</div>
+    ${coach.turns.length ? '' : `<div class="row wrap pp-chips">${COACH_ASKS.map((q) => `<button type="button" class="ghost small" data-coachq="${esc(q)}">${esc(q)}</button>`).join('')}</div>`}
+    <form class="row pp-form" data-coachform><label class="grow"><span class="visually-hidden">Your question</span><input name="q" maxlength="500" autocomplete="off" placeholder="Ask about your plan" value="${esc(coach.draft)}" ${coach.busy ? 'disabled' : ''}></label><button ${coach.busy ? 'disabled' : ''}>Ask</button></form>
+    <p class="tiny muted">Sends your plan numbers and your question to Claude. It can explain and suggest, never change your plan. <button type="button" class="linkish tiny" data-coach="close">Close</button></p>`;
+}
+const redrawCoach = () => { const el = $('#planProgress .pp-ask'); if (el) el.innerHTML = coachHtml(); };
+async function askCoach(q) {
+  q = String(q || '').trim();
+  if (!q || coach.busy) return;
+  if (q.length > 500) { coach.error = "That's a long question — try a shorter one"; return redrawCoach(); }
+  coach.busy = true; coach.error = ''; coach.draft = '';
+  const turn = { q, a: '' };
+  const earlier = coach.turns.filter((x) => x.a).map(({ q: tq, a }) => ({ q: tq, a }));
+  coach.turns.push(turn); redrawCoach();
+  try {
+    const r = await account.askPlan(q, coachFactsNow(), earlier);
+    if (r.ok) { turn.a = r.answer; turn.checkin = !!r.checkin; }
+    else { coach.turns.pop(); coach.draft = q; coach.error = r.status === 501 ? "Ask about my plan isn't set up on this connector yet." : r.error || "Claude couldn't answer just now — try again in a moment"; }
+  } catch { coach.turns.pop(); coach.draft = q; coach.error = "You seem to be offline — try again when you're connected"; }
+  coach.busy = false; redrawCoach();
+  $('#planProgress .pp-form input')?.focus();
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#planProgress [data-coach], #planProgress [data-coachq]');
+  if (!b) return;
+  if (b.dataset.coachq) { if (!coach.open) return; return askCoach(b.dataset.coachq); }
+  const a = b.dataset.coach;
+  if (a === 'open') coach.open = true;
+  if (a === 'close') coach.open = false;
+  if (a === 'ok') global.set('coachOk', true);
+  redrawCoach();
+  if (a === 'ok' || a === 'open') $('#planProgress .pp-form input')?.focus();
+});
+document.addEventListener('submit', (e) => {
+  if (!e.target.matches('#planProgress [data-coachform]')) return;
+  e.preventDefault();
+  askCoach(e.target.q.value);
+});
+document.addEventListener('input', (e) => { if (e.target.closest('#planProgress [data-coachform]')) coach.draft = e.target.value; });
 
 // Weigh-ins since the current phase started (trends shouldn't mix a cut with a gain).
 function phaseWeights() {

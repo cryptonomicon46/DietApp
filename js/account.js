@@ -148,6 +148,13 @@ export const account = {
     return { ok: r.status === 200, status: r.status, ...r.data };
   },
 
+  // 📈 Ask about my plan: the plan's numbers (js/planCoach.js), the question and this chat's
+  // earlier turns — the connector rebuilds the numbers through the same allowlist.
+  async askPlan(question, facts, turns) {
+    const r = await call('POST', '/ai/plan', { question, facts, turns }, 30000);
+    return { ok: r.status === 200, status: r.status, ...r.data };
+  },
+
   // ---------- the dogs: one set for the family app and the trackers ----------
   // The family's dog pets become a third copy of each dog in the trackers (dogs.js merges it
   // with yours and your partner's, newest edit of each field winning). Their name, breed,

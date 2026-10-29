@@ -68,7 +68,7 @@ export const WHATS_NEW = {
 };
 SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'Health is your day', cards: [
   ['⚖️', 'Weigh in on Health', 'Type today’s weight on 💪 Health and it’s in Meals and Weight too. A 7 AM reminder is there if you want it.'],
-  ['📈', 'How your plan is going', 'Week, days left, On track / Behind / Ahead — or Too early to tell — with an estimate, the next step and why. It never changes your targets.'],
+  ['📈', 'How your plan is going', 'Week, days left, On track / Behind / Ahead — or Too early to tell — with an estimate, the next step and why. 💬 Ask about my plan asks Claude (just your plan numbers and your question). Nothing changes your targets without your OK.'],
   ['🏋️', 'Today’s Workout → Train', 'Add a workout, Start Workout, record what you actually did set by set, leave and Resume any time, then Complete. Names are suggested; rename them later.'],
   ['🛒', 'Scan is in Groceries', 'Food is Meals · Weight · Groceries; ▦ Scan a barcode is at the top of Groceries.'],
 ] });

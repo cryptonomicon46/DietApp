@@ -11,6 +11,11 @@ export const PURPOSES = {
   'workout.text': { provider: 'anthropic', payload: 'personal-text', fields: { text: 1500, unit: 4 }, perDay: 40 },
   // 📷 "From a photo": one re-encoded image (no location or camera data) and the weight unit.
   'workout.photo': { provider: 'anthropic', payload: 'personal-image', fields: { image: 3_500_000, mime: 16, unit: 4 }, perDay: 20 },
+  // 📈 "Ask about my plan": the plan's numbers only (rebuilt through js/planCoach.js cleanFacts —
+  // phase, week, targets, a 7-day adherence summary, trend, planned rate, goal date, training-day
+  // count), the question, and earlier questions and answers of the same chat. Never names, meals,
+  // notes, weights, anyone else's data or household content.
+  'diet.coach': { provider: 'anthropic', payload: 'personal-text', fields: { facts: 1500, question: 500, turns: 6000 }, perDay: 30 },
   // 🧭 Plan an outing / ⇄ swap a stop: what was typed, the day, chips and what you've liked — never
   // names or history. (The family's home town is added by the feature; it isn't a person's data.)
   'outing.plan': { provider: 'anthropic', payload: 'personal-text', fields: { text: 400, day: 10, chips: 600, taste: 400 }, perDay: 20 },
