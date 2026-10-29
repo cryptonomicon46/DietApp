@@ -44,6 +44,9 @@ to OurPawmily stops sending the old way, and 🛟 Recover can still read those c
    npx wrangler secret put STRAVA_CLIENT_SECRET --name lean-plate-connect
    # APP_ORIGIN is set in wrangler.toml (change it if you host the app elsewhere)
    ```
+   **Later updates:** `bash scripts/pawdeploy.sh` (or the `pawdeploy` alias; see the main README).
+   It pulls the checked-out branch, keeps your storage id in `wrangler.toml`, runs `npm install`
+   and deploys, and stops without deploying if the pull fails or the id is still the placeholder.
 3. **Household sharing** (legacy): nothing to set up. New phones don't use it; phones that
    already shared through a code keep syncing until their migration.
 4. **WHOOP (optional):** once the two WHOOP secrets are set, **Devices** shows **Connect WHOOP**

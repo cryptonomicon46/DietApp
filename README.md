@@ -514,6 +514,12 @@ npm install        # first time on a fresh copy
 npx wrangler deploy
 ```
 
+Or run `bash scripts/pawdeploy.sh` from anywhere: it pulls the latest code for the branch you have checked out (normally `main`), keeps your local storage id in `server/wrangler.toml`, and deploys. It stops without deploying if the pull fails or the storage id is still the placeholder. To get the short `pawdeploy` command, run this once from the project folder (in Git Bash on Windows; use `~/.zshrc` on a Mac):
+
+```sh
+echo "alias pawdeploy='bash \"$(pwd)/scripts/pawdeploy.sh\"'" >> ~/.bashrc && source ~/.bashrc
+```
+
 Secrets are added with `npx wrangler secret put …` and never committed.
 
 ## Releasing an update

@@ -232,7 +232,7 @@ State mapping (stored → shown → primary action), nothing rewritten:
 ## Deployment facts (verified)
 
 - Pushing or merging to `main` deploys the front end to GitHub Pages ("pages build and deployment" runs on every push to `main`). Other branches don't deploy.
-- The Worker deploys only when the user runs `pawdeploy` (wrangler deploy) on their computer.
+- The Worker deploys only when the user runs `pawdeploy` (wrangler deploy) on their computer. Since 2026-10-29 the script is in the repo as `scripts/pawdeploy.sh` (`.gitattributes` keeps `*.sh` at Unix line endings for Git Bash on Windows). It pulls the checked-out branch fast-forward only, keeps the local storage id, and stops without deploying if the pull fails, the id clashes with an update or is still the placeholder. It was tested in throwaway clones with `npm`/`npx` stubbed: placeholder → stop; update elsewhere → deploy with the id kept; `wrangler.toml` changed on another line → merged; the id line changed upstream → stop with a clean file and the local version in `git stash`.
 - Every push runs the Check (`.github/workflows/check.yml`): tests, link check, performance budget.
 - Phase A (`perf/phase-a`, `c20b8f2..0c35063`) was pushed to `main` at the start of Phase 0, before the user's "do not deploy automatically" instruction arrived. It is client-only.
 
