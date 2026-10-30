@@ -110,7 +110,7 @@ function drawPack() {
   const t = { kcal: (+k.kcal > 0 ? +k.kcal : labelKcal(k.p, k.c, k.f)) * k.servings, p: (+k.p || 0) * k.servings, c: (+k.c || 0) * k.servings, f: (+k.f || 0) * k.servings };
   const saved = (ms.data?.preparedMeals || []).slice(-6).reverse();
   open(`${head('📦 Packaged meal', NAME[meal])}
-    ${k.serving ? `<p class="ml-note">Read from the label · per serving <b>(${E(k.serving)})</b> — check the numbers.</p>` : `<button type="button" class="wide ghost" data-ml="photo:${meal}:label">📷 Snap the label</button>`}
+    ${k.serving ? `<p class="ml-note">Read from the label · per serving: <b>${E(k.serving)}</b> — check the numbers.</p>` : `<button type="button" class="wide ghost" data-ml="photo:${meal}:label">📷 Snap the label</button>`}
     ${saved.length && !k.serving ? `<p class="small muted">Yours: ${saved.map((x, i) => `<button type="button" class="linkish small" data-ml="packuse:${i}">${E(x.name)}</button>`).join(' · ')}</p>` : ''}
     <label class="ml-field small">Name <input data-mle="k:name" value="${E(k.name)}" maxlength="60" placeholder="e.g. Chicken burrito bowl"></label>
     <div class="ml-4">${[['p', 'Protein g'], ['c', 'Carbs g'], ['f', 'Fat g'], ['kcal', 'Calories']].map(([f, l]) => `<label class="small">${l}<input inputmode="decimal" data-mle="k:${f}" value="${k[f]}"></label>`).join('')}</div>
