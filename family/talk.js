@@ -14,7 +14,8 @@ import { isDayQuestion, checkSuggestions } from '../js/talkDay.js';
 let c = null;
 export function init(ctx) { c = ctx; }
 const tk = { tab: 'home', text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null };
-const DAYOK = () => `fam.talk.dayok.${c.who()}`;
+// v2: the facts now include your own food today (a new kind of data, so it's asked again).
+const DAYOK = () => `fam.talk.dayok2.${c.who()}`;
 const E = (s) => c.esc(s);
 const SEEN = 'fam.talk.seen';
 export const ICON = '<svg class="tk-ic" viewBox="0 0 32 32" aria-hidden="true"><path class="bub" d="M5 7.5A4.5 4.5 0 0 1 9.5 3h13A4.5 4.5 0 0 1 27 7.5v9a4.5 4.5 0 0 1-4.5 4.5H14l-6 5v-5h0A3 3 0 0 1 5 18z"/><rect class="mic" x="13.5" y="6.5" width="5" height="8" rx="2.5"/><path class="mic-s" d="M11 12a5 5 0 0 0 10 0M16 17v2"/></svg>';
@@ -82,7 +83,7 @@ function out() {
   if (tk.voice) return '';
   if (tk.busy) return '<p class="small muted">Reading…</p>';
   if (tk.error) return `<p class="small">${E(tk.error)}</p>`;
-  if (tk.consent) return `<div class="tk-card"><b>📅 Answer questions about your day?</b><small>To answer, Pawmily sends Claude today's and tomorrow's calendar from this app — times, titles, places and whose (names swapped for roles) — your free time, today's weather and your own WHOOP summary when it has them. Nothing is kept, and nothing changes unless you tap.</small><div class="tk-two"><button type="button" data-talk="dayok">Allow and ask</button><button type="button" class="ghost" data-talk="dayno">Not now</button></div></div>`;
+  if (tk.consent) return `<div class="tk-card"><b>📅 Answer questions about your day?</b><small>To answer, Pawmily sends Claude today's and tomorrow's calendar from this app — times, titles, places and whose (names swapped for roles) — your free time, the forecast for your area, and, when you have them, your own WHOOP numbers and your own food today (your meal plan, what you've logged and what's left). Never your weight or notes. Nothing is kept, and nothing changes unless you tap.</small><div class="tk-two"><button type="button" data-talk="dayok">Allow and ask</button><button type="button" class="ghost" data-talk="dayno">Not now</button></div></div>`;
   if (tk.cards) return tk.cards.map(cardHtml).join('') + (tk.cards.length > 1 && tk.cards.filter((x) => x.go && !x.done).length > 1 ? '<button type="button" class="wide" data-talk="all">Do all of these</button>' : '');
   if (tk.say) return `<div class="tk-card"><p class="small" style="margin:0">${E(tk.say)}</p></div>${examples()}`;
   return examples();
@@ -134,7 +135,8 @@ async function askDay(text, t) {
     const r = await c.api.post('/ai/talk/day', { text: t.text, today: ctx.today, now: ctx.now, context: JSON.stringify(ctx) });
     const all = toTokens(people.map((p) => p.name).join(', '), people).map;
     const back = (s) => fromTokens(s, all, people).replace(/\byou and ([A-Z][a-z]+)\b/g, 'you and $1');
-    tk.cards = [{ type: 'answer', text: back(r.answer || "I couldn't work that out.") },
+    const to = /\b(meals?|macros?|calories|protein|carbs|fat|eat|breakfast|lunch|dinner|snacks?|recovery|sleep|strain|whoop|hrv)\b/i.test(t.text) ? 'health' : 'calendar';
+    tk.cards = [{ type: 'answer', text: back(r.answer || "I couldn't work that out."), to },
       ...checkSuggestions(r.suggestions, ctx).map((x) => ({ type: 'suggest', s: { ...x, title: back(x.title), why: back(x.why) }, go: true }))];
   } catch (e) { tk.error = e.status === 429 ? "That's all the day questions for today." : e.message || "Pawmily couldn't answer that just now."; }
   tk.busy = false;
@@ -177,7 +179,7 @@ function cardHtml(x, i) {
     return `<div class="tk-card"><b>📚 ${E(b.title)}</b><small class="muted">${E([(b.authors || []).map((a) => a.name || a).join(', '), b.year].filter(Boolean).join(' · '))} → ${E(READ[x.state])}</small>
       ${p && !x.done ? `<label class="tk-rec"><input type="checkbox" data-talkrec="${i}" ${x.recBy ? 'checked' : ''}> Recommended by ${E(p.first)}</label>` : ''}${btn('Add to Read')}</div>`;
   }
-  if (x.type === 'answer') return `<div class="tk-card tk-answer">${E(x.text).replace(/\n/g, '<br>')}<button type="button" class="linkish small" data-talk="calopen">Open Calendar ›</button></div>`;
+  if (x.type === 'answer') return `<div class="tk-card tk-answer">${E(x.text).replace(/\n/g, '<br>')}${x.to === 'health' ? '<button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button>' : '<button type="button" class="linkish small" data-talk="calopen">Open Calendar ›</button>'}</div>`;
   if (x.type === 'suggest') { const d = new Date(`${x.s.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' }); return `<div class="tk-card"><b>🗓 ${E(x.s.title)} · ${E(d)} ${E(time12(x.s.start))}–${E(time12(x.s.end))}</b>${x.s.why ? `<small class="muted">${E(x.s.why)}</small>` : ''}${btn('Add to my calendar', true)}</div>`; }
   if (x.type === 'care') return `<div class="tk-card"><b>${E(x.care.icon)} ${E(x.care.label)}</b><small class="muted">Today · logged for you</small>${btn('Log it')}</div>`;
   if (x.type === 'pickcare') return `<div class="tk-card"><b>Which one?</b><small class="muted">I don't know "${E(x.chore)}" — pick it:</small><div class="tk-ex">${x.kinds.map((k) => `<button type="button" data-talkcare="${i}:${E(k.kind)}">${E(k.icon)} ${E(k.label)}</button>`).join('')}</div></div>`;
@@ -246,6 +248,7 @@ export async function onClick(t) {
   if (d.talk === 'dayok') { try { c.LS.set(DAYOK(), '1'); } catch { /* private mode */ } const q = tk.consent?.text || tk.text; tk.consent = null; return send(q); }
   if (d.talk === 'dayno') { tk.consent = null; tk.say = "OK — I won't look at your calendar. I can still add shows, movies and books, and log meals, workouts and chores."; return draw(); }
   if (d.talk === 'calopen') { c.closeSheet(); return c.show('calendar'); }
+  if (d.talk === 'healthopen') { c.closeSheet(); return c.show('health'); }
   if (d.talk === 'seen') { try { c.LS.set(SEEN, '1'); } catch { /* private mode */ } return draw(); }
   if (d.talk === 'readopen') { c.closeSheet(); return c.show('read'); }
   return null;

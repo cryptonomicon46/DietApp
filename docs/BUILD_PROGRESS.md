@@ -4,8 +4,35 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 🗣️ Talk to Pawmily — T2a follow-up: weather, food and WHOOP numbers in day questions (2026-10-30, `v2/talk-weather` from `main` `a56143f`)
+- **Why:** the owner's live tries. *"best time for a run and indoor climbing at Movement Santa Clara"* got no weather (the day facts only used Look's weather cache, so usually none); *"meal plan for the rest of the day and my sleep and recovery"* got "I don't have a meal plan" and a recovery band without numbers.
+- **Built:**
+  - `js/talkDay.js` `dayWeather`: the dog-walk forecast (`walkWeather`, Open-Meteo for the family's area, refetched after 30 min), every 2 h from 6 AM to 8 PM today (from about now) and tomorrow, plus sunrise and sunset.
+  - `foodFacts`: your own targets, eaten, left (kcal/protein/carbs/fat) and each meal logged or still planned, with foods (from `js/dayPlan.js` `dayEntry`/`planOf`/`logOf`/`snapshotOf`; never weight or notes; titles tokenized).
+  - WHOOP numbers (recovery %, HRV, resting HR, sleep performance %, hours and need, strain) from `recoveryContext`.
+  - `CONTEXT_MAX` trimming: tomorrow's weather goes first, then the last items of the fullest day.
+  - `isDayQuestion` also takes food/WHOOP questions (question form only; "Log lunch…" still logs).
+- **Instructions (`DAY_INSTRUCTIONS`):**
+  - Mention the weather at the suggested times and keep outdoor plans before sunset.
+  - Don't estimate travel times; leave room for the trip.
+  - Give WHOOP's numbers in one line in WHOOP's order (Sleep · Recovery · Strain).
+  - For food: list the rest of today's planned meals, then what's left.
+  - Answer what was asked first.
+- **Consent:** asked again (`fam.talk.dayok2`), because food is a new kind of data; the card now says so. The answer links to *Open Health ›* for food/WHOOP questions.
+- **Fix found while testing:** with *Don't listen when I open Talk* on, tapping 🎤 said "Listening isn't available here"; the 🎤 button now always listens (`listenNow(true)`).
+- **Tests:** `node --test tests/talkday.test.js` 9 pass; `npm test` 474 pass, 0 fail (weather, trimming, routing, food facts, WHOOP numbers, instructions).
+- **Browser check (390 px and 320 px):** local Pages, `wrangler dev` and a synthetic family, with Claude stubbed. Results:
+  - The consent card reads well.
+  - The context sent was 2.3 KB: 14 weather points, daylight, and the planned meals with foods.
+  - No names were sent.
+  - *Open Health ›* is shown.
+  - No errors.
+  - WHOOP wasn't exercised in the browser (the synthetic family has none); its numbers are covered by unit tests.
+- **Not done (needs a decision):** travel times (T3 places and travel, decision 6) and gym opening hours.
+- **State:** built; not merged, not deployed. The connector must be redeployed (the instructions changed) before or with merging.
+
 ### 🗣️ Talk to Pawmily — T2a "Ask about my day" (2026-10-30, after the owner tried T1 live: "I'm okay sending this information to Claude… I want the intelligence built into the app"; same branch)
-- **State: built and tested; not merged, not deployed.** It needs the connector redeployed (`/ai/talk/day`).
+- **State: merged (PR #10, `a56143f`) and deployed** (connector `59b38cb4…` by the owner from `v2/talk-t0`; Pages run 231 finished 18:08 UTC 2026-10-30 after ~4½ min in GitHub's queue). T1 merged earlier (PR #9, `cef5117`).
 - **Built:**
   - `js/talkDay.js`: `isDayQuestion`; `freeTime` (your own, both-of-you and family items block you, your partner's alone don't; today from now on; 7 AM–10 PM; ≥ 30 min); `dayContext` (items with roles, titles tokenized, free gaps, weather, WHOOP facts); `checkSuggestions` (kept only inside a free gap).
   - `server/talkAi.js` `answerDay` (structured `{answer, suggestions}`); gateway `talk.day`; route `/ai/talk/day`.
