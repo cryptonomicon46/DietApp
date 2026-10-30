@@ -19,21 +19,23 @@ globalThis.location = { hash: '', pathname: '/DietApp/family/', search: '' };
 globalThis.history = { replaceState: () => { location.hash = ''; } };
 
 // WHOOP, played: workouts and cycles by page, tokens that can expire or be removed.
-const whoop = { workouts: [], cycles: [], valid: new Set(['A1']), refreshOk: true, down: false, revoked: [], calls: [] };
+const whoop = { workouts: [], cycles: [], recovery: [], sleep: [], scope: null, dailyOk: true, valid: new Set(['A1']), refreshOk: true, down: false, revoked: [], calls: [] };
 const W = (id, day, kj = 1255.2) => ({ id, sport_name: 'functional-fitness', start: `${day}T15:00:00.000Z`, end: `${day}T16:00:00.000Z`, score_state: 'SCORED', score: { kilojoule: kj, strain: 9.1, average_heart_rate: 120 } });
 async function fakeWhoop(url, init = {}) {
   const u = new URL(url), auth = (init.headers?.Authorization || init.headers?.get?.('Authorization') || '').replace('Bearer ', '');
   whoop.calls.push(`${init.method || 'GET'} ${u.pathname}`);
   if (u.pathname === '/oauth/oauth2/token') {
     const p = new URLSearchParams(String(init.body));
-    if (p.get('grant_type') === 'authorization_code') return Response.json({ access_token: 'A1', refresh_token: 'R1', expires_in: 3600 });
+    const sc = whoop.scope ? { scope: whoop.scope } : {};
+    if (p.get('grant_type') === 'authorization_code') return Response.json({ access_token: 'A1', refresh_token: 'R1', expires_in: 3600, ...sc });
     if (!whoop.refreshOk) return Response.json({ error: 'invalid_grant', error_description: 'refresh token revoked' }, { status: 400 });
-    whoop.valid.add('A2'); return Response.json({ access_token: 'A2', refresh_token: 'R2', expires_in: 3600 });
+    whoop.valid.add('A2'); return Response.json({ access_token: 'A2', refresh_token: 'R2', expires_in: 3600, ...sc });
   }
   if (whoop.down) return Response.json({ message: 'unavailable' }, { status: 503 });
   if (u.pathname === '/developer/v2/user/access' && init.method === 'DELETE') { whoop.revoked.push(auth); whoop.valid.delete(auth); return new Response(null, { status: 204 }); }
   if (!whoop.valid.has(auth)) return Response.json({ message: 'unauthorized' }, { status: 401 });
-  const list = u.pathname.endsWith('/cycle') ? whoop.cycles : whoop.workouts;
+  if (/\/(recovery|activity\/sleep)$/.test(u.pathname) && !whoop.dailyOk) return Response.json({ message: 'forbidden' }, { status: 403 });
+  const list = u.pathname.endsWith('/cycle') ? whoop.cycles : u.pathname.endsWith('/recovery') ? whoop.recovery : u.pathname.endsWith('/activity/sleep') ? whoop.sleep : whoop.workouts;
   const at = +(u.searchParams.get('nextToken') || 0), page = list.slice(at, at + 2);
   return Response.json({ records: page, next_token: at + 2 < list.length ? String(at + 2) : null });
 }
@@ -48,7 +50,7 @@ globalThis.fetch = async (url, init = {}) => {
 };
 ls.set('fam.server', 'https://w.test'); ls.set('lp.g.owner', '"sandman"');
 
-const { devices, syncOwner, mergeSynced } = await import('../js/devices.js');
+const { devices, syncOwner, mergeSynced, hasDaily } = await import('../js/devices.js');
 const { exportProfile, profileStore } = await import('../js/storage.js');
 const { splitHealth } = await import('../js/healthParts.js');
 const me = profileStore('sandman');
@@ -67,7 +69,7 @@ async function connect({ say = 'yes', tamper = false } = {}) {
 test('connect: only the scopes it needs, the state checked, back to Health, the sign-in on this device only', async () => {
   const { auth, back, result } = await connect();
   assert.equal(auth.origin + auth.pathname, 'https://api.prod.whoop.com/oauth/oauth2/auth');
-  assert.equal(auth.searchParams.get('scope'), 'offline read:workout read:cycles');
+  assert.equal(auth.searchParams.get('scope'), 'offline read:workout read:cycles read:recovery read:sleep');
   assert.equal(auth.searchParams.get('client_id'), 'cid'); assert.equal(auth.searchParams.get('client_secret'), null);
   assert.equal(back.pathname, '/DietApp/family/', 'returns to the family app');
   assert.equal(back.search, '', 'tokens only in the fragment, never in a URL a server logs');
@@ -103,7 +105,7 @@ test('a sync: every page, each workout once, the day\'s total burn for Diet', as
   const r = await syncOwner(3);
   assert.equal(r.added, 3, 'w2 twice across pages is one workout; an unscored one waits');
   assert.deepEqual(me.get('workoutHistory').map((w) => w.id).sort(), ['whoop:w1', 'whoop:w2', 'whoop:w3']);
-  assert.deepEqual(me.get('workoutHistory')[0], { id: 'whoop:w1', name: 'functional-fitness', start: '2026-10-26T15:00:00.000Z', minutes: 60, kcal: 300, strain: 9.1 });
+  assert.deepEqual(me.get('workoutHistory')[0], { id: 'whoop:w1', name: 'functional-fitness', start: '2026-10-26T15:00:00.000Z', minutes: 60, kcal: 300, strain: 9.1, avgHr: 120 });
   const dayOf = (iso) => new Date(Date.parse(iso) + 12 * 3600e3).toLocaleDateString('en-CA');
   assert.equal(me.get('deviceTotal')[dayOf('2026-10-28T06:30:00.000Z')], 2000);
   assert.equal(me.get('deviceTotal')[dayOf('2026-10-27T06:30:00.000Z')], 2500);
@@ -186,4 +188,47 @@ test('the synced data follows Fitness sharing on the server: without permission,
   const got = await call(`${F}/members/${samId}/health/fitness`, mom);
   assert.equal(got.data.workoutHistory.length, 4);
   assert.ok(!JSON.stringify(got).match(/A1|A2|R1|R2|csecret/), 'no sign-in anywhere in what Mom gets');
+});
+
+test('Recovery and Sleep: only with WHOOP\'s permission, only when OurPawmily asks, kept private — and an older connection keeps syncing workouts', async () => {
+  // An older connection (made before Recovery and Sleep were asked for): no scope known.
+  whoop.scope = null; whoop.calls = [];
+  await connect();
+  assert.equal(hasDaily(devices.get().whoop), false);
+  assert.equal(devices.status('whoop').dailyMissing, true);
+  const r0 = await syncOwner(3, { daily: true });
+  assert.deepEqual(r0.errors, []);
+  assert.ok(!whoop.calls.some((c) => /recovery|sleep/.test(c)), 'not asked without permission');
+  assert.equal(me.get('whoopDaily'), undefined);
+  // Reconnected with the new scopes.
+  whoop.scope = 'offline read:workout read:cycles read:recovery read:sleep';
+  await connect();
+  assert.equal(hasDaily(devices.get().whoop), true);
+  assert.equal(devices.status('whoop').dailyMissing, undefined);
+  const wake = new Date(); wake.setHours(6, 30, 0, 0);
+  const today = wake.toLocaleDateString('en-CA'), tz = (() => { const m = -wake.getTimezoneOffset(); return `${m < 0 ? '-' : '+'}${String(Math.floor(Math.abs(m) / 60)).padStart(2, '0')}:${String(Math.abs(m) % 60).padStart(2, '0')}`; })();
+  whoop.sleep = [{ id: 'sl1', cycle_id: 77, start: new Date(wake - 8 * 3.6e6).toISOString(), end: wake.toISOString(), timezone_offset: tz, nap: false, score_state: 'SCORED', score: { stage_summary: { total_in_bed_time_milli: 8 * 3.6e6, total_light_sleep_time_milli: 4 * 3.6e6, total_slow_wave_sleep_time_milli: 1.5 * 3.6e6, total_rem_sleep_time_milli: 1.5 * 3.6e6 }, sleep_needed: { baseline_milli: 7.5 * 3.6e6 }, sleep_performance_percentage: 91 } }];
+  whoop.recovery = [{ cycle_id: 77, sleep_id: 'sl1', score_state: 'SCORED', score: { user_calibrating: false, recovery_score: 58, resting_heart_rate: 52, hrv_rmssd_milli: 70.2 } }];
+  whoop.calls = [];
+  await syncOwner(3); // the trackers' sync: workouts only
+  assert.ok(!whoop.calls.some((c) => /recovery|sleep/.test(c)));
+  assert.equal(me.get('whoopDaily'), undefined);
+  await syncOwner(3, { daily: true });
+  assert.ok(whoop.calls.includes('GET /developer/v2/recovery') && whoop.calls.includes('GET /developer/v2/activity/sleep'));
+  const daily = me.get('whoopDaily');
+  assert.equal(daily[today].whoop.recovery.score.recovery_score, 58);
+  assert.equal(daily[today].whoop.sleep.score.sleep_performance_percentage, 91);
+  // Private: in your own full copy only, never in a part anyone can be given.
+  const shared = exportProfile('sandman', { shared: true });
+  assert.ok(shared.whoopDaily, 'in your own account copy');
+  const parts = splitHealth(shared);
+  assert.ok(!JSON.stringify(parts).includes('recovery_score') && !JSON.stringify(parts).includes('sl1'));
+  // WHOOP stops allowing Recovery and Sleep: workouts keep coming, Health asks to reconnect.
+  whoop.dailyOk = false; whoop.workouts.push(W('w9', '2026-10-29'));
+  const r = await syncOwner(3, { daily: true });
+  assert.deepEqual(r.errors, []); assert.equal(r.added, 1);
+  assert.equal(devices.status('whoop').dailyMissing, true);
+  assert.equal(devices.status('whoop').needsReconnect, undefined, 'workouts still connected');
+  assert.equal(me.get('whoopDaily')[today].whoop.recovery.score.recovery_score, 58, 'what came in stays');
+  whoop.dailyOk = true;
 });

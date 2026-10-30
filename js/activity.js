@@ -200,6 +200,10 @@ export function fromWhoop(r) {
     kcal: r.score?.kilojoule ? Math.round(r.score.kilojoule / 4.184) : null,
     strain: r.score?.strain ?? null,
     avgHr: r.score?.average_heart_rate ?? null,
+    maxHr: r.score?.max_heart_rate ?? null,
+    // Minutes in each heart-rate zone, 0–5 (WHOOP's zone_durations).
+    zones: r.score?.zone_durations ? ['zero', 'one', 'two', 'three', 'four', 'five'].map((z) => Math.round((r.score.zone_durations[`zone_${z}_milli`] || 0) / 60000)) : null,
+    tz: r.timezone_offset || null,
   };
 }
 
