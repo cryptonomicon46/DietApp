@@ -15,7 +15,23 @@
 // Calories: matching only shows WHOOP's numbers on the logged workout. Diet counts the burn from
 // the device's own workouts and day totals (js/dayPlan.js); a logged workout never adds calories,
 // so a matched pair is counted once.
-import { localDate } from './whoopDay.js';
+
+// '+09:00' / '-05:00' / 'Z' → minutes east of UTC (null when missing or malformed).
+export function offsetMin(tz) {
+  if (tz === 'Z') return 0;
+  const m = /^([+-])(\d{2}):?(\d{2})$/.exec(String(tz || ''));
+  return m ? (m[1] === '-' ? -1 : 1) * (+m[2] * 60 + +m[3]) : null;
+}
+const pad = (n) => String(n).padStart(2, '0');
+// The calendar date of an instant where a device record says you were (WHOOP gives each record
+// its time-zone offset; without one, this phone's zone). js/whoopDay.js files its days by it too.
+export function localDate(iso, tz, shiftMs = 0) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const off = offsetMin(tz);
+  if (off == null) { const d = new Date(t + shiftMs); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+  return new Date(t + shiftMs + off * 60000).toISOString().slice(0, 10);
+}
 
 const MIN = 60000;
 export const deviceDay = (x) => localDate(x.start, x.tz);

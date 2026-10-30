@@ -20,26 +20,14 @@
 // change belongs to the morning you woke up. Today's entry is read for today and nothing else: if
 // it isn't there yet, it's "not scored yet" — never yesterday's.
 import { durationFor } from './workout.js';
+import { offsetMin, localDate } from './workoutMatch.js';
 
 export const MIN_DAYS = 14; // scored, non-calibrating days before "your usual" means anything
 export const WINDOW = 30; // the days your usual range is drawn from
 export const KEEP = 60; // days kept
 
-// '+09:00' / '-05:00' / 'Z' → minutes east of UTC (null when missing or malformed).
-export function offsetMin(tz) {
-  if (tz === 'Z') return 0;
-  const m = /^([+-])(\d{2}):?(\d{2})$/.exec(String(tz || ''));
-  return m ? (m[1] === '-' ? -1 : 1) * (+m[2] * 60 + +m[3]) : null;
-}
-const pad = (n) => String(n).padStart(2, '0');
-// The calendar date of an instant where the record says you were (else this phone's zone).
-export function localDate(iso, tz, shiftMs = 0) {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return null;
-  const off = offsetMin(tz);
-  if (off == null) { const d = new Date(t + shiftMs); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
-  return new Date(t + shiftMs + off * 60000).toISOString().slice(0, 10);
-}
+// The calendar date where the record says you were (js/workoutMatch.js, shared with workouts).
+export { offsetMin, localDate };
 export const sleepDay = (s) => (s?.end ? localDate(s.end, s.timezone_offset) : null);
 export const cycleDay = (c) => (c?.start ? localDate(c.start, c.timezone_offset, 12 * 3600e3) : null);
 export const addDays = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };

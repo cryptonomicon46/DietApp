@@ -26,8 +26,10 @@ to OurPawmily stops sending the old way, and 🛟 Recover can still read those c
 
 1. **Create the apps**
    - WHOOP: <https://developer-dashboard.whoop.com> → create app. Scopes:
-     `read:workout`, `read:cycles`, `offline` (the app asks for no more; `read:recovery` is no longer
-     needed and can be unticked).
+     `read:workout`, `read:cycles`, `read:recovery`, `read:sleep`, `offline` (the app asks for no
+     more; `read:profile` and `read:body_measurement` aren't used and can be unticked). Recovery and
+     Sleep were added in Health 2 Phase B: tick them before deploying it, then each phone that was
+     connected before reconnects once (💪 Health says so; workouts keep syncing meanwhile).
      Redirect URL: `https://<your-worker>.workers.dev/whoop/callback`
    - Strava (legacy, only for phones already connected): <https://www.strava.com/settings/api> → create app.
      Authorization Callback Domain: `<your-worker>.workers.dev`
@@ -53,7 +55,8 @@ to OurPawmily stops sending the old way, and 🛟 Recover can still read those c
    on every phone — no URL to paste. Routes: `/whoop/login?state=` (the phone's state; ending `.f`
    returns to `family/`), `/whoop/callback` (tokens back in the URL fragment with the state; a "no"
    on WHOOP's page comes back as an error), `/whoop/refresh` (401 when WHOOP refuses: reconnect),
-   `/whoop/workouts` and `/whoop/cycles` (one page of 25, `nextToken`), `/whoop/revoke` (POST →
+   `/whoop/workouts`, `/whoop/cycles`, `/whoop/recovery` and `/whoop/sleep` (one page of 25,
+   `nextToken`; token responses pass WHOOP's granted `scope` back to the phone), `/whoop/revoke` (POST →
    WHOOP `DELETE /v2/user/access`). The connector stores nothing for WHOOP. The STRAVA secrets only matter for phones that already
    connected Strava.
 
