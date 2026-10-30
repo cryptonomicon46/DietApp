@@ -277,3 +277,14 @@ test('duration: the middle of your recent finished times for the same workout, e
   assert.deepEqual(W.durationFor(w, [done(40), done(55), done(48), done(1), done(70, 'Legs')]), { minutes: 48, from: 'history' });
   assert.deepEqual(W.durationFor(normalize({ activity: { kind: 'Run', minutes: 30 } }), []), { minutes: 30, from: 'plan' });
 });
+
+test('undo a variant: the original plan back, with every set ticked since', () => {
+  const w = upper(), v = W.proposeVariant(w, 'lighter').workout;
+  let cur = logSet({ ...v, status: 'active', startedAt: 5 }, 0, 0, 0); cur = logSet(cur, 0, 0, 1);
+  const back = W.undoVariant(w, cur);
+  assert.deepEqual(back.blocks.map((b) => b.rounds), [3, 3, 4, 1]);
+  assert.deepEqual(back.blocks[0].items[0].sets.map((x) => x.done), [true, true, false]);
+  assert.equal(back.status, 'active'); assert.equal(back.startedAt, 5);
+  const sh = W.proposeVariant(w, 'shorter').workout;
+  assert.equal(W.undoVariant(w, sh).blocks.length, 4);
+});

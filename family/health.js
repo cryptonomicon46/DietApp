@@ -148,6 +148,38 @@ function foodRow(f, esc, hot) {
 // The Health screen. `ctx`: { esc, sharing (one line), today, hour, workout: { state: 'planned' |
 // 'active' | 'done' | 'none', html: (hot) => the Workout row } from family/fitness.js, devices
 // (HTML), reminder (true | false | null: the morning weigh-in reminder, null when unknown) }.
+// ⌚ WHOOP today (only when WHOOP is connected on this phone): Recovery, Sleep and Strain as WHOOP
+// gives them, one calm line (js/whoopDay.js recoveryContext), and — only when Recovery is lower
+// than your usual or the night was short, and there's a workout today — an offer to make it
+// lighter, previewed first. WHOOP informs; it never changes your plan by itself. Private to you.
+const BAND = { green: 'Green', yellow: 'Yellow', red: 'Red' };
+export function whoopHtml(w, esc) {
+  if (!w) return '';
+  const head = `<div class="hl-sec"><h2 class="hl-sech">WHOOP</h2>${w.dailyMissing ? '' : '<button type="button" class="linkish small" data-act="whoopdays">Last 7 days ›</button>'}</div>`;
+  if (w.dailyMissing) return `${head}<section class="card hl-whoop" aria-label="WHOOP"><p class="small">Reconnect WHOOP to see your Recovery and Sleep here. Your workouts keep syncing either way.</p><button type="button" class="ghost" data-act="devconnect">Reconnect WHOOP</button></section>`;
+  const r = w.recovery, sl = w.sleep;
+  const rec = r.state === 'scored' && r.score != null
+    ? `<b class="wh-big"><span class="wh-dot ${r.band}" aria-hidden="true"></span>${r.score}%</b><small>${BAND[r.band] || ''}${r.relative ? ` · ${r.relative === 'usual' ? 'your usual' : `${r.relative} than usual`}` : ''}</small>`
+    : `<b class="wh-big wh-none">—</b><small>${r.state === 'unscorable' ? 'Not scored' : 'Not scored yet'}</small>`;
+  const sleep = sl.hours != null ? `<b class="wh-big">${sl.hours} h</b><small>${sl.neededHours ? `of ${sl.neededHours} h needed` : sl.performance != null ? `${sl.performance}%` : ''}</small>` : `<b class="wh-big wh-none">—</b><small>${sl.state === 'none' ? 'No sleep yet' : 'Not scored yet'}</small>`;
+  const strain = w.strain.today != null ? `<b class="wh-big">${w.strain.today.toFixed(1)}</b><small>${w.strain.yesterday != null ? `yesterday ${w.strain.yesterday.toFixed(1)}` : 'so far today'}</small>` : `<b class="wh-big wh-none">—</b><small>${w.strain.yesterday != null ? `yesterday ${w.strain.yesterday.toFixed(1)}` : 'none yet'}</small>`;
+  const lt = w.lighter || {};
+  const lighter = lt.applied ? `<p class="small wh-applied">🪶 Today's workout is lighter · <button type="button" class="linkish small" data-fx="lighterundo">Undo</button></p>`
+    : w.lighterHint && lt.can ? '<button type="button" class="ghost wh-lighter" data-fx="lighter">🪶 Make today\'s workout lighter</button>' : '';
+  return `${head}<section class="card hl-whoop" aria-label="WHOOP today">
+    <div class="wh-tiles"><div class="wh-tile"><span class="wh-lab">Recovery</span>${rec}</div><div class="wh-tile"><span class="wh-lab">Sleep</span>${sleep}</div><div class="wh-tile"><span class="wh-lab">Strain</span>${strain}</div></div>
+    <p class="small wh-line">${esc(w.line)}</p>${lighter}</section>`;
+}
+// The last 7 days, WHOOP's numbers only, and your usual range once there's enough.
+export function whoopDaysHtml(days, range, esc) {
+  const day = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return `<div class="row between"><h2>⌚ WHOOP · last 7 days</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <table class="wh-days"><thead><tr><th scope="col">Day</th><th scope="col">Recovery</th><th scope="col">Sleep</th><th scope="col">Strain</th></tr></thead><tbody>
+    ${days.map((x) => `<tr><th scope="row">${esc(day(x.date))}</th><td>${x.recovery != null ? `<span class="wh-dot ${x.band}" aria-hidden="true"></span>${x.recovery}%` : `<span class="muted">${x.state === 'unscorable' ? 'not scored' : '—'}</span>`}</td><td>${x.sleepHours != null ? `${x.sleepHours} h` : '<span class="muted">—</span>'}</td><td>${x.strain != null ? x.strain.toFixed(1) : '<span class="muted">—</span>'}</td></tr>`).join('')}
+    </tbody></table>
+    <p class="small">${range.ready ? `Your usual Recovery: ${range.low}–${range.high}% (the middle half of your last 30 days).` : `Building your usual range — ${range.have} of ${range.need} scored days so far. Until then, WHOOP's own colour is all that's shown.`}</p>
+    <p class="tiny muted">🔒 Your Recovery and Sleep are yours alone — not shared with your family, whatever your Fitness sharing. Numbers are WHOOP's; "usual" and the sleep gap are worked out on your phone.</p>`;
+}
 export function healthHtml(data, ctx) {
   const { esc } = ctx, d = dietSummary(data, ctx.today);
   const pr = d.progress, hour = ctx.hour ?? 9;
@@ -173,6 +205,7 @@ export function healthHtml(data, ctx) {
   return `<div class="hl-head"><h1 class="hl-h">💪 Health</h1><button type="button" class="linkish small" data-act="healthshare">${esc(ctx.sharing)} ›</button></div>
     <div class="hl-sec"><h2 class="hl-sech">Today</h2>${up.text ? `<span class="hl-next" role="status">Next: ${esc(up.text)}</span>` : ''}</div>
     <section class="card hl-anchors" aria-label="Today">${weight}${foodRow(food, esc, up.anchor === 'food')}${wk.html(up.anchor === 'workout')}</section>
+    ${whoopHtml(ctx.whoop, esc)}
     <div class="hl-sec"><h2 class="hl-sech">Nutrition &amp; plan</h2></div>
     <section class="card hl-card" aria-label="Nutrition and plan">${nutrition}</section>
     <div class="hl-sec"><h2 class="hl-sech">More</h2></div>

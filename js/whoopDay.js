@@ -44,6 +44,10 @@ export const sleepDay = (s) => (s?.end ? localDate(s.end, s.timezone_offset) : n
 export const cycleDay = (c) => (c?.start ? localDate(c.start, c.timezone_offset, 12 * 3600e3) : null);
 export const addDays = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
+// Did WHOOP grant Recovery and Sleep to this sign-in? (Unknown on an older connection until it
+// next renews: then it says.)
+export const hasDaily = (t) => !!t && /\bread:recovery\b/.test(t.scope || '') && /\bread:sleep\b/.test(t.scope || '');
+
 // ---------- WHOOP's records → the facts kept (WHOOP's names; only what the app uses) ----------
 const nums = (o, keys) => Object.fromEntries(keys.filter((k) => Number.isFinite(o?.[k])).map((k) => [k, o[k]]));
 const STATES = ['SCORED', 'PENDING_SCORE', 'UNSCORABLE'];

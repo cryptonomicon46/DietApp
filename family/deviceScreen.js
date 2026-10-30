@@ -23,7 +23,7 @@ export async function sheet() {
   const w = devices.get().whoop, st = devices.status('whoop'), strava = devices.get().strava;
   const can = !!cfg.devices?.whoop, E = c.esc;
   c.openSheet(`<div class="row between"><h2>⌚ Devices</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
-    <div class="dev-row"><div class="grow"><b>WHOOP</b><p class="small muted" id="devWhoop" role="status">${E(w ? st.text : can ? 'Brings in your workouts and each day\'s calories burned.' : cfg.offline ? 'Couldn\'t check — you seem to be offline.' : 'Not available yet on this app.')}</p></div></div>
+    <div class="dev-row"><div class="grow"><b>WHOOP</b><p class="small muted" id="devWhoop" role="status">${E(w ? st.text : can ? 'Brings in your workouts, each day\'s calories burned and strain, and your Recovery and Sleep (those stay private to you).' : cfg.offline ? 'Couldn\'t check — you seem to be offline.' : 'Not available yet on this app.')}</p></div></div>
     <div class="row wrap">${w ? `${st.needsReconnect ? '<button type="button" data-act="devconnect">Reconnect</button>' : '<button type="button" data-act="devsync">Sync now</button>'}<button type="button" class="ghost" data-act="devoff">Disconnect</button>` : can ? '<button type="button" data-act="devconnect">Connect WHOOP</button>' : ''}</div>
     ${strava ? '<div class="dev-row"><div class="grow"><b>Strava</b><p class="small muted">Connected before; no longer offered. You can disconnect it.</p></div><button type="button" class="ghost small" data-act="devoffstrava">Disconnect</button></div>' : ''}
     <div class="dev-row"><div class="grow"><b>Garmin</b><p class="small muted">Not available. Garmin only opens its data to approved companies, so OurPawmily can't connect to it directly.</p></div></div>
@@ -38,10 +38,19 @@ async function syncHere(days = 3) {
   if (!account.active()) await account.connect().catch(() => null);
   if (account.active()) await account.pull().catch(() => null);
   const { syncOwner } = await D();
-  const r = await syncOwner(days);
+  const r = await syncOwner(days, { daily: true });
   if (account.active()) await account.push().catch(() => {});
   c.clearShared();
   return r;
+}
+// Opening Health: the same, quietly. → whether anything new came in.
+export async function quietSync() {
+  const id = await owner();
+  if (!id) return false;
+  const now = () => ['whoopDaily', 'workoutHistory'].map((k) => localStorage.getItem(`lp.p.${id}.${k}`)).join('|');
+  const before = now();
+  await syncHere(3);
+  return now() !== before;
 }
 const said = (out, fresh) => (out.errors.length ? out.errors[0].message : out.added ? `⌚ ${out.added} ${fresh ? '' : 'new '}workout${out.added === 1 ? '' : 's'}${fresh ? ' brought in' : ''}` : fresh ? '⌚ Connected — no workouts in the last two weeks' : '⌚ Up to date');
 

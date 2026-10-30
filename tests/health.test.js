@@ -118,3 +118,35 @@ test('nudges are calm and pick the most useful thing', async () => {
   assert.match(nudgeFor(over, { hour: 20 }), /one day doesn't move the trend/);
   for (const h of [7, 13, 20]) assert.ok(!/fail|bad|should have|missed/i.test(nudgeFor(base, { hour: h })));
 });
+
+test('⌚ WHOOP on Health: nothing without WHOOP, reconnect asked once, "Not scored yet", lighter only when it fits', async () => {
+  const { whoopHtml, healthHtml, whoopDaysHtml } = await import('../family/health.js');
+  const D = await import('../js/whoopDay.js');
+  const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  // No WHOOP: no section at all.
+  const plain = healthHtml({}, { esc, today: '2026-10-30', hour: 9, sharing: 'Private' });
+  assert.ok(!plain.includes('WHOOP') && !plain.includes('hl-whoop'));
+  assert.equal(whoopHtml(null, esc), '');
+  // Connected before Recovery and Sleep were asked for.
+  assert.match(whoopHtml({ dailyMissing: true }, esc), /Reconnect WHOOP to see your Recovery and Sleep/);
+  // Today not scored yet: no number borrowed from yesterday.
+  const today = '2026-10-30';
+  const daily = { '2026-10-29': { whoop: { recovery: D.recoveryFacts({ cycle_id: 1, sleep_id: 's', score_state: 'SCORED', score: { recovery_score: 88 } }) } } };
+  let h = whoopHtml({ ...D.recoveryContext(daily, today), lighter: { can: true } }, esc);
+  assert.match(h, /Not scored yet/); assert.ok(!h.includes('88%'));
+  assert.ok(!h.includes('data-fx="lighter"'), 'no offer without a reason');
+  // Lower than usual, with a workout today → the offer (a preview, not a change).
+  const ctx = { recovery: { state: 'scored', score: 30, band: 'red', relative: 'lower' }, sleep: { state: 'scored', hours: 6.2, neededHours: 7.9 }, strain: { today: 3.1, yesterday: 15.2 }, line: 'Recovery is lower than your usual.', lighterHint: true };
+  h = whoopHtml({ ...ctx, lighter: { can: true } }, esc);
+  assert.match(h, /30%/); assert.match(h, /lower than usual/); assert.match(h, /6.2 h/); assert.match(h, /of 7.9 h needed/); assert.match(h, /yesterday 15.2/);
+  assert.match(h, /data-fx="lighter"/);
+  assert.ok(!whoopHtml({ ...ctx, lighter: { can: false } }, esc).includes('data-fx="lighter"'), 'no workout today, no offer');
+  h = whoopHtml({ ...ctx, lighter: { can: true, applied: 'lighter' } }, esc);
+  assert.match(h, /data-fx="lighterundo"/); assert.ok(!h.includes('data-fx="lighter"'));
+  // Placed below Today, above Nutrition & plan.
+  const page = healthHtml({}, { esc, today, hour: 9, sharing: 'Private', whoop: { ...ctx, lighter: {} } });
+  assert.ok(page.indexOf('aria-label="Today"') < page.indexOf('hl-whoop') && page.indexOf('hl-whoop') < page.indexOf('Nutrition &amp; plan'));
+  // 7 days: WHOOP's values, "Building your usual range" until there's enough.
+  const s = whoopDaysHtml(D.lastDays(daily, today), D.usualRange(daily, today), esc);
+  assert.match(s, /88%/); assert.match(s, /Building your usual range — 1 of 14/); assert.match(s, /not shared with your family/);
+});

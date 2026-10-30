@@ -397,14 +397,40 @@ function show(view, extra) {
 // 💪 Health: your own Diet and Fitness (family/health.js, loaded when you open it).
 async function healthView() {
   $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div><div class="skeleton card"></div>`;
-  const [H, rec, F, nudges] = await Promise.all([import(`./health.js?v=${VERSION}`), memberData().catch(() => null), fit().catch(() => null), loadNudges().catch(() => null)]);
+  const wh = whoopHere();
+  const [H, rec, F, nudges, WD] = await Promise.all([import(`./health.js?v=${VERSION}`), memberData().catch(() => null), fit().catch(() => null), loadNudges().catch(() => null), wh ? import(`../js/whoopDay.js?v=${VERSION}`).catch(() => null) : null]);
   if (state.view !== 'health') return;
   const data = await openData(rec);
   if (data.locked) { $('#view').innerHTML = `${demoBanner()}<section class="card"><b>🔒 Locked on this device</b><p class="small muted">This device needs the family key to show your Health. Me › 🔐 Encryption.</p></section>`; return; }
   if (F) F.setLegacy(data, LIFT_NAMES);
   health.data = data;
   if (mealMod) mealMod.then((M) => M.setData(data)).catch(() => {});
-  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), hour: new Date().getHours(), workout: F ? F.healthRow(esc) : undefined, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), devices: devicesLine() })}</div>`;
+  const whoop = wh && WD ? { ...WD.recoveryContext(wh.daily, isoLocal()), dailyMissing: !WD.hasDaily(wh.t), lighter: F ? F.lighterState() : null } : null;
+  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), hour: new Date().getHours(), workout: F ? F.healthRow(esc) : undefined, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), devices: devicesLine(), whoop })}</div>`;
+  if (wh) whoopAutoSync(wh.t);
+}
+// ⌚ WHOOP on this phone (its sign-in and what it brought in live only here), read without loading
+// anything: null when WHOOP isn't connected, so Health shows nothing extra and asks for nothing.
+function whoopHere() {
+  try {
+    const owner = JSON.parse(localStorage.getItem('lp.g.owner'));
+    const t = owner && JSON.parse(localStorage.getItem(`lp.p.${owner}.devices`))?.whoop;
+    return t ? { t, daily: JSON.parse(localStorage.getItem(`lp.p.${owner}.whoopDaily`)) || {} } : null;
+  } catch { return null; }
+}
+// Opening Health brings in what's new from WHOOP (at most every 20 minutes), then shows it.
+let whoopSyncing = false;
+function whoopAutoSync(t) {
+  if (whoopSyncing || t.problem === 'reconnect' || Date.now() - (t.lastSync || 0) < 20 * 60000) return;
+  whoopSyncing = true;
+  devices().then((m) => m.quietSync()).then((changed) => { if (changed && state.view === 'health') healthView(); }).catch(() => {}).finally(() => { whoopSyncing = false; });
+}
+// The last 7 days of WHOOP (Health › WHOOP › Last 7 days).
+async function whoopDays() {
+  const wh = whoopHere();
+  if (!wh) return;
+  const [H, WD] = await Promise.all([import(`./health.js?v=${VERSION}`), import(`../js/whoopDay.js?v=${VERSION}`)]);
+  openSheet(H.whoopDaysHtml(WD.lastDays(wh.daily, isoLocal()), WD.usualRange(wh.daily, isoLocal()), esc));
 }
 // 🍽 Logging food from Health (family/meals.js, loaded the first time you tap a meal action):
 // it changes your trackers the way a weigh-in does (editMine), with js/dayPlan.js — the same
@@ -443,8 +469,7 @@ let devUi = null;
 const devices = () => (devUi ||= import(`./deviceScreen.js?v=${VERSION}`).then((m) => { m.init({ esc, openSheet, toast, api, VERSION, state, clearShared: () => shared.clear(), refresh: () => state.view === 'health' && healthView(), $ }); return m; }).catch((e) => { devUi = null; throw e; }));
 // The Health card's line, without loading anything: what this device knows about its connection.
 function devicesLine() {
-  let w = null;
-  try { const owner = JSON.parse(localStorage.getItem('lp.g.owner')); w = owner && JSON.parse(localStorage.getItem(`lp.p.${owner}.devices`))?.whoop; } catch { /* none */ }
+  const w = whoopHere()?.t;
   const line = !w ? 'No device connected' : w.problem === 'reconnect' ? '⚠️ WHOOP needs reconnecting' : `WHOOP connected${w.lastSync ? ` · synced ${new Date(w.lastSync).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : ''}`;
   return `<button type="button" class="hl-line2" data-act="devices"><span>⌚ Devices <small class="muted">· ${esc(line)}</small></span><span class="go">›</span></button>`;
 }
@@ -458,6 +483,7 @@ function fit() {
       api, fid: state.fid, me: fam().me, esc, toast, openSheet, closeSheet, iso: () => isoLocal(), confirm: (q) => confirm(q),
       lock: async (v) => (fk() ? { enc: await seal(fk(), v) } : v), unlock: async (v) => (isSealed(v) ? tryOpen(fk(), v, null) : v),
       el: () => (state.view === 'fitness' ? $('#view') : null), show: () => (state.view === 'fitness' ? F.render() : show('fitness')), editMine,
+      refresh: () => (state.view === 'health' ? healthView() : null), whoopOn: () => !!whoopHere(),
       // null when the settings couldn't be read (offline): asked again next time, not remembered as off.
       aiReady: async () => { const cfg = await api.liveConfig(); return cfg.missing || cfg.offline ? null : !!cfg.ai; },
     });
@@ -4469,6 +4495,7 @@ document.addEventListener('click', (e) => {
     case 'grocall': home.all = true; return renderGroc();
     case 'grocclear': return act(() => grocAct(() => api.post(`/families/${state.fid}/groceries/clear`)));
     case 'devices': return act(async () => (await devices()).sheet());
+    case 'whoopdays': return act(whoopDays);
     case 'devconnect': case 'devsync': case 'devoff': case 'devoffstrava': return act(async () => (await devices()).onAct(d.act, t));
     case 'weighremind': return act(async () => {
       if (callNudge.all?.weighin) setNudges(await api.del(`/account/nudges/weighin?today=${isoLocal()}`));

@@ -4,7 +4,8 @@
 //   Workout { v: 1, id, title, date, status: 'planned' | 'active' | 'done',
 //             source: 'manual' | 'text' | 'photo' | 'repeat' | 'lift' | 'device' | 'program',
 //             notes, blocks: [Block], activity?: { kind, minutes, distance, distUnit, kcal },
-//             program?: { block, day, week } (made from the lifting program), startedAt?, doneAt? }
+//             program?: { block, day, week } (made from the lifting program), startedAt?, doneAt?,
+//             match?: { id } | { none: true } (your pick of its WHOOP workout, js/workoutMatch.js) }
 //   Block   { id, kind: 'straight' | 'superset' | 'circuit', rounds, rest?, note?, items: [Item],
 //             uncertain?: ['rounds' | 'kind'] }
 //   Item    { id, name, note?, perSide?, ref? (the program's exercise id), sets: [Set] (one per round),
@@ -78,6 +79,9 @@ export function normalize(raw = {}) {
   const pg = raw.program;
   if (pg && typeof pg === 'object' && /^[A-Z]$/.test(pg.day || '')) w.program = { block: Math.max(1, int(pg.block, 999) || 1), day: pg.day, week: Math.min(6, Math.max(1, int(pg.week, 6) || 1)) };
   for (const k of ['startedAt', 'doneAt']) if (Number.isFinite(raw[k])) w[k] = raw[k];
+  const mt = raw.match;
+  if (mt?.none === true) w.match = { none: true };
+  else if (typeof mt?.id === 'string' && mt.id) w.match = { id: text(mt.id, 60) };
   return w;
 }
 
@@ -279,6 +283,14 @@ export function proposeVariant(w, intent) {
   }
   if (!changes.length) return null;
   return { intent, workout: c, changes, minutes: { from: estMinutes(w), to: estMinutes(c) } };
+}
+// Undo a variant: the original plan back, keeping every set ticked since (a variant only drops
+// sets and trailing parts, so each one sits at the same place in the original).
+export function undoVariant(original, current) {
+  const back = clone(original);
+  current.blocks.forEach((b, bi) => b.items.forEach((it, ii) => it.sets.forEach((x, si) => { const to = back.blocks[bi]?.items[ii]; if (to?.sets[si] && x.done) to.sets[si] = clone(x); })));
+  for (const k of ['status', 'startedAt']) if (current[k] != null) back[k] = current[k];
+  return normalize(back);
 }
 // "Bench Press 3 sets → 2", "Rows + Push-ups 4 rounds → 3", "Core finisher left out".
 export function changeText(ch) { return ch.what === 'part' ? `${ch.name} left out` : `${ch.name} ${ch.from} ${ch.what} → ${ch.to}`; }

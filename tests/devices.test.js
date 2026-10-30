@@ -188,6 +188,13 @@ test('the synced data follows Fitness sharing on the server: without permission,
   const got = await call(`${F}/members/${samId}/health/fitness`, mom);
   assert.equal(got.data.workoutHistory.length, 4);
   assert.ok(!JSON.stringify(got).match(/A1|A2|R1|R2|csecret/), 'no sign-in anywhere in what Mom gets');
+  // WHOOP Recovery and Sleep live only in Sam's full copy: even with Diet and Fitness both shared,
+  // Pat gets the parts, never that copy.
+  await call(`${F}/members/${samId}`, sam, 'PATCH', { share: { diet: [ids.pat], fitness: [ids.pat] } });
+  await call(`${F}/members/${samId}/data`, sam, 'PUT', { data: { ...exportProfile('sandman', { shared: true }), whoopDaily: { '2026-10-30': { whoop: { recovery: { score_state: 'SCORED', score: { recovery_score: 31 } } } } } } });
+  assert.equal((await call(`${F}/members/${samId}/data`, pat)).status, 403);
+  assert.equal((await call(`${F}/members/${samId}/data`, sam)).data.whoopDaily['2026-10-30'].whoop.recovery.score.recovery_score, 31);
+  assert.ok(!JSON.stringify(await call(`${F}/members/${samId}/health/fitness`, pat)).includes('recovery_score'));
 });
 
 test('Recovery and Sleep: only with WHOOP\'s permission, only when OurPawmily asks, kept private — and an older connection keeps syncing workouts', async () => {

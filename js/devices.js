@@ -1,7 +1,7 @@
 import { fromWhoop, fromStrava } from './activity.js';
 import { profileStore, ownerId } from './storage.js';
 import { serverUrl } from './server.js';
-import { dailyFrom, mergeDaily, cycleDay } from './whoopDay.js';
+import { dailyFrom, mergeDaily, cycleDay, hasDaily } from './whoopDay.js';
 
 // 🔌 Devices: talks to the connector (server/worker.js), which only passes WHOOP's sign-in and data
 // through. The sign-in (tokens) is kept on this device, under the phone owner's own trackers — never
@@ -98,8 +98,7 @@ export const devices = {
     return { workouts: out, totals, errors, ...(days ? { daily: days } : {}) };
   },
 };
-// Did WHOOP grant Recovery and Sleep? (Unknown on an older connection until its next renewal.)
-export const hasDaily = (t) => !!t && /\bread:recovery\b/.test(t.scope || '') && /\bread:sleep\b/.test(t.scope || '');
+export { hasDaily };
 const mark = (provider, patch) => { const d = load(); if (!d[provider]) return; d[provider] = { ...d[provider], ...patch }; if (!d[provider].problem) delete d[provider].problem; save(d); };
 
 // A fresh access token (refreshed a minute before it runs out).

@@ -6,8 +6,9 @@
 // also kept on this phone (locked the same way) until it's finished, so leaving or reloading
 // never loses a set.
 import * as W from '../js/workout.js';
+import { matchAll, deviceFacts, candidatesFor, waitingForDevice } from '../js/workoutMatch.js';
 
-const fx = { c: null, today: null, templates: [], bumps: {}, rest: null, restTick: null, log: [], todayAt: 0, logAt: 0, loaded: false, draft: null, draftFrom: null, legacy: [], others: [], lift: null, timer: null, view: 'main', said: null, unread: [], reading: false, ai: null, pic: null };
+const fx = { c: null, today: null, original: null, variant: null, device: [], templates: [], bumps: {}, rest: null, restTick: null, log: [], todayAt: 0, logAt: 0, loaded: false, draft: null, draftFrom: null, legacy: [], others: [], lift: null, timer: null, view: 'main', said: null, unread: [], reading: false, ai: null, pic: null };
 export const state = fx;
 import * as PG from '../js/programWorkout.js';
 
@@ -21,6 +22,8 @@ export async function load(c) {
   fx.today = td?.today ? W.normalize(td.today) : null;
   fx.templates = (td?.templates || []).map(W.normalize).slice(0, 30);
   fx.bumps = td?.bumps && typeof td.bumps === 'object' ? td.bumps : {};
+  // 🪶 A lighter (or shorter) version applied today keeps the original, for Undo.
+  fx.original = td?.original?.workout && fx.today && td.original.workout.id === fx.today.id ? { intent: td.original.intent, workout: W.normalize(td.original.workout) } : null;
   fx.log = (ld?.log || []).map(W.normalize);
   fx.todayAt = t?.savedAt || 0; fx.logAt = l?.savedAt || 0; fx.loaded = true;
   await recover();
@@ -53,12 +56,17 @@ export function setLegacy(data, names = {}) {
   fx.legacy = all.filter(W.isStrength);
   fx.others = all.filter((w) => !W.isStrength(w));
   fx.lift = data?.lift || null;
+  // Device workouts with their WHOOP numbers, to match with the workouts you logged (js/workoutMatch.js).
+  fx.device = (data?.workoutHistory || []).filter((x) => x?.id && x.start).slice(-200);
 }
 Object.defineProperties(fx, {
   programOn: { get: () => PG.programOn(fx.lift) },
   programNext: { get: () => (PG.programOn(fx.lift) ? PG.programNext(fx.lift, fx.log) : null) },
 });
-const allDone = () => [...fx.log, ...fx.legacy.filter((x) => !fx.log.some((y) => y.id === x.id))].filter((w) => w.status === 'done');
+// A device workout matched to one you logged shows on that one (its WHOOP numbers), not twice.
+const devId = (x) => `dev${String(x.id || x.start).replace(/[^a-z0-9]/gi, '')}`.slice(0, 16);
+const matched = () => matchAll(fx.log, fx.device);
+const allDone = () => { const hide = new Set([...matched().values()].map((m) => devId(m.device))); return [...fx.log, ...fx.legacy.filter((x) => !fx.log.some((y) => y.id === x.id) && !hide.has(x.id))].filter((w) => w.status === 'done'); };
 const history = () => allDone().filter(W.isStrength).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.doneAt || 0) - (a.doneAt || 0));
 const open = () => (fx.today && fx.today.status !== 'done' ? fx.today : null);
 
@@ -70,7 +78,8 @@ async function put(which, payload, base) {
 export function saveToday(now = false) {
   clearTimeout(fx.timer);
   const go = async () => {
-    try { const r = await put('today', { today: fx.today, templates: fx.templates, bumps: fx.bumps }, fx.todayAt); fx.todayAt = r.savedAt; }
+    if (fx.original && fx.original.workout.id !== fx.today?.id) fx.original = null;
+    try { const r = await put('today', { today: fx.today, templates: fx.templates, bumps: fx.bumps, ...(fx.original ? { original: fx.original } : {}) }, fx.todayAt); fx.todayAt = r.savedAt; }
     catch (e) {
       if (e.status !== 409) return fx.c.toast(`Couldn't save — ${e.message}`);
       // Saved on another phone meanwhile: theirs wins for the plan; keep going from it.
@@ -405,7 +414,7 @@ async function startWith(w, source, { start = false } = {}) {
   const fresh = W.normalize({ ...applyBumps(w), date: fx.c.iso(), status: 'planned', source: source || w.source });
   if (W.untitled(fresh.title)) fresh.title = W.suggestName(fresh);
   if (open() && W.summary(fx.today).done && !fx.c.confirm(`Replace "${fx.today.title}"? What you've logged in it is kept only if you complete it first.`)) return;
-  fx.today = fresh; await saveToday(true);
+  fx.today = fresh; fx.original = null; await saveToday(true);
   if (start) { begin(); render(); return fx.c.toast(`▶ ${fresh.title} — tick each set as you go`); }
   fx.view = 'today'; render(); fx.c.toast(`🏋️ ${fresh.title} is Today's Workout`);
 }
@@ -432,6 +441,7 @@ export function summarySheet(id) {
   fx.c.openSheet(`<div class="row between"><h2>✅ ${E(w.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     <p class="small muted">${E(w.date || '')}${w.doneAt ? ` · ${new Date(w.doneAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}</p>
     <div class="fx-stats"><div><b>${s.minutes ? `${s.minutes} min` : '—'}</b><span>time</span></div><div><b>${s.done} sets</b><span>${s.exercises} exercise${s.exercises === 1 ? '' : 's'}</span></div><div><b>${s.volume ? s.volume.toLocaleString() : '—'}</b><span>lb lifted</span></div></div>
+    ${deviceHtml(w)}
     ${bests.map((x) => `<p class="ml-note">🏆 New best: ${E(x.name)} ${x.top} ${E(x.unit)}</p>`).join('')}
     ${fx.sug.map((p, i) => `<div class="ml-note fx-sug"><span>You did every planned set of ${E(p.name)} at ${p.from} ${E(p.unit)}. <b>Try ${p.to} ${E(p.unit)} next time?</b></span><div class="fx-two"><button type="button" data-fx="bump:${i}">Accept</button><button type="button" class="ghost" data-fx="nobump:${i}">Keep ${p.from}</button></div></div>`).join('')}
     <p class="small">${lines.join('<br>')}</p>
@@ -446,6 +456,66 @@ export function begin() {
 export function edit(w, from = 'new') { fx.draft = W.normalize(w); fx.draftFrom = from; fx.view = 'edit'; render(); }
 const blank = (n) => ({ items: Array.from({ length: n }, () => ({ name: '', sets: [{}, {}, {}] })), rounds: 3 });
 // One finished workout: what you planned and did, its name (yours to change), do it again, save it.
+// ⌚ The WHOOP workout that goes with one you logged: its strain, calories, heart rate and zones
+// (shown here only — Diet counts the calories once, from WHOOP), or "Waiting for WHOOP…".
+const ZONES = ['Zone 0', 'Zone 1', 'Zone 2', 'Zone 3', 'Zone 4', 'Zone 5'];
+function zonesBar(z) {
+  const total = (z || []).reduce((a, b) => a + b, 0);
+  if (!total) return '';
+  return `<div class="fx-zones" role="img" aria-label="Heart-rate zones: ${z.map((m, i) => `${ZONES[i]} ${m} min`).join(', ')}">${z.map((m, i) => (m ? `<i class="z${i}" style="flex:${m}"></i>` : '')).join('')}</div>`;
+}
+function deviceHtml(w) {
+  if (!fx.log.some((x) => x.id === w.id)) return '';
+  const f = deviceFacts(matched().get(w.id)), on = !!fx.c.whoopOn?.();
+  if (f) {
+    const nums = [f.strain != null ? `strain ${f.strain.toFixed(1)}` : '', f.kcal ? `${f.kcal} kcal` : '', f.avgHr ? `avg ${f.avgHr}${f.maxHr ? ` / max ${f.maxHr}` : ''} bpm` : ''].filter(Boolean).join(' · ');
+    const how = f.method === 'manual' ? 'You matched this' : f.method === 'overlap' ? 'Matched by time' : 'Matched to the nearest WHOOP workout that day';
+    return `<div class="fx-dev"><p class="small"><b>⌚ ${/^whoop:/.test(f.id) ? 'WHOOP' : 'Device'}</b>${nums ? ` · ${E(nums)}` : ''}</p>${zonesBar(f.zones)}<p class="tiny muted">${how} · counted once in your Diet · <button type="button" class="linkish tiny" data-fx="wpicker:${E(w.id)}">Not this one?</button></p></div>`;
+  }
+  if (waitingForDevice(w, null, { connected: on, today: fx.c.iso() })) return '<p class="small muted fx-dev">⌚ Waiting for WHOOP… it adds a workout once it has scored it.</p>';
+  if (candidatesFor(w, fx.device).length) return `<p class="tiny muted fx-dev">⌚ <button type="button" class="linkish tiny" data-fx="wpicker:${E(w.id)}">Match a WHOOP workout</button></p>`;
+  return '';
+}
+const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+function pickerSheet(id) {
+  const w = fx.log.find((x) => x.id === id);
+  if (!w) return;
+  const cur = deviceFacts(matched().get(id))?.id, list = candidatesFor(w, fx.device);
+  fx.c.openSheet(`<div class="row between"><h2>⌚ Which WHOOP workout?</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <p class="small muted">${E(w.title)} · ${E(w.date)}. Only workouts from the same day.</p>
+    ${list.map((x) => `<button type="button" class="card fx-hist${x.id === cur ? ' on' : ''}" data-fx="wpick:${E(w.id)}:${E(x.id)}" aria-pressed="${x.id === cur}"><span class="grow"><b>${E(x.name || 'Workout')} · ${E(clock(x.start))}</b><small class="muted">${x.minutes ?? '?'} min${x.strain != null ? ` · strain ${x.strain.toFixed(1)}` : ''}${x.kcal ? ` · ${x.kcal} kcal` : ''}</small></span>${x.id === cur ? '<span aria-hidden="true">✓</span>' : ''}</button>`).join('') || '<p class="small muted">No WHOOP workouts that day.</p>'}
+    <div class="fx-two"><button type="button" class="ghost" data-fx="wnone:${E(w.id)}">None of these</button><button type="button" data-fx="summary:${E(w.id)}">Back</button></div>`);
+}
+async function setMatch(id, match) {
+  const w = fx.log.find((x) => x.id === id);
+  if (!w) return;
+  await appendLog(W.normalize({ ...w, match }));
+  summarySheet(id);
+  fx.c.toast(match.none ? 'Unlinked — no WHOOP workout for this one' : '⌚ Matched');
+}
+// 🪶 Make it lighter (from Health's WHOOP section): a preview first, today only, Undo after.
+export function lighterState() {
+  const t = open();
+  return { can: !!(t && W.proposeVariant(t, 'lighter')), applied: t && fx.original?.workout.id === t.id ? fx.original.intent : null };
+}
+function lighterSheet() {
+  const t = open(), v = t && W.proposeVariant(t, 'lighter');
+  if (!v) return fx.c.toast('Nothing left to make lighter');
+  fx.variant = v;
+  fx.c.openSheet(`<div class="row between"><h2>🪶 Make today's workout lighter?</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <p class="small"><b>${E(t.title)}</b></p>
+    <ul class="fx-changes">${v.changes.map((ch) => `<li>${E(W.changeText(ch))}</li>`).join('')}</ul>
+    ${v.minutes.from && v.minutes.to ? `<p class="small muted">About ${v.minutes.from} → ${v.minutes.to} min. Same weights and reps.</p>` : ''}
+    <p class="tiny muted">Today only — your saved workouts don't change, and you can undo it.</p>
+    <div class="fx-two"><button type="button" data-fx="lighterok">Apply</button><button type="button" class="ghost" data-act="close">Keep original</button></div>`);
+  return null;
+}
+function undoLighter() {
+  const t = open(), o = fx.original;
+  if (!t || !o || o.workout.id !== t.id) return;
+  fx.today = W.undoVariant(o.workout, t); fx.original = null; saveToday(true);
+  fx.c.toast('Back to the original workout'); fx.c.refresh?.(); render();
+}
 function histSheet(id) {
   const w = history().find((x) => x.id === id);
   if (!w) return;
@@ -453,6 +523,7 @@ function histSheet(id) {
   const lines = w.blocks.flatMap((b) => b.items.map((it) => `<p class="small"><b>${E(it.name || '?')}</b>${it.perSide ? ' <small class="muted">each side</small>' : ''} ${it.sets.map((x) => (x.done ? `${E(didText(x))}${changed(x) ? ` <small class="muted">(plan ${E(planText(x))})</small>` : ''}` : `<s class="muted" title="Not done">${E(planText(x)) || '—'}</s>`)).join(' · ')}</p>`));
   fx.c.openSheet(`<div class="row between"><h2>${E(w.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     <p class="small muted">${E(w.date || '')}${s.minutes ? ` · ${s.minutes} min` : ''}${s.volume ? ` · ${s.volume.toLocaleString()} lb lifted` : ''}${w.source === 'device' ? ' · from your device' : w.source === 'lift' || w.program ? ' · lifting program' : ''}</p>
+    ${deviceHtml(w)}
     ${lines.join('') || (w.activity ? `<p class="small">${E(w.activity.kind)}${w.activity.minutes ? ` · ${w.activity.minutes} min` : ''}${w.activity.kcal ? ` · ${w.activity.kcal} kcal` : ''}</p>` : '')}
     <div class="row fx-rename"><label class="grow"><span class="visually-hidden">Name</span><input id="fxRename" value="${E(w.title)}" maxlength="80" aria-label="Workout name"></label><button type="button" class="ghost" data-fx="rename:${E(w.id)}">Rename</button></div>
     ${w.blocks.length ? `<div class="row"><button type="button" class="grow" data-fx="repeat:${E(w.id)}">🔁 Do it again today</button><button type="button" class="ghost" data-fx="savetpl:${E(w.id)}">Save it</button></div>` : ''}`);
@@ -546,6 +617,21 @@ export async function onClick(t) {
       return c.toast(`✓ ${k} sets logged as planned`, () => { setToday(prev); render(); });
     }
     case 'summary': return summarySheet(r.join(':'));
+    case 'wpicker': return pickerSheet(r[0]);
+    case 'wpick': return setMatch(r[0], { id: r.slice(1).join(':') });
+    case 'wnone': return setMatch(r[0], { none: true });
+    case 'lighter': return lighterSheet();
+    case 'lighterok': {
+      const v = fx.variant, t = open();
+      fx.variant = null; c.closeSheet();
+      if (!v || !t || v.workout.id !== t.id) return null;
+      fx.original = { intent: v.intent, workout: t };
+      fx.today = W.normalize({ ...v.workout, status: t.status, startedAt: t.startedAt });
+      await saveToday(true);
+      c.toast('🪶 Lighter for today', () => undoLighter());
+      c.refresh?.(); return render();
+    }
+    case 'lighterundo': return undoLighter();
     case 'bump': {
       const p = fx.sug?.[n[0]];
       if (!p) return null;
