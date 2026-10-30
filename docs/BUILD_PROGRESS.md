@@ -16,6 +16,16 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 - **Browser check** (390 px; 320 px in dark mode; synthetic family with three adults):
   - Together had 8 in Coming up; the first person had 8 (all theirs); the second had 0.
   - Chips wrap at 320 px with no overflow; no errors.
+### 📅 Talk — any day you ask about, not just today and tomorrow (2026-10-30, `v2/talk-days` from `main`)
+- **Owner's live try:** "What's on the calendar for Sunday and Monday" got "I don't have anything for Sunday or Monday… only covers today and tomorrow", although those days had events.
+- **Cause:** `dayContext` always sent exactly today and tomorrow. All events are already on the phone (`loadCal` loads them all), so any day could be sent.
+- **Fix:**
+  - `js/talkDay.js` `daysAsked` reads which days are meant: weekday names ("Sunday and Monday", "next Friday"), "this weekend", "this week", "next week", "in N days", "the next N days", "Nov 3", "11/12", "the 5th".
+  - Otherwise it's today and tomorrow, as before. At most 8 days, within 30 days.
+  - "sat"/"sun" are words, not days.
+  - Claude is told the facts cover only the listed days, and that weather may cover only some of them.
+  - Day consent is asked again (`fam.talk.dayok4`), because any asked day can now be sent.
+- **Tests:** `tests/talkday.test.js`: the owner's two questions, plus weekend, next week, next Friday, dates, past dates, word false-positives and the cap.
 
 ### 🗣️ Talk — traffic and weather questions always reach the day facts (2026-10-30, `v2/talk-routing` from `main` `7f9c94a`)
 - **Owner's live try:** "I like to run later in the afternoon and go rock climb at movement Santa Clara how's the traffic and the weather" got "I can't check traffic or weather".

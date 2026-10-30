@@ -480,7 +480,8 @@ function talk() {
         await loadCal({ golden: false });
         const today = isoLocal(), now = new Date(), D = await import(`../js/talkDay.js?v=${VERSION}`);
         const days = [];
-        for (const d of [today, shiftLocal(today, 1)]) days.push({ date: d, items: (await dayEntries(d)).map((x) => ({ time: x.time || '', end: x.end || '', allDay: !!x.allDay, title: String(x.title || '').replace(/<[^>]+>/g, ''), place: x.place || '', who: x.who, kind: x.cls === 'plan' ? 'plan' : /^(Drop off|Pick up)/.test(x.title || '') ? 'dog appointment' : 'event' })) });
+        // The days the question is about (today and tomorrow unless it names others; up to 8).
+        for (const d of D.daysAsked(asked, today)) days.push({ date: d, items: (await dayEntries(d)).map((x) => ({ time: x.time || '', end: x.end || '', allDay: !!x.allDay, title: String(x.title || '').replace(/<[^>]+>/g, ''), place: x.place || '', who: x.who, kind: x.cls === 'plan' ? 'plan' : /^(Drop off|Pick up)/.test(x.title || '') ? 'dog appointment' : 'event' })) });
         // The family's forecast (the one Home fetches for dog walks; fetched now if it's old).
         let weather = null, sun = null;
         try { const wx = await walkWeather(); ({ hours: weather, sun } = D.dayWeather(wx.hourly, { dates: days.map((d) => d.date), now, daily: wx.daily })); } catch { /* no weather just now */ }
