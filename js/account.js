@@ -87,6 +87,9 @@ export const account = {
     const mine = exportProfile(a.profile, { shared: true });
     const sig = `${a.fid}:${a.me}:${hashOf(JSON.stringify(mine))}`;
     if (sig === global.get('account.sentSig', '')) { await this.pushParts(a, mine).catch(() => {}); await this.pushDogs(a).catch(() => {}); return; }
+    // WHOOP Recovery and Sleep ride only in your own full copy: the parts go up first, so the
+    // connector already knows to keep that copy to you alone (healthSplit) before it holds them.
+    if (mine.whoopDaily) await this.pushParts(a, mine).catch(() => {});
     const r = await call('PUT', `/families/${a.fid}/members/${a.me}/data`, { data: await lockData(a, mine) });
     if (r.status !== 200) throw new Error(r.data.error || `account upload failed (${r.status})`);
     global.set('account.sentSig', sig);

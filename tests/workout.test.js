@@ -222,3 +222,69 @@ test('progression: only when every planned set was done at the planned weight an
   assert.deepEqual(W.progression(mk('Bench press', [[10, 135], [10, 135]], { asPlanned: true })), [], 'ticked as planned: no evidence');
   assert.deepEqual(W.progression(mk('Push-ups', [[15, null]])), []);
 });
+
+// 🪶 Health 2 Phase B: a today-only variant, previewed before anything changes.
+const upper = () => normalize({ id: 'u1', title: 'Upper Body', date: '2026-10-30', blocks: [
+  { items: [{ name: 'Bench Press', sets: [{ reps: 8, weight: 135 }, { reps: 8, weight: 135 }, { reps: 8, weight: 135 }] }] },
+  { items: [{ name: 'Rows', sets: [{ reps: 10, weight: 60 }, { reps: 10, weight: 60 }, { reps: 10, weight: 60 }] }] },
+  { kind: 'superset', rounds: 4, items: [{ name: 'Curls', sets: [{ reps: 12 }] }, { name: 'Dips', sets: [{ reps: 10, bw: true }] }] },
+  { items: [{ name: 'Plank', sets: [{ time: 45 }] }] },
+] });
+
+test('lighter: a third fewer sets (at least one fewer, never below one), weights kept, original untouched', () => {
+  const w = upper(), before = JSON.stringify(w);
+  const v = W.proposeVariant(w, 'lighter');
+  assert.equal(JSON.stringify(w), before, 'the original is never changed');
+  assert.deepEqual(v.changes.map(W.changeText), ['Bench Press 3 sets → 2', 'Rows 3 sets → 2', 'Curls + Dips 4 rounds → 3']);
+  assert.deepEqual(v.workout.blocks.map((b) => b.rounds), [2, 2, 3, 1]);
+  assert.ok(v.workout.blocks.every((b) => b.items.every((it) => it.sets.length === b.rounds)));
+  assert.equal(v.workout.blocks[0].items[0].sets[1].weight, 135);
+  assert.equal(v.workout.id, w.id, 'still today\'s workout');
+  assert.ok(v.minutes.to < v.minutes.from);
+  assert.equal(W.proposeVariant(normalize(v.workout), 'lighter').workout.blocks[0].rounds, 1);
+});
+
+test('lighter never removes a ticked set; nothing to change → null; unknown intent or a finished workout → null', () => {
+  let w = upper();
+  w = logSet(w, 0, 0, 0); w = logSet(w, 0, 0, 1); w = logSet(w, 0, 0, 2);
+  w = logSet(w, 1, 0, 0); w = logSet(w, 1, 0, 1);
+  const v = W.proposeVariant(w, 'lighter');
+  assert.deepEqual(v.workout.blocks.map((b) => b.rounds), [3, 2, 3, 1]);
+  assert.ok(!v.changes.some((c) => c.name === 'Bench Press'));
+  assert.equal(W.proposeVariant(normalize({ blocks: [{ items: [{ name: 'Plank', sets: [{ time: 60 }] }] }] }), 'lighter'), null);
+  assert.equal(W.proposeVariant(upper(), 'express'), null);
+  assert.equal(W.proposeVariant(complete(upper()), 'lighter'), null);
+  const run = W.proposeVariant(normalize({ activity: { kind: 'Run', minutes: 45 } }), 'lighter');
+  assert.equal(W.changeText(run.changes[0]), 'Run 45 minutes → 30');
+});
+
+test('shorter: leaves out the last unstarted parts until it takes about two thirds of the time', () => {
+  const w = upper(), v = W.proposeVariant(w, 'shorter');
+  assert.ok(v.workout.blocks.length < w.blocks.length && v.workout.blocks.length >= 1);
+  assert.ok(v.minutes.to <= Math.ceil(v.minutes.from * (2 / 3)) + 5);
+  assert.ok(v.changes.every((c) => c.what === 'part'));
+  assert.match(W.changeText(v.changes.at(-1)), /^Plank left out$/);
+  let started = upper(); started = logSet(started, 3, 0, 0);
+  assert.equal(W.proposeVariant(started, 'shorter'), null, 'a part you started stays');
+});
+
+test('duration: the middle of your recent finished times for the same workout, else the estimate', () => {
+  const w = upper(), at = (m) => ({ startedAt: 1e12, doneAt: 1e12 + m * 60000 });
+  const done = (m, title = 'Upper body') => ({ ...complete(normalize({ title })), ...at(m), status: 'done' });
+  assert.equal(W.durationFor(w, []).from, 'estimate');
+  assert.equal(W.durationFor(w, []).minutes, W.estMinutes(w));
+  assert.equal(W.durationFor(w, [done(40)]).from, 'estimate', 'one time is not enough');
+  assert.deepEqual(W.durationFor(w, [done(40), done(55), done(48), done(1), done(70, 'Legs')]), { minutes: 48, from: 'history' });
+  assert.deepEqual(W.durationFor(normalize({ activity: { kind: 'Run', minutes: 30 } }), []), { minutes: 30, from: 'plan' });
+});
+
+test('undo a variant: the original plan back, with every set ticked since', () => {
+  const w = upper(), v = W.proposeVariant(w, 'lighter').workout;
+  let cur = logSet({ ...v, status: 'active', startedAt: 5 }, 0, 0, 0); cur = logSet(cur, 0, 0, 1);
+  const back = W.undoVariant(w, cur);
+  assert.deepEqual(back.blocks.map((b) => b.rounds), [3, 3, 4, 1]);
+  assert.deepEqual(back.blocks[0].items[0].sets.map((x) => x.done), [true, true, false]);
+  assert.equal(back.status, 'active'); assert.equal(back.startedAt, 5);
+  const sh = W.proposeVariant(w, 'shorter').workout;
+  assert.equal(W.undoVariant(w, sh).blocks.length, 4);
+});

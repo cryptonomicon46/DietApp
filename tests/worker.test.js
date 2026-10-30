@@ -86,3 +86,31 @@ test('linked calendars: fetched for a known household from calendar hosts only, 
     assert.equal((await ics({ code, url: link })).status, 422);
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('WHOOP Recovery and Sleep (Health 2 Phase B): one page at a time, straight through, nothing stored; the granted scope goes back to the phone', async () => {
+  const seen = [], real = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const u = new URL(String(url));
+    seen.push({ path: u.pathname, q: Object.fromEntries(u.searchParams), auth: init.headers?.Authorization });
+    if (u.pathname === '/oauth/oauth2/token') return Response.json({ access_token: 'A', refresh_token: 'R', expires_in: 3600, scope: 'offline read:workout read:cycles read:recovery read:sleep' });
+    return Response.json({ records: [{ id: 'x', score_state: 'SCORED' }], next_token: 'n2' });
+  };
+  try {
+    const store = kv(), e = { ...env, HOUSEHOLD: store, WHOOP_CLIENT_ID: 'cid', WHOOP_CLIENT_SECRET: 's' };
+    const go = (p, init) => worker.fetch(new Request(`https://w.test${p}`, init), e);
+    const login = await go('/whoop/login?state=abcdefgh12345678');
+    assert.match(new URL(login.headers.get('Location')).searchParams.get('scope'), /^offline read:workout read:cycles read:recovery read:sleep$/);
+    for (const [route, whoopPath] of [['/whoop/recovery', '/developer/v2/recovery'], ['/whoop/sleep', '/developer/v2/activity/sleep']]) {
+      const r = await go(`${route}?start=2026-10-01T00:00:00.000Z&nextToken=abc&limit=999&extra=1`, { headers: { Authorization: 'Bearer T1' } });
+      assert.equal(r.status, 200);
+      assert.equal((await r.json()).next_token, 'n2');
+      const last = seen.at(-1);
+      assert.equal(last.path, whoopPath);
+      assert.deepEqual(last.q, { start: '2026-10-01T00:00:00.000Z', limit: '25', nextToken: 'abc' }, 'only start, a page of 25 and the next token');
+      assert.equal(last.auth, 'Bearer T1');
+    }
+    const ref = await go('/whoop/refresh', { method: 'POST', body: JSON.stringify({ refresh_token: 'R' }) });
+    assert.equal((await ref.json()).scope, 'offline read:workout read:cycles read:recovery read:sleep');
+    assert.deepEqual((await store.list({ prefix: '' })).keys, [], 'the connector keeps nothing');
+  } finally { globalThis.fetch = real; }
+});

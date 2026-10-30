@@ -210,6 +210,20 @@ Confirmed: "Same-Day Delivery powered by Instacart" (sameday.costco.com and .ca)
 
 Casual / non-work wardrobe bulk onboarding, seasonal Closet rotation, packing lists from the calendar, and per-person cryptographic isolation of the Closet (today every grown-up holds the family key; the connector's checks keep Closets apart — see the security project below).
 
+## 🗣️ Talk to Pawmily — whole-life command layer (design only)
+
+**NOT AUTHORIZED.** The architecture review is `docs/TALK_TO_PAWMILY.md` (2026-10-30). Do not build voice, calendar planning, route/traffic intelligence, day-plan orchestration, external place/routing providers or background coaching without explicit authorization.
+
+- **Model:** Understand → Plan → Capture → Coordinate, across Home, Calendar, Health/Diet, Fitness, Dogs, chores, family requests, Threads, Dates, Watch, Read, Ideas, Look and reminders. It is not built around Health.
+- **Ownership:**
+  - No subsystem owns the orchestration, and the assistant is not a database. Each domain stays authoritative and exposes typed, validated actions and read-only context adapters.
+  - WHOOP supplies context (`dayContextForPlanning`, Health 2 Phase B) and never controls the training plan.
+  - Fitness owns workout variants (`W.proposeVariant`).
+  - Calendar owns time.
+  - Us plans are the shared proposal.
+- **Proposals:** reuse what exists. Us "Feeling like" plans for anything shared, Home requests for asking the household, preview → Apply → Undo for self-only changes. No new stored proposal type. Anything that affects another person is proposed first, never written to their calendar silently.
+- **External facts:** places, hours, routing, showtimes and events come from providers with a traceable id. The LLM combines them and never invents them.
+
 ## Separate future security project
 
 Per-person/per-area cryptographic isolation for Diet/Fitness needs its own design and audit before commercial/external-family launch. It is not authorized here and must not be bundled into Read/Discover work or the currently frozen key system.

@@ -63,6 +63,7 @@ export const sync = {
     if (!this.household()) return;
     // Nothing changed since the last upload: no write (the free plan allows 1,000 a day).
     const data = exportProfile(ownerId(), { shared: true });
+    delete data.whoopDaily; // WHOOP Recovery and Sleep are yours alone: never in the household copy
     const text = JSON.stringify(data);
     let h = 2166136261; for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
     const sig = `${s.code}:${ownerId()}:${(h >>> 0).toString(36)}${text.length.toString(36)}`;

@@ -4,7 +4,8 @@
 //   Workout { v: 1, id, title, date, status: 'planned' | 'active' | 'done',
 //             source: 'manual' | 'text' | 'photo' | 'repeat' | 'lift' | 'device' | 'program',
 //             notes, blocks: [Block], activity?: { kind, minutes, distance, distUnit, kcal },
-//             program?: { block, day, week } (made from the lifting program), startedAt?, doneAt? }
+//             program?: { block, day, week } (made from the lifting program), startedAt?, doneAt?,
+//             match?: { id } | { none: true } (your pick of its WHOOP workout, js/workoutMatch.js) }
 //   Block   { id, kind: 'straight' | 'superset' | 'circuit', rounds, rest?, note?, items: [Item],
 //             uncertain?: ['rounds' | 'kind'] }
 //   Item    { id, name, note?, perSide?, ref? (the program's exercise id), sets: [Set] (one per round),
@@ -78,6 +79,9 @@ export function normalize(raw = {}) {
   const pg = raw.program;
   if (pg && typeof pg === 'object' && /^[A-Z]$/.test(pg.day || '')) w.program = { block: Math.max(1, int(pg.block, 999) || 1), day: pg.day, week: Math.min(6, Math.max(1, int(pg.week, 6) || 1)) };
   for (const k of ['startedAt', 'doneAt']) if (Number.isFinite(raw[k])) w[k] = raw[k];
+  const mt = raw.match;
+  if (mt?.none === true) w.match = { none: true };
+  else if (typeof mt?.id === 'string' && mt.id) w.match = { id: text(mt.id, 60) };
   return w;
 }
 
@@ -233,6 +237,63 @@ export function estMinutes(w) {
   });
   return sec ? Math.max(5, Math.round(sec / 300) * 5) : null;
 }
+// How long this workout usually takes you: the middle of your last few finished times for a
+// workout with the same name (started and finished in the app, 5 min to 4 h), else the estimate.
+export function durationFor(w, history = []) {
+  const took = history.filter((x) => x.status === 'done' && x.id !== w.id && same(x.title, w.title) && x.startedAt && x.doneAt)
+    .map((x) => Math.round((x.doneAt - x.startedAt) / 60000)).filter((m) => m >= 5 && m <= 240).slice(0, 5).sort((a, b) => a - b);
+  if (took.length >= 2) return { minutes: took[Math.floor(took.length / 2)], from: 'history' };
+  const m = w.activity?.minutes ?? estMinutes(w);
+  return m ? { minutes: m, from: w.activity?.minutes ? 'plan' : 'estimate' } : null;
+}
+
+// 🪶 A today-only version of a workout, for you to look at before anything changes. Nothing here
+// saves: the caller shows `changes` as a preview, and only Apply puts `workout` in Today's
+// Workout (saved workouts and templates are never touched; the caller keeps the original for Undo).
+//   lighter — about a third fewer sets of each exercise (at least one fewer, never below one);
+//             weights and reps stay as planned. A timed activity gets about a third fewer minutes.
+//   shorter — the same sets, but the last parts you haven't started are left out until it takes
+//             about two thirds of the time (the first part always stays).
+// Sets you've already ticked are never removed. Returns null when there's nothing to change.
+// (Room for more intents — an express version, fit to N minutes — without changing callers.)
+export const INTENTS = { lighter: 'lighter', shorter: 'shorter' };
+export function proposeVariant(w, intent) {
+  if (!INTENTS[intent] || !w || w.status === 'done') return null;
+  const c = clone(w), changes = [];
+  const doneRounds = (b) => Math.max(0, ...b.items.map((it) => it.sets.reduce((n, s, i) => (s.done ? i + 1 : n), 0)));
+  const label = (b) => b.items.map((it) => it.name).filter(Boolean).join(' + ') || 'Exercise';
+  if (intent === 'lighter') {
+    c.blocks.forEach((b) => {
+      const to = Math.max(1, doneRounds(b), b.rounds - Math.max(1, Math.floor(b.rounds / 3)));
+      if (to >= b.rounds) return;
+      changes.push({ name: label(b), what: b.items.length > 1 ? 'rounds' : 'sets', from: b.rounds, to });
+      for (const it of b.items) it.sets.length = to;
+      b.rounds = to;
+    });
+    const a = c.activity;
+    if (a?.minutes >= 15 && !c.blocks.length) { const to = Math.round((a.minutes * 2) / 3 / 5) * 5; changes.push({ name: a.kind, what: 'minutes', from: a.minutes, to }); a.minutes = to; }
+  } else {
+    const goal = (estMinutes(w) || 0) * (2 / 3);
+    for (let i = c.blocks.length - 1; i > 0 && estMinutes(c) > goal; i--) {
+      const b = c.blocks[i];
+      if (doneRounds(b)) break;
+      changes.unshift({ name: label(b), what: 'part', from: b.rounds, to: 0 });
+      c.blocks.splice(i, 1);
+    }
+  }
+  if (!changes.length) return null;
+  return { intent, workout: c, changes, minutes: { from: estMinutes(w), to: estMinutes(c) } };
+}
+// Undo a variant: the original plan back, keeping every set ticked since (a variant only drops
+// sets and trailing parts, so each one sits at the same place in the original).
+export function undoVariant(original, current) {
+  const back = clone(original);
+  current.blocks.forEach((b, bi) => b.items.forEach((it, ii) => it.sets.forEach((x, si) => { const to = back.blocks[bi]?.items[ii]; if (to?.sets[si] && x.done) to.sets[si] = clone(x); })));
+  for (const k of ['status', 'startedAt']) if (current[k] != null) back[k] = current[k];
+  return normalize(back);
+}
+// "Bench Press 3 sets → 2", "Rows + Push-ups 4 rounds → 3", "Core finisher left out".
+export function changeText(ch) { return ch.what === 'part' ? `${ch.name} left out` : `${ch.name} ${ch.from} ${ch.what} → ${ch.to}`; }
 
 // ---------- names ----------
 // Words that place an exercise: upper body, lower body, core, or cardio-ish conditioning.

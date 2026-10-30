@@ -25,10 +25,12 @@ const WHOOP = {
   auth: 'https://api.prod.whoop.com/oauth/oauth2/auth',
   token: 'https://api.prod.whoop.com/oauth/oauth2/token',
   api: 'https://api.prod.whoop.com/developer',
-  // Only what feeds the app: workouts (Fitness) and each day's total burn (Diet). Not recovery,
-  // sleep or body measurements.
-  scope: 'offline read:workout read:cycles',
+  // Only what feeds the app: workouts (Fitness), each day's total burn and strain (cycles), and
+  // Recovery and Sleep (Health 2 Phase B — kept private on the phone). Not profile or body
+  // measurements.
+  scope: 'offline read:workout read:cycles read:recovery read:sleep',
 };
+const WHOOP_PATHS = { '/whoop/workouts': 'activity/workout', '/whoop/cycles': 'cycle', '/whoop/recovery': 'recovery', '/whoop/sleep': 'activity/sleep' };
 const STRAVA = {
   auth: 'https://www.strava.com/oauth/authorize',
   token: 'https://www.strava.com/oauth/token',
@@ -226,13 +228,16 @@ export default {
               client_id: env.WHOOP_CLIENT_ID, client_secret: env.WHOOP_CLIENT_SECRET, scope: 'offline',
             }));
           } catch (e) { return json({ error: e.message, reconnect: !e.unavailable }, e.unavailable ? 502 : 401); }
-        // One page (25) of workouts or of days (cycles) since `start`; the phone follows nextToken.
+        // One page (25) of workouts, days (cycles), recoveries or sleeps since `start`; the phone
+        // follows nextToken. Passed straight through: nothing is kept here.
         case '/whoop/workouts':
-        case '/whoop/cycles': {
+        case '/whoop/cycles':
+        case '/whoop/recovery':
+        case '/whoop/sleep': {
           const q = new URLSearchParams({ start: url.searchParams.get('start') || '', limit: '25' });
           const next = url.searchParams.get('nextToken');
           if (next) q.set('nextToken', next.slice(0, 500));
-          const res = await fetch(`${WHOOP.api}/v2/${url.pathname === '/whoop/cycles' ? 'cycle' : 'activity/workout'}?${q}`, { headers: { Authorization: req.headers.get('Authorization') || '' } });
+          const res = await fetch(`${WHOOP.api}/v2/${WHOOP_PATHS[url.pathname]}?${q}`, { headers: { Authorization: req.headers.get('Authorization') || '' } });
           return json(await res.json().catch(() => ({})), res.status);
         }
         // Disconnect: ask WHOOP to drop this app's access too (the phone forgets the tokens either way).
@@ -289,6 +294,9 @@ async function tokenRequest(endpoint, params) {
     access_token: data.access_token,
     refresh_token: data.refresh_token,
     expires_at: data.expires_at ? data.expires_at * 1000 : Date.now() + (data.expires_in || 3600) * 1000,
+    // What was granted (WHOOP says it with every token), so the phone knows when a connection
+    // made before Recovery and Sleep were asked for needs reconnecting.
+    ...(typeof data.scope === 'string' ? { scope: data.scope.slice(0, 300) } : {}),
   };
 }
 
