@@ -37,6 +37,7 @@ import { drawPoster, planCsvRows, drawReportPoster } from './poster.js';
 import { RANGES, PHASE_NAMES, buildReport, reportText, reportCsvRows, weeklyRows, rangeTitle, combosText, combosCsvRows } from './share.js';
 import { programReview } from './review.js';
 import { planProgress, STATUS } from './planProgress.js';
+import { baseTargetsOf, trainingOf, burnedOf, dayEntry, snapshotOf } from './dayPlan.js';
 import { planFacts, factsText } from './planCoach.js';
 
 // ---------- storage ----------
@@ -85,17 +86,9 @@ function currentWeight() {
   return last ? last.weight : state.profile.weight;
 }
 
-function baseTargets() {
-  const t = dailyTargets(state.profile, currentWeight(), state.adjust);
-  const a = state.macroAdjust;
-  const p = Math.max(t.p + a.p, 60), f = Math.max(t.f + a.f, 25);
-  let c = Math.max(t.c + a.c, 30);
-  // Check-in changes never push calories below the safe minimum (1500 men / 1200 women).
-  const floor = state.profile.sex === 'male' ? 1500 : 1200;
-  const kcalWith = (cc) => t.kcal + (p - t.p) * 4 + (f - t.f) * 9 + (cc - t.c) * 4;
-  if (kcalWith(c) < floor) c += Math.ceil((floor - kcalWith(c)) / 4);
-  return { ...t, p, f, c, kcal: Math.round(kcalWith(c)), atFloor: kcalWith(c) <= floor + 20 };
-}
+// The day's numbers come from js/dayPlan.js (Health works them out the same way).
+const dataNow = () => ({ profile: state.profile, weights: state.weights, adjust: state.adjust, macroAdjust: state.macroAdjust, workouts: state.workouts, activities: state.activities, whoopTotal: state.whoopTotal, deviceTotal: store.get('deviceTotal', {}), eaten: state.eaten });
+const baseTargets = () => baseTargetsOf(dataNow());
 
 const firstName = () => (state.profile?.name || '').trim().split(/\s+/)[0];
 
@@ -122,29 +115,9 @@ function consumed() {
   return t;
 }
 
-// Calories burned today: your WHOOP total if you typed it, otherwise resting + daily
-// life + the full net burn of each activity (the plan only eats back 75% of it).
-function burnedToday() {
-  const today = isoDate();
-  const typed = state.whoopTotal[today];
-  if (typed) return { kcal: typed, source: 'WHOOP (you entered)' };
-  const synced = store.get('deviceTotal', {})[today];
-  const base = baseTargets();
-  if (!activityOf(state.profile).tracked) return synced > base.tdee ? { kcal: synced, source: 'WHOOP (so far today)' } : { kcal: base.tdee, source: 'estimate from your activity level' };
-  const day = todaysTraining();
-  const exercise = day.sessions.reduce((a, w) => a + Math.max((w.kcal || 0) - (base.bmr / 1440) * w.minutes, 0), 0);
-  const est = Math.round(base.tdee + exercise);
-  // WHOOP's total so far today counts once it's past the estimate (in the morning it's only partial).
-  if (synced > est) return { kcal: synced, source: 'WHOOP (so far today)' };
-  return { kcal: est, source: 'estimate: daily life + your activities' };
-}
-
-// Positive while cutting, 0 at maintenance or on a diet break, negative on a lean gain.
-function plannedDeficitFor(base, burned, t) {
-  if (base.lbPerWeek < 0) return base.tdee - base.kcal;
-  if (base.lbPerWeek === 0) return 0;
-  return Math.max(base.tdee - base.kcal, burned - t.kcal);
-}
+// Calories burned today (js/dayPlan.js): your WHOOP total if you typed it, otherwise resting +
+// daily life + each activity's burn.
+const burnedToday = () => burnedOf(dataNow(), isoDate());
 
 // 📈 Above Meals: where you are in the plan and whether recent weigh-ins say it's working
 // (js/planProgress.js). An estimate, worded as one; it never changes targets — the weekly
@@ -232,18 +205,8 @@ function phaseWeights() {
 }
 
 function recordDay() {
-  const t = targets(), base = baseTargets(), ate = consumed();
-  const burned = burnedToday().kcal;
-  state.days[isoDate()] = {
-    eaten: Math.round(ate.kcal), burned, target: t.kcal,
-    // The plan's deficit for today includes the share of training calories it doesn't
-    // add back to food, so eating to target on a big training day isn't "too big".
-    plannedDeficit: plannedDeficitFor(base, burned, t), protein: Math.round(ate.p), proteinTarget: t.p,
-    // For the family app's Today card.
-    left: { kcal: Math.round(t.kcal - ate.kcal), p: Math.round(t.p - ate.p), c: Math.round(t.c - ate.c), f: Math.round(t.f - ate.f) },
-    floor: state.profile.sex === 'male' ? 1500 : 1200,
-    meals: Object.keys(todaysLog().meals).length,
-  };
+  todaysLog();
+  state.days[isoDate()] = dayEntry(dataNow(), isoDate());
   store.set('days', state.days);
 }
 
@@ -331,17 +294,7 @@ function viewLog() {
   return viewingToday() ? todaysLog() : { meals: {}, fuel: null, extras: [] };
 }
 
-function todaysTraining() {
-  const base = baseTargets();
-  const today = isoDate();
-  const workouts = state.workouts.filter((w) => isoDate(new Date(w.start)) === today);
-  const manual = state.activities.filter((a) => a.date === today);
-  return trainingDay(workouts, manual, {
-    bmr: base.bmr,
-    weightKg: currentWeight() / 2.20462,
-    tracked: !!activityOf(state.profile).tracked,
-  });
-}
+const todaysTraining = () => trainingOf(dataNow(), isoDate());
 
 // Today's targets, including workout calories and intra-workout carbs.
 function targets() {
@@ -1456,11 +1409,7 @@ function eatButton(meal) {
     : `<div class="eat-row"><button class="eat" data-eat>${meal === 'snack' ? '✓ Log snack' : '✓ I ate this'}</button></div>`;
 }
 
-function snapshot(m) {
-  return { title: m.title, kcal: m.totals.kcal, p: m.totals.p, f: m.totals.f, c: m.totals.c, target: m.target,
-    foods: m.portions.filter((x) => x.grams > 0).map((x) => `${FOODS[x.food].name} ${x.grams}g`).join('; '),
-    at: new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) };
-}
+const snapshot = (m) => snapshotOf(m);
 
 function totalsLine(m) {
   const cell = (k, label) => {
