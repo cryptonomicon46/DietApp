@@ -86,6 +86,31 @@ npx wrangler deploy
   a request, the API retries it on Anthropic's recommended fallback model automatically.
 - Without the key, everything else works; unparsed commands just show a hint.
 
+### 🔊 The Pawmily voice (ElevenLabs, optional pilot)
+
+Talk can read answers aloud in a voice made with ElevenLabs (for example your own instant voice clone)
+instead of the phone's voice. Each person chooses it in the Talk sheet (*🎙 Use the Pawmily voice*); it's
+off by default, and without these secrets the app simply uses the phone's voice.
+
+1. In ElevenLabs, create an API key restricted to **Text to Speech** (plus **Voices: Read** if you want
+   `scripts/elevenlabs-check.mjs` to show the voice), with a **credit limit**. Find the voice's ID under
+   **Voices › My Voices ›** the voice **› Copy voice ID**.
+2. Check it works on your plan before enabling anything:
+   `ELEVENLABS_API_KEY=… ELEVENLABS_VOICE_ID=… node scripts/elevenlabs-check.mjs` → `VERDICT: API_OK`.
+3. Give both to the connector and deploy:
+
+```sh
+cd server
+npx wrangler secret put ELEVENLABS_API_KEY  --name lean-plate-connect   # paste the key only into this prompt
+npx wrangler secret put ELEVENLABS_VOICE_ID --name lean-plate-connect
+npx wrangler deploy
+```
+
+- Optional: `ELEVENLABS_MODEL` (default `eleven_flash_v2_5`, the low-latency model) and `ELEVENLABS_PER_DAY`
+  (spoken answers per member per day, default 30) as secrets or `[vars]`.
+- What goes to ElevenLabs: only the words of the answer being read aloud (names included — speech needs them).
+  Not audio, not other data, not the family key. Nothing is stored on the connector but the daily counter.
+
 ### 🚗 Drive times with live traffic (Google Maps, optional)
 
 "Ask about my day" can add drive times with traffic and opening hours when a question is about going

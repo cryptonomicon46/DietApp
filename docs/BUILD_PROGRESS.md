@@ -4,6 +4,42 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 🎙 The Pawmily voice — ElevenLabs pilot (2026-10-30, `v2/voice-elevenlabs-pilot` from `main`; owner: "proceed with integrating with Eleven labs. I'll purchase the subscription")
+- **Built (behind `VoiceOutputProvider`; off by default):**
+  - `server/voiceTts.js` `POST /voice/tts`:
+    - signed in; text ≤ 600 characters; a daily limit per member (`ELEVENLABS_PER_DAY`, default 30);
+    - calls ElevenLabs text-to-speech with `ELEVENLABS_VOICE_ID` (`eleven_flash_v2_5`, mp3);
+    - returns the audio (`no-store`);
+    - answers 501 without `ELEVENLABS_API_KEY`/`ELEVENLABS_VOICE_ID`;
+    - passes on ElevenLabs' errors as "ElevenLabs: …".
+  - `/config` gives `voice`.
+  - `family/voice.js` `pawmilyVoiceOutput`: fetches the audio and plays it in one shared `<audio>`. That player is started silently inside the tap (iOS). On any failure the phone's voice reads instead.
+  - In Talk: *🎙 Use the Pawmily voice* (`fam.talk.voiceOut`), offered only when the connector has the voice. It's used for read-aloud (still off by default) and for 🔊.
+- **Privacy (owner asked):**
+  - Only the words being read go to ElevenLabs, names included. Not audio, not other data, not the family key. Nothing is stored but the daily counter.
+  - ElevenLabs may keep a generation history in the account.
+  - Privacy page, README, help guide, server README and ARCHITECTURE updated.
+- **Not built (needs the owner's decisions, mockups first):** Threads read aloud.
+  - It would send decrypted thread text through the connector to ElevenLabs: an exception to end-to-end encryption, tap-only.
+  - Other people's messages need their opt-in.
+  - Each message should be read in its author's voice once both voices exist.
+- **Tests:** `tests/voice.test.js`:
+  - text cleaning;
+  - 401 / 501, `/config` `voice`;
+  - only the words and the model are sent;
+  - nothing kept but the counter;
+  - 400, the 600-character cap, 429 at the daily limit, ElevenLabs errors passed on.
+  - `npm test` 495 pass.
+- **Browser check** (390 px; local Pages and `wrangler dev`, voice service stubbed):
+  - The choice appears when `/config` says `voice`; picking it is remembered.
+  - 🔊 sends only `{"text":"You have book club at 6 PM."}`.
+  - With undecodable test audio, the phone's voice read the answer (the fallback). No errors.
+- **Not verified:** real ElevenLabs audio, and playback on a real iPhone.
+- **Needs from the owner:**
+  1. `scripts/elevenlabs-check.mjs` with the clone → `API_OK`.
+  2. `wrangler secret put ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID`.
+  3. `pawdeploy`.
+
 ### 👫 Talk — your partner's day (2026-10-30, `v2/talk-partner` from `main`)
 - **Owner's live try:** "What's on my wife's calendar today" got "I can only see your own items, not [partner]'s calendar".
 - **Cause:**

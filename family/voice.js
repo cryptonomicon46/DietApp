@@ -33,3 +33,36 @@ export const browserVoiceOutput = {
     } catch { /* the phone can't speak just now */ }
   },
 };
+
+// 🔊 The Pawmily voice (ElevenLabs pilot): the same text, spoken in the household's chosen voice by
+// the connector (/voice/tts — it holds the key; the phone sends only the words being read aloud).
+// Any failure (not set up, offline, the day's limit) falls back to the phone's own voice.
+// iOS plays audio only after a tap has started it: family/app.js primeAudioNow() does that in the tap.
+// The one shared player: app.js starts it silently inside the tap (window.__pawPlayer) so iOS lets it
+// play the answer once it arrives.
+const playerOf = () => (typeof window !== 'undefined' && (window.__pawPlayer ||= new Audio())) || null;
+export function pawmilyVoiceOutput({ base, token, fallback = browserVoiceOutput }) {
+  let url = null, seq = 0;
+  const stop = () => { seq++; try { playerOf()?.pause(); } catch { /* not playing */ } if (url) { URL.revokeObjectURL(url); url = null; } fallback.stop(); };
+  return {
+    id: 'pawmily',
+    available: () => typeof Audio !== 'undefined',
+    stop,
+    async speak(text) {
+      const words = spokenText(text);
+      if (!words) return;
+      stop();
+      const mine = seq;
+      try {
+        const r = await fetch(`${base()}/v2/voice/tts`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token() ? { Authorization: `Bearer ${token()}` } : {}) }, body: JSON.stringify({ text: words }) });
+        if (!r.ok) throw new Error(`voice ${r.status}`);
+        const blob = await r.blob();
+        if (mine !== seq) return; // stopped (or a newer answer) while it was coming
+        url = URL.createObjectURL(blob);
+        const player = playerOf();
+        player.src = url;
+        await player.play();
+      } catch { if (mine === seq) fallback.speak(words); }
+    },
+  };
+}

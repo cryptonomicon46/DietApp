@@ -418,6 +418,10 @@ document.addEventListener('focusout', () => $('#talkFab')?.classList.remove('typ
 // browser can't (or you turned it off in the sheet), the box opens for typing / the keyboard's 🎤.
 // 📍 Where you are, for drive times: asked only when a day question is about going somewhere
 // (the phone asks your permission the first time), rounded to about 100 m, never kept.
+// iOS plays an audio element only after a tap has started it: the one shared player (family/voice.js
+// uses window.__pawPlayer) is started silently right here, inside the tap, for the Pawmily voice.
+const SILENT = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA';
+function primeAudioNow() { try { window.__pawPlayer ||= new Audio(); window.__pawPlayer.src = SILENT; window.__pawPlayer.play().catch(() => {}); } catch { /* no audio here */ } }
 function hereNow() {
   return new Promise((ok) => {
     if (!navigator.geolocation) return ok(null);
@@ -440,15 +444,24 @@ function listenNow(asked = false) {
     r.start();
     // iOS only lets a page speak after a tap has started speech once: a silent word now, in the tap.
     try { if (window.speechSynthesis && LS.get('fam.talk.speak') === 'on') { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch { /* no speech here */ }
+    if (LS.get('fam.talk.speak') === 'on' && LS.get('fam.talk.voiceOut') === 'pawmily') primeAudioNow();
     return buf;
   } catch { return null; }
 }
 let talkMod = null;
 function talk() {
-  talkMod ||= import(`./talk.js?v=${VERSION}`).then((m) => {
+  // (The connector's settings — usually already here — say whether the Pawmily voice is offered.)
+  const cfgSoon = Promise.race([api.liveConfig().catch(() => null), new Promise((ok) => setTimeout(ok, 1500, null))]);
+  talkMod ||= Promise.all([import(`./talk.js?v=${VERSION}`), import(`./voice.js?v=${VERSION}`), cfgSoon]).then(([m, V, cfg]) => {
     const first = (n) => String(n || '').split(/\s+/)[0];
+    // 🔊 The Pawmily voice (ElevenLabs pilot): offered when the connector has it; used when chosen here.
+    let voiceCfg = !!cfg?.voice;
+    if (!cfg) api.liveConfig().then((c2) => { voiceCfg = !!c2?.voice; }).catch(() => {});
+    const pawVoice = V.pawmilyVoiceOutput({ base: () => api.base(), token: () => api.token() });
     m.init({
       api, esc, openSheet, closeSheet, toast, LS, show, iso: () => isoLocal(),
+      voiceReady: () => voiceCfg && api.mode() !== 'demo',
+      get voiceOut() { return voiceCfg && api.mode() !== 'demo' && LS.get('fam.talk.voiceOut') === 'pawmily' ? pawVoice : undefined; },
       aiReady: async () => { const cfg = await api.liveConfig(); return cfg.missing || cfg.offline ? null : !!cfg.ai; },
       // Names stay on the phone: they're swapped for roles before anything is sent (js/talkActions.js).
       people: () => fam().members.filter((x) => x.kind === 'person').map((x) => ({ id: x.id, name: first(x.name), role: x.id === fam().me ? 'me' : x.id === partnerMember()?.id ? 'partner' : 'member' })),
@@ -4364,6 +4377,7 @@ document.addEventListener('click', (e) => {
   const post = t.closest('[data-post]');
   if (d.pact) return postAction(d.pact, t.closest('.menu').dataset);
   if (d.act === 'talk') { const voice = d.talkmic != null || t.closest('.talk-bar, .talk-fab') ? listenNow() : null; return act(async () => (await talk()).open(state.view, { voice })); }
+  if (d.talk === 'speak' && LS.get('fam.talk.voiceOut') === 'pawmily') primeAudioNow();
   if (d.talk === 'mic') { const voice = listenNow(true); return act(async () => (await talk()).listen(voice)); }
   if (d.talk || d.talkex != null || d.talkgo != null || d.talkundo != null || d.talkset || d.talkpick || d.talkpickshow || d.talkcare) return act(async () => (await talk()).onClick(t));
   if (d.care) {

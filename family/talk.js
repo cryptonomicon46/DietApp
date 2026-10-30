@@ -38,6 +38,8 @@ const out$ = () => c?.voiceOut || browserVoiceOutput;
 const SPEAK_OK = () => out$().available();
 // Off unless you switch it on (owner, 2026-10-30: no speaking back by default; a richer voice may come later).
 const speakOn = () => { try { return c.LS.get('fam.talk.speak') === 'on'; } catch { return false; } };
+// The Pawmily voice (ElevenLabs pilot): offered only when the connector has it set up; off unless chosen.
+const pawVoice = () => { try { return c.LS.get('fam.talk.voiceOut') === 'pawmily'; } catch { return false; } };
 let heard = false; // this request came from your voice
 export function hush() { out$().stop(); }
 export function speak(text, { always = false } = {}) {
@@ -91,7 +93,7 @@ function draw() {
       <div class="tk-two"><button type="button" data-talk="stop">Done</button><button type="button" class="ghost" data-talk="type">Type instead</button></div>
       <p class="tiny muted">Your phone's speech service turns your voice into text (Apple's on iPhone, Google's on Android); Pawmily only gets the words.</p></div>`
     : `<form class="tk-form" data-talkform><label for="tkText" class="visually-hidden">What would you like?</label><textarea id="tkText" rows="2" maxlength="500" placeholder="Ask or tell Pawmily…" enterkeyhint="send">${E(tk.text)}</textarea>${MIC_OK() ? '<button type="button" class="ghost tk-mic" data-talk="mic" aria-label="Speak">🎤</button>' : ''}<button ${tk.busy ? 'disabled' : ''} aria-label="Send">${tk.busy ? '…' : '↑'}</button></form>
-    <p class="tiny muted tk-hint">${MIC_OK() ? '🎤 Tap to speak, or type.' : '🎤 Tap the microphone on your keyboard to speak — only the words reach Pawmily.'}${MIC_OK() ? ` <button type="button" class="linkish tiny" data-talk="voiceoff">${voiceOff() ? 'Listen when I open Talk' : "Don't listen when I open Talk"}</button>` : ''}${MIC_OK() && SPEAK_OK() ? ` · <button type="button" class="linkish tiny" data-talk="speakoff">${speakOn() ? '🔇 Don\'t read answers aloud' : '🔊 Read answers aloud'}</button>` : ''}</p>`}
+    <p class="tiny muted tk-hint">${MIC_OK() ? '🎤 Tap to speak, or type.' : '🎤 Tap the microphone on your keyboard to speak — only the words reach Pawmily.'}${MIC_OK() ? ` <button type="button" class="linkish tiny" data-talk="voiceoff">${voiceOff() ? 'Listen when I open Talk' : "Don't listen when I open Talk"}</button>` : ''}${MIC_OK() && SPEAK_OK() ? ` · <button type="button" class="linkish tiny" data-talk="speakoff">${speakOn() ? '🔇 Don\'t read answers aloud' : '🔊 Read answers aloud'}</button>` : ''}${c.voiceReady?.() ? ` · <button type="button" class="linkish tiny" data-talk="voicepick">${pawVoice() ? '🎙 Pawmily voice ✓' : '🎙 Use the Pawmily voice'}</button>` : ''}</p>`}
     <div id="tkOut" role="status">${out()}</div></div>`);
 }
 function out() {
@@ -267,6 +269,7 @@ export async function onClick(t) {
   if (d.talk === 'voiceoff') { try { c.LS.set('fam.talk.voice', voiceOff() ? '' : 'off'); } catch { /* private mode */ } c.toast(voiceOff() ? 'Talk opens ready to type' : 'Talk starts listening when you open it'); return draw(); }
   if (d.talk === 'dayok') { try { c.LS.set(DAYOK(), '1'); } catch { /* private mode */ } const q = tk.consent?.text || tk.text; tk.consent = null; return send(q); }
   if (d.talk === 'dayno') { tk.consent = null; tk.say = "OK — I won't look at your calendar. I can still add shows, movies and books, and log meals, workouts and chores."; return draw(); }
+  if (d.talk === 'voicepick') { try { c.LS.set('fam.talk.voiceOut', pawVoice() ? '' : 'pawmily'); } catch { /* private mode */ } hush(); c.toast(pawVoice() ? 'Answers are read in the Pawmily voice (when read aloud)' : 'Answers are read in your phone\'s voice'); return draw(); }
   if (d.talk === 'speakoff') { try { c.LS.set('fam.talk.speak', speakOn() ? '' : 'on'); } catch { /* private mode */ } if (!speakOn()) hush(); c.toast(speakOn() ? 'Answers to spoken questions are read aloud' : 'Answers stay on screen'); return draw(); }
   if (d.talk === 'speak') { const a = tk.cards?.find((x) => x.type === 'answer'); return speak(a?.text, { always: true }); }
   if (d.talk === 'calopen') { c.closeSheet(); return c.show('calendar'); }

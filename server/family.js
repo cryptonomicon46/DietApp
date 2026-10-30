@@ -69,6 +69,7 @@ import { routeTalk, answerDay } from './talkAi.js';
 import { cleanFacts, cleanTurns } from '../js/planCoach.js';
 import { bookRoutes, bookLookupRoutes, bookCover, forgetReader } from './books.js';
 import { travelRoutes } from './travel.js';
+import { ttsRoutes, voiceReady } from './voiceTts.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
@@ -199,7 +200,7 @@ export async function familyApi(req, env, path, ctx = null) {
 
   if (path === '/config') return json({ googleClientId: env.GOOGLE_CLIENT_ID || '', ready: !!env.GOOGLE_CLIENT_ID, supportEmail: env.SUPPORT_EMAIL || '', termsVersion: TERMS_VERSION, photos: !!blobStore(env),
     // 🔌 Which device connections are set up here (only whether; never the keys), so the app never offers a Connect that can't work.
-    devices: { whoop: !!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET) }, ai: aiReady(env) });
+    devices: { whoop: !!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET) }, ai: aiReady(env), voice: voiceReady(env) });
 
   // 📚 A book cover (an image tag, so no sign-in): passed through from Open Library and cached.
   if (path.startsWith('/books/cover/') && method === 'GET') { const r = await bookCover({ path, env }); if (r) return r; }
@@ -373,6 +374,8 @@ export async function familyApi(req, env, path, ctx = null) {
   { const r = await bookLookupRoutes({ path, method, env, json, url, req, user, underLimit, db }); if (r) return r; }
   // ---- 🚗 Drive times with live traffic for day questions (Google Maps) ----
   { const r = await travelRoutes({ path, method, env, json, body, user, underLimit, db }); if (r) return r; }
+  // ---- 🔊 The Pawmily voice (ElevenLabs pilot): answer text → audio, off unless the key is set ----
+  { const r = await ttsRoutes({ path, method, env, json, body, user, underLimit, db }); if (r) return r; }
   { const r = await bookRoutes({ path, method, body, db, loadFamily, meIn, isCouple, sealed, randomId, json }); if (r) return r; }
   // ---- 👔 Look: your own Closet (yours alone), its pictures, and Fit Checks with your partner ----
   if (/^\/families\/[a-z0-9]+\/(members\/[a-z0-9]+\/look|fitchecks)/.test(path)) {
