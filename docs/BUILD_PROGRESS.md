@@ -17,7 +17,14 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
   - `family/app.js` `dayContext` adapter (the Calendar tab's `dayEntries`, cached weather, `dayContextForPlanning`).
 - **Tests:** `tests/talkday.test.js` (5). `npm test` 470 pass, 0 fail.
 - **Browser** (local, Claude stubbed): question → consent → Allow → the request carried 2 days of items with "you" / "[partner]" and the free gaps, with no names → the answer showed "Pat" again → the suggested run added to the calendar → Undo available.
-- **Owner questions raised (2026-10-30):** the risks of Claude seeing calendar data (answered in the session); one-tap voice instead of the keyboard 🎤. The second needs a decision, since browser speech recognition sends audio to Apple or Google.
+- **Owner questions raised (2026-10-30):** the risks of Claude seeing calendar data (answered in the session); one-tap voice instead of the keyboard 🎤.
+- **One-tap voice (approved 2026-10-30, "Ok Yes proceed", accepting that audio goes to Apple's or Google's speech service, as with Siri dictation; this supersedes the earlier keyboard-only voice rule for Talk):**
+  - `listenNow` in `family/app.js` starts speech recognition inside the tap; `listen` in `family/talk.js` shows the words live and reads the request at the pause.
+  - Controls: *Done*, *Type instead*, 🎤 to listen again, and a *Don't listen when I open Talk* switch (`fam.talk.voice`).
+  - Errors are worded plainly (not allowed, no speech, no mic, offline); listening falls back to typing.
+  - Browser check with a stand-in recogniser: one tap → live words → the request read → a Watch card. *Type instead* focuses the box; "not allowed" gives a plain message.
+  - **Not verified:** a real iPhone Home Screen app. WebKit's speech recognition there has been unreliable in some iOS versions; the owner should test it.
+  - Privacy page, README, help guide and tour updated.
 
 ### 🗣️ Talk to Pawmily — T1 (authorized 2026-10-30 by choosing the placement — "Go with your recommendation the E1 and the small gold circle on the other tabs"; same branch)
 - **State: T1 built, tested and browser-verified. Stopped for review. Not merged, not deployed.** The connector must be deployed first (new `/ai/talk`); without it the phone's own reading still works and Claude-read requests say they couldn't be read.

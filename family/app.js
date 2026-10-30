@@ -412,6 +412,23 @@ let talkY = 0;
 addEventListener('scroll', () => { const b = $('#talkFab'), y = scrollY; if (b && !b.hidden) b.classList.toggle('away', y > talkY + 4 && y > 80); if (Math.abs(y - talkY) > 4) talkY = y; }, { passive: true });
 document.addEventListener('focusin', (e) => { if (e.target.matches?.('input, textarea, select, [contenteditable]') && !e.target.closest('#sheet')) $('#talkFab')?.classList.add('typing'); });
 document.addEventListener('focusout', () => $('#talkFab')?.classList.remove('typing'));
+// 🎤 One tap, then talk: listening starts inside the tap itself (browsers only allow it there), with
+// the phone's own speech recognition — on an iPhone Apple's speech service turns the voice into text
+// (as with Siri dictation), on Android Google's. OurPawmily only ever gets the text. Where the
+// browser can't (or you turned it off in the sheet), the box opens for typing / the keyboard's 🎤.
+function listenNow() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR || LS.get('fam.talk.voice') === 'off') return null;
+  try {
+    const r = new SR(), buf = { r, text: '', ended: false, error: '', listener: null };
+    r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+    r.onresult = (e) => { buf.text = [...e.results].map((x) => x[0]?.transcript || '').join(' ').replace(/\s+/g, ' ').trim(); buf.listener?.(); };
+    r.onerror = (e) => { buf.error = e.error || 'error'; };
+    r.onend = () => { buf.ended = true; buf.listener?.(); };
+    r.start();
+    return buf;
+  } catch { return null; }
+}
 let talkMod = null;
 function talk() {
   talkMod ||= import(`./talk.js?v=${VERSION}`).then((m) => {
@@ -4294,7 +4311,8 @@ document.addEventListener('click', (e) => {
   const d = t.dataset;
   const post = t.closest('[data-post]');
   if (d.pact) return postAction(d.pact, t.closest('.menu').dataset);
-  if (d.act === 'talk') return act(async () => (await talk()).open(state.view));
+  if (d.act === 'talk') { const voice = d.talkmic != null || t.closest('.talk-bar, .talk-fab') ? listenNow() : null; return act(async () => (await talk()).open(state.view, { voice })); }
+  if (d.talk === 'mic') { const voice = listenNow(); return act(async () => (await talk()).listen(voice)); }
   if (d.talk || d.talkex != null || d.talkgo != null || d.talkundo != null || d.talkset || d.talkpick || d.talkpickshow || d.talkcare) return act(async () => (await talk()).onClick(t));
   if (d.care) {
     const box = t.getBoundingClientRect();

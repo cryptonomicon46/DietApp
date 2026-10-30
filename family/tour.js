@@ -63,11 +63,11 @@ export const SLIDES = [
 export const WHATS_NEW = {
   id: '2026-12e',
   title: 'New: 🗣️ Talk to Pawmily',
-  text: 'Just say it — add a show or a book, log a meal, a workout or a chore. You check a card first; nothing changes until you tap.',
+  text: 'One tap and speak — add a show or a book, log a meal or a chore, ask what’s on today. You check a card first; nothing changes until you tap.',
   slides: ['new', 'help'],
 };
 SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '🗣️ Talk to Pawmily', cards: [
-  ['🟡', 'Golden bar on Home', 'Under the greeting — or the small gold circle on other tabs. Tap it and type, or tap 🎤 on your keyboard.'],
+  ['🟡', 'One tap, then speak', 'The golden bar on Home (or the gold circle on other tabs) starts listening at once. Or type.'],
   ['📺', 'Shows, movies and books', '“Add Dune to our watchlist”, “We’re watching Severance now”, “Pat recommended Project Hail Mary”.'],
   ['🍽', 'Meals, workouts, chores', '“Log lunch: chicken bowl”, “Make today’s workout lighter”, “Walked the dog”.'],
   ['🔒', 'You approve, it’s private', 'A card first, then Undo. Your phone reads it; only what it can’t goes to Claude, with names swapped for roles.'],

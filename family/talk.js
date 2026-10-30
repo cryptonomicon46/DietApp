@@ -13,7 +13,7 @@ import { isDayQuestion, checkSuggestions } from '../js/talkDay.js';
 
 let c = null;
 export function init(ctx) { c = ctx; }
-const tk = { tab: 'home', text: '', busy: false, cards: null, say: '', error: '', consent: null };
+const tk = { tab: 'home', text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null };
 const DAYOK = () => `fam.talk.dayok.${c.who()}`;
 const E = (s) => c.esc(s);
 const SEEN = 'fam.talk.seen';
@@ -27,24 +27,59 @@ const EXAMPLES = {
 const WATCH = { want: 'Want to Watch', watching: 'Watching', finished: 'Watched', upnext: 'Up Next', dropped: 'Stopped' };
 const READ = { want: 'Want to Read', reading: 'Reading', finished: 'Finished', dropped: 'Stopped' };
 const MEAL = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', extra: 'A snack or extra' };
+const MIC_OK = () => typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+const voiceOff = () => { try { return c.LS.get('fam.talk.voice') === 'off'; } catch { return false; } };
 const norm = (t) => String(t || '').toLowerCase().replace(/^(the|a|an)\s+/, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
-export function open(tab = 'home') {
+export function open(tab = 'home', { voice = null } = {}) {
   tk.tab = EXAMPLES[tab] ? tab : tab === 'watch' || tab === 'read' ? 'us' : tab === 'fitness' ? 'health' : 'home';
-  Object.assign(tk, { text: '', busy: false, cards: null, say: '', error: '', consent: null });
+  Object.assign(tk, { text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null });
+  if (voice) return listen(voice);
   draw();
   setTimeout(() => document.getElementById('tkText')?.focus(), 60);
+  return null;
+}
+// 🎤 Listening (started by the tap in app.js): your words show as you speak; when you pause, the
+// request is read like a typed one. "Type instead" stops it.
+const SPEECH_ERR = { 'not-allowed': 'Speech recognition is off for this app — allow it in your phone\'s settings, or type.', 'service-not-allowed': 'Speech recognition is off for this app — allow it in your phone\'s settings, or type.', 'no-speech': "I didn't hear anything — tap 🎤 to try again, or type.", 'audio-capture': "The microphone isn't available — type instead.", network: "Speech recognition needs a connection — type instead." };
+export function listen(voice) {
+  if (!voice) { tk.error = "Listening isn't available here — type, or tap 🎤 on your keyboard."; return draw(); }
+  tk.voice = voice; tk.cards = null; tk.say = ''; tk.error = ''; tk.text = '';
+  draw();
+  voice.listener = () => {
+    if (tk.voice !== voice) return;
+    const live = document.getElementById('tkLive');
+    if (live) live.textContent = voice.text || 'Listening…';
+    if (!voice.ended) return;
+    tk.voice = null;
+    if (voice.text) return send(voice.text);
+    tk.error = voice.error === 'aborted' ? '' : SPEECH_ERR[voice.error] || (voice.error ? "I couldn't catch that — tap 🎤 to try again, or type." : "I didn't hear anything — tap 🎤 to try again, or type.");
+    draw();
+    setTimeout(() => document.getElementById('tkText')?.focus(), 60);
+  };
+  if (voice.ended || voice.text) voice.listener();
+  return null;
+}
+function stopListening(typeInstead = false) {
+  const v = tk.voice;
+  if (!v) return;
+  if (typeInstead) { tk.voice = null; try { v.r.abort(); } catch { /* already stopped */ } draw(); setTimeout(() => document.getElementById('tkText')?.focus(), 60); return; }
+  try { v.r.stop(); } catch { /* already stopped */ }
 }
 function draw() {
   let first = false;
   try { first = !c.LS.get(SEEN); } catch { /* private mode */ }
   c.openSheet(`<div class="tk-sheet"><div class="row between tk-top"><h2>${ICON}Talk to Pawmily</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     ${first ? `<p class="tk-first">Say what you'd like done — add a show or a book, log a meal, a workout or a chore. Your phone reads it first; only what it can't read goes to Claude, with people's names swapped for roles. Nothing changes until you tap. <button type="button" class="linkish small" data-talk="seen">Got it</button></p>` : ''}
-    <form class="tk-form" data-talkform><label for="tkText" class="visually-hidden">What would you like?</label><textarea id="tkText" rows="2" maxlength="500" placeholder="Ask or tell Pawmily…" enterkeyhint="send">${E(tk.text)}</textarea><button ${tk.busy ? 'disabled' : ''} aria-label="Send">${tk.busy ? '…' : '↑'}</button></form>
-    <p class="tiny muted tk-hint">🎤 Tap the microphone on your keyboard to speak — only the words reach Pawmily.</p>
+    ${tk.voice ? `<div class="tk-listen" role="status"><span class="tk-pulse" aria-hidden="true">🎤</span><p id="tkLive" class="tk-live">${E(tk.voice.text || 'Listening…')}</p>
+      <div class="tk-two"><button type="button" data-talk="stop">Done</button><button type="button" class="ghost" data-talk="type">Type instead</button></div>
+      <p class="tiny muted">Your phone's speech service turns your voice into text (Apple's on iPhone, Google's on Android); Pawmily only gets the words.</p></div>`
+    : `<form class="tk-form" data-talkform><label for="tkText" class="visually-hidden">What would you like?</label><textarea id="tkText" rows="2" maxlength="500" placeholder="Ask or tell Pawmily…" enterkeyhint="send">${E(tk.text)}</textarea>${MIC_OK() ? '<button type="button" class="ghost tk-mic" data-talk="mic" aria-label="Speak">🎤</button>' : ''}<button ${tk.busy ? 'disabled' : ''} aria-label="Send">${tk.busy ? '…' : '↑'}</button></form>
+    <p class="tiny muted tk-hint">${MIC_OK() ? '🎤 Tap to speak, or type.' : '🎤 Tap the microphone on your keyboard to speak — only the words reach Pawmily.'}${MIC_OK() ? ` <button type="button" class="linkish tiny" data-talk="voiceoff">${voiceOff() ? 'Listen when I open Talk' : "Don't listen when I open Talk"}</button>` : ''}</p>`}
     <div id="tkOut" role="status">${out()}</div></div>`);
 }
 function out() {
+  if (tk.voice) return '';
   if (tk.busy) return '<p class="small muted">Reading…</p>';
   if (tk.error) return `<p class="small">${E(tk.error)}</p>`;
   if (tk.consent) return `<div class="tk-card"><b>📅 Answer questions about your day?</b><small>To answer, Pawmily sends Claude today's and tomorrow's calendar from this app — times, titles, places and whose (names swapped for roles) — your free time, today's weather and your own WHOOP summary when it has them. Nothing is kept, and nothing changes unless you tap.</small><div class="tk-two"><button type="button" data-talk="dayok">Allow and ask</button><button type="button" class="ghost" data-talk="dayno">Not now</button></div></div>`;
@@ -205,6 +240,9 @@ export async function onClick(t) {
   if (d.talkpickshow) { const [i, j] = d.talkpickshow.split(':').map(Number); const x = tk.cards[i]; tk.cards[i] = { type: 'watchstatus', show: x.hits[j], status: x.status, go: true }; return redraw(); }
   if (d.talkcare) { const [i, kind] = d.talkcare.split(':'); const k = tk.cards[+i].kinds.find((y) => y.kind === kind); tk.cards[+i] = { type: 'care', care: k, go: true }; return redraw(); }
   if (d.talk === 'all') { for (let i = 0; i < tk.cards.length; i++) if (tk.cards[i].go && !tk.cards[i].done && tk.cards[i].type !== 'handoff') await go(i); return null; }
+  if (d.talk === 'stop') return stopListening(false);
+  if (d.talk === 'type') return stopListening(true);
+  if (d.talk === 'voiceoff') { try { c.LS.set('fam.talk.voice', voiceOff() ? '' : 'off'); } catch { /* private mode */ } c.toast(voiceOff() ? 'Talk opens ready to type' : 'Talk starts listening when you open it'); return draw(); }
   if (d.talk === 'dayok') { try { c.LS.set(DAYOK(), '1'); } catch { /* private mode */ } const q = tk.consent?.text || tk.text; tk.consent = null; return send(q); }
   if (d.talk === 'dayno') { tk.consent = null; tk.say = "OK — I won't look at your calendar. I can still add shows, movies and books, and log meals, workouts and chores."; return draw(); }
   if (d.talk === 'calopen') { c.closeSheet(); return c.show('calendar'); }
