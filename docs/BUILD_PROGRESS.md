@@ -1,11 +1,22 @@
 # OurPawmily Build Progress
 
-Last update: 2026-10-29 — 👔 Look MVP (L0–L6) on `v2/look-mvp` from `main` `f333274` (Health UX merged as PR #4 and deployed, reported by the user). Earlier: Health/Fitness/Diet UX (H1–H12 with amendments) on `v2/health-ux`. Phases 4–11 and the Describe-it change are merged to `main` (PR #2 `d94c25f`, PR #3 `e9708af`) and deployed (reported by the user).
+Last update: 2026-10-30 — 💪 Health 2 Phase B (WHOOP) started on `v2/health-2b` from `main` `aa4fe63`; B0 blocked on network access. Health 2 Phase A merged as PR #6 (`aa4fe63`) and deployed (reported by the user). Earlier: 👔 Look MVP (L0–L6) on `v2/look-mvp` from `main` `f333274` (Health UX merged as PR #4 and deployed, reported by the user). Earlier: Health/Fitness/Diet UX (H1–H12 with amendments) on `v2/health-ux`. Phases 4–11 and the Describe-it change are merged to `main` (PR #2 `d94c25f`, PR #3 `e9708af`) and deployed (reported by the user).
 
 ## Current phase and task
 
+### 💪 Health 2 — Phase B, WHOOP context (authorized 2026-10-30 with amendments 1–9; branch `v2/health-2b` from `main` `aa4fe63`)
+- **State: B0 BLOCKED.** `developer.whoop.com` (and `api.prod.whoop.com`) are refused by this environment's network policy (proxy `connect_rejected`; WebFetch `ENOTFOUND`, 2026-10-30). The approved plan says not to guess WHOOP field names, so B1–B5 (scopes, connector routes, `whoopDaily`, the Health WHOOP section, workout matching) wait until the domain is allowed in the environment's network settings. A web search returned only snippets (recovery `score_state` / `user_calibrating`, `sleep_needed` parts) — not enough to confirm the schema.
+- **Done meanwhile (field-independent, in scope):**
+  - Amendment 2 — `W.proposeVariant(workout, intent)` in `js/workout.js`: intents `lighter` (about a third fewer sets per exercise, at least one fewer, never below one; weights and reps kept; a timed activity ~⅔ of its minutes) and `shorter` (leaves out the last unstarted parts until ~⅔ of the estimated time; the first part always stays). Never removes a ticked set; never changes the input; returns `{intent, workout, changes, minutes}` for a preview, or null. `W.changeText` → "Bench Press 3 sets → 2". Not wired to any screen yet (its only caller will be the WHOOP section's *Make it lighter* preview, B4).
+  - Amendment 4 — `W.durationFor(workout, history)`: the median of your last ≤ 5 finished times for the same workout name (5–240 min, at least 2), else the plan's minutes or `W.estMinutes`.
+  - Amendment 8 — the day-planning boundary in `docs/FUTURE_FEATURES.md` (Talk to Pawmily, design only) and `docs/ARCHITECTURE.md` §9.
+- **Tests:** 4 new in `tests/workout.test.js` (lighter, ticked sets / null cases / activity, shorter, duration). `npm test` 2026-10-30: **436 pass, 0 fail** (was 432).
+- **Decisions still open from the Phase B prompt:** usual range = middle half of your own 30 days, with a minimum sample (amendment 5) — to be finalized in B3; design stop after B0 — skipped unless something contradicts the rules.
+- **Next step (reproducible):** allow `developer.whoop.com` in the environment's Network access (Allowed domains), then re-run B0: confirm the v2 recovery, sleep, cycle and workout fields, `score_state` values, `timezone_offset`, paging and scopes from the official pages, and continue B1–B7.
+- **Last safe commit:** `main` `aa4fe63` (deployed).
+
 ### 💪 Health 2 — Phase A (authorized 2026-10-30: N0 approved with product changes 1–11 and the Daily Habit addendum; branch `v2/health-2` from `main` `a3fbe02`)
-- **State:** Phase A built, tested and verified in a browser. **Stopped at the Phase A checkpoint for product-owner review. Not merged, not deployed.** Phase B (WHOOP), N6 (Weekly balance in Fitness) and A11 (weekly review) are not started.
+- **State:** Phase A built, tested and verified in a browser; merged to `main` as PR #6 (`aa4fe63`) and deployed (reported by the user). Phase B (WHOOP), N6 (Weekly balance in Fitness) and A11 (weekly review) are not started.
 - **Checkpoint A** (design): `docs/mockups/health-2/CHECKPOINT_A.md`, mockups `docs/mockups/health-2/screens.mjs`. The owner approved without answering its decisions, so the recommendations were used: scope = CORE NOW + Tell me, Adjust the rest of today, What fits?, Done logging today and last time, with the rest timer and progression last; "on target" → "near target"; drinks under More only; "Build it" starts with a plain exercise. Correction to the audit: Build it already did; the superset came from the in-block "Add an exercise" link, now labelled *🔗 Pair it with another exercise (superset)*.
 - **Commits:** `163f5ee` shared food-day module · `a7d81c9` Today anchors + meal logging · `ce0e87b` workouts · `83da943` estimate/parser tests · this commit (docs, small fixes).
 - **What's built:**

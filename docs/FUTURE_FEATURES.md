@@ -210,6 +210,17 @@ Confirmed: "Same-Day Delivery powered by Instacart" (sameday.costco.com and .ca)
 
 Casual / non-work wardrobe bulk onboarding, seasonal Closet rotation, packing lists from the calendar, and per-person cryptographic isolation of the Closet (today every grown-up holds the family key; the connector's checks keep Closets apart — see the security project below).
 
+## 🗣️ Talk to Pawmily — day planning (design only)
+
+**NOT AUTHORIZED.** Recorded 2026-10-30 with the Health 2 Phase B approval so that Phase B's WHOOP work leaves the right seams. Do not build voice, calendar planning, route/traffic intelligence, day-plan orchestration or background coaching without explicit authorization.
+
+- **What it would do:** you say or type your plan for the day; the assistant *proposes* a day plan (when to train, which workout version fits, what to eat around it, what to move) and you accept, change or ignore it. It never changes anything on its own.
+- **Inputs it would combine** (each owned by its own subsystem, read through a narrow read-only interface):
+  - WHOOP context — `dayContextForPlanning(...)` (Health 2 Phase B): structured facts only (recovery state / score band / relative to your usual, sleep hours / need / deficit, strain yesterday / today, the planned workout's id, name, estimated minutes and status). No names, notes, history, calendar, family data, Threads, meals or location;
+  - calendar (events and free time), workout duration (`W.durationFor`), schedule feasibility, routing and traffic, household responsibilities (dogs, chores, requests).
+- **Ownership rule:** no subsystem owns the orchestration. WHOOP supplies context and never controls the training plan; Fitness owns workouts and their variants (`W.proposeVariant` — `lighter` and `shorter` today, `express` and `fit_duration` later); Calendar owns time; Diet owns the food day. The assistant only reads those interfaces and proposes; each change is applied through the owning subsystem's own preview → Apply → Undo.
+- **Privacy to design before building:** what each interface's facts reveal, which reach Claude (through the AI gateway with its own purpose, allowlist and cap), what is kept, and that the family key never leaves the phone. Recovery and sleep are private by default and would reach the assistant only for their owner.
+
 ## Separate future security project
 
 Per-person/per-area cryptographic isolation for Diet/Fitness needs its own design and audit before commercial/external-family launch. It is not authorized here and must not be bundled into Read/Discover work or the currently frozen key system.
