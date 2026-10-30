@@ -52,6 +52,12 @@ export async function quietSync() {
   await syncHere(3);
   return now() !== before;
 }
+// While Health is open: today's Strain and workouts only, kept on this phone. → whether anything changed.
+export async function todayRefresh() {
+  if (!(await owner())) return false;
+  const { refreshToday } = await D();
+  return refreshToday();
+}
 const said = (out, fresh) => (out.errors.length ? out.errors[0].message : out.added ? `⌚ ${out.added} ${fresh ? '' : 'new '}workout${out.added === 1 ? '' : 's'}${fresh ? ' brought in' : ''}` : fresh ? '⌚ Connected — no workouts in the last two weeks' : '⌚ Up to date');
 
 export async function onAct(act, t) {

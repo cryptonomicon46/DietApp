@@ -160,13 +160,13 @@ async function whoopSince(start, daily = null) {
     const day = cycleDay(c);
     totals[day] = Math.max(totals[day] || 0, Math.round(kj / 4.184));
   }
-  if (!daily) return { workouts, totals };
+  if (!daily) return { workouts, totals, cycles };
   try {
     return { workouts, totals, daily: { recoveries: await pages('recovery', daily), sleeps: await pages('sleep', daily), cycles } };
   } catch (err) {
     if (err.kind !== 'reconnect') throw err;
     mark('whoop', { scope: (load().whoop?.scope || '').replace(/\s*read:(recovery|sleep)\b/g, '') });
-    return { workouts, totals };
+    return { workouts, totals, cycles };
   }
 }
 async function stravaSince(start) {
@@ -197,6 +197,19 @@ export function mergeSynced(st, { workouts = [], totals = {}, daily = null }, no
     st.set('whoopDaily', mergeDaily(stored, dailyFrom(daily, stored), today, now));
   }
   st.set('lastSync', now);
+}
+// ⌚ Today's Strain while 💪 Health is open (every few minutes): just the day so far — the current
+// cycle and the last day and a half of workouts (2 WHOOP requests), kept on this phone. Nothing is
+// saved to your account here; the next full sync does that. → whether anything changed.
+export async function refreshToday(now = Date.now()) {
+  const d = load();
+  if (!ownerId() || !d.whoop || d.whoop.problem === 'reconnect') return false;
+  const st = own(), key = () => JSON.stringify([Object.entries(st.get('whoopDaily', {}) || {}).map(([k, e]) => [k, e.whoop]), st.get('workoutHistory', []).filter((w) => /^whoop:/.test(w.id)).slice(-20)]);
+  const before = key();
+  const got = await whoopSince(new Date(now - 36 * 3600e3));
+  mergeSynced(st, { workouts: got.workouts, totals: got.totals, daily: { cycles: got.cycles } }, now);
+  mark('whoop', { todayAt: now });
+  return key() !== before;
 }
 // Sync the phone owner's devices into their trackers. → { added, errors }
 // `daily`: also WHOOP's Recovery and Sleep (OurPawmily only) — a month the first time, so your

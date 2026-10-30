@@ -1361,22 +1361,68 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .fx-rest-all { margin: 4px 0 8px; min-height: 48px; }
 .hl-ctx b { display: inline; }
 /* ⌚ Health 2 Phase B: WHOOP today, the 7-day sheet, a workout's WHOOP numbers, the lighter preview. */
-.hl-whoop { display: grid; gap: 8px; }
-.wh-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.wh-tile { background: var(--bg); border-radius: 12px; padding: 8px 6px; text-align: center; display: grid; gap: 1px; min-width: 0; }
-.wh-tile small { font-size: .72rem; color: var(--muted); overflow-wrap: anywhere; }
-.wh-lab { font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-.wh-big { font-size: 1.25rem; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
-.wh-none { color: var(--muted); font-weight: 600; }
-.wh-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; background: var(--muted); }
-.wh-dot.green { background: #16a34a; } .wh-dot.yellow { background: #eab308; } .wh-dot.red { background: #dc2626; }
-.wh-line { margin: 0; }
-.wh-applied { margin: 0; }
-.wh-lighter { justify-self: start; }
-.wh-days { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 6px 0 10px; }
-.wh-days th, .wh-days td { text-align: left; padding: 7px 4px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.wh-days thead th { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-.wh-days .wh-dot { margin-right: 5px; }
+/* WHOOP's look for WHOOP's data (WHOOP Brand & Design Guidelines): its background gradient in either
+   theme, its score colours (set inline from health.js WHOOP_COLORS), uppercase bold labels with 10%
+   letter spacing, bold numbers (DINPro → the fallbacks it names), and "Data by" with its logo. */
+.hl-whoop, .whd { --wh-ink: #fff; --wh-dim: rgba(255,255,255,.62); --wh-line: rgba(255,255,255,.09); --wh-trk: #2E383E; color: var(--wh-ink); background: linear-gradient(180deg, #283339, #101518); border-radius: 18px; }
+.hl-whoop { padding: 14px 12px 14px; display: grid; gap: 10px; }
+.wh-by { display: flex; align-items: center; justify-content: center; gap: 8px; font: 600 11px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: var(--wh-dim); }
+.wh-by img { width: 100px; height: auto; display: block; }
+.wh-rings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.wh-tile { all: unset; box-sizing: border-box; display: grid; justify-items: center; gap: 6px; padding: 4px 2px 2px; border-radius: 14px; cursor: pointer; text-align: center; min-width: 0; -webkit-tap-highlight-color: transparent; }
+.wh-tile:focus-visible { outline: 2px solid #00F19F; outline-offset: 2px; }
+.wh-tile:active { background: rgba(255,255,255,.05); }
+.wh-ring { position: relative; display: block; width: 100%; max-width: 104px; aspect-ratio: 1; }
+.wh-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); display: block; }
+.wh-trk { stroke: var(--wh-trk); }
+.wh-val { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 700 26px/1 "DINPro", "D-DIN", "Helvetica Neue", Helvetica, Arial, sans-serif; font-variant-numeric: tabular-nums; color: var(--wh-ink); }
+.wh-val small { font-size: .55em; margin-left: 1px; padding-top: .35em; }
+.wh-val.none { color: var(--wh-dim); font-weight: 600; }
+.wh-ring.big { width: 150px; max-width: 150px; margin: 6px auto 4px; }
+.wh-ring.big .wh-val { font-size: 38px; }
+.wh-lab { font: 700 12px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.wh-lab i { font-style: normal; opacity: .7; margin-left: 3px; }
+.wh-sub { font: 500 11.5px/1.25 "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--wh-dim); }
+.wh-line { margin: 2px 4px 0; font-size: .93rem; line-height: 1.4; color: rgba(255,255,255,.9); }
+.wh-btn { justify-self: start; background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 9px 14px; font-weight: 600; margin: 0 4px; }
+.wh-applied { margin: 0 4px; font-size: .9rem; color: rgba(255,255,255,.85); }
+.wh-link { all: unset; cursor: pointer; color: #00F19F; font-weight: 700; }
+.wh-link:focus-visible { outline: 2px solid #00F19F; }
+/* a WHOOP sheet: the whole sheet in WHOOP's gradient */
+.sheet:has(.whd) { background: #101518; color: #fff; }
+.whd { margin: -18px -16px calc(-18px - env(safe-area-inset-bottom)); padding: 18px 16px calc(20px + env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; }
+.wh-top { display: flex; justify-content: space-between; align-items: center; }
+.wh-top h2 { margin: 0; font: 700 15px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #fff; }
+.wh-x { all: unset; cursor: pointer; font-size: 20px; line-height: 1; padding: 6px 4px; color: #fff; }
+.wh-x:focus-visible { outline: 2px solid #00F19F; }
+.wh-when { text-align: center; font-size: .82rem; color: var(--wh-dim); margin: 0 0 10px; }
+.wh-say { font-size: .93rem; color: rgba(255,255,255,.9); margin: 8px 2px 12px; line-height: 1.4; }
+.wh-fine { font-size: .76rem; color: rgba(255,255,255,.5); margin: 10px 2px 12px; line-height: 1.4; }
+.wh-dim { color: var(--wh-dim); }
+.wh-k { font: 700 12px/1.2 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.7); margin: 14px 2px 6px; }
+.wh-stat { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; padding: 12px 2px; border-top: 1px solid var(--wh-line); }
+.wh-stat .k { font: 700 12px/1.2 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.72); }
+.wh-stat .v { font: 700 20px/1 "DINPro", "D-DIN", "Helvetica Neue", Helvetica, Arial, sans-serif; font-variant-numeric: tabular-nums; text-align: right; grid-row: span 2; align-self: center; white-space: nowrap; }
+.wh-stat .v small { font-size: 12px; font-weight: 600; color: var(--wh-dim); margin-left: 3px; }
+.wh-stat .u { font-size: .8rem; color: rgba(255,255,255,.55); }
+.wh-stages { display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px; margin: 6px 0; }
+.wh-stages i { display: block; }
+.wh-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; font-size: .82rem; color: rgba(255,255,255,.82); margin-bottom: 8px; }
+.wh-legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: var(--c); }
+.wh-zone { display: grid; grid-template-columns: 54px 1fr 54px; align-items: center; gap: 8px; font-size: .82rem; margin: 6px 0; color: rgba(255,255,255,.82); }
+.wh-zone .t { height: 10px; border-radius: 5px; background: var(--wh-trk); overflow: hidden; }
+.wh-zone .t i { display: block; height: 100%; border-radius: 5px; min-width: 3px; }
+.wh-zone .m { text-align: right; font-variant-numeric: tabular-nums; }
+.wh-wk { padding: 12px 2px; border-top: 1px solid var(--wh-line); }
+.wh-wk .h { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; }
+.wh-wk .h b { color: #0093E7; font-variant-numeric: tabular-nums; }
+.wh-wk .s { font-size: .8rem; color: rgba(255,255,255,.6); margin-top: 3px; }
+.wh-days { width: 100%; border-collapse: collapse; font: 600 .92rem/1 "Helvetica Neue", Helvetica, Arial, sans-serif; font-variant-numeric: tabular-nums; margin: 12px 0 4px; }
+.wh-days th, .wh-days td { text-align: left; padding: 10px 4px; border-bottom: 1px solid var(--wh-line); white-space: nowrap; color: #fff; }
+.wh-days thead th { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+.wh-bar { display: inline-block; width: 42px; height: 6px; border-radius: 3px; background: var(--wh-trk); vertical-align: middle; margin-right: 7px; overflow: hidden; }
+.wh-bar i { display: block; height: 100%; border-radius: 3px; }
+@media (max-width: 360px) { .wh-val { font-size: 21px; } .wh-lab { font-size: 10.5px; } .wh-bar { width: 30px; } .wh-days th, .wh-days td { padding: 9px 2px; } }
 .fx-dev { background: var(--bg); border-radius: 12px; padding: 8px 10px; margin: 8px 0; display: grid; gap: 6px; }
 .fx-dev p { margin: 0; }
 .fx-zones { display: flex; height: 8px; border-radius: 4px; overflow: hidden; gap: 1px; }
@@ -1385,4 +1431,3 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .fx-zones .z3 { background: #facc15; } .fx-zones .z4 { background: #fb923c; } .fx-zones .z5 { background: #ef4444; }
 .fx-changes { margin: 6px 0; padding-left: 20px; display: grid; gap: 3px; }
 .fx-hist.on { outline: 2px solid var(--brand); }
-@media (max-width: 360px) { .wh-big { font-size: 1.08rem; } .wh-tile { padding: 7px 3px; } }

@@ -128,21 +128,27 @@ test('⌚ WHOOP on Health: nothing without WHOOP, reconnect asked once, "Not sco
   assert.ok(!plain.includes('WHOOP') && !plain.includes('hl-whoop'));
   assert.equal(whoopHtml(null, esc), '');
   // Connected before Recovery and Sleep were asked for.
-  assert.match(whoopHtml({ dailyMissing: true }, esc), /Reconnect WHOOP to see your Recovery and Sleep/);
+  assert.match(whoopHtml({ dailyMissing: true }, esc), /Reconnect WHOOP to see your Sleep, Recovery and Strain/);
   // Today not scored yet: no number borrowed from yesterday.
   const today = '2026-10-30';
   const daily = { '2026-10-29': { whoop: { recovery: D.recoveryFacts({ cycle_id: 1, sleep_id: 's', score_state: 'SCORED', score: { recovery_score: 88 } }) } } };
   let h = whoopHtml({ ...D.recoveryContext(daily, today), lighter: { can: true } }, esc);
-  assert.match(h, /Not scored yet/); assert.ok(!h.includes('88%'));
+  assert.match(h, /not scored yet/i); assert.ok(!h.includes('>88<'));
   assert.ok(!h.includes('data-fx="lighter"'), 'no offer without a reason');
   // Lower than usual, with a workout today → the offer (a preview, not a change).
   const ctx = { recovery: { state: 'scored', score: 30, band: 'red', relative: 'lower' }, sleep: { state: 'scored', hours: 6.2, neededHours: 7.9 }, strain: { today: 3.1, yesterday: 15.2 }, line: 'Recovery is lower than your usual.', lighterHint: true };
   h = whoopHtml({ ...ctx, lighter: { can: true } }, esc);
-  assert.match(h, /30%/); assert.match(h, /lower than usual/); assert.match(h, /6.2 h/); assert.match(h, /of 7.9 h needed/); assert.match(h, /yesterday 15.2/);
+  assert.match(h, />30<small>%/); assert.match(h, /lower than usual/); assert.match(h, /6.2<small>h/); assert.match(h, /of 7.9 h/); assert.match(h, /yesterday 15.2/);
+  // WHOOP's colours (its Brand & Design Guidelines): red band for 30, Strain blue; "Data by" with its logo.
+  assert.match(h, /stroke="#FF0026"/); assert.match(h, /stroke="#0093E7"/); assert.match(h, /Data by <img src="whoop-logo-white.svg" alt="WHOOP"/);
+  // Each ring opens what's behind it.
+  assert.deepEqual([...h.matchAll(/data-act="whoopdetail" data-wd="(\w+)"/g)].map((m) => m[1]), ['sleep', 'recovery', 'strain']);
   // WHOOP's own order: Sleep (its performance %), Recovery, Strain.
   const order = ['>Sleep<', '>Recovery<', '>Strain<'].map((k) => h.indexOf(k));
   assert.ok(order[0] > 0 && order[0] < order[1] && order[1] < order[2], order.join());
-  assert.match(whoopHtml({ ...ctx, sleep: { ...ctx.sleep, performance: 74 }, lighter: {} }, esc), /74%<\/b><small>6.2 h of 7.9 h<\/small>/);
+  const withPerf = whoopHtml({ ...ctx, sleep: { ...ctx.sleep, performance: 74 }, recovery: { ...ctx.recovery, score: 63, band: 'yellow', relative: 'usual' }, lighter: {} }, esc);
+  assert.match(withPerf, />74<small>%<\/small><\/span><\/span><span class="wh-lab">Sleep/); assert.match(withPerf, /6.2 h of 7.9 h/);
+  assert.match(withPerf, /stroke="#7BA1BB"/); assert.match(withPerf, /stroke="#FFDE00"/);
   assert.match(h, /data-fx="lighter"/);
   assert.ok(!whoopHtml({ ...ctx, lighter: { can: false } }, esc).includes('data-fx="lighter"'), 'no workout today, no offer');
   h = whoopHtml({ ...ctx, lighter: { can: true, applied: 'lighter' } }, esc);
@@ -153,4 +159,19 @@ test('⌚ WHOOP on Health: nothing without WHOOP, reconnect asked once, "Not sco
   // 7 days: WHOOP's values, "Building your usual range" until there's enough.
   const s = whoopDaysHtml(D.lastDays(daily, today), D.usualRange(daily, today), esc);
   assert.match(s, /88%/); assert.match(s, /Building your usual range — 1 of 14/); assert.match(s, /not shared with your family/);
+});
+
+test("⌚ the WHOOP detail sheets: Recovery, Sleep and Strain, WHOOP's names and numbers, 'your usual' only when known", async () => {
+  const { recoveryDetailHtml, sleepDetailHtml, strainDetailHtml } = await import('../family/health.js');
+  const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const rec = recoveryDetailHtml({ state: 'scored', score: 63, band: 'yellow', line: 'Recovery is in your usual range.', sleep: { hours: 7.4, neededHours: 8.1 },
+    rows: [{ key: 'hrv', label: 'Heart rate variability', value: 62, unit: 'ms', usual: { low: 55, high: 68 } }, { key: 'rhr', label: 'Resting heart rate', value: 54, unit: 'bpm', usual: null }, { key: 'sleep', label: 'Sleep performance', value: 76, unit: '%', usual: null }] }, esc, 'Fri, Oct 30');
+  assert.match(rec, /Heart rate variability/); assert.match(rec, /Your usual 55–68 ms/); assert.match(rec, /7.4 h of the 8.1 h you needed/);
+  assert.ok(!/Your usual [\d.]+–[\d.]+ bpm/.test(rec), "no usual without enough days");
+  assert.match(recoveryDetailHtml({ state: 'pending' }, esc), /isn't scored yet/);
+  const sl = sleepDetailHtml({ state: 'scored', performance: 76, from: '11:02 PM', to: '6:50 AM', hours: 7.4, neededHours: 8.1, stages: [['Awake', 0.4], ['Light', 3.6], ['Deep (SWS)', 1.8], ['REM', 2]], need: { baseline: 7.6, debt: 0.3, strain: 0.2, nap: 0 }, consistency: 80, efficiency: 93, respiratory: 15.2, respiratoryUsual: null, disturbances: 9, cycles: 4 }, esc);
+  for (const x of ['11:02 PM – 6:50 AM', 'Sleep consistency', 'Sleep efficiency', 'You needed 8.1 h: 7.6 baseline + 0.3 sleep debt + 0.2 from strain', 'Disturbances', '4 sleep cycles', 'Deep (SWS) · 1.8 h']) assert.ok(sl.includes(x), x);
+  const st = strainDetailHtml({ strain: 9.8, yesterday: 14.2, kcal: 1265, avgHr: 74, maxHr: 158, steps: 6214, zones: [4, 12, 18, 9, 4, 1], workouts: [{ id: 'whoop:a', name: 'weightlifting', at: '9:31 AM', minutes: 48, kcal: 330, strain: 8.6, avgHr: 117, maxHr: 158 }] }, esc, { updated: '10:42 AM', logged: (id) => (id === 'whoop:a' ? 'Upper Body' : '') });
+  for (const x of ['updated 10:42 AM', '1,265', '6,214', 'Zone 5', '18 min', 'Weightlifting · 9:31 AM', '✓ Upper Body in Fitness', 'not the whole day']) assert.ok(st.includes(x), x);
+  assert.match(strainDetailHtml({ strain: null, yesterday: null, kcal: null, avgHr: null, maxHr: null, steps: null, zones: null, workouts: [] }, esc), /No WHOOP workouts today yet/);
 });

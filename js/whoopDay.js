@@ -49,7 +49,7 @@ export function sleepFacts(s) {
   const out = { id: s.id ?? null, cycle_id: s.cycle_id ?? null, start: s.start, end: s.end, timezone_offset: s.timezone_offset ?? null, nap: !!s.nap, score_state: state(s) };
   if (out.score_state === 'SCORED' && s.score) {
     out.score = {
-      stage_summary: nums(s.score.stage_summary, ['total_in_bed_time_milli', 'total_awake_time_milli', 'total_light_sleep_time_milli', 'total_slow_wave_sleep_time_milli', 'total_rem_sleep_time_milli']),
+      stage_summary: nums(s.score.stage_summary, ['total_in_bed_time_milli', 'total_awake_time_milli', 'total_light_sleep_time_milli', 'total_slow_wave_sleep_time_milli', 'total_rem_sleep_time_milli', 'sleep_cycle_count', 'disturbance_count']),
       sleep_needed: nums(s.score.sleep_needed, ['baseline_milli', 'need_from_sleep_debt_milli', 'need_from_recent_strain_milli', 'need_from_recent_nap_milli']),
       ...nums(s.score, ['sleep_performance_percentage', 'sleep_efficiency_percentage', 'sleep_consistency_percentage', 'respiratory_rate']),
     };
@@ -59,6 +59,7 @@ export function sleepFacts(s) {
 export function cycleFacts(c) {
   const out = { id: c.id ?? null, start: c.start, end: c.end ?? null, timezone_offset: c.timezone_offset ?? null, score_state: state(c) };
   if (out.score_state === 'SCORED' && c.score) out.score = nums(c.score, ['strain', 'kilojoule', 'average_heart_rate', 'max_heart_rate']);
+  if (Number.isFinite(c.step_count)) out.step_count = c.step_count; // the cycle's steps so far (null: none)
   return out;
 }
 const inBed = (s) => s.score?.stage_summary?.total_in_bed_time_milli ?? (Date.parse(s.end) - Date.parse(s.start)) ?? 0;
@@ -74,7 +75,12 @@ export function dailyFrom({ recoveries = [], sleeps = [], cycles = [] } = {}, pr
   for (const s of main) { const o = byCycle.get(s.cycle_id); if (!o || inBed(s) > inBed(o)) byCycle.set(s.cycle_id, s); }
   const byId = new Map(main.map((s) => [s.id, s]));
   const known = new Map(); // sleep id / cycle id → date, from what's stored
-  for (const [d, e] of Object.entries(prev || {})) { if (e?.whoop?.sleep?.id) known.set(`s:${e.whoop.sleep.id}`, d); if (e?.whoop?.cycle?.id != null) known.set(`c:${e.whoop.cycle.id}`, d); }
+  for (const [d, e] of Object.entries(prev || {})) {
+    const sl = e?.whoop?.sleep;
+    if (sl?.id) known.set(`s:${sl.id}`, d);
+    if (sl?.cycle_id != null) known.set(`c:${sl.cycle_id}`, d); // a cycle goes with its stored sleep's day
+    if (e?.whoop?.cycle?.id != null) known.set(`c:${e.whoop.cycle.id}`, d);
+  }
   for (const s of byCycle.values()) put(sleepDay(s), 'sleep', sleepFacts(s));
   const cyc = new Map(cycles.filter(Boolean).map((c) => [c.id, c]));
   for (const c of cyc.values()) { const s = byCycle.get(c.id); put(s ? sleepDay(s) : known.get(`c:${c.id}`) || cycleDay(c), 'cycle', cycleFacts(c)); }
@@ -100,11 +106,13 @@ const scored = (r) => r?.score_state === 'SCORED' && !r.score?.user_calibrating 
 const quart = (a, q) => { const i = (a.length - 1) * q, lo = Math.floor(i); return a[lo] + (a[Math.min(lo + 1, a.length - 1)] - a[lo]) * (i - lo); };
 // Your usual: the middle half of your own scored Recovery over the WINDOW days before today —
 // only once there are MIN_DAYS of them (pending, unscorable and calibrating days don't count).
-export function usualRange(daily = {}, today) {
-  const from = addDays(today, -WINDOW);
-  const s = Object.entries(daily).filter(([d, e]) => d >= from && d < today && scored(e?.whoop?.recovery)).map(([, e]) => e.whoop.recovery.score.recovery_score).sort((a, b) => a - b);
+export function usualRange(daily = {}, today) { return usualOf(daily, today, (e) => (scored(e?.whoop?.recovery) ? e.whoop.recovery.score.recovery_score : null)); }
+// The same "usual" (middle half, WINDOW days, MIN_DAYS valid ones) for any one number of a day.
+export function usualOf(daily = {}, today, pick, round = 0) {
+  const from = addDays(today, -WINDOW), k = 10 ** round;
+  const s = Object.entries(daily).filter(([d]) => d >= from && d < today).map(([, e]) => pick(e)).filter(Number.isFinite).sort((a, b) => a - b);
   if (s.length < MIN_DAYS) return { ready: false, have: s.length, need: MIN_DAYS };
-  return { ready: true, have: s.length, low: Math.round(quart(s, 0.25)), high: Math.round(quart(s, 0.75)) };
+  return { ready: true, have: s.length, low: Math.round(quart(s, 0.25) * k) / k, high: Math.round(quart(s, 0.75) * k) / k };
 }
 export function relativeToUsual(score, range) {
   if (!range?.ready || !Number.isFinite(score)) return null;
@@ -152,6 +160,67 @@ export function lastDays(daily = {}, today, n = 7) {
     const e = daily[d], r = e?.whoop?.recovery, s = sleepNumbers(e?.whoop?.sleep);
     return { date: d, state: stateOf(r), recovery: r?.score_state === 'SCORED' ? r.score?.recovery_score ?? null : null, band: scoreBand(r?.score?.recovery_score), sleepHours: s?.hours ?? null, sleepPerf: s?.performance != null ? Math.round(s.performance) : null, strain: strainOf(e) };
   });
+}
+
+// ---------- the three detail sheets (tap Recovery, Sleep or Strain) ----------
+// "11:02 PM" where the record says you were.
+export function clockAt(iso, tz) {
+  const t = Date.parse(iso), off = offsetMin(tz);
+  if (!Number.isFinite(t)) return '';
+  const d = off == null ? new Date(t) : new Date(t + off * 60000);
+  const h = off == null ? d.getHours() : d.getUTCHours(), m = off == null ? d.getMinutes() : d.getUTCMinutes();
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+const r1 = (n) => (Number.isFinite(n) ? Math.round(n * 10) / 10 : null);
+const ok = (r) => r?.score_state === 'SCORED' && !r.score?.user_calibrating;
+// Recovery: WHOOP's score and what went into it, each beside your usual (once there's enough).
+export function recoveryDetail(daily = {}, today) {
+  const c = recoveryContext(daily, today), e = daily[today]?.whoop || {}, r = e.recovery?.score || {}, sl = e.sleep?.score || {};
+  const fromRec = (k) => (x) => (ok(x?.whoop?.recovery) ? x.whoop.recovery.score[k] ?? null : null);
+  const row = (key, label, value, unit, usual, round = 0) => ({ key, label, value: value == null ? null : round ? r1(value) : Math.round(value), unit, usual: usual.ready ? usual : null });
+  const resp = (x) => (x?.whoop?.sleep?.score_state === 'SCORED' ? x.whoop.sleep.score?.respiratory_rate ?? null : null);
+  const sn = sleepNumbers(e.sleep);
+  return {
+    ...c.recovery, line: c.line,
+    rows: [
+      row('hrv', 'Heart rate variability', r.hrv_rmssd_milli, 'ms', usualOf(daily, today, fromRec('hrv_rmssd_milli'))),
+      row('rhr', 'Resting heart rate', r.resting_heart_rate, 'bpm', usualOf(daily, today, fromRec('resting_heart_rate'))),
+      row('resp', 'Respiratory rate', sl.respiratory_rate, 'rpm', usualOf(daily, today, resp, 1), 1),
+      row('sleep', 'Sleep performance', sl.sleep_performance_percentage, '%', { ready: false }),
+      row('spo2', 'Blood oxygen', r.spo2_percentage, '%', usualOf(daily, today, fromRec('spo2_percentage'))),
+      row('skin', 'Skin temp', r.skin_temp_celsius, '°C', usualOf(daily, today, fromRec('skin_temp_celsius'), 1), 1),
+    ].filter((x) => x.value != null),
+    sleep: sn,
+  };
+}
+// Sleep: when, the stages, hours against what WHOOP says you needed (and why), and its other scores.
+export function sleepDetail(daily = {}, today) {
+  const s = daily[today]?.whoop?.sleep;
+  if (s?.score_state !== 'SCORED' || !s.score) return { state: !s ? 'none' : s.score_state === 'UNSCORABLE' ? 'unscorable' : 'pending' };
+  const st = s.score.stage_summary || {}, nd = s.score.sleep_needed || {}, h = (ms) => r1((ms || 0) / 3.6e6);
+  const resp = usualOf(daily, today, (x) => (x?.whoop?.sleep?.score_state === 'SCORED' ? x.whoop.sleep.score?.respiratory_rate ?? null : null), 1);
+  return {
+    state: 'scored', performance: s.score.sleep_performance_percentage ?? null, from: clockAt(s.start, s.timezone_offset), to: clockAt(s.end, s.timezone_offset),
+    ...sleepNumbers(s), inBed: h(st.total_in_bed_time_milli),
+    stages: [['Awake', h(st.total_awake_time_milli)], ['Light', h(st.total_light_sleep_time_milli)], ['Deep (SWS)', h(st.total_slow_wave_sleep_time_milli)], ['REM', h(st.total_rem_sleep_time_milli)]],
+    need: { baseline: h(nd.baseline_milli), debt: h(nd.need_from_sleep_debt_milli), strain: h(nd.need_from_recent_strain_milli), nap: h(nd.need_from_recent_nap_milli) },
+    consistency: s.score.sleep_consistency_percentage ?? null, efficiency: s.score.sleep_efficiency_percentage != null ? Math.round(s.score.sleep_efficiency_percentage) : null,
+    respiratory: r1(s.score.respiratory_rate), respiratoryUsual: resp.ready ? resp : null,
+    disturbances: st.disturbance_count ?? null, cycles: st.sleep_cycle_count ?? null,
+  };
+}
+// Strain: today's so far, and today's WHOOP workouts with their heart-rate zones (WHOOP gives zones
+// per workout, not for the whole day — the total is your workouts'). `workouts`: workoutHistory.
+export function strainDetail(daily = {}, today, workouts = []) {
+  const cy = daily[today]?.whoop?.cycle, sc = cy?.score || {};
+  const list = workouts.filter((x) => /^whoop:/.test(x.id || '') && x.start && localDate(x.start, x.tz) === today).sort((a, b) => b.start.localeCompare(a.start));
+  const zones = [0, 1, 2, 3, 4, 5].map((i) => list.reduce((a, x) => a + (x.zones?.[i] || 0), 0));
+  return {
+    strain: r1(sc.strain), yesterday: recoveryContext(daily, today).strain.yesterday,
+    kcal: Number.isFinite(sc.kilojoule) ? Math.round(sc.kilojoule / 4.184) : null, avgHr: sc.average_heart_rate ?? null, maxHr: sc.max_heart_rate ?? null, steps: cy?.step_count ?? null,
+    zones: zones.some(Boolean) ? zones : null,
+    workouts: list.map((x) => ({ id: x.id, name: x.name, at: clockAt(x.start, x.tz), minutes: x.minutes, strain: r1(x.strain), kcal: x.kcal, avgHr: x.avgHr ?? null, maxHr: x.maxHr ?? null })),
+  };
 }
 
 // 🧭 The one read-only interface a future planner gets (docs/TALK_TO_PAWMILY.md): structured

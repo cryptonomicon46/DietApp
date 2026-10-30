@@ -239,3 +239,20 @@ test('Recovery and Sleep: only with WHOOP\'s permission, only when OurPawmily as
   assert.equal(me.get('whoopDaily')[today].whoop.recovery.score.recovery_score, 58, 'what came in stays');
   whoop.dailyOk = true;
 });
+
+test('today\'s Strain while Health is open: only the day\'s cycle and workouts, kept on this phone, filed with last night\'s sleep', async () => {
+  const { refreshToday } = await import('../js/devices.js');
+  const wake = new Date(); wake.setHours(6, 30, 0, 0);
+  const today = wake.toLocaleDateString('en-CA');
+  whoop.cycles = [{ id: 77, start: new Date(wake - 8 * 3.6e6).toISOString(), timezone_offset: null, score_state: 'SCORED', score: { strain: 6.4, kilojoule: 5230, average_heart_rate: 71, max_heart_rate: 150 }, step_count: 4100 }];
+  whoop.calls = [];
+  const v2 = []; const f = globalThis.fetch; globalThis.fetch = (url, init) => { if (/w\.test\/v2\//.test(String(url))) v2.push(String(url)); return f(url, init); };
+  try { assert.equal(await refreshToday(), true); } finally { globalThis.fetch = f; }
+  assert.deepEqual([...new Set(whoop.calls)].sort(), ['GET /developer/v2/activity/workout', 'GET /developer/v2/cycle']);
+  assert.deepEqual(v2, [], 'nothing saved to the account here');
+  const day = me.get('whoopDaily')[today].whoop;
+  assert.equal(day.cycle.score.strain, 6.4); assert.equal(day.cycle.step_count, 4100);
+  assert.equal(day.recovery.score.recovery_score, 58, 'last night\'s Recovery untouched');
+  assert.ok(devices.get().whoop.todayAt > 0);
+  assert.equal(await refreshToday(), false, 'nothing new → nothing to redraw');
+});

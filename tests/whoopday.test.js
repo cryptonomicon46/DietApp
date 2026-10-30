@@ -57,7 +57,10 @@ test('facts kept as WHOOP gave them (its names, untouched); pending and unscorab
   const f = D.sleepFacts(s);
   assert.equal(f.score.sleep_performance_percentage, 88);
   assert.equal(f.score.stage_summary.total_rem_sleep_time_milli, s.score.stage_summary.total_rem_sleep_time_milli);
-  assert.equal(f.score.stage_summary.sleep_cycle_count, undefined, 'only what the app uses');
+  assert.equal(f.score.stage_summary.sleep_cycle_count, 4); assert.equal(f.score.stage_summary.disturbance_count, 9);
+  assert.equal(f.score.stage_summary.total_no_data_time_milli, undefined, 'only what the app uses');
+  assert.equal(D.cycleFacts(cyc(1, s.start, '-07:00', 8, { step_count: 6214 })).step_count, 6214);
+  assert.equal('step_count' in D.cycleFacts(cyc(1, s.start, '-07:00', 8, { step_count: null })), false);
   assert.deepEqual(D.recoveryFacts(rec(1, 's1', 44)).score, { user_calibrating: false, recovery_score: 44, resting_heart_rate: 55, hrv_rmssd_milli: 61.4, spo2_percentage: 96, skin_temp_celsius: 33.6 });
   assert.deepEqual(D.recoveryFacts(rec(1, 's1', 44, { score_state: 'PENDING_SCORE', score: undefined })), { cycle_id: 1, sleep_id: 's1', score_state: 'PENDING_SCORE' });
   assert.equal(D.recoveryFacts({ cycle_id: 1, score_state: 'UNSCORABLE' }).score, undefined);
@@ -144,4 +147,31 @@ test('planning facts: exactly the structured fields, nothing private, and they n
   // whoopDaily is in no Health part: it stays in your own full copy, never shared.
   assert.ok(!Object.values(PARTS).flat().includes('whoopDaily'));
   assert.deepEqual(splitHealth({ whoopDaily: daily, workouts: [] }), { diet: {}, fitness: { workouts: [] }, us: {} });
+});
+
+test("the detail sheets: Recovery's inputs beside your usual, Sleep's stages and need, today's Strain and workout zones", () => {
+  const today = '2026-10-30';
+  const daily = history(today, 20, (i) => 60 + (i % 5));
+  for (let i = 1; i <= 20; i++) daily[D.addDays(today, -i)].whoop.sleep = D.sleepFacts(sleep(`s${i}`, i, '2026-10-01T06:00:00Z', '2026-10-01T14:00:00Z', '-07:00'));
+  daily[today] = { whoop: { recovery: D.recoveryFacts(rec(9, 's9', 63)), sleep: D.sleepFacts(sleep('s9', 9, '2026-10-30T06:02:00Z', '2026-10-30T13:50:00Z', '-07:00')), cycle: D.cycleFacts(cyc(9, '2026-10-30T06:02:00Z', '-07:00', 9.83, { step_count: 6214 })) } };
+  daily[D.addDays(today, -1)].whoop.cycle = D.cycleFacts(cyc(8, '2026-10-29T06:00:00Z', '-07:00', 14.2));
+  const r = D.recoveryDetail(daily, today);
+  assert.deepEqual(r.rows.map((x) => x.key), ['hrv', 'rhr', 'resp', 'sleep', 'spo2', 'skin']);
+  const hrv = r.rows.find((x) => x.key === 'hrv');
+  assert.deepEqual([hrv.value, hrv.unit, hrv.usual.low, hrv.usual.high], [61, 'ms', 61, 61]);
+  assert.equal(r.rows.find((x) => x.key === 'sleep').usual, null);
+  // Not enough days: no "usual" for any of them.
+  assert.ok(D.recoveryDetail({ [today]: daily[today] }, today).rows.every((x) => x.usual == null));
+  const sl = D.sleepDetail(daily, today);
+  assert.deepEqual([sl.from, sl.to, sl.hours, sl.consistency, sl.efficiency, sl.disturbances, sl.cycles], ['11:02 PM', '6:50 AM', 6.8, 80, 93, 9, 4]);
+  assert.deepEqual(sl.stages.map(([k]) => k), ['Awake', 'Light', 'Deep (SWS)', 'REM']);
+  assert.deepEqual(sl.need, { baseline: 7.5, debt: 0.3, strain: 0.2, nap: 0 });
+  assert.equal(D.sleepDetail({}, today).state, 'none');
+  // Strain: today's cycle; today's WHOOP workouts only (in their own offset), zones added up.
+  const w = (id, start, z, tz = '-07:00') => ({ id: `whoop:${id}`, name: 'weightlifting', start, minutes: 48, kcal: 330, strain: 8.6, avgHr: 117, maxHr: 158, zones: z, tz });
+  const st = D.strainDetail(daily, today, [w('a', '2026-10-30T16:31:00Z', [4, 12, 18, 9, 4, 1]), w('b', '2026-10-30T13:00:00Z', [1, 1, 1, 1, 1, 1]), w('old', '2026-10-30T05:00:00Z', [9, 9, 9, 9, 9, 9]), { id: 'strava:1', start: '2026-10-30T15:00:00Z' }]);
+  assert.deepEqual([st.strain, st.yesterday, st.kcal, st.steps, st.avgHr, st.maxHr], [9.8, 14.2, 2151, 6214, 64, 150]);
+  assert.deepEqual(st.zones, [5, 13, 19, 10, 5, 2], 'the 10 PM workout the night before is yesterday\'s');
+  assert.deepEqual(st.workouts.map((x) => [x.id, x.at]), [['whoop:a', '9:31 AM'], ['whoop:b', '6:00 AM']]);
+  assert.equal(D.strainDetail({}, today, []).zones, null);
 });
