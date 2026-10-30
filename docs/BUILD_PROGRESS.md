@@ -4,6 +4,29 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 🔊 Talk — answers read aloud, and the extensibility seams (2026-10-30; owner: "I'd also like Claude to speak back the responses", then the voice/agent/integration note; on `v2/talk-travel`, PR #12)
+- **Read aloud:**
+  - Answers to spoken questions are read by the phone's own voice: day answers (plus "I found N times…"), the "can't do that" line, errors, and "Here it is — check it and tap to confirm" for cards.
+  - 🔊 replays an answer. *Don't read answers aloud* turns it off (`fam.talk.speak`).
+  - Typed questions stay silent.
+  - Speech stops on a new listen and when the sheet closes.
+  - iOS needs a tap before a page may speak, so a silent word is spoken inside the listening tap.
+- **Seams (no new providers):**
+  - `family/voice.js` defines `VoiceInputProvider`/`VoiceOutputProvider`. The browser output provider lives there. The input session now exposes `stop()`/`abort()`, so Talk never touches the recognizer.
+  - `CONTEXT` allowlists now match the real adapters (`weather`, `daylight`, `food`, `travel`, `drive`), and a test checks every normaliser's output fits.
+  - `toolSpec(action)` gives each registry action its input and output, permission, privacy, read/write, confirmation and failure behaviour, with tests:
+    - every write is confirmed;
+    - anything touching someone else's time is `theirs`, except answering a plan someone sent you.
+  - `docs/TALK_TO_PAWMILY.md` §12 covers skills, provider independence and the ElevenLabs evaluation (design only).
+- **Browser check** (fake recognizer and fake speech, 390 px):
+  - the spoken day answer was read without emoji;
+  - replay worked;
+  - a spoken Watch request got the short line;
+  - the typed question stayed silent;
+  - closing the sheet stopped speech;
+  - the toggle worked; no errors.
+- **Not verified:** a real iPhone. Speech after recognition (audio session), the silent switch and voice quality all need the owner's test.
+
 ### 🚗 Talk to Pawmily — T3 drive times with live traffic (2026-10-30, owner: "Use Google for the information and build it"; `v2/talk-travel` from `v2/talk-weather`)
 - **Built:**
   - `server/travel.js` and `POST /travel`, signed in, 30 a day per member:

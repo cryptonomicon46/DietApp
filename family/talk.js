@@ -10,9 +10,10 @@
 import { parseTalk } from '../js/talkParse.js';
 import { toTokens, fromTokens } from '../js/talkActions.js';
 import { isDayQuestion, checkSuggestions } from '../js/talkDay.js';
+import { browserVoiceOutput } from './voice.js';
 
 let c = null;
-export function init(ctx) { c = ctx; }
+export function init(ctx) { document.getElementById('sheet')?.addEventListener('close', hush); c = ctx; }
 const tk = { tab: 'home', text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null };
 // v3: food (v2) and drive times from where you are (v3) are new kinds of data, so it's asked again.
 const DAYOK = () => `fam.talk.dayok3.${c.who()}`;
@@ -30,6 +31,17 @@ const READ = { want: 'Want to Read', reading: 'Reading', finished: 'Finished', d
 const MEAL = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', extra: 'A snack or extra' };
 const MIC_OK = () => typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 const voiceOff = () => { try { return c.LS.get('fam.talk.voice') === 'off'; } catch { return false; } };
+// 🔊 Answers read aloud (family/voice.js VoiceOutputProvider; the phone's own voice today) — only
+// when you asked by voice, and never if you turned it off. Nothing extra leaves the phone.
+const out$ = () => c?.voiceOut || browserVoiceOutput;
+const SPEAK_OK = () => out$().available();
+const speakOff = () => { try { return c.LS.get('fam.talk.speak') === 'off'; } catch { return false; } };
+let heard = false; // this request came from your voice
+export function hush() { out$().stop(); }
+export function speak(text, { always = false } = {}) {
+  if (!SPEAK_OK() || (!always && (!heard || speakOff()))) return;
+  out$().speak(text);
+}
 const norm = (t) => String(t || '').toLowerCase().replace(/^(the|a|an)\s+/, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
 export function open(tab = 'home', { voice = null } = {}) {
@@ -44,6 +56,7 @@ export function open(tab = 'home', { voice = null } = {}) {
 // request is read like a typed one. "Type instead" stops it.
 const SPEECH_ERR = { 'not-allowed': 'Speech recognition is off for this app — allow it in your phone\'s settings, or type.', 'service-not-allowed': 'Speech recognition is off for this app — allow it in your phone\'s settings, or type.', 'no-speech': "I didn't hear anything — tap 🎤 to try again, or type.", 'audio-capture': "The microphone isn't available — type instead.", network: "Speech recognition needs a connection — type instead." };
 export function listen(voice) {
+  hush();
   if (!voice) { tk.error = "Listening isn't available here — type, or tap 🎤 on your keyboard."; return draw(); }
   tk.voice = voice; tk.cards = null; tk.say = ''; tk.error = ''; tk.text = '';
   draw();
@@ -53,7 +66,7 @@ export function listen(voice) {
     if (live) live.textContent = voice.text || 'Listening…';
     if (!voice.ended) return;
     tk.voice = null;
-    if (voice.text) return send(voice.text);
+    if (voice.text) { heard = true; return send(voice.text); }
     tk.error = voice.error === 'aborted' ? '' : SPEECH_ERR[voice.error] || (voice.error ? "I couldn't catch that — tap 🎤 to try again, or type." : "I didn't hear anything — tap 🎤 to try again, or type.");
     draw();
     setTimeout(() => document.getElementById('tkText')?.focus(), 60);
@@ -64,8 +77,8 @@ export function listen(voice) {
 function stopListening(typeInstead = false) {
   const v = tk.voice;
   if (!v) return;
-  if (typeInstead) { tk.voice = null; try { v.r.abort(); } catch { /* already stopped */ } draw(); setTimeout(() => document.getElementById('tkText')?.focus(), 60); return; }
-  try { v.r.stop(); } catch { /* already stopped */ }
+  if (typeInstead) { tk.voice = null; try { v.abort(); } catch { /* already stopped */ } draw(); setTimeout(() => document.getElementById('tkText')?.focus(), 60); return; }
+  try { v.stop(); } catch { /* already stopped */ }
 }
 function draw() {
   let first = false;
@@ -76,7 +89,7 @@ function draw() {
       <div class="tk-two"><button type="button" data-talk="stop">Done</button><button type="button" class="ghost" data-talk="type">Type instead</button></div>
       <p class="tiny muted">Your phone's speech service turns your voice into text (Apple's on iPhone, Google's on Android); Pawmily only gets the words.</p></div>`
     : `<form class="tk-form" data-talkform><label for="tkText" class="visually-hidden">What would you like?</label><textarea id="tkText" rows="2" maxlength="500" placeholder="Ask or tell Pawmily…" enterkeyhint="send">${E(tk.text)}</textarea>${MIC_OK() ? '<button type="button" class="ghost tk-mic" data-talk="mic" aria-label="Speak">🎤</button>' : ''}<button ${tk.busy ? 'disabled' : ''} aria-label="Send">${tk.busy ? '…' : '↑'}</button></form>
-    <p class="tiny muted tk-hint">${MIC_OK() ? '🎤 Tap to speak, or type.' : '🎤 Tap the microphone on your keyboard to speak — only the words reach Pawmily.'}${MIC_OK() ? ` <button type="button" class="linkish tiny" data-talk="voiceoff">${voiceOff() ? 'Listen when I open Talk' : "Don't listen when I open Talk"}</button>` : ''}</p>`}
+    <p class="tiny muted tk-hint">${MIC_OK() ? '🎤 Tap to speak, or type.' : '🎤 Tap the microphone on your keyboard to speak — only the words reach Pawmily.'}${MIC_OK() ? ` <button type="button" class="linkish tiny" data-talk="voiceoff">${voiceOff() ? 'Listen when I open Talk' : "Don't listen when I open Talk"}</button>` : ''}${MIC_OK() && SPEAK_OK() ? ` · <button type="button" class="linkish tiny" data-talk="speakoff">${speakOff() ? '🔊 Read answers aloud' : '🔇 Don\'t read answers aloud'}</button>` : ''}</p>`}
     <div id="tkOut" role="status">${out()}</div></div>`);
 }
 function out() {
@@ -109,7 +122,7 @@ export async function send(text) {
       if (!steps.length) tk.say = r.say || "I can't do that yet. I can add shows, movies and books, and log meals, workouts and chores.";
     } catch (e) { tk.error = e.status === 429 ? "That's all the Talk requests for today." : e.message || "Pawmily couldn't read that just now."; }
     tk.busy = false;
-    if (!steps?.length) return draw();
+    if (!steps?.length) { speak(tk.say || tk.error); return draw(); }
   }
   if (steps[0]?.do === 'ask.day') return askDay(text, t);
   // Roles back to names, in anything shown to you.
@@ -117,6 +130,7 @@ export async function send(text) {
   // A meal, a described workout or "make it lighter" on its own: straight to that area's own preview.
   if (steps.length === 1 && ['diet.log', 'fitness.describe', 'fitness.lighter'].includes(steps[0].do)) { c.closeSheet(); return handOff(steps[0]); }
   tk.cards = await Promise.all(steps.map(resolve));
+  speak(tk.cards.length > 1 ? `Here are ${tk.cards.length} things — check them and tap to confirm.` : 'Here it is — check it and tap to confirm.');
   draw();
 }
 
@@ -139,7 +153,10 @@ async function askDay(text, t) {
     const go = (ctx.travel?.places || []).filter((p) => p.found !== false).map((p) => ({ name: p.place, q: p.address || p.place, min: p.drives?.find((d) => d.leave === 'now')?.minutes }));
     tk.cards = [{ type: 'answer', text: back(r.answer || "I couldn't work that out."), to, go },
       ...checkSuggestions(r.suggestions, ctx).map((x) => ({ type: 'suggest', s: { ...x, title: back(x.title), why: back(x.why) }, go: true }))];
+    const n = tk.cards.length - 1;
+    speak(`${tk.cards[0].text}${n ? ` I found ${n === 1 ? 'a time' : `${n} times`} you could add to your calendar.` : ''}`);
   } catch (e) { tk.error = e.status === 429 ? "That's all the day questions for today." : e.message || "Pawmily couldn't answer that just now."; }
+  if (tk.error) speak(tk.error);
   tk.busy = false;
   return draw();
 }
@@ -180,7 +197,7 @@ function cardHtml(x, i) {
     return `<div class="tk-card"><b>📚 ${E(b.title)}</b><small class="muted">${E([(b.authors || []).map((a) => a.name || a).join(', '), b.year].filter(Boolean).join(' · '))} → ${E(READ[x.state])}</small>
       ${p && !x.done ? `<label class="tk-rec"><input type="checkbox" data-talkrec="${i}" ${x.recBy ? 'checked' : ''}> Recommended by ${E(p.first)}</label>` : ''}${btn('Add to Read')}</div>`;
   }
-  if (x.type === 'answer') return `<div class="tk-card tk-answer">${E(x.text).replace(/\n/g, '<br>')}${(x.go || []).map((g) => `<a class="tk-go small" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(g.q)}&travelmode=driving" target="_blank" rel="noopener">🚗 ${E(g.name)}${g.min ? ` · ${g.min} min now` : ''} · Directions ›</a>`).join('')}${x.to === 'health' ? '<button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button>' : '<button type="button" class="linkish small" data-talk="calopen">Open Calendar ›</button>'}</div>`;
+  if (x.type === 'answer') return `<div class="tk-card tk-answer">${SPEAK_OK() ? '<button type="button" class="icon-btn tk-say" data-talk="speak" aria-label="Read this aloud">🔊</button>' : ''}${E(x.text).replace(/\n/g, '<br>')}${(x.go || []).map((g) => `<a class="tk-go small" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(g.q)}&travelmode=driving" target="_blank" rel="noopener">🚗 ${E(g.name)}${g.min ? ` · ${g.min} min now` : ''} · Directions ›</a>`).join('')}${x.to === 'health' ? '<button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button>' : '<button type="button" class="linkish small" data-talk="calopen">Open Calendar ›</button>'}</div>`;
   if (x.type === 'suggest') { const d = new Date(`${x.s.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' }); return `<div class="tk-card"><b>🗓 ${E(x.s.title)} · ${E(d)} ${E(time12(x.s.start))}–${E(time12(x.s.end))}</b>${x.s.why ? `<small class="muted">${E(x.s.why)}</small>` : ''}${btn('Add to my calendar', true)}</div>`; }
   if (x.type === 'care') return `<div class="tk-card"><b>${E(x.care.icon)} ${E(x.care.label)}</b><small class="muted">Today · logged for you</small>${btn('Log it')}</div>`;
   if (x.type === 'pickcare') return `<div class="tk-card"><b>Which one?</b><small class="muted">I don't know "${E(x.chore)}" — pick it:</small><div class="tk-ex">${x.kinds.map((k) => `<button type="button" data-talkcare="${i}:${E(k.kind)}">${E(k.icon)} ${E(k.label)}</button>`).join('')}</div></div>`;
@@ -248,6 +265,8 @@ export async function onClick(t) {
   if (d.talk === 'voiceoff') { try { c.LS.set('fam.talk.voice', voiceOff() ? '' : 'off'); } catch { /* private mode */ } c.toast(voiceOff() ? 'Talk opens ready to type' : 'Talk starts listening when you open it'); return draw(); }
   if (d.talk === 'dayok') { try { c.LS.set(DAYOK(), '1'); } catch { /* private mode */ } const q = tk.consent?.text || tk.text; tk.consent = null; return send(q); }
   if (d.talk === 'dayno') { tk.consent = null; tk.say = "OK — I won't look at your calendar. I can still add shows, movies and books, and log meals, workouts and chores."; return draw(); }
+  if (d.talk === 'speakoff') { try { c.LS.set('fam.talk.speak', speakOff() ? '' : 'off'); } catch { /* private mode */ } if (speakOff()) hush(); c.toast(speakOff() ? 'Answers stay on screen' : 'Answers to spoken questions are read aloud'); return draw(); }
+  if (d.talk === 'speak') { const a = tk.cards?.find((x) => x.type === 'answer'); return speak(a?.text, { always: true }); }
   if (d.talk === 'calopen') { c.closeSheet(); return c.show('calendar'); }
   if (d.talk === 'healthopen') { c.closeSheet(); return c.show('health'); }
   if (d.talk === 'seen') { try { c.LS.set(SEEN, '1'); } catch { /* private mode */ } return draw(); }
@@ -255,4 +274,4 @@ export async function onClick(t) {
   return null;
 }
 export function onChange(t) { if (t.dataset.talkrec != null) { const x = tk.cards[+t.dataset.talkrec]; x.recBy = t.checked && c.partner() ? c.partner().id : ''; } }
-export function onSubmit(f) { const v = f.querySelector('textarea')?.value || ''; return send(v); }
+export function onSubmit(f) { heard = false; hush(); const v = f.querySelector('textarea')?.value || ''; return send(v); }

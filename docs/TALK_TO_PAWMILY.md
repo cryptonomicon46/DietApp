@@ -179,3 +179,63 @@ Only examples whose actions are built and authorized are shown. Unsupported requ
 - **T2** — coordination: `calendar.freeBusy`, Us plan proposals with decline/counter, Home requests.
 - **T3** — external context: places/hours and routing providers (after decision 6), schedule feasibility, date and outing proposals.
 - **T4** — compound requests and Plan my day, with WHOOP context (`dayContextForPlanning`) as one input among many.
+
+## 12. Extensibility — voice, context adapters, skills, tools (DESIGN ONLY beyond what's built; owner note 2026-10-30)
+
+Talk stays on its authorized V1 features. ElevenLabs, reservation and media providers, and more autonomous agents are **not authorized**. This section records the seams that let them be added later without a rewrite.
+
+**The flow:**
+voice or text → intent and context → Pawmily orchestrator (the phone reader `js/talkParse.js`, or Claude through the gateway) → typed steps or a proposal (`js/talkActions.js` `validate` / `checkPlan`) → a card you approve (Undo) → each domain's own write path, sealed with the family key.
+
+### 12.1 Voice providers (built as a seam)
+- **`VoiceInputProvider`**: audio → transcript.
+  - Today it's the browser's speech recognition (`family/app.js` `listenNow`). It must start inside the tap.
+  - Talk receives only a session `{ text, ended, error, listener, stop(), abort() }` and never touches the recognizer.
+- **`VoiceOutputProvider`**: response text → audio.
+  - It's `{ id, available(), speak(text), stop() }` (`family/voice.js` `browserVoiceOutput`: the phone's own speech synthesis, Apple's on-device voices on iPhone).
+  - Talk takes it from its context (`c.voiceOut`), falling back to the browser one.
+- **Voice never owns reasoning or state.** A provider turns sound into text, and text into sound. Validation, consent, privacy minimisation and writes stay in Pawmily.
+
+### 12.2 External context adapters (built for weather, food and travel)
+- Each adapter normalises its provider's answer into only the fields Pawmily needs. The allowlists are `CONTEXT` in `js/talkActions.js`, and tests check that every normaliser's output fits its allowlist:
+  - `weather` / `daylight`: `dayWeather` ← Open-Meteo
+  - `food`: `foodFacts` ← `js/dayPlan.js`
+  - `travel` / `drive`: `travelFacts` ← `server/travel.js` ← Google Maps
+- Provider objects never travel past the adapter.
+- A missing provider (no key, offline, permission refused) leaves its facts out, and the answer says so.
+- **Future adapters** follow the same shape: a provider call behind the connector, a normaliser, an allowlist entry and a test.
+  - `places` is already inside `travel`.
+  - `restaurantAvailability`, `media` and `books` would come later; Watch and Read already have their own server adapters.
+
+### 12.3 Skills (design only)
+- Possible future skills: Day Planner, Schedule Feasibility, Date Concierge, Household Triage, Health Planner, Media Librarian, Errand Optimizer.
+- These are **bounded prompts, not agents**. Each gets a scoped context built on the phone from adapters (no database access), returns typed steps or a proposal checked by `checkPlan`, and keeps no state between requests.
+- "Ask about my day" is today's Day Planner in this shape: `dayContext` → `talk.day` → answer and suggestions, each re-checked on the phone.
+- A request that spans domains ("Can we visit the Rolex store and get dinner afterward?") becomes **one** plan card, not several agent replies.
+
+### 12.4 Tool registry (built as `toolSpec`)
+Every action in `ACTIONS` exposes, through `toolSpec(action)`:
+- input schema (JSON Schema from `args`) and output (facts, a saved id with Undo, or a proposal id);
+- required permission (the Family area the server already enforces);
+- privacy class;
+- read or write;
+- confirmation: `none` for reads, `tap` for your own writes, `theirs` for anything touching someone else's time;
+- failure behaviour.
+
+A tool is added to the registry first. External callers (a future voice agent included) get registry tools only, never database access, and every write keeps Pawmily-side validation and confirmation.
+
+### 12.5 Provider independence
+- **Domain models** name no provider.
+- **Claude** sits behind `server/aiGateway.js`. The model comes from settings; Gemini already backs some features.
+- **Maps** sit behind `server/travel.js`.
+- **Weather** sits behind `js/brief.js` / `dayWeather`.
+- **Speech** sits behind 12.1.
+- The UI works without each optional provider. With no Claude, the phone reader still handles everyday requests. With no Maps key, location or speech, those parts are simply left out.
+
+### 12.6 A future ElevenLabs evaluation (design only; needs its own authorization)
+- **First, a chained test:** ElevenLabs realtime speech-to-text (as a `VoiceInputProvider`) → the existing Pawmily orchestration → ElevenLabs streaming text-to-speech (as a `VoiceOutputProvider`).
+- **Setup:**
+  - The API key stays on the connector, which issues short-lived tokens or proxies the stream.
+  - Audio would then go to ElevenLabs, so the privacy page and consent would change.
+- **Measure:** latency, accuracy on household names (still swapped for roles before any AI), cost, and behaviour on iPhone.
+- **Only after that,** consider letting an external voice-agent platform call tools. Start read-only, or with narrow proposal tools from `toolSpec` (`confirm: 'tap' | 'theirs'`). Pawmily validates and confirms every write. The agent never holds the family key or any private context beyond a tool's allowlist.

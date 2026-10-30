@@ -84,7 +84,7 @@ test('what each lookup may tell the assistant: allowlisted fields only (no event
   assert.equal(T.minimizeFacts('health.history', {}), null, 'no adapter, nothing');
   const day = dayContextForPlanning({ daily: {}, today: '2026-10-30' });
   assert.deepEqual(T.minimizeFacts('fitness.day', day), day, 'the Phase B planning facts fit as they are');
-  assert.deepEqual(Object.keys(T.minimizeFacts('travel', { from: 'Willow Glen', to: 'Santana Row', minutes: 14, home: '123 Real St' })), ['from', 'to', 'minutes']);
+  assert.deepEqual(Object.keys(T.minimizeFacts('travel', { place: 'Movement Santa Clara', drives: [], home: '123 Real St', raw: { routes: [] } })), ['place', 'drives']);
 });
 
 test('the examples under the Talk box only offer what is built', () => {

@@ -1470,6 +1470,7 @@ body.has-talk main { padding-bottom: 96px; }
 .tk-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; } .tk-two button { min-height: 44px; }
 .tk-answer { font-size: .95rem; line-height: 1.45; } .tk-answer > button { justify-self: start; min-height: 0; padding: 0; }
 .tk-go { display: block; padding: .45rem 0; color: var(--brand); font-weight: 600; text-decoration: none; min-height: 44px; box-sizing: border-box; line-height: 1.6; }
+.tk-answer > .tk-say { float: right; padding: 0; margin: -6px -8px 0 6px; min-width: 44px; min-height: 44px; font-size: 1.1rem; }
 /* 🎤 listening */
 .tk-listen { display: grid; justify-items: center; gap: 10px; text-align: center; margin: 14px 0 4px; }
 .tk-pulse { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; font-size: 2rem; background: radial-gradient(120% 140% at 30% 20%, #fffbe2 0%, #ffe680 18%, #ffc928 48%, #e09b00 78%, #a56c00 100%); box-shadow: 0 0 0 0 rgba(224,155,0,.45); animation: tkPulse 1.4s ease-out infinite; }

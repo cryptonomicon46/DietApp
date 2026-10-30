@@ -425,17 +425,21 @@ function hereNow() {
     navigator.geolocation.getCurrentPosition((p) => ok({ lat: Math.round(p.coords.latitude * 1000) / 1000, lng: Math.round(p.coords.longitude * 1000) / 1000 }), () => ok(null), { enableHighAccuracy: false, timeout: 8000, maximumAge: 15 * 60000 });
   });
 }
+// 🎙️ The browser VoiceInputProvider (family/voice.js describes the boundary): it must start inside
+// the tap, so it lives here; Talk only gets the session { text, ended, error, listener, stop, abort }.
 // `asked`: the 🎤 button itself — it listens even when "Don't listen when I open Talk" is on.
 function listenNow(asked = false) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR || (!asked && LS.get('fam.talk.voice') === 'off')) return null;
   try {
-    const r = new SR(), buf = { r, text: '', ended: false, error: '', listener: null };
+    const r = new SR(), buf = { text: '', ended: false, error: '', listener: null, stop: () => r.stop(), abort: () => r.abort() };
     r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
     r.onresult = (e) => { buf.text = [...e.results].map((x) => x[0]?.transcript || '').join(' ').replace(/\s+/g, ' ').trim(); buf.listener?.(); };
     r.onerror = (e) => { buf.error = e.error || 'error'; };
     r.onend = () => { buf.ended = true; buf.listener?.(); };
     r.start();
+    // iOS only lets a page speak after a tap has started speech once: a silent word now, in the tap.
+    try { if (window.speechSynthesis && LS.get('fam.talk.speak') !== 'off') { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch { /* no speech here */ }
     return buf;
   } catch { return null; }
 }

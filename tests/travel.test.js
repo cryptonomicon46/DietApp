@@ -100,3 +100,28 @@ test('the /travel route: signed in, needs the key, a daily limit, Google errors 
   const bad = await call('/travel', t2, 'POST', ask);
   assert.equal(bad.status, 502); assert.match(bad.error, /Google Maps: API key not valid/);
 });
+
+test('external context adapters: what each normaliser produces is exactly its allowlist (no provider objects)', async () => {
+  const { CONTEXT, minimizeFacts } = await import('../js/talkActions.js');
+  const { dayWeather, foodFacts } = await import('../js/talkDay.js');
+  const fits = (adapter, obj) => assert.deepEqual(minimizeFacts(adapter, obj), obj, `${adapter}: ${Object.keys(obj).filter((k) => !CONTEXT[adapter].includes(k))}`);
+  const f = travelFacts({ places: [{ q: 'x', found: true, name: 'Movement Santa Clara', address: '801 Martin Ave', openNow: true, hoursToday: '6 AM – 10 PM', drives: [{ leave: 'now', minutes: 18, miles: 7.8 }] }, { q: 'Nowhere', found: false }] });
+  for (const p of f.places) { fits('travel', p); for (const d of p.drives || []) fits('drive', d); }
+  const w = dayWeather([{ time: new Date(2026, 9, 30, 14), temp: 64, rain: 5, wind: 6, uv: 3, aqi: 40 }], { dates: ['2026-10-30'], daily: { sunrise: ['2026-10-30T07:24'], sunset: ['2026-10-30T18:08'] } });
+  for (const h of w.hours) fits('weather', h); for (const s of w.sun) fits('daylight', s);
+  fits('food', foodFacts({ entry: { eaten: 1, target: 2000, protein: 1, proteinTarget: 150, left: { kcal: 1999, p: 149, c: 200, f: 60 }, complete: true }, planned: { dinner: { title: 'Cod', kcal: 600, p: 50, c: 50, f: 15 } }, extras: 1 }));
+});
+
+test('the tool registry: every action declares input, output, permission, privacy, read/write, confirmation and failure', async () => {
+  const { ACTIONS, toolSpec } = await import('../js/talkActions.js');
+  for (const a of Object.keys(ACTIONS)) {
+    const t = toolSpec(a);
+    for (const k of ['input', 'output', 'permission', 'privacy', 'access', 'confirm', 'onFailure']) assert.ok(t[k], `${a}.${k}`);
+    assert.equal(t.input.type, 'object');
+    if (t.access === 'write') assert.notEqual(t.confirm, 'none', `${a}: a write is always confirmed`);
+    // Someone else's time is only ever proposed to them; answering what they asked you is your own tap.
+    if (ACTIONS[a].affects === 'shared' && a !== 'us.plan.reply') assert.equal(t.confirm, 'theirs', `${a}: someone else's time is only ever proposed`);
+  }
+  assert.equal(toolSpec('diet.log').permission, 'diet'); assert.match(toolSpec('diet.log').privacy, /health/);
+  assert.equal(toolSpec('calendar.freeBusy').access, 'read'); assert.equal(toolSpec('nope'), null);
+});
