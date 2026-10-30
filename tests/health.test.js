@@ -175,3 +175,20 @@ test("⌚ the WHOOP detail sheets: Recovery, Sleep and Strain, WHOOP's names and
   for (const x of ['updated 10:42 AM', '1,265', '6,214', 'Zone 5', '18 min', 'Weightlifting · 9:31 AM', '✓ Upper Body in Fitness', 'not the whole day']) assert.ok(st.includes(x), x);
   assert.match(strainDetailHtml({ strain: null, yesterday: null, kcal: null, avgHr: null, maxHr: null, steps: null, zones: null, workouts: [] }, esc), /No WHOOP workouts today yet/);
 });
+
+test("every meal today is one tap from Health: a meal you described shows as that meal, and opens to its foods", async () => {
+  const { foodState, healthHtml } = await import('../family/health.js');
+  const D = await import('../js/dayPlan.js');
+  const profile = { sex: 'male', age: 35, heightIn: 70, phase: 'cut', goalLb: 175, activity: 'light', pace: 'steady' };
+  const data = { profile, weights: [{ date: today, weight: 182 }] };
+  const s = { get: (k, f) => (k in data ? data[k] : f), set: (k, v) => { data[k] = v; } };
+  D.logAs(s, today, 'breakfast', { items: [{ food: 'egg', grams: 100 }, { food: 'sourdough', grams: 50 }] });
+  D.planAs(s, today, 'lunch', { items: [{ food: 'avocado', grams: 68 }, { food: 'egg', grams: 150 }] });
+  const f = foodState(data, today, 11);
+  const by = Object.fromEntries(f.meals.map((m) => [m.meal, m]));
+  assert.equal(by.breakfast.logged, true); assert.match(by.breakfast.title, /Whole eggs|eggs/i);
+  assert.equal(by.lunch.logged, false); assert.match(by.lunch.title, /Avocado/i);
+  assert.equal(f.next, 'lunch'); assert.match(f.title, /Avocado/i, '"Lunch is next" shows the meal you described');
+  const html = healthHtml(data, { esc, today, hour: 11, sharing: '' });
+  assert.match(html, /data-ml="open:breakfast"/); assert.match(html, /data-ml="open:lunch"/); assert.match(html, /All meals ›/);
+});

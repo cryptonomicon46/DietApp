@@ -1479,3 +1479,19 @@ body.has-talk main { padding-bottom: 96px; }
 .tk-live { font-size: 1.1rem; font-weight: 600; min-height: 2.6em; margin: 0; }
 .tk-listen .tk-two { width: 100%; }
 .tk-mic { min-width: 50px; padding: 0 10px !important; font-size: 1.15rem !important; }
+/* 🍽 Today's meals on Health: each one a tap from its foods and amounts */
+.hl-meals { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.hl-meal { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: baseline; gap: 6px; min-height: 40px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: .85rem; }
+.hl-meal b { display: inline; font-weight: 600; } .hl-meal small { display: inline; color: var(--muted); font-size: .8rem; }
+.hl-meal.on { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); background: var(--brand-soft); }
+.hl-meal.next { border-color: var(--brand); }
+.hl-meal.all { color: var(--brand); font-weight: 600; border-style: dashed; }
+.hl-meal:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+/* the amount of one food: − slider + */
+.ml-amt { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; margin: 6px 0 2px; grid-column: 1 / -1; }
+.ml-amt button { min-height: 44px; padding: 0; font-size: 1.2rem; }
+.ml-amt input[type=range] { width: 100%; accent-color: var(--brand); min-height: 32px; }
+.ml-ei.edit { flex-wrap: wrap; }
+.ml-pack { display: block; margin: 6px auto 0; }
+.ml-food { flex-wrap: wrap; } .ml-food .ml-slide { flex: 1 0 100%; width: 100%; accent-color: var(--brand); min-height: 32px; margin: 2px 0 0; }
+.ml-food .ml-unit { flex: 1 0 100%; display: block; margin-top: -2px; min-height: 1em; }

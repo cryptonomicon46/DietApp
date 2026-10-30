@@ -206,11 +206,18 @@ export function logPlanned(s, today, meal, at = atNow()) {
 // yesterday): it becomes today's version of that meal — so the trackers show it and the meals
 // still to come re-fit around it — and it's logged.
 export function logAs(s, today, meal, c, at = atNow()) {
+  planAs(s, today, meal, c);
+  return logPlanned(s, today, meal, at);
+}
+// "Plan it": the same, without logging — it becomes today's plan for that meal (foods and grams
+// stay resizable), and the meals still to come re-fit around it.
+export function planAs(s, today, meal, c) {
   rollDay(s, today);
   const custom = s.get('custom');
   custom.meals = { ...custom.meals, [meal]: c };
   s.set('custom', custom);
-  return logPlanned(s, today, meal, at);
+  record(s, today);
+  return planOf(dataOf(s), today)[meal];
 }
 export function unlog(s, today, meal) { return editLog(s, today, (log) => { delete log.meals[meal]; }); }
 export function addExtras(s, today, items) { return editLog(s, today, (log) => { log.extras = [...(log.extras || []), ...items.filter(Boolean)]; }); }

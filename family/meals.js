@@ -10,6 +10,7 @@ import { FOODS } from '../js/foods.js';
 import { EAT_OUT, EAT_OUT_SIZE, DRINKS, labelKcal } from '../js/plan.js';
 import { parseMeal, totalOf } from '../js/foodText.js';
 import { leftText } from './health.js';
+import { amountOf, resize, nudge, placeItems, asMealItems, packagedAsk } from '../js/mealEstimate.js';
 
 const ms = { c: null, data: null, sheet: null, ops: [], ai: null, busy: false };
 export const state = ms;
@@ -57,11 +58,12 @@ function mealSheet(meal) {
   const rows = (m.portions || []).filter((x) => FOODS[x.food]).map((x) => {
     const step = x.range?.[2] || 5;
     return `<div class="ml-food"><span><b>${E(FOODS[x.food].name)}</b>${x.locked ? ' <small class="muted">🔒</small>' : ''}</span>
-      <span class="ml-step"><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${-step}" aria-label="Less ${E(FOODS[x.food].name)}">−</button><input inputmode="decimal" data-mle="g:${meal}:${x.slot}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams"><span class="small muted">g</span><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${step}" aria-label="More ${E(FOODS[x.food].name)}">＋</button></span></div>`;
+      <span class="ml-step"><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${-step}" aria-label="Less ${E(FOODS[x.food].name)}">−</button><input inputmode="decimal" data-mle="g:${meal}:${x.slot}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams"><span class="small muted">g</span><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${step}" aria-label="More ${E(FOODS[x.food].name)}">＋</button></span>
+      <input type="range" class="ml-slide" data-mle="gs:${meal}:${x.slot}" min="0" max="${Math.max(x.range?.[1] || 400, r0(x.grams) * 2)}" step="${step}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams" aria-valuetext="${r0(x.grams)} grams${unitHint(x)}"><small class="muted ml-unit" id="mlU-${x.slot}">${E(unitHint(x).replace(/^, /, ''))}</small></div>`;
   }).join('');
   const yest = yesterdays(meal);
   open(`${head(NAME[meal], logged ? `✓ logged ${E(logged.at || '')}` : 'planned')}
-    <p class="small ml-title">${E(m.title)}</p>${totals(m.totals)}<p class="tiny muted">${leftLine(s)}</p>
+    <p class="small ml-title">${E(m.title)}</p><div id="mlMealTot">${totals(m.totals)}<p class="tiny muted">${leftLine(s)}</p></div>
     ${rows ? `<div class="ml-foods">${rows}</div><p class="tiny muted">Changes save when you log${logged ? ' or close' : ''}. ${m.balanced ? 'Sized to balance the rest of your day.' : ''}</p>` : ''}
     <div class="ml-primary">${logged ? `<button type="button" data-ml="save:${meal}" ${ms.ops.length ? '' : 'disabled'}>Save changes</button>` : `<button type="button" data-ml="plan:${meal}">✓ Log as planned</button>`}
       <div class="ml-three"><button type="button" class="ghost" data-ml="photo:${meal}">📷 Photo</button><button type="button" class="ghost" data-ml="tell:${meal}">🎙️ Tell me</button><button type="button" class="ghost" data-ml="out:${meal}">🍴 Ate out</button></div></div>
@@ -74,6 +76,8 @@ function mealSheet(meal) {
       ${logged ? `<button type="button" class="ghost" data-ml="unlog:${meal}">↩︎ Unlog<small>Logged by mistake</small></button>` : ''}
     </div><a class="ml-link" href="../#today">Swap foods, combos and more in Today's plan ›</a></details>`);
 }
+// "2 eggs", "½ avocado": the food's own unit next to its grams, when it has one.
+function unitHint(x) { const f = FOODS[x.food]; if (!f?.unit?.grams) return ''; const a = amountOf({ food: x.food, grams: x.grams }, FOODS); return `, ${a.text}`; }
 const customOf = (s, meal) => D.customOf(s.d, today())[meal] || {};
 function yesterdays(meal) {
   const d = new Date(`${today()}T12:00:00`); d.setDate(d.getDate() - 1);
@@ -233,7 +237,12 @@ async function readPhoto() {
 
 // ---------- 🎙️ Tell me ----------
 // 🗣️ From Talk to Pawmily: the same Tell me, already filled in and read — its preview is the check.
-export function tellWith(target, text) { ms.sheet = { kind: 'tell', target, text, est: null, error: '' }; drawTell(); return readTell(); }
+// From Talk (or Tell me): "plan" when you said you'll have it; a packaged meal goes to the label form.
+export function tellWith(target, text, { plan = false } = {}) {
+  const pk = target !== 'extra' && packagedAsk(text);
+  if (pk) return packSheet(target, { name: pk.name, p: pk.p, c: pk.c, f: pk.f, kcal: pk.kcal, servings: 1, save: true });
+  ms.sheet = { kind: 'tell', target, text, est: null, error: '', plan }; drawTell(); return readTell();
+}
 function tellSheet(target) {
   ms.sheet = { kind: 'tell', target, text: '', est: null, error: '' };
   drawTell();
@@ -253,50 +262,83 @@ async function readTell() {
   sh.text = text;
   if (!text) { sh.error = 'Say or type what you had first.'; return drawTell(); }
   const local = parseMeal(text, FOODS);
-  if (!local.unread.length && local.items.length) return estimateSheet(sh.target, { from: 'tell', name: '', items: local.items, text });
-  if ((await aiCheck()) === false) return estimateSheet(sh.target, { from: 'tell', name: '', items: local.items, unread: local.unread, text });
+  if (!local.unread.length && local.items.length) return estimateSheet(sh.target, { from: 'tell', name: '', items: local.items, text, plan: sh.plan });
+  if ((await aiCheck()) === false) return estimateSheet(sh.target, { from: 'tell', name: '', items: local.items, unread: local.unread, text, plan: sh.plan });
   ms.busy = true; drawTell();
   try {
     const r = await ms.c.api.post('/ai/diet/text', { text });
     ms.busy = false;
     if (ms.sheet !== sh) return null;
     if (!r.items?.length) { sh.error = "Couldn't make out the food in that — try naming each thing."; return drawTell(); }
-    return estimateSheet(sh.target, { from: 'tell', name: '', items: r.items, text, claude: true });
+    return estimateSheet(sh.target, { from: 'tell', name: '', items: r.items, text, claude: true, plan: sh.plan });
   } catch (e) {
     ms.busy = false;
     if (e.status === 501) ms.ai = false;
     if (ms.sheet !== sh) return null;
     // Claude isn't there right now: what the phone could read, with what it couldn't.
-    return estimateSheet(sh.target, { from: 'tell', name: '', items: local.items, unread: local.unread, text, note: e.status === 429 ? e.message : "Claude couldn't read it just now — here's what your phone could." });
+    return estimateSheet(sh.target, { from: 'tell', name: '', items: local.items, unread: local.unread, text, plan: sh.plan, note: e.status === 429 ? e.message : "Claude couldn't read it just now — here's what your phone could." });
   }
 }
 
 // ---------- the estimate: check it, then log ----------
 function estimateSheet(target, est) {
-  ms.sheet = { kind: 'est', target, est: { size: 1, ate: 1, ...est, items: est.items.map((x) => ({ ...x })) } };
+  // Foods the phone knows stay foods (resized by weight or unit); the rest are resized in servings.
+  ms.sheet = { kind: 'est', target, est: { size: 1, ate: 1, editing: false, ...est, items: placeItems(est.items.map((x) => ({ ...x })), FOODS, parseMeal) } };
   drawEst();
 }
 function estTotals(e) { const t = totalOf(e.items), x = e.size * e.ate; return { kcal: t.kcal * x, p: t.p * x, c: t.c * x, f: t.f * x }; }
+const amountLine = (x) => { const a = amountOf(x, FOODS); return `${a.text}${a.sub ? ` · ${a.sub}` : ''}`; };
+const itemSmall = (x) => `${E(amountLine(x))}${x.guess ? ' · typical portion — check' : ''} · ${r0(x.p)}P ${r0(x.c)}C ${r0(x.f)}F`;
 function drawEst() {
-  const { est: e, target } = ms.sheet, t = estTotals(e);
-  open(`${head(e.from === 'photo' ? '📷 Estimate' : '🎙️ Here\'s what I got', target === 'extra' ? 'a snack or extra' : NAME[target])}
+  const { est: e, target } = ms.sheet, t = estTotals(e), extra = target === 'extra';
+  const rows = e.items.map((x, i) => {
+    const a = amountOf(x, FOODS);
+    const ctl = e.editing ? `<div class="ml-amt"><button type="button" class="ghost" data-ml="enudge:${i}:-1" aria-label="Less ${E(x.name)}">−</button><input type="range" data-mle="ea:${i}" min="${a.min}" max="${a.max}" step="${a.step}" value="${a.value}" aria-label="${E(x.name)}, how much" aria-valuetext="${E(amountLine(x))}, ${r0(x.kcal)} calories"><button type="button" class="ghost" data-ml="enudge:${i}:1" aria-label="More ${E(x.name)}">+</button></div>` : '';
+    return `<div class="ml-ei${e.editing ? ' edit' : ''}"><span><b>${E(x.name)}</b><small class="muted" id="mlA${i}">${itemSmall(x)}</small></span><span><span id="mlK${i}">${r0(x.kcal)} kcal</span> <button type="button" class="icon-btn" data-ml="edel:${i}" aria-label="Remove ${E(x.name)}">✕</button></span>${ctl}</div>`;
+  }).join('');
+  const kc = `${r0(t.kcal)} kcal`;
+  const main = extra ? `<button type="button" id="mlLog" data-ml="elog" ${t.kcal > 0 ? '' : 'disabled'}>✓ Log ${kc}</button>`
+    : e.plan ? `<button type="button" id="mlLog" data-ml="eplan" ${t.kcal > 0 ? '' : 'disabled'}>Plan it · ${kc}</button>` : `<button type="button" id="mlLog" data-ml="elog" ${t.kcal > 0 ? '' : 'disabled'}>✓ Plan & log · ${kc}</button>`;
+  const second = extra ? '' : e.plan ? '<button type="button" class="ghost" data-ml="elog">✓ Plan & log</button>' : '<button type="button" class="ghost" data-ml="eplan">Plan it</button>';
+  open(`${head(e.from === 'photo' ? '📷 Estimate' : '🎙️ Here\'s what I got', extra ? 'a snack or extra' : NAME[target])}
     ${e.note ? `<p class="small" role="status">${E(e.note)}</p>` : ''}
-    <p class="ml-note">${e.from === 'photo' ? 'A rough estimate — adjust anything that looks off.' : e.claude ? 'Read by Claude from your words — check it.' : 'Read on your phone — check it.'}${e.restaurant ? ' Restaurant food usually has more oil than it looks.' : ''}</p>
-    <div class="ml-est">${e.items.map((x, i) => `<div class="ml-ei"><span><b>${E(x.name)}</b><small class="muted">${E(x.amount || '')}${x.guess ? ' · typical portion — check' : ''} · ${r0(x.p)}P ${r0(x.c)}C ${r0(x.f)}F</small></span><span>${r0(x.kcal)} kcal <button type="button" class="icon-btn" data-ml="edel:${i}" aria-label="Remove ${E(x.name)}">✕</button></span></div>`).join('') || '<p class="small muted">Nothing left — add it another way.</p>'}</div>
-    ${e.unread?.length ? `<p class="small">Couldn't place: ${e.unread.map((x) => `“${E(x)}”`).join(', ')} — add ${e.unread.length === 1 ? 'it' : 'them'} with ✏️ Quick macros after logging.</p>` : ''}
+    <p class="ml-note">${e.from === 'photo' ? 'A rough estimate — adjust anything that looks off.' : e.claude ? 'Read by Claude from your words — check it.' : 'Read on your phone — check it.'}${e.restaurant ? ' Restaurant food usually has more oil than it looks.' : ''} Change how much of each food with ✏️ Edit amounts — the numbers follow.</p>
+    <div class="ml-est">${rows || '<p class="small muted">Nothing left — add it another way.</p>'}</div>
+    ${e.unread?.length ? `<p class="small">Couldn't place: ${e.unread.map((x) => `“${E(x)}”`).join(', ')} — say it again with an amount, or add ${e.unread.length === 1 ? 'it' : 'them'} after logging.</p>` : ''}
     ${e.from === 'photo' ? `<div class="ml-label small">Portion</div><div class="seg">${[[0.75, 'Light'], [1, 'Regular'], [1.3, 'Large']].map(([v, l]) => `<button type="button" class="${e.size === v ? 'on' : ''}" data-ml="esize:${v}">${l}</button>`).join('')}</div>
       <div class="ml-label small">How much you ate</div><div class="seg">${[[1, 'All'], [0.75, 'Most'], [0.5, 'Half']].map(([v, l]) => `<button type="button" class="${e.ate === v ? 'on' : ''}" data-ml="eate:${v}">${l}</button>`).join('')}</div>` : ''}
-    ${totals(t)}
-    <div class="ml-primary"><button type="button" data-ml="elog" ${t.kcal > 0 ? '' : 'disabled'}>✓ Log ${r0(t.kcal)} kcal</button><div class="ml-two"><button type="button" class="ghost" data-ml="eedit">Edit the numbers</button><button type="button" class="ghost" data-ml="${e.from === 'photo' ? `photo:${target}` : `tell:${target}`}">${e.from === 'photo' ? 'Retake' : 'Say it again'}</button></div></div>`);
+    <div id="mlTot">${totals(t)}</div>
+    <div class="ml-primary">${main}<div class="ml-two">${second}<button type="button" class="ghost" data-ml="eamt">${e.editing ? 'Done editing' : '✏️ Edit amounts'}</button></div>
+      <div class="ml-two"><button type="button" class="ghost" data-ml="${e.from === 'photo' ? `photo:${target}` : `tell:${target}`}">${e.from === 'photo' ? 'Retake' : 'Say it again'}</button>${extra ? '' : `<button type="button" class="ghost" data-ml="epack">📦 It's packaged</button>`}</div></div>`);
 }
-function logEstimate() {
-  const { est: e, target } = ms.sheet, t = estTotals(e);
+// While a slider moves: only the numbers change (redrawing would stop the drag).
+function refreshEst(i) {
+  const { est: e, target } = ms.sheet, t = estTotals(e), x = e.items[i];
+  const a = document.getElementById(`mlA${i}`), k = document.getElementById(`mlK${i}`), tot = document.getElementById('mlTot'), b = document.getElementById('mlLog');
+  if (a) a.innerHTML = itemSmall(x);
+  if (k) k.textContent = `${r0(x.kcal)} kcal`;
+  if (tot) tot.innerHTML = totals(t);
+  if (b) { b.disabled = !(t.kcal > 0); b.textContent = target === 'extra' ? `✓ Log ${r0(t.kcal)} kcal` : e.plan ? `Plan it · ${r0(t.kcal)} kcal` : `✓ Plan & log · ${r0(t.kcal)} kcal`; }
+}
+// The meal to keep: its foods and grams when every item is a food the app knows (so it can be
+// resized later from Health), else one entry with its numbers.
+function estMeal() {
+  const { est: e } = ms.sheet, t = estTotals(e);
   const name = (e.name || e.items.map((x) => x.name.replace(/\s*\(.*?\)/g, '')).slice(0, 3).join(', ')).slice(0, 60) || 'Meal';
   const icon = e.from === 'photo' ? '📷' : '🎙️';
-  if (target === 'extra') return commit((s) => D.addExtras(s, today(), [{ title: `${icon} ${name}`, kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) }]), `✓ ${name} logged · ${r0(t.kcal)} kcal`);
-  const c = e.restaurant ? { eatout: { mode: 'menu', dishName: name, menu: { kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) } } }
+  const items = !e.restaurant && asMealItems(e.items, e.size * e.ate);
+  const c = items ? { items } : e.restaurant ? { eatout: { mode: 'menu', dishName: name, menu: { kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) } } }
     : { prepared: { name, kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f), servings: 1, icon } };
-  return commit((s) => D.logAs(s, today(), target, c), `✓ ${NAME[target]} logged · ${r0(t.kcal)} kcal`);
+  return { c, t, name, icon };
+}
+function logEstimate() {
+  const { target } = ms.sheet, { c, t, name, icon } = estMeal();
+  if (target === 'extra') return commit((s) => D.addExtras(s, today(), [{ title: `${icon} ${name}`, kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) }]), `✓ ${name} logged · ${r0(t.kcal)} kcal`);
+  return commit((s) => D.logAs(s, today(), target, c), `✓ ${NAME[target]} planned and logged · ${r0(t.kcal)} kcal — tap it on Health to change amounts`);
+}
+function planEstimate() {
+  const { target } = ms.sheet, { c, t } = estMeal();
+  return commit((s) => D.planAs(s, today(), target, c), `🗓 ${NAME[target]} planned · ${r0(t.kcal)} kcal — log it from Health when you eat it`);
 }
 
 // ---------- 🔎 What fits? / Adjust the rest of today ----------
@@ -386,7 +428,10 @@ export async function onClick(t) {
     case 'edel': sh.est.items.splice(+r[0], 1); return drawEst();
     case 'esize': sh.est.size = +r[0]; return drawEst();
     case 'eate': sh.est.ate = +r[0]; return drawEst();
-    case 'eedit': { const t = estTotals(sh.est); return quickSheet(sh.target, { p: r0(t.p), c: r0(t.c), f: r0(t.f), kcal: r0(t.kcal), name: (sh.est.name || '').slice(0, 60) }); }
+    case 'eamt': sh.est.editing = !sh.est.editing; return drawEst();
+    case 'enudge': sh.est.items[+r[0]] = nudge(sh.est.items[+r[0]], +r[1], FOODS); return drawEst();
+    case 'epack': { const t = estTotals(sh.est); return packSheet(sh.target, { name: (sh.est.name || sh.est.text || '').slice(0, 60), p: '', c: '', f: '', kcal: '', servings: 1, save: true, was: r0(t.kcal) }); }
+    case 'eplan': return planEstimate();
     case 'elog': return logEstimate();
     case 'adjust': return fitsSheet(true);
     case 'fits': return fitsSheet(false);
@@ -420,4 +465,19 @@ export function onInput(t) {
   if (a === 'dc') { sh.custom[k] = t.value; const b = document.querySelector('[data-ml="dlog"]'); if (b) b.disabled = !drinkList().length; return; }
   if (a === 'dcock') { const prev = sh.cocktail; sh.cocktail = t.value; if (sh.n[prev]) { sh.n[t.value] = sh.n[prev]; delete sh.n[prev]; } return drawDrinks(); }
   if (a === 'tell') { sh.text = t.value; }
+  // A food's slider in the meal sheet: the grams box, the unit and the totals follow as you slide.
+  if (a === 'gs' && sh.kind === 'meal') {
+    const [, meal, slot] = t.dataset.mle.split(':'), g = Math.max(0, +t.value || 0);
+    ms.ops = ms.ops.filter((o) => !(o[0] === 'grams' && o[1] === meal && o[2] === slot));
+    ms.ops.push(['grams', meal, slot, g]);
+    const box = document.querySelector(`[data-mle="g:${meal}:${slot}"]`); if (box) box.value = r0(g);
+    const pv = preview(), m = planNow(pv)?.[meal], u = document.getElementById(`mlU-${slot}`), tot = document.getElementById('mlMealTot');
+    const x = m?.portions.find((p) => p.slot === slot);
+    if (u && x) u.textContent = unitHint(x).replace(/^, /, '');
+    t.setAttribute('aria-valuetext', `${r0(g)} grams${x ? unitHint(x) : ''}`);
+    if (tot && m) tot.innerHTML = `${totals(m.totals)}<p class="tiny muted">${leftLine(pv)}</p>`;
+    const btn = document.querySelector('[data-ml^="save:"]'); if (btn) btn.disabled = false;
+    return;
+  }
+  if (a === 'ea' && sh.kind === 'est') { const i = +k; sh.est.items[i] = resize(sh.est.items[i], t.value, FOODS); t.setAttribute('aria-valuetext', `${amountLine(sh.est.items[i])}, ${r0(sh.est.items[i].kcal)} calories`); refreshEst(i); }
 }

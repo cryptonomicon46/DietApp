@@ -6,7 +6,7 @@
 //   { do: 'watch.status', title, status }
 //   { do: 'read.add', title, author, state: 'want' | 'reading' | 'finished', recBy: 'partner' | '' }
 //   { do: 'read.state', title, state }
-//   { do: 'diet.log', meal: 'breakfast' | 'lunch' | 'dinner' | 'extra', text }
+//   { do: 'diet.log', meal: 'breakfast' | 'lunch' | 'dinner' | 'extra', text, plan? (true: planning ahead) }
 //   { do: 'fitness.describe', text }      { do: 'fitness.lighter' }      { do: 'care.log', chore }
 //   { do: 'ask.day' } — a question about today/tomorrow (js/talkDay.js answers it, with your OK)
 // Titles stay titles: the phone finds the matching show or book itself, so lists never leave it.
@@ -34,7 +34,7 @@ export function tidySteps(list) {
     } else if (d === 'diet.log' || d === 'fitness.describe') {
       const text = clean(s.text, d === 'diet.log' ? 600 : 1500);
       if (!text) continue;
-      out.push(d === 'diet.log' ? { do: d, meal: pick(s.meal === 'snack' ? 'extra' : s.meal, MEALS, 'extra'), text } : { do: d, text });
+      out.push(d === 'diet.log' ? { do: d, meal: pick(s.meal === 'snack' ? 'extra' : s.meal, MEALS, 'extra'), text, ...(s.plan === true ? { plan: true } : {}) } : { do: d, text });
     } else if (d === 'fitness.lighter') out.push({ do: d });
     else if (d === 'care.log') { const chore = clean(s.chore, 40); if (chore) out.push({ do: d, chore }); }
     else if (d === 'ask.day') { out.length = 0; out.push({ do: d }); break; } // a question about the day: answered on its own
@@ -57,6 +57,9 @@ const RULES = [
   [/^i(?:'m|’m| am)\s+(?:starting|reading|listening\s+to)\s+(.+)$/i, (m) => ({ do: 'read.state', title: m[1], state: 'reading' })],
   [/^i\s+(?:started|began)\s+(?:reading\s+)?(.+)$/i, (m) => ({ do: 'read.state', title: m[1], state: 'reading' })],
   [/^i\s+finished\s+(?:reading\s+)?(.+)$/i, (m) => ({ do: 'read.state', title: m[1], state: 'finished' })],
+  // Food — planning ahead ("Plan dinner: salmon and rice", "I'll have a burrito bowl for lunch") opens it with Plan it first.
+  [/^plan\s+(?:my\s+)?(breakfast|lunch|dinner)\s*[:,—–-]?\s*(?:as\s+)?(.+)$/i, (m) => ({ do: 'diet.log', meal: m[1].toLowerCase(), text: m[2], plan: true })],
+  [/^(?:i(?:'ll|’ll| will)\s+have|i(?:'m|’m| am)\s+(?:having|going\s+to\s+have))\s+(.+?)\s+for\s+(breakfast|lunch|dinner)$/i, (m) => ({ do: 'diet.log', meal: m[2].toLowerCase(), text: m[1], plan: true })],
   // Food
   [/^(?:log|i\s+had|i\s+ate|for)\s+(?:my\s+)?(breakfast|lunch|dinner|a\s+snack|snack)\s*[:,—–-]?\s*(?:was\s+|of\s+)?(.+)$/i, (m) => ({ do: 'diet.log', meal: /snack/i.test(m[1]) ? 'extra' : m[1].toLowerCase(), text: m[2] })],
   [/^(?:log\s+)?(.+?)\s+for\s+(breakfast|lunch|dinner)$/i, (m) => ({ do: 'diet.log', meal: m[2].toLowerCase(), text: m[1] })],

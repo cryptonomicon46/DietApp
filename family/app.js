@@ -469,9 +469,9 @@ function talk() {
       },
       careLog: async (kind) => { const r = await api.post(`/families/${state.fid}/care`, { kind, date: isoLocal(), by: 'me' }); if (state.view === 'home') { renderCare(); renderRace(); } return r.entry?.id; },
       careUndo: async (id) => { if (id) await api.del(`/families/${state.fid}/care/${isoLocal()}/${id}`); if (state.view === 'home') { renderCare(); renderRace(); } },
-      dietTell: async (meal, text) => {
+      dietTell: async (meal, text, opts = {}) => {
         if (!health.data) { const d = await openData(await memberData().catch(() => null)); if (d?.locked) throw new Error('🔒 This device needs the family key first — Me › 🔐 Encryption'); health.data = d; }
-        const M = await meals(); M.setData(health.data); return M.tellWith(meal, text);
+        const M = await meals(); M.setData(health.data); return M.tellWith(meal, text, opts);
       },
       fitDescribe: async (text) => { const F = await fit(); if (state.view !== 'fitness') show('fitness'); return F.describeWith(text); },
       who: () => `${state.fid}.${fam().me}`,
