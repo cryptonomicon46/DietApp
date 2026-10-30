@@ -66,7 +66,7 @@ function mealSheet(meal) {
     <p class="small ml-title">${E(m.title)}</p><div id="mlMealTot">${totals(m.totals)}<p class="tiny muted">${leftLine(s)}</p></div>
     ${rows ? `<div class="ml-foods">${rows}</div><p class="tiny muted">Changes save when you log${logged ? ' or close' : ''}. ${m.balanced ? 'Sized to balance the rest of your day.' : ''}</p>` : ''}
     <div class="ml-primary">${logged ? `<button type="button" data-ml="save:${meal}" ${ms.ops.length ? '' : 'disabled'}>Save changes</button>` : `<button type="button" data-ml="plan:${meal}">✓ Log as planned</button>`}
-      <div class="ml-three"><button type="button" class="ghost" data-ml="photo:${meal}">📷 Photo</button><button type="button" class="ghost" data-ml="tell:${meal}">🎙️ Tell me</button><button type="button" class="ghost" data-ml="out:${meal}">🍴 Ate out</button></div></div>
+      <button type="button" class="ghost" data-ml="other:${meal}">＋ Something else</button></div>
     <details class="ml-more"><summary>More</summary><div class="ml-grid">
       ${yest ? `<button type="button" class="ghost" data-ml="again:${meal}">🔁 Same as yesterday<small>${E(yest.title)} · ${r0(yest.kcal)} kcal</small></button>` : ''}
       <button type="button" class="ghost" data-ml="quick:${meal}">✏️ Quick macros<small>Just protein, carbs, fat</small></button>
@@ -135,14 +135,14 @@ function drawOut() {
   const t = menu ? { kcal: +menu.kcal || 0, p: menu.p !== '' ? +menu.p : (+menu.kcal || 0) * 0.25 / 4, c: menu.c !== '' ? +menu.c : (+menu.kcal || 0) * 0.35 / 4, f: menu.f !== '' ? +menu.f : (+menu.kcal || 0) * 0.4 / 9 } : outTotals(o);
   open(`${head('🍴 Ate out', NAME[meal])}
     <label class="ml-field small">Where <input data-mle="o:place" value="${E(o.place)}" maxlength="40" placeholder="optional"></label>
-    <button type="button" class="wide" data-ml="photo:${meal}:restaurant">📷 Snap the dish</button>
     ${menu ? `<div class="ml-label small">From the menu</div><label class="ml-field small">Dish <input data-mle="m:name" value="${E(menu.name || '')}" maxlength="60"></label><div class="ml-4">${[['kcal', 'Calories'], ['p', 'Protein g'], ['c', 'Carbs g'], ['f', 'Fat g']].map(([f, l]) => `<label class="small">${l}<input inputmode="decimal" data-mle="m:${f}" value="${menu[f]}"></label>`).join('')}</div>
       <p class="tiny muted">Only calories? Protein, carbs and fat are filled in with a typical restaurant split.</p>`
     : `<div class="ml-label small">Or pick what's closest</div><div class="chips">${Object.entries(EAT_OUT).map(([k, d]) => `<button type="button" class="chip ${o.dish === k ? 'on' : ''}" data-ml="odish:${k}">${E(d.label)}</button>`).join('')}</div>
       <div class="ml-label small">Portion</div><div class="seg">${Object.entries(EAT_OUT_SIZE).map(([k, v]) => `<button type="button" class="${o.size === k ? 'on' : ''}" data-ml="osize:${k}">${v.label}</button>`).join('')}</div>
       <div class="ml-label small">How much you ate</div><div class="seg">${[[1, 'All'], [0.75, 'Most'], [0.5, 'Half']].map(([v, l]) => `<button type="button" class="${o.ate === v ? 'on' : ''}" data-ml="oate:${v}">${l}</button>`).join('')}</div>`}
     ${totals(t)}
-    <div class="ml-primary"><button type="button" data-ml="olog" ${t.kcal > 0 ? '' : 'disabled'}>✓ Log it</button><div class="ml-two"><button type="button" class="ghost" data-ml="omenu">${menu ? 'Pick a dish instead' : 'Menu lists calories'}</button><button type="button" class="ghost" data-ml="drinks:${meal}">🍷 Add drinks</button></div></div>`);
+    <div class="ml-primary"><button type="button" data-ml="olog" ${t.kcal > 0 ? '' : 'disabled'}>✓ Log it</button></div>
+    <div class="ml-minis center"><button type="button" class="ghost" data-ml="photo:${meal}:restaurant">📷 Have a photo?</button><button type="button" class="ghost" data-ml="omenu">${menu ? '🍴 Pick a dish instead' : '🧾 Menu shows calories'}</button><button type="button" class="ghost" data-ml="drinks:${meal}">🍷 Drinks</button></div>`);
 }
 
 // ---------- 🍷 Drinks ----------
@@ -174,6 +174,20 @@ function drawDrinks() {
     <div class="ml-primary"><button type="button" data-ml="dlog" ${list.length ? '' : 'disabled'}>Add ${count || ''} drink${count === 1 ? '' : 's'}</button></div>`);
 }
 
+// ---------- ＋ Something else: every other way to log a meal, Talk first ----------
+// (Saying it goes to 🗣️ Talk — the one place to say or type a meal; app.js starts listening in the tap.)
+function otherSheet(meal) {
+  ms.sheet = { kind: 'other', meal };
+  const s = preview(), m = planNow(s)?.[meal], yest = yesterdays(meal), name = NAME[meal].toLowerCase();
+  const way = (attrs, ic, t, sub, cls = '') => `<button type="button" class="ml-way ${cls}" ${attrs}><span class="ic" aria-hidden="true">${ic}</span><span>${t}<small>${sub}</small></span><span aria-hidden="true">›</span></button>`;
+  open(`${head(`Log ${name}`, NAME[meal])}<div class="ml-ways">
+    ${way(`data-act="talk" data-talkmeal="${meal}"`, '🎙️', 'Say what you had', '“Two eggs and a slice of sourdough” — Talk to Pawmily', 'talk')}
+    ${way(`data-ml="photo:${meal}"`, '📷', 'From a photo', 'Choose one from Photos, or take one now')}
+    ${way(`data-ml="out:${meal}"`, '🍴', 'Ate out', 'Pick the closest dish and how much')}
+    ${way(`data-ml="pack:${meal}"`, '📦', 'Packaged', 'The numbers from the label')}</div>
+    <div class="ml-minis">${yest ? `<button type="button" class="ghost" data-ml="again:${meal}">🔁 Same as yesterday</button>` : ''}<button type="button" class="ghost" data-ml="drinks:${meal}">🍷 Drinks</button>${meal !== 'snack' && m && !m.eatout && !m.prepared ? `<button type="button" class="ghost" data-ml="lowcarb:${meal}">🥑 Low-carb ${customOf(s, meal).lowCarb ? 'off' : 'today'}</button>` : ''}</div>`);
+}
+
 // ---------- 📷 Photo (plate, restaurant dish, label, menu) ----------
 function photoSheet(meal, hint = '') {
   ms.sheet = { kind: 'photo', meal, hint, pic: null, error: '' };
@@ -182,11 +196,12 @@ function photoSheet(meal, hint = '') {
 }
 function drawPhoto() {
   const { meal, hint, pic, error } = ms.sheet;
-  if (ms.ai === false) return open(`${head('📷 Photo', NAME[meal] || '')}<p class="small">Reading photos isn't set up here yet. 🎙️ Tell me, 🍴 Ate out and ✏️ Quick macros work without it.</p><div class="ml-two"><button type="button" data-ml="tell:${meal}">🎙️ Tell me</button><button type="button" class="ghost" data-ml="quick:${meal}">✏️ Quick macros</button></div>`);
+  if (ms.ai === false) return open(`${head('📷 Photo', NAME[meal] || '')}<p class="small">Reading photos isn't set up here yet. Saying it in Talk, 🍴 Ate out and 📦 Packaged work without it.</p><div class="ml-two"><button type="button" data-act="talk" data-talkmeal="${meal}">🎙️ Say it</button><button type="button" class="ghost" data-ml="out:${meal}">🍴 Ate out</button></div>`);
   open(`${head(hint === 'label' ? '📷 Snap the label' : '📷 Photo', NAME[meal] || '')}
     ${pic?.url ? `<img class="ml-pic" src="${pic.url}" alt="The photo you chose">` : `<p class="small">${hint === 'label' ? 'A clear photo of the nutrition facts.' : 'Your plate, a restaurant dish, a nutrition label or a menu with calories. A fork or your hand in the photo helps judge the portion.'}</p>`}
-    <input type="file" accept="image/*" capture="environment" data-mlpick hidden>
-    ${ms.busy ? '<p class="small" role="status">Estimating… usually 5–15 seconds</p>' : `<button type="button" class="wide ${pic?.url ? 'ghost' : ''}" data-ml="pick">${pic?.url ? 'Choose another' : 'Take or choose a photo'}</button>`}
+    <input type="file" accept="image/*" data-mlpick id="mlLib" hidden><input type="file" accept="image/*" capture="environment" data-mlpick id="mlCam" hidden>
+    ${ms.busy ? '<p class="small" role="status">Estimating… usually 5–15 seconds</p>' : `<div class="ml-primary"><button type="button" class="${pic?.url ? 'ghost' : ''}" data-ml="pick:lib">🖼 ${pic?.url ? 'Choose another' : 'Choose from Photos'}</button><button type="button" class="ghost" data-ml="pick:cam">📷 Take a photo now</button></div>`}
+    ${hint === 'label' || !NAME[meal] || meal === 'extra' ? '' : `<div class="ml-label small">Which meal? <span class="muted">(logged for today — a photo from any day is fine)</span></div><div class="chips">${['breakfast', 'lunch', 'snack', 'dinner'].map((x) => `<button type="button" class="chip ${x === meal ? 'on' : ''}" data-ml="pmeal:${x}" aria-pressed="${x === meal}">${NAME[x]}</button>`).join('')}</div>`}
     ${pic?.url && !ms.busy ? '<button type="button" class="wide" data-ml="pread">Estimate it</button>' : ''}
     ${error ? `<p class="small" role="alert">${E(error)}</p>` : ''}
     <p class="tiny muted">The photo you choose is sent to Claude (Anthropic) to estimate it — only that picture, redrawn on your phone first so it has no location or camera details. It isn't kept: not by us, not in your log. Anthropic doesn't train on it and deletes it after a short safety check period.</p>`);
@@ -309,7 +324,7 @@ function drawEst() {
       <div class="ml-label small">How much you ate</div><div class="seg">${[[1, 'All'], [0.75, 'Most'], [0.5, 'Half']].map(([v, l]) => `<button type="button" class="${e.ate === v ? 'on' : ''}" data-ml="eate:${v}">${l}</button>`).join('')}</div>` : ''}
     <div id="mlTot">${totals(t)}</div>
     <div class="ml-primary">${main}<div class="ml-two">${second}<button type="button" class="ghost" data-ml="eamt">${e.editing ? 'Done editing' : '✏️ Edit amounts'}</button></div>
-      <div class="ml-two"><button type="button" class="ghost" data-ml="${e.from === 'photo' ? `photo:${target}` : `tell:${target}`}">${e.from === 'photo' ? 'Retake' : 'Say it again'}</button>${extra ? '' : `<button type="button" class="ghost" data-ml="epack">📦 It's packaged</button>`}</div></div>`);
+      <div class="ml-two"><button type="button" class="ghost" ${e.from === 'photo' ? `data-ml="photo:${target}"` : `data-act="talk" data-talkmeal="${target}"`}>${e.from === 'photo' ? 'Retake' : 'Say it again'}</button>${extra ? '' : `<button type="button" class="ghost" data-ml="epack">📦 It's packaged</button>`}</div></div>`);
 }
 // While a slider moves: only the numbers change (redrawing would stop the drag).
 function refreshEst(i) {
@@ -421,7 +436,9 @@ export async function onClick(t) {
       return commit((s) => D.addExtras(s, today(), list), `🍷 Added · ${r0(k)} kcal`);
     }
     case 'photo': dropPic(); return photoSheet(r[0], r[1] || '');
-    case 'pick': return document.querySelector('[data-mlpick]')?.click();
+    case 'pick': return document.getElementById(r[0] === 'cam' ? 'mlCam' : 'mlLib')?.click();
+    case 'pmeal': sh.meal = r[0]; return drawPhoto();
+    case 'other': return otherSheet(r[0]);
     case 'pread': return readPhoto();
     case 'tell': return tellSheet(r[0]);
     case 'tread': return readTell();
@@ -438,7 +455,7 @@ export async function onClick(t) {
     case 'fuse': return useFit(+r[0]);
     case 'done': return commit((s) => D.setDone(s, today(), true), '✓ Done for today — this day counts as complete in your weekly check-in');
     case 'undone': return commit((s) => D.setDone(s, today(), false), 'Okay — today stays open');
-    case 'extra': return open(`${head('＋ Add', 'a snack or extra')}<div class="ml-grid"><button type="button" class="ghost" data-ml="tell:extra">🎙️ Tell me<small>Say what you had</small></button><button type="button" class="ghost" data-ml="drinks:extra">🍷 Drinks<small>Wine, beer, cocktails</small></button><button type="button" class="ghost" data-ml="quick:extra">✏️ Quick macros<small>Just P, C, F</small></button></div>`);
+    case 'extra': return open(`${head('＋ Add', 'a snack or extra')}<div class="ml-grid"><button type="button" class="ghost" data-act="talk" data-talkmeal="extra">🎙️ Say it<small>Talk to Pawmily</small></button><button type="button" class="ghost" data-ml="drinks:extra">🍷 Drinks<small>Wine, beer, cocktails</small></button><button type="button" class="ghost" data-ml="quick:extra">✏️ Quick macros<small>Just P, C, F</small></button></div>`);
     default: return null;
   }
 }

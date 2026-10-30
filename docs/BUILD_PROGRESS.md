@@ -4,6 +4,30 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 🍽 Simpler meal logging (2026-10-30, `v2/meals-simplify` from `main`; mockups first in `docs/mockups/meals/`, then built after the owner's answers)
+- **Owner's ask:** the 📷 🎙️ 🍴 icons on Health's next meal were confusing now that Talk handles voice. Photos had to come from the camera, not Photos.
+- **Built:**
+  - Health's next meal has two buttons: **✓ As planned** and **＋ Something else**. The meal sheet has one **＋ Something else**.
+  - **＋ Something else** is one sheet:
+    - 🎙️ **Say what you had** opens Talk for that meal. `open(tab, { meal })`; listening starts in the tap. "two eggs…" becomes "Log lunch: two eggs…". A diet step takes that meal unless you name another. Talk shows "🍽 Logging lunch".
+    - 📷 From a photo · 🍴 Ate out · 📦 Packaged.
+    - Small links: Same as yesterday · Drinks · Low-carb today.
+  - **Photo:**
+    - 🖼 **Choose from Photos** (an input without `capture`, which was the cause) or 📷 Take a photo now.
+    - **Which meal?** chips. A photo from any day is logged for today.
+  - **Ate out:** the top "Snap the dish" is gone. 📷 Have a photo?, 🧾 Menu shows calories and 🍷 Drinks are small links at the bottom.
+  - **Tell me's mic sheet** is no longer reachable. "Say it again" and the snack sheet's "Say it" open Talk. `tellWith` stays, because Talk's meal hand-off uses it.
+- **Tests:**
+  - `tests/health.test.js`: the row has `plan:` and `other:`, and no photo/tell/out buttons.
+  - `npm test`: 493 pass.
+- **Browser check** (390 px; 320 px in dark mode; local Pages and `wrangler dev`, synthetic family):
+  - The row shows two buttons; Something else lists the four ways.
+  - The photo inputs are `mlLib` (no capture) and `mlCam`; switching to Dinner works.
+  - The Ate out links show.
+  - "Say what you had" → "Logging breakfast" → "2 eggs and a slice of sourdough" gives the Breakfast estimate.
+  - No overflow and no errors.
+- **Not verified:** the iOS photo picker on a real iPhone.
+
 ### 👫 Talk — your partner's day (2026-10-30, `v2/talk-partner` from `main`)
 - **Owner's live try:** "What's on my wife's calendar today" got "I can only see your own items, not [partner]'s calendar".
 - **Cause:**

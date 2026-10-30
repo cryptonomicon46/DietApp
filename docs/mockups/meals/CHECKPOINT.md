@@ -31,7 +31,13 @@ Screens are in `screens.html` (`#row`, `#other`, `#photo`, `#photoest`, `#out`, 
 **Alternative (#alt, not recommended):** **✓ As planned · 🎙️ Say it · ⋯** on the row itself. It's one tap
 faster for voice, but it's three buttons again, and a ⋯ menu hides the photo and packaged options.
 
-## Questions for the owner
+## Owner's answers (2026-10-30) → built on `v2/meals-simplify`
+- "Something else" is fine.
+- A photo can be from any day (the same meal from the same place again). It's logged for **today**, for
+  the meal you pick, so there's no Today/Yesterday choice.
+- Tell me's separate mic sheet goes. Saying it is Talk ("the mic … is redundant now that we have Talk").
+
+## Questions for the owner (as asked)
 1. Is **"＋ Something else"** the right wording? Other options: "Log it another way", "Something different".
 2. **Yesterday for photos:** today's meal log covers today only. Logging into yesterday means editing a
    past day's log, which is more work. Recommendation: today only for now. Keep "Yesterday" for later.
