@@ -15,12 +15,38 @@ whites 1 cup 126 kcal, Avocado 1 avocado 181 kcal, Sourdough 1 slice 131 kcal; 5
 with **✓ Log 581 kcal**, *Edit the numbers*, *Say it again*. After logging, changing a portion
 meant **Health → Weight trend → the trackers' Meals tab → several more taps**.
 
+### 1b. The owner's follow-up (2026-10-30, with screenshots): these are requirements
+1. **Weights for foods, macros only for packaged meals.**
+   - After Talk or Tell me reads foods ("2 eggs, a cup of egg whites, an avocado, a slice of sourdough"),
+     **Edit** must let you change **each food's amount** (grams or its own unit). Protein, carbs, fat and
+     calories are **worked out** from those amounts, never typed.
+   - Today, *Edit the numbers* opens a macros form (Protein g / Carbs g / Fat g / Calories, "How much you
+     ate", "Save to my prepared meals"). Nobody can fill that in for foods they weighed themselves.
+   - The macros form is only for a **packaged meal**, where the numbers are printed on the label. It shows
+     only when you say so ("log a packaged meal", "pre-packaged", "from the label", "it says 450
+     calories") or choose 📦 Packaged.
+2. **Suggested phrases under the Talk box**, so people learn what works. For example:
+   - Meals: "Log 2 eggs and a slice of sourdough for breakfast", "Plan dinner: salmon and rice", "Log a
+     packaged meal for lunch".
+   - Chores: "Walked the dogs", "Fed the dogs dinner".
+   - The chips are per tab (`family/talk.js` `EXAMPLES`), tap to fill the box, and show only phrases the
+     app really handles.
+3. **Health's "Lunch is next" row shows the meal you described.**
+   - Once you've planned or logged it through Talk, the row shows that meal (its foods, kcal and protein),
+     not the generated plan.
+   - Tapping the row opens that meal, with each food's amount editable.
+   - A link from there opens the full Meals page for bigger changes.
+   - Logged meals stay reachable too (see 5d): "3 meals logged" becomes a list you can tap.
+4. **The rule in one line:** you edit what you ate (foods and how much); the app works out P/F/C. Typing
+   P/F/C appears only for packaged meals.
+
 ## 2. What the code does today (verified in the repo, re-check before building)
 
 | Where | Behaviour | Why it hurts |
 | --- | --- | --- |
 | `family/talk.js` `diet.log` card | Hands off to Meals' **Tell me** (`family/meals.js` `tellWith`) | One path only: log. No "plan it". |
-| `family/meals.js` `drawEst` (estimate sheet) | Items can only be removed (×); amounts are fixed; *Edit the numbers* jumps to ✏️ Quick macros (`eedit` → `quickSheet`) and **loses the items** | Can't say "1½ avocado" or "half the bread" without retyping. |
+| `family/talk.js` `EXAMPLES.health` | Three fixed chips ("Log breakfast: two eggs and toast", a workout, "Make today's workout lighter") | No packaged-meal, plan or chore phrases on Health. |
+| `family/meals.js` `drawEst` (estimate sheet) | Items can only be removed (×); amounts are fixed; *Edit the numbers* jumps to ✏️ Quick macros (`eedit` → `quickSheet`) and **loses the items**; the owner then lands in a macros form with Protein/Carbs/Fat/Calories inputs (screenshot 11:57) | Can't say "1½ avocado" or "half the bread" without retyping. |
 | `family/meals.js` `logEstimate` | Logs the whole estimate as **one lump** (`prepared: { name, kcal, p, c, f }` via `D.logAs`), even when every item is a known food with grams (`js/foodText.js` `parseMeal` gives `food`, `grams`) | The logged meal has no foods → the meal sheet has no portion rows → editing means the trackers. |
 | `family/meals.js` `mealSheet` | A **planned** meal already has per-food −/+ gram steppers (`g:meal:slot:±step`, typed grams), *Save changes* for a logged meal | Good. Reuse it, but the steps are small and it only works for plan-built meals. |
 | `family/health.js` food row | "Lunch is next" is a button (opens `mealSheet`); once meals are logged it shows **"3 meals logged" as plain text**, with no way into each meal | Nowhere to tap to fix a logged meal from Health. |
@@ -58,6 +84,8 @@ screens are simple.
     said, else the next meal);
   - the item list with portion controls (as in 5c);
   - live totals, plus "after this: ~X kcal, Y g protein left today".
+- **Edit** on the card opens the amounts of the foods you named (5c), never a macros form. A packaged meal
+  ("log a packaged meal…") opens 📦 Packaged instead, where the label's numbers are typed.
 - Two buttons of equal weight: **Plan it** (secondary) and **✓ Plan & log** (primary, the default when
   they said "I had…" or "log…"). Undo on both.
 - The wording decides which is primary: "I'm having / I'll have / plan" makes Plan it primary; "I had /
@@ -100,6 +128,11 @@ screens are simple.
   under More.
 - The ✓ As planned, 📷 Photo, 🎙️ Tell me and 🍴 Ate out quick actions stay where they are.
 
+### 5d½. Talk suggestions
+- Health: "Log 2 eggs and a slice of sourdough for breakfast", "Plan dinner: salmon and rice", "Log a packaged meal for lunch", "How much protein is left?".
+- Home: "Walked the dogs", "Fed the dogs dinner", "What's on today?".
+- A packaged-meal phrase without numbers opens 📦 Packaged for that meal; with numbers ("450 calories, 30 g protein") it fills them in.
+
 ### 5e. Logged lump meals (legacy, Quick macros, eat-out)
 - These show one "serving" ruler (¼ to 3 servings) and a *Break into foods* link that opens Tell me
   pre-filled with the meal's name.
@@ -117,6 +150,9 @@ screens are simple.
 5. Health Today with the meal list: morning (nothing logged), midday (breakfast ✓), evening (all ✓).
 6. Tap a logged meal → the meal sheet with rulers and Save changes, at both rest and edited states.
 7. A legacy lump meal with the servings ruler and *Break into foods*.
+7b. *Edit* on a Talk meal: food amounts (no macro boxes); and a "log a packaged meal" request → 📦 Packaged with label fields.
+7c. The Talk sheet on Health and Home with the new suggestion chips.
+7d. Health "Lunch is next" showing a Talk-planned meal; tap → the meal with editable amounts and *All meals ›*.
 8. The two ruler layouts compared: one row open at a time, and all rows open.
 9. States: loading, the family key locked on this device, offline (changes queued or blocked, as today),
    an error, and an empty plan (no Diet set up).
@@ -150,6 +186,7 @@ screens are simple.
 
 ## 8. Acceptance criteria
 
+- Editing a food meal never shows Protein/Carbs/Fat/Calories inputs; those appear only for packaged meals (📦 or a packaged-meal phrase).
 - Talk to a logged meal takes ≤ 2 taps after speaking: the card, then ✓ Plan & log. Talk to a planned
   meal also takes ≤ 2 taps.
 - From Health, changing a logged meal's portion takes ≤ 3 taps or gestures: tap the meal, scroll the
