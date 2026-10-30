@@ -7,7 +7,7 @@
 // never loses a set.
 import * as W from '../js/workout.js';
 
-const fx = { c: null, today: null, templates: [], log: [], todayAt: 0, logAt: 0, loaded: false, draft: null, draftFrom: null, legacy: [], others: [], lift: null, timer: null, view: 'main', said: null, unread: [], reading: false, ai: null, pic: null };
+const fx = { c: null, today: null, templates: [], bumps: {}, rest: null, restTick: null, log: [], todayAt: 0, logAt: 0, loaded: false, draft: null, draftFrom: null, legacy: [], others: [], lift: null, timer: null, view: 'main', said: null, unread: [], reading: false, ai: null, pic: null };
 export const state = fx;
 import * as PG from '../js/programWorkout.js';
 
@@ -20,6 +20,7 @@ export async function load(c) {
   if ((t?.data && !td) || (l?.data && !ld)) throw Object.assign(new Error('🔒 This device needs the family key first — Me › 🔐 Encryption'), { locked: true });
   fx.today = td?.today ? W.normalize(td.today) : null;
   fx.templates = (td?.templates || []).map(W.normalize).slice(0, 30);
+  fx.bumps = td?.bumps && typeof td.bumps === 'object' ? td.bumps : {};
   fx.log = (ld?.log || []).map(W.normalize);
   fx.todayAt = t?.savedAt || 0; fx.logAt = l?.savedAt || 0; fx.loaded = true;
   await recover();
@@ -69,7 +70,7 @@ async function put(which, payload, base) {
 export function saveToday(now = false) {
   clearTimeout(fx.timer);
   const go = async () => {
-    try { const r = await put('today', { today: fx.today, templates: fx.templates }, fx.todayAt); fx.todayAt = r.savedAt; }
+    try { const r = await put('today', { today: fx.today, templates: fx.templates, bumps: fx.bumps }, fx.todayAt); fx.todayAt = r.savedAt; }
     catch (e) {
       if (e.status !== 409) return fx.c.toast(`Couldn't save — ${e.message}`);
       // Saved on another phone meanwhile: theirs wins for the plan; keep going from it.
@@ -93,17 +94,22 @@ if (typeof document !== 'undefined') document.addEventListener('visibilitychange
 // "4 of 7 exercises · 12 of 21 sets" (sets too: a circuit finishes its exercises only at the end).
 const doneText = (w) => { const p = W.progress(w), s = W.summary(w); return `${p.exDone} of ${p.exercises} exercises · ${s.done} of ${s.sets} sets`; };
 const meta = (w) => { const n = W.progress(w).exercises, m = W.estMinutes(w); return `${n} exercise${n === 1 ? '' : 's'}${m ? ` · ~${m} min` : ''}`; };
-export function card(esc) {
-  const t = open(), last = history()[0];
-  if (t) {
-    const p = W.progress(t), going = t.status === 'active';
-    return `<button type="button" class="fx-today" data-fx="${going ? 'train' : 'today'}"><span class="grow"><b>${esc(t.title)}</b><small class="muted">${going ? esc(doneText(t)) : esc(meta(t))}</small></span><span class="go">${going ? 'Resume Workout' : "Today's Workout"} →</span></button>
-      ${going ? '' : '<button type="button" class="wide" data-fx="start">Start Workout →</button>'}
-      <button type="button" class="linkish small" data-fx="main">Fitness and history ›</button>`;
+// The Workout anchor on Health: planned → Start, in progress → Resume, done today → View summary
+// (kept for the rest of the day), or nothing planned → Add.
+export function doneToday() { return fx.log.find((w) => w.status === 'done' && w.date === fx.c.iso()) || null; }
+export function healthRow(esc) {
+  const t = open(), d = doneToday(), last = history()[0];
+  const row = (hot, ic, body, acts) => `<div class="hl-row2${hot ? ' hot' : ''}"><span class="hl-ic" aria-hidden="true">${ic}</span>${body}<div class="hl-acts">${acts}</div></div>`;
+  if (t?.status === 'active') {
+    const s = W.summary(t);
+    return { state: 'active', title: t.title, html: (hot) => row(hot, '🏋️', `<button type="button" class="hl-what" data-fx="train"><b>${esc(t.title)} · in progress</b><small>${esc(doneText(t))}${t.startedAt ? ` · ${Math.max(1, Math.round((Date.now() - t.startedAt) / 60000))} min` : ''}</small></button><span class="hl-bar hl-prog" aria-hidden="true"><i style="width:${s.sets ? Math.round((s.done / s.sets) * 100) : 0}%"></i></span>`, `<button type="button" class="grow" data-fx="train">▶ Resume ${t.title.length <= 18 ? esc(t.title) : 'workout'}</button>`) };
   }
-  return `<button type="button" class="wide" data-fx="add">＋ Add Workout</button>
-    ${last ? `<p class="tiny muted">Last: ${esc(last.title)} · ${esc(last.date || '')}</p>` : ''}
-    <button type="button" class="linkish small" data-fx="main">Fitness and history ›</button>`;
+  if (t) return { state: 'planned', title: t.title, html: (hot) => row(hot, '🏋️', `<button type="button" class="hl-what" data-fx="today"><b>${esc(t.title)} today</b><small>${esc(meta(t))} ›</small></button>`, `<button type="button" class="grow${hot ? '' : ' ghost'}" data-fx="start">Start workout</button>`) };
+  if (d) {
+    const s = W.summary(d);
+    return { state: 'done', title: d.title, html: () => row(false, '✅', `<button type="button" class="hl-what" data-fx="summary:${esc(d.id)}"><b>${esc(d.title)} · done</b><small>${[s.minutes ? `${s.minutes} min` : '', `${s.done} sets`, s.volume ? `${s.volume.toLocaleString()} lb` : ''].filter(Boolean).join(' · ')}</small></button>`, `<button type="button" class="ghost grow" data-fx="summary:${esc(d.id)}">View summary</button>`) };
+  }
+  return { state: 'none', title: '', html: () => row(false, '🏋️', `<div><b>No workout planned</b><small>${last ? `Last: ${esc(last.title)} · ${esc(last.date || '')}` : 'Build one, describe it or snap a photo'}</small></div>`, '<button type="button" class="ghost grow" data-fx="add">＋ Add workout</button>') };
 }
 
 // ---------- screens ----------
@@ -293,7 +299,8 @@ function editorHtml() {
   const w = fx.draft, u = W.uncertain(w), p = W.problems(w);
   const fromAi = w.source === 'text' || w.source === 'photo';
   return `${head('data-fx="cancel"', fx.draftFrom === 'today' ? "Today's Workout" : 'Fitness', fromAi ? 'Review Workout' : fx.draftFrom === 'today' ? 'Edit workout' : 'Build a workout')}
-    ${fromAi ? `<p class="small muted pad">${w.source === 'photo' ? 'Read from your photo' : 'Read from what you wrote'}. Check it before adding — nothing is saved until you tap Add.</p>` : ''}
+    ${fromAi ? `<p class="small muted pad">${w.source === 'photo' ? 'Read from your photo' : 'Read from what you wrote'}. Check it first — nothing is saved until you choose below.</p>` : ''}
+    ${fx.draftFrom === 'today' ? '' : '<p class="fx-banner">This becomes <b>Today\'s Workout</b>. Start it now and tick sets as you go — or, if you\'ve already done it, <b>Log as done</b>.</p>'}
     ${fromAi && fx.unread.length ? `<p class="small pad">Not placed: ${fx.unread.map((x) => `“${E(x)}”`).join(', ')}</p>` : ''}
     ${u.length ? `<div class="note warn" role="status">⚠️ ${u.length} thing${u.length === 1 ? '' : 's'} to check — highlighted below.</div>` : ''}
     <label class="fx-title">Name<input data-fxe="title" value="${W.untitled(w.title) ? '' : E(w.title)}" placeholder="${E(W.suggestName(w))}" maxlength="80"><small class="tiny muted">Leave it blank to use the suggested name, or type your own.</small></label>
@@ -307,10 +314,11 @@ function editorHtml() {
         <div class="row wrap"><select class="fx-measure" data-fxe="measure:${bi}:${ii}" aria-label="Measured in">${[['reps', 'Reps × weight'], ['bw', 'Reps (bodyweight)'], ['time', 'Time'], ['distance', 'Distance']].map(([k, l]) => `<option value="${k}" ${m === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
           <label class="fx-side small"><input type="checkbox" data-fxe="perside:${bi}:${ii}" ${it.perSide ? 'checked' : ''}> Each side</label></div>
         <div class="fx-sets"><div class="fx-set fx-lab" aria-hidden="true"><small>${b.items.length > 1 ? 'round' : 'set'}</small>${m === 'time' ? '<span>sec</span>' : m === 'distance' ? `<span>${E(it.sets[0]?.distUnit || 'mi')}</span>` : '<span>reps</span>'}${m === 'reps' ? `<span>${E(it.sets[0]?.unit || 'lb')}</span>` : ''}</div>${it.sets.map((s, si) => setCell(bi, ii, si, s, m)).join('')}</div></div>`; }).join('')}
-      <button type="button" class="linkish small" data-fx="additem:${bi}">＋ Add an exercise to this ${b.items.length > 1 ? (b.kind === 'circuit' ? 'circuit' : 'superset') : 'part (makes a superset)'}</button></section>`).join('')}
+      <button type="button" class="linkish small" data-fx="additem:${bi}">${b.items.length > 1 ? `＋ Add an exercise to this ${b.kind === 'circuit' ? 'circuit' : 'superset'}` : '🔗 Pair it with another exercise (superset)'}</button></section>`).join('')}
     <div class="row wrap fx-add"><button type="button" class="ghost small" data-fx="addblock:1">＋ Exercise</button><button type="button" class="ghost small" data-fx="addblock:2">＋ Superset</button><button type="button" class="ghost small" data-fx="addblock:3">＋ Circuit</button></div>
     <p class="small muted pad" id="fxProblems">${p.map(E).join(' ')}</p>
-    <div class="fx-foot"><button type="button" class="ghost" data-fx="cancel">Cancel</button><button type="button" data-fx="savedraft" ${p.length ? 'disabled' : ''}>${fx.draftFrom === 'today' ? 'Save' : "Add to Today's Workout"}</button></div>`;
+    ${fx.draftFrom === 'today' ? `<div class="fx-foot"><button type="button" class="ghost" data-fx="cancel">Cancel</button><button type="button" data-fx="savedraft" ${p.length ? 'disabled' : ''}>Save</button></div>`
+      : `<div class="fx-foot fx-foot3"><button type="button" data-fx="startnow" ${p.length ? 'disabled' : ''}>▶ Start now</button><div class="fx-two"><button type="button" class="ghost" data-fx="savedraft" ${p.length ? 'disabled' : ''}>Save for later today</button><button type="button" class="ghost" data-fx="logdone" ${p.length ? 'disabled' : ''}>✓ Log as done</button></div></div>`}`;
 }
 // Train: doing Today's Workout. Each set shows the plan; ✓ records it as planned or with what you
 // typed (the plan is kept beside it). A done round folds to one line, e.g. "Set 3 — 8 × 135 ✓".
@@ -327,7 +335,9 @@ function trainHtml() {
   return `${head('data-fx="today"', "Today's Workout", `Train · ${E(w.title)}`)}
     <p class="small pad" role="status"><b>${p.exDone} of ${p.exercises} exercises</b> · ${s.done} of ${s.sets} sets${nx ? ` · next: ${E(w.blocks[nx.bi].items[nx.ii].name || 'exercise')}` : ' · all done'}</p>
     <div class="fx-progress" role="progressbar" aria-label="Sets done" aria-valuemin="0" aria-valuemax="${s.sets}" aria-valuenow="${s.done}"><i style="width:${s.sets ? Math.round((s.done / s.sets) * 100) : 0}%"></i></div>
-    ${w.blocks.map((b, bi) => `<section class="card fx-block"><b>${b.items.length > 1 ? blockLabel(b) : `🏋️ ${E(b.items[0]?.name || '')}${b.items[0]?.perSide ? ' <small class="muted">each side</small>' : ''}`}</b>${b.note ? `<small class="muted">${E(b.note)}</small>` : ''}
+    <p class="small pad"><button type="button" class="linkish small" data-fx="resttoggle">⏱ Rest timer: ${restOn() ? 'on' : 'off'}</button></p>
+    ${w.blocks.map((b, bi) => { const open1 = b.items.some((it) => it.sets.some((x) => !x.done)); return `<section class="card fx-block"><div class="fx-bh"><b>${b.items.length > 1 ? blockLabel(b) : `🏋️ ${E(b.items[0]?.name || '')}${b.items[0]?.perSide ? ' <small class="muted">each side</small>' : ''}`}</b>${open1 ? `<button type="button" class="ghost small fx-all" data-fx="${b.items.length > 1 ? `allblock:${bi}` : `all:${bi}:0`}">✓ All ${b.items.length > 1 ? 'rounds' : 'sets'}</button>` : '<span class="small good">✓ done</span>'}</div>${b.note ? `<small class="muted">${E(b.note)}</small>` : ''}
+      ${b.items.map((it) => { const l = W.lastText(W.lastTime(history(), it.name, w.id)); return `<p class="fx-last">${b.items.length > 1 ? `<b>${E(it.name)}</b> · ` : ''}Plan ${E(planShort(it))}${l ? ` · Last time <b>${E(l)}</b>` : ''}</p>`; }).join('')}
       ${[...Array(b.rounds).keys()].map((r) => { const all = b.items.every((it) => it.sets[r]?.done);
         const lab = b.items.length > 1 ? `Round ${r + 1}` : `Set ${r + 1}`;
         return all ? `<p class="small fx-rdone">${lab} — ${b.items.map((it) => `${b.items.length > 1 ? `${E(it.name)} ` : ''}${E(didText(it.sets[r]))}${changed(it.sets[r]) ? ` <small class="muted">(plan ${E(planText(it.sets[r]))})</small>` : ''}`).join(' · ')} ✓ <button type="button" class="linkish tiny" data-fx="undo:${bi}:${r}" aria-label="Undo ${lab}">undo</button></p>`
@@ -335,19 +345,97 @@ function trainHtml() {
             <span class="grow"><b>${b.items.length > 1 ? `${E(it.name)}${it.perSide ? ' <small class="muted">each side</small>' : ''}` : lab}</b><small class="muted">${E(planText(x)) || 'as you like'}</small></span>
             ${x.done ? `<span class="small">${E(didText(x))} ✓</span>` : `<span class="fx-in">${m === 'time' ? `<input inputmode="numeric" data-fxl="time:${bi}:${ii}:${r}" value="${x.time ?? ''}" aria-label="Seconds, ${E(it.name)} ${lab}" placeholder="sec">` : m === 'distance' ? `<input inputmode="decimal" data-fxl="distance:${bi}:${ii}:${r}" value="${x.distance ?? ''}" aria-label="Distance, ${E(it.name)} ${lab}" placeholder="${x.distUnit}">` : `<input inputmode="numeric" data-fxl="reps:${bi}:${ii}:${r}" value="${x.reps ?? ''}" aria-label="Reps, ${E(it.name)} ${lab}" placeholder="reps">${m === 'reps' ? `<input inputmode="decimal" data-fxl="weight:${bi}:${ii}:${r}" value="${x.weight ?? ''}" aria-label="Weight (${x.unit}), ${E(it.name)} ${lab}" placeholder="${x.unit}">` : ''}`}</span>
               <button type="button" class="fx-check" data-fx="log:${bi}:${ii}:${r}" aria-label="Done: ${E(it.name)}, ${b.items.length > 1 ? 'round' : 'set'} ${r + 1}">✓</button>`}</div>`; }).join('')}</div>`; }).join('')}
-    </section>`).join('')}
-    <div class="fx-foot"><button type="button" class="ghost" data-fx="edittoday">Edit</button><button type="button" data-fx="finish">Complete Workout</button></div>`;
+      ${fx.rest?.bi === bi ? restHtml() : ''}
+    </section>`; }).join('')}
+    ${W.remaining(w).length ? '<button type="button" class="ghost wide fx-rest-all" data-fx="logrest">✓ Log remaining sets as planned</button>' : ''}
+    <div class="fx-foot"><button type="button" class="ghost" data-fx="edittoday">Edit</button><button type="button" data-fx="finish">Complete workout</button></div>`;
+}
+// "3 × 8 @ 40 lb" when every set is the same, else the sets one by one.
+function planShort(it) {
+  const s0 = it.sets[0] || {}, same = it.sets.every((x) => x.reps === s0.reps && x.weight === s0.weight && x.time === s0.time && x.bw === s0.bw);
+  if (same && s0.reps != null) return `${it.sets.length} × ${s0.reps}${s0.bw ? ' · bodyweight' : s0.weight != null ? ` @ ${s0.weight} ${s0.unit}` : ''}`;
+  return W.itemText(it).slice((it.name || '?').length + 1);
+}
+// ⏱ The optional rest timer (off unless you turn it on; remembered on this phone). Shown from a
+// timestamp, so it's right when you come back to the screen; no notifications.
+const REST_KEY = () => `fam.fx.rest.${fx.c.fid}.${fx.c.me}`;
+function restOn() { try { return localStorage.getItem(REST_KEY()) === '1'; } catch { return false; } }
+const HEAVY = /squat|deadlift|\brdl\b|press|bench|row|pull.?up|chin.?up|lunge|clean|thrust|dip/i;
+function startRest(bi, si) {
+  if (!restOn()) return;
+  const b = fx.today.blocks[bi];
+  if (b.items.length > 1 && !b.items.every((it) => it.sets[si]?.done)) return; // a superset or circuit rests after the round
+  const secs = b.rest ?? (b.items.length > 1 ? 60 : HEAVY.test(b.items[0]?.name || '') ? 90 : 60);
+  fx.rest = { bi, until: Date.now() + secs * 1000, buzzed: false };
+  tickRest();
+}
+const mmss = (ms) => { const t = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+function restHtml() {
+  const left = fx.rest.until - Date.now();
+  return `<div class="fx-rest" role="timer" aria-live="off"><span>${left > 0 ? `Rest <b data-restleft>${mmss(left)}</b>` : '<b>Rest over</b> — next set when you\'re ready'}</span><span><button type="button" class="linkish small" data-fx="restplus">+30 s</button> · <button type="button" class="linkish small" data-fx="restskip">${left > 0 ? 'Skip' : 'Hide'}</button></span></div>`;
+}
+function tickRest() {
+  clearInterval(fx.restTick);
+  fx.restTick = setInterval(() => {
+    const el = document.querySelector('[data-restleft]');
+    if (!fx.rest || fx.view !== 'train') { clearInterval(fx.restTick); return; }
+    const left = fx.rest.until - Date.now();
+    if (left <= 0) { if (!fx.rest.buzzed) { fx.rest.buzzed = true; navigator.vibrate?.(200); } clearInterval(fx.restTick); return render(); }
+    if (el) el.textContent = mmss(left);
+  }, 500);
 }
 
 // ---------- actions ----------
 function setToday(w) { fx.today = w; saveToday(); }
 // A new Today's Workout (from any of the ways in): shown as the plan first; Start Workout begins it.
-async function startWith(w, source) {
-  const fresh = W.normalize({ ...w, date: fx.c.iso(), status: 'planned', source: source || w.source });
+// Weights you accepted after your last session (📈) go into the next workout with that exercise.
+function applyBumps(w) {
+  if (!Object.keys(fx.bumps || {}).length || w.program || source0(w) === 'program') return w;
+  const c = W.normalize(w);
+  for (const b of c.blocks) for (const it of b.items) {
+    const k = (it.name || '').trim().toLowerCase(), u = fx.bumps[k];
+    if (!u) continue;
+    for (const st of it.sets) if (st.weight != null && st.weight <= u.from && st.unit === u.unit) st.weight = u.to;
+    delete fx.bumps[k];
+  }
+  return c;
+}
+const source0 = (w) => w.source;
+async function startWith(w, source, { start = false } = {}) {
+  const fresh = W.normalize({ ...applyBumps(w), date: fx.c.iso(), status: 'planned', source: source || w.source });
   if (W.untitled(fresh.title)) fresh.title = W.suggestName(fresh);
   if (open() && W.summary(fx.today).done && !fx.c.confirm(`Replace "${fx.today.title}"? What you've logged in it is kept only if you complete it first.`)) return;
   fx.today = fresh; await saveToday(true);
+  if (start) { begin(); render(); return fx.c.toast(`▶ ${fresh.title} — tick each set as you go`); }
   fx.view = 'today'; render(); fx.c.toast(`🏋️ ${fresh.title} is Today's Workout`);
+}
+// ✅ After a workout: the numbers, any new best, and (only from sets you actually logged) an
+// optional next step. Opens from Complete workout and from Health's "View summary".
+const nm = (x) => (x || '').trim().toLowerCase();
+function bestBefore(name, notId) {
+  let best = 0;
+  for (const w of history()) { if (w.id === notId) continue; for (const b of w.blocks || []) for (const it of b.items) if (nm(it.name) === nm(name)) for (const x of it.sets) if (x.done && !x.bw) best = Math.max(best, (x.got?.weight ?? x.weight) || 0); }
+  return best;
+}
+export function summarySheet(id) {
+  const w = [...fx.log, ...history()].find((x) => x.id === id);
+  if (!w) return;
+  const s = W.summary(w), bests = [];
+  for (const b of w.blocks) for (const it of b.items) {
+    const top = Math.max(0, ...it.sets.filter((x) => x.done && !x.bw).map((x) => (x.got?.weight ?? x.weight) || 0));
+    const before = bestBefore(it.name, w.id);
+    if (top && before && top > before && !bests.some((x) => nm(x.name) === nm(it.name))) bests.push({ name: it.name, top, unit: it.sets[0]?.unit || 'lb' });
+  }
+  fx.sug = w.date === fx.c.iso() ? W.progression(w).filter((p) => !fx.bumps[nm(p.name)]) : [];
+  fx.sumId = id;
+  const lines = w.blocks.flatMap((b) => b.items.map((it) => `${E(it.name || '?')} ${E(it.sets.filter((x) => x.done).map((x) => didText(x)).join(', ') || '—')}`));
+  fx.c.openSheet(`<div class="row between"><h2>✅ ${E(w.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <p class="small muted">${E(w.date || '')}${w.doneAt ? ` · ${new Date(w.doneAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}</p>
+    <div class="fx-stats"><div><b>${s.minutes ? `${s.minutes} min` : '—'}</b><span>time</span></div><div><b>${s.done} sets</b><span>${s.exercises} exercise${s.exercises === 1 ? '' : 's'}</span></div><div><b>${s.volume ? s.volume.toLocaleString() : '—'}</b><span>lb lifted</span></div></div>
+    ${bests.map((x) => `<p class="ml-note">🏆 New best: ${E(x.name)} ${x.top} ${E(x.unit)}</p>`).join('')}
+    ${fx.sug.map((p, i) => `<div class="ml-note fx-sug"><span>You did every planned set of ${E(p.name)} at ${p.from} ${E(p.unit)}. <b>Try ${p.to} ${E(p.unit)} next time?</b></span><div class="fx-two"><button type="button" data-fx="bump:${i}">Accept</button><button type="button" class="ghost" data-fx="nobump:${i}">Keep ${p.from}</button></div></div>`).join('')}
+    <p class="small">${lines.join('<br>')}</p>
+    <div class="fx-two"><button type="button" class="ghost" data-fx="savetpl:${E(w.id)}">⭐ Save as a template</button><button type="button" data-act="close">Done</button></div>`);
 }
 // Start Workout: the clock starts and Train opens (Health's button calls this too).
 export function begin() {
@@ -421,6 +509,55 @@ export async function onClick(t) {
     case 'delitem': { const b = fx.draft.blocks[n[0]]; b.items.splice(n[1], 1); if (!b.items.length) fx.draft.blocks.splice(n[0], 1); else b.kind = W.kindFor(b.items.length); return render(); }
     case 'additem': { const b = fx.draft.blocks[n[0]]; b.items.push(W.makeItem({ name: '', sets: b.items[0]?.sets.map(() => ({})) || [{}] }, b.rounds)); b.items.at(-1).uncertain = undefined; delete b.items.at(-1).uncertain; b.kind = b.items.length > 2 && b.kind !== 'circuit' ? 'circuit' : W.kindFor(b.items.length); return render(); }
     case 'addblock': { const blk = W.makeBlock({ ...blank(n[0]), kind: n[0] >= 3 ? 'circuit' : undefined }); delete blk.uncertain; for (const it of blk.items) delete it.uncertain; fx.draft.blocks.push(blk); return render(); }
+    case 'startnow': case 'logdone': {
+      const w = W.normalize(fx.draft);
+      if (W.problems(w).length) return render();
+      if (W.untitled(w.title)) w.title = W.suggestName(w);
+      fx.draft = null; fx.unread = [];
+      const src = w.source === 'text' || w.source === 'photo' ? w.source : 'manual';
+      if (a === 'startnow') return startWith(w, src, { start: true });
+      // ✓ Log as done: you already did it — every set recorded as planned (change any in history).
+      const at = Date.now();
+      const done = W.complete(W.logRemaining(W.normalize({ ...applyBumps(w), date: c.iso(), status: 'active', source: src })), at);
+      await appendLog(done); await saveToday(true);
+      fx.view = 'main'; render(); summarySheet(done.id);
+      return c.toast(`💪 ${done.title} logged`);
+    }
+    case 'all': case 'allblock': {
+      const prev = fx.today, [bi, ii] = n;
+      let w = fx.today;
+      const before = W.remaining(w).length;
+      if (a === 'all') w = W.logAll(w, bi, ii); else w.blocks[bi].items.forEach((_, j) => { w = W.logAll(w, bi, j); });
+      setToday(w); fx.rest = null; render();
+      return c.toast(`✓ ${before - W.remaining(w).length} sets logged as planned`, () => { setToday(prev); render(); });
+    }
+    case 'logrest': {
+      const rem = W.remaining(fx.today), by = new Map();
+      for (const x of rem) { const k = `${x.bi}:${x.ii}`; if (!by.has(k)) by.set(k, { name: x.name, sets: [] }); by.get(k).sets.push(x.set); }
+      const line = (g) => { const s0 = g.sets[0]; const same = g.sets.every((x) => x.reps === s0.reps && x.weight === s0.weight); return `${E(g.name || '?')} — ${g.sets.length} set${g.sets.length === 1 ? '' : 's'}${same && s0.reps != null ? ` × ${s0.reps}${s0.bw ? ' (bodyweight)' : s0.weight != null ? ` @ ${s0.weight} ${E(s0.unit)}` : ''}` : ''}`; };
+      return c.openSheet(`<h2 style="margin:0 0 6px">Log the ${rem.length} remaining set${rem.length === 1 ? '' : 's'} as planned?</h2>
+        <p class="small">They'll be recorded as <b>done with the planned reps and weights</b>:</p><ul class="small">${[...by.values()].map((g) => `<li>${line(g)}</li>`).join('')}</ul>
+        <p class="tiny muted">Did something differently? Cancel and change that set first. You can undo this.</p>
+        <div class="fx-two"><button type="button" data-fx="logrestok">✓ Log ${rem.length} set${rem.length === 1 ? '' : 's'} as planned</button><button type="button" class="ghost" data-act="close">Cancel</button></div>`);
+    }
+    case 'logrestok': {
+      const prev = fx.today, k = W.remaining(prev).length;
+      setToday(W.logRemaining(prev)); fx.rest = null; c.closeSheet(); render();
+      return c.toast(`✓ ${k} sets logged as planned`, () => { setToday(prev); render(); });
+    }
+    case 'summary': return summarySheet(r.join(':'));
+    case 'bump': {
+      const p = fx.sug?.[n[0]];
+      if (!p) return null;
+      fx.bumps = { ...fx.bumps, [nm(p.name)]: { from: p.from, to: p.to, unit: p.unit } };
+      for (const t0 of fx.templates) for (const b of t0.blocks) for (const it of b.items) if (nm(it.name) === nm(p.name)) for (const st of it.sets) if (st.weight === p.from && st.unit === p.unit) st.weight = p.to;
+      await saveToday(true); summarySheet(fx.sumId);
+      return c.toast(`📈 Next time: ${p.name} at ${p.to} ${p.unit}`);
+    }
+    case 'nobump': fx.sug.splice(n[0], 1); return summarySheet(fx.sumId);
+    case 'resttoggle': { const on = !restOn(); try { localStorage.setItem(REST_KEY(), on ? '1' : '0'); } catch { /* private mode */ } if (!on) fx.rest = null; render(); return c.toast(on ? '⏱ Rest timer on — it starts when you tick a set' : 'Rest timer off'); }
+    case 'restplus': if (fx.rest) { fx.rest.until = Math.max(Date.now(), fx.rest.until) + 30000; fx.rest.buzzed = false; render(); tickRest(); } return null;
+    case 'restskip': fx.rest = null; return render();
     case 'savedraft': {
       const w = W.normalize(fx.draft);
       if (W.problems(w).length) return render();
@@ -437,7 +574,7 @@ export async function onClick(t) {
     case 'log': {
       const [bi, ii, si] = n, row = t.closest('.fx-logrow');
       const got = {}; for (const inp of row.querySelectorAll('[data-fxl]')) got[inp.dataset.fxl.split(':')[0]] = num(inp.value);
-      setToday(W.logSet(fx.today, bi, ii, si, got)); render();
+      setToday(W.logSet(fx.today, bi, ii, si, got)); startRest(bi, si); render();
       document.querySelector('.fx-round.next')?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
       return null;
     }
@@ -448,7 +585,7 @@ export async function onClick(t) {
       const done = W.complete(fx.today);
       await appendLog(done);
       fx.today = null; await saveToday(true);
-      fx.view = 'main'; render(); histSheet(done.id);
+      fx.rest = null; fx.view = 'main'; render(); summarySheet(done.id);
       return c.toast(`💪 ${done.title} — ${s.done} sets. Nice work.`);
     }
     default: return null;
@@ -456,8 +593,8 @@ export async function onClick(t) {
 }
 // The Add / Save button and the problem line follow the draft as you type.
 function refreshFoot() {
-  const p = W.problems(fx.draft), btn = document.querySelector('[data-fx=savedraft]'), line = document.getElementById('fxProblems');
-  if (btn) btn.disabled = p.length > 0;
+  const p = W.problems(fx.draft), line = document.getElementById('fxProblems');
+  for (const b of document.querySelectorAll('[data-fx=savedraft],[data-fx=startnow],[data-fx=logdone]')) b.disabled = p.length > 0;
   if (line) line.textContent = p.join(' ');
 }
 // Editor inputs: the draft follows what you type (no re-render while typing).

@@ -11,7 +11,7 @@ const shift = (iso, n) => new Date(t(iso) + n * DAY).toISOString().slice(0, 10);
 const r1 = (n) => Math.round(n * 10) / 10;
 export const STATUS = {
   'on-track': { label: 'On track', icon: '✅' },
-  behind: { label: 'Behind plan', icon: '⏳' },
+  behind: { label: 'Slower than planned', icon: '⏳' },
   ahead: { label: 'Ahead of plan', icon: '⚡' },
   'too-early': { label: 'Too early to tell', icon: '🌱' },
 };

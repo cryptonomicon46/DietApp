@@ -329,7 +329,8 @@ export function preparedMeal(cust) {
   const n = +e.servings || 1;
   const kcal = +e.kcal > 0 ? +e.kcal : labelKcal(e.p, e.c, e.f);
   const totals = { kcal: Math.round(kcal * n), p: Math.round((+e.p || 0) * n), f: Math.round((+e.f || 0) * n), c: Math.round((+e.c || 0) * n) };
-  const title = `📦 ${e.name || 'Prepared meal'}${e.kitchen ? ` · ${e.kitchen}` : ''}${n !== 1 ? ` ×${n}` : ''}`;
+  // icon: how it was logged when it wasn't a package (📷 photo, 🎙️ Tell me, ✏️ quick macros, 🔁 again).
+  const title = `${e.icon || '📦'} ${e.name || 'Prepared meal'}${e.kitchen ? ` · ${e.kitchen}` : ''}${n !== 1 ? ` ×${n}` : ''}`;
   return { title, portions: [], totals, custom: true, prepared: true };
 }
 

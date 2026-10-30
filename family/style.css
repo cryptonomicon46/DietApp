@@ -147,6 +147,7 @@ blockquote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--brand); 
 /* sheets & toast */
 .sheet { border: 0; border-radius: 22px 22px 0 0; width: 100%; max-width: 560px; margin: auto auto 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); background: var(--card); color: var(--ink); max-height: 92vh; overflow: auto; }
 .sheet::backdrop { background: rgba(0,0,0,.4); }
+.toast-undo { background: none; color: var(--brand-soft); padding: 4px 6px; margin-left: 6px; min-height: 36px; text-decoration: underline; font-weight: 800; }
 .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: .9rem; font-weight: 600; z-index: 20; max-width: calc(100% - 32px); }
 
 /* beta: consent, modules, dog care, menus, account */
@@ -1082,7 +1083,7 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .hl-weigh button { min-height: 48px; min-width: 88px; }
 .hl-plan { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; color: var(--ink); font-weight: 500; font-size: .85rem; }
 .hl-status { color: var(--brand); white-space: nowrap; }
-.hl-status.behind { color: var(--warn, #b45309); }
+.hl-status.behind { color: var(--muted); }
 .hl-status.too-early { color: var(--muted); }
 .hl-sparkl { display: block; color: var(--brand); }
 .hl-card .btn.wide { min-height: 48px; display: grid; place-items: center; }
@@ -1266,3 +1267,96 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .lk-fit h3 { text-transform: none; letter-spacing: 0; color: var(--ink); font-size: 1.25rem; margin: 0; }
 .lk-tile img { filter: drop-shadow(0 1px 2px rgba(0,0,0,.28)); }
 .lk-closet-top h3 { text-transform: none; letter-spacing: 0; color: var(--ink); font-size: 1.15rem; }
+
+/* 💪 Health 2: Today's three anchors (weight · food · workout), one emphasised; then Nutrition & plan; then More. */
+.hl-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 14px 4px 6px; }
+.hl-sech { margin: 0; font-size: .78rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.hl-next { font-size: .82rem; font-weight: 700; color: var(--brand); text-align: right; }
+.hl-anchors, .hl-more { padding: 0; overflow: hidden; }
+.hl-row2 { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 4px 10px; padding: 12px 14px; border-top: 1px solid var(--line); align-items: start; }
+.hl-row2:first-child { border-top: 0; }
+.hl-row2.hot { background: color-mix(in srgb, var(--brand) 9%, var(--card)); box-shadow: inset 4px 0 0 var(--brand); }
+.hl-row2 > div, .hl-what { min-width: 0; }
+.hl-row2 b { display: block; font-weight: 700; }
+.hl-row2 small { display: block; color: var(--muted); font-size: .85rem; }
+.hl-ic { font-size: 1.25rem; line-height: 1.5; text-align: center; }
+.hl-what { all: unset; display: block; cursor: pointer; min-height: 44px; border-radius: 8px; }
+.hl-what:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.hl-acts { grid-column: 2; display: flex; gap: 6px; margin-top: 6px; }
+.hl-acts button, .hl-acts .btn { min-height: 44px; padding: 8px 12px; font-size: .92rem; white-space: nowrap; }
+.hl-acts .grow { flex: 1; }
+.hl-ico { width: 46px; flex: none; padding: 8px 0 !important; font-size: 1.15rem !important; }
+.hl-ctx { grid-column: 1 / -1; font-size: .88rem; margin: 6px 0 0; }
+.hl-mini { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hl-mini b { display: inline; }
+.hl-trend { font-size: .8rem; }
+.hl-prog { grid-column: 2; margin-top: 6px; }
+.hl-row2 .hl-weigh { grid-column: 2; margin-top: 4px; }
+.hl-line2 { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 14px; min-height: 48px; background: none; color: var(--ink); border: 0; border-top: 1px solid var(--line); border-radius: 0; font-weight: 500; text-align: left; text-decoration: none; }
+.hl-line2:first-child { border-top: 0; }
+.hl-line2 .go { color: var(--brand); font-weight: 700; white-space: nowrap; }
+.hl-line2 .hl-spark { width: 70px; height: 22px; flex: none; }
+.hl-go { justify-content: flex-end; }
+@media (max-width: 359px) { .hl-acts { flex-wrap: wrap; } .hl-acts .grow { flex: 1 1 100%; } .hl-trend { display: none; } }
+/* 🍽 The meal sheet and the quick ways to log (family/meals.js). */
+.ml-sheet { display: grid; gap: 8px; }
+.ml-head h2 { margin: 0; font-size: 1.2rem; }
+.ml-title { margin: 0; font-weight: 600; }
+.ml-tot { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; font-size: .9rem; }
+.ml-tot b { font-size: 1.02rem; }
+.ml-p { color: #c0392b; } .ml-c { color: #2f6db5; } .ml-f { color: #b7791f; } .ml-a { color: #7b4bb3; }
+:root[data-theme=dark] .ml-p, :root[data-theme=dark] .ml-c, :root[data-theme=dark] .ml-f, :root[data-theme=dark] .ml-a { filter: brightness(1.45); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .ml-p, :root:not([data-theme=light]) .ml-c, :root:not([data-theme=light]) .ml-f, :root:not([data-theme=light]) .ml-a { filter: brightness(1.45); } }
+.ml-foods { display: grid; border-top: 1px solid var(--line); }
+.ml-food { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ml-food > span:first-child { min-width: 0; }
+.ml-step { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.ml-step button { width: 44px; height: 44px; padding: 0; font-size: 1.1rem; }
+.ml-step input { width: 64px; min-height: 44px; text-align: center; }
+.ml-step output { min-width: 28px; text-align: center; font-weight: 700; }
+.ml-primary { display: grid; gap: 8px; margin-top: 6px; }
+.ml-primary > button { min-height: 50px; font-size: 1rem; }
+.ml-three, .ml-two { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ml-two { grid-template-columns: 1fr 1fr; }
+.ml-three button, .ml-two button { min-height: 48px; padding: 8px 6px; white-space: nowrap; font-size: .92rem; }
+.ml-more { border-top: 1px solid var(--line); margin-top: 4px; }
+.ml-more summary { padding: 12px 2px; font-weight: 700; color: var(--brand); cursor: pointer; min-height: 44px; }
+.ml-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ml-grid button { min-height: 56px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; text-align: left; padding: 8px 12px; border-radius: 16px; font-size: .92rem; }
+.ml-grid button small { font-weight: 500; color: var(--muted); font-size: .74rem; }
+.ml-link { display: block; padding: 12px 2px; color: var(--brand); font-weight: 600; text-decoration: none; }
+.ml-note { background: var(--brand-soft); border-radius: 12px; padding: 8px 10px; font-size: .86rem; margin: 0; }
+.ml-macro { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 8px; }
+.ml-macro label { font-weight: 700; }
+.ml-field { display: grid; gap: 4px; } .ml-field input, .ml-field select { min-height: 44px; }
+.ml-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; } .ml-4.ml-3 { grid-template-columns: 2fr 1fr 1fr; }
+.ml-4 label { display: grid; gap: 2px; } .ml-4 input { min-height: 44px; min-width: 0; text-align: center; }
+.ml-label { font-weight: 700; color: var(--muted); margin-top: 4px; }
+.ml-check { display: flex; gap: 10px; align-items: center; min-height: 44px; } .ml-check input { width: 22px; height: 22px; flex: none; }
+.ml-drink { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.ml-drink small, .ml-ei small, .ml-opt small { display: block; }
+.ml-pic { width: 100%; max-height: 260px; object-fit: cover; border-radius: 14px; }
+.ml-tell { width: 100%; font: inherit; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); min-height: 88px; }
+.ml-est { display: grid; border-top: 1px solid var(--line); }
+.ml-ei { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ml-ei > span:last-child { white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.ml-opt { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.ml-opt button { min-height: 40px; padding: 6px 12px; white-space: nowrap; }
+@media (max-width: 359px) { .ml-three { grid-template-columns: 1fr 1fr; } .ml-4 { grid-template-columns: 1fr 1fr; } .ml-step input { width: 52px; } .ml-step button { width: 40px; } }
+/* 🏋️ Health 2: plan vs log, ✓ All sets, last time, rest timer, the summary after a workout. */
+.fx-banner { background: var(--brand-soft); border-radius: 14px; padding: 10px 12px; font-size: .88rem; margin: 6px 4px 10px; }
+.fx-foot3 { display: grid; gap: 8px; justify-content: stretch; }
+.fx-foot3 > button { width: 100%; }
+.fx-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fx-two button { min-height: 48px; width: 100%; }
+.fx-bh { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fx-all { min-height: 40px; padding: 6px 12px; white-space: nowrap; }
+.fx-last { margin: 2px 0 4px; font-size: .8rem; color: var(--muted); }
+.fx-last b { color: var(--ink); font-weight: 600; }
+.fx-rest { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: var(--brand-soft); border-radius: 12px; padding: 8px 12px; margin-top: 6px; }
+.fx-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+.fx-stats div { background: var(--bg); border-radius: 12px; padding: 8px; text-align: center; }
+.fx-stats b { display: block; font-size: 1.1rem; } .fx-stats span { font-size: .74rem; color: var(--muted); }
+.fx-sug { display: grid; gap: 8px; }
+.fx-rest-all { margin: 4px 0 8px; min-height: 48px; }
+.hl-ctx b { display: inline; }

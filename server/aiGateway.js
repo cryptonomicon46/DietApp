@@ -15,6 +15,11 @@ export const PURPOSES = {
   // phone — no location or camera data). Nothing else from the Closet goes with them.
   'look.item': { provider: 'anthropic', payload: 'personal-image', fields: { image: 3_500_000, mime: 16 }, perDay: 60 },
   'look.pieces': { provider: 'anthropic', payload: 'personal-image', fields: { image: 3_500_000, mime: 16 }, perDay: 20 },
+  // 🍽 Health: one meal photo (a plate, a restaurant dish, a nutrition label or a menu — redrawn on
+  // the phone, no location or camera data) with what kind it should be; or the words someone said
+  // or typed in "Tell me" (never audio). Nothing else from their food log goes with them.
+  'diet.photo': { provider: 'anthropic', payload: 'personal-image', fields: { image: 3_500_000, mime: 16, hint: 12 }, perDay: 30 },
+  'diet.text': { provider: 'anthropic', payload: 'personal-text', fields: { text: 600 }, perDay: 60 },
   // 📈 "Ask about my plan": the plan's numbers only (rebuilt through js/planCoach.js cleanFacts —
   // phase, week, targets, a 7-day adherence summary, trend, planned rate, goal date, training-day
   // count), the question, and earlier questions and answers of the same chat. Never names, meals,
