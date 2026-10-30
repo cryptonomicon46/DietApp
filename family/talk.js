@@ -15,8 +15,9 @@ import { browserVoiceOutput } from './voice.js';
 let c = null;
 export function init(ctx) { document.getElementById('sheet')?.addEventListener('close', hush); c = ctx; }
 const tk = { tab: 'home', text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null };
-// v3: food (v2) and drive times from where you are (v3) are new kinds of data, so it's asked again.
-const DAYOK = () => `fam.talk.dayok3.${c.who()}`;
+// v4: food (v2), drive times from where you are (v3), and any day you ask about, not just today and
+// tomorrow (v4) — each widened what's sent, so it's asked again.
+const DAYOK = () => `fam.talk.dayok4.${c.who()}`;
 const E = (s) => c.esc(s);
 const SEEN = 'fam.talk.seen';
 export const ICON = '<svg class="tk-ic" viewBox="0 0 32 32" aria-hidden="true"><path class="bub" d="M5 7.5A4.5 4.5 0 0 1 9.5 3h13A4.5 4.5 0 0 1 27 7.5v9a4.5 4.5 0 0 1-4.5 4.5H14l-6 5v-5h0A3 3 0 0 1 5 18z"/><rect class="mic" x="13.5" y="6.5" width="5" height="8" rx="2.5"/><path class="mic-s" d="M11 12a5 5 0 0 0 10 0M16 17v2"/></svg>';
@@ -97,7 +98,7 @@ function out() {
   if (tk.voice) return '';
   if (tk.busy) return '<p class="small muted">Reading…</p>';
   if (tk.error) return `<p class="small">${E(tk.error)}</p>`;
-  if (tk.consent) return `<div class="tk-card"><b>📅 Answer questions about your day?</b><small>To answer, Pawmily sends Claude today's and tomorrow's calendar from this app — times, titles, places and whose (names swapped for roles) — your free time, the forecast for your area, and, when you have them, your own WHOOP numbers and your own food today (your meal plan, what you've logged and what's left). Never your weight or notes. When you ask about going somewhere, your location (to about 100 m) and the place go to Google Maps for drive times with traffic and opening hours. Nothing is kept, and nothing changes unless you tap.</small><div class="tk-two"><button type="button" data-talk="dayok">Allow and ask</button><button type="button" class="ghost" data-talk="dayno">Not now</button></div></div>`;
+  if (tk.consent) return `<div class="tk-card"><b>📅 Answer questions about your day?</b><small>To answer, Pawmily sends Claude the calendar from this app for the days you ask about (today and tomorrow unless you name others, up to about a week) — times, titles, places and whose (names swapped for roles) — your free time, the forecast for your area, and, when you have them, your own WHOOP numbers and your own food today (your meal plan, what you've logged and what's left). Never your weight or notes. When you ask about going somewhere, your location (to about 100 m) and the place go to Google Maps for drive times with traffic and opening hours. Nothing is kept, and nothing changes unless you tap.</small><div class="tk-two"><button type="button" data-talk="dayok">Allow and ask</button><button type="button" class="ghost" data-talk="dayno">Not now</button></div></div>`;
   if (tk.cards) return tk.cards.map(cardHtml).join('') + (tk.cards.length > 1 && tk.cards.filter((x) => x.go && !x.done).length > 1 ? '<button type="button" class="wide" data-talk="all">Do all of these</button>' : '');
   if (tk.say) return `<div class="tk-card"><p class="small" style="margin:0">${E(tk.say)}</p></div>${examples()}`;
   return examples();

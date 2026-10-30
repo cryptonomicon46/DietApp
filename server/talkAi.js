@@ -49,6 +49,7 @@ const SUGGESTION = { type: 'object', additionalProperties: false, required: ['da
 export const DAY_SCHEMA = { type: 'object', additionalProperties: false, required: ['answer', 'suggestions'], properties: { answer: { type: 'string' }, suggestions: { type: 'array', items: SUGGESTION } } };
 export const DAY_INSTRUCTIONS = `A member of a household app asked a question about their day. Answer from the facts below only, as the JSON asked for.
 - answer: short and warm, plain text, at most 5 short lines. Times like "4:30 PM". Lead with what they asked.
+- The facts cover only the days in "days" (the ones they asked about). If they ask about a day that isn't there, say you only looked at the days listed. Weather may cover only some of those days.
 - The facts list each day's items with whose they are ("you", "you and [partner]", "[partner]", "[member:N]", "the family"), and "yourFreeTime" — the only gaps they have. Never invent events, places, travel times or weather; if something isn't in the facts, say you don't know it.
 - People appear as [partner] or [member:N]. Keep those tokens exactly; never guess names.
 - "weather" is the forecast for their area every 2 hours (°F, chance of rain in %, wind in mph) and "daylight" has sunrise and sunset. When they're planning anything outdoors, say what the weather will be at the times you suggest, in a few words ("62°F and dry at 2 PM"), and keep outdoor plans before sunset. If there is no weather in the facts, say you don't have the forecast.
