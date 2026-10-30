@@ -4,6 +4,22 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 👫 Talk — your partner's day (2026-10-30, `v2/talk-partner` from `main`)
+- **Owner's live try:** "What's on my wife's calendar today" got "I can only see your own items, not [partner]'s calendar".
+- **Cause:**
+  - Linked calendars are family-wide: every phone fetches every linked calendar and tags it with whose it is. But Talk used whatever copy the phone had saved, without waiting for a refresh.
+  - Claude wasn't told which calendars are linked, so an empty partner day read as "can't see".
+- **Fix:**
+  - Before answering, `dayContext` waits up to 6 s for the linked calendars to refresh.
+  - The facts now include `linkedCalendars` (by role only, with whether each could be read).
+  - `DAY_INSTRUCTIONS`:
+    - list [partner]'s items;
+    - if there are none, say [partner] has nothing on the calendars Pawmily can see;
+    - if none of the linked calendars is [partner]'s, say it can be linked under Calendar › Linked calendars;
+    - never say it can see only your own items.
+- **Tests:** `tests/talkday.test.js` covers linked calendars by role, with no names. `npm test` 493 pass.
+- **Not run:** a browser check (the local servers were down and the scratch folder was unavailable). A small change, covered by unit tests.
+
 ### 👥 Calendar — Together or one person's events (2026-10-30, `v2/cal-filter` from `main`; owner: "categorize them as [me], [partner] and Together")
 - **Built:**
   - Chips at the top of the month card: **Together** (everything, the default) and one per grown-up, in their colours.

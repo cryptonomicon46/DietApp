@@ -134,3 +134,13 @@ test('the days a question is about: today and tomorrow unless it names others (w
   assert.ok(daysAsked('every day this month and next week and the next 7 days', T).length <= 8);
   assert.match(DAY_INSTRUCTIONS, /only the days in "days"/);
 });
+
+test("your partner's day: whose linked calendars are in the facts (roles only), and Claude never claims it sees only yours", async () => {
+  const { dayContext } = await import('../js/talkDay.js');
+  const ctx = dayContext({ today: '2026-10-30', now: '16:00', meId: 'sam', people, days: [{ date: '2026-10-30', items: [{ time: '18:00', title: 'Book club', who: 'pat' }] }],
+    linked: [{ who: 'sam', ok: true }, { who: 'pat', ok: false }, { who: 'both', ok: true }] });
+  assert.deepEqual(ctx.linkedCalendars, [{ whose: 'you', ok: true }, { whose: '[partner]', ok: false }, { whose: 'you and [partner]', ok: true }]);
+  assert.equal(ctx.days[0].items[0].who, '[partner]'); assert.ok(!/Pat|Sam/.test(JSON.stringify(ctx)));
+  assert.equal(dayContext({ today: '2026-10-30', meId: 'sam', people, days: [] }).linkedCalendars, undefined);
+  assert.match(DAY_INSTRUCTIONS, /Never say you can only see their own items/); assert.match(DAY_INSTRUCTIONS, /Calendar › Linked calendars/);
+});
