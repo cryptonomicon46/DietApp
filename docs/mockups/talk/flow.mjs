@@ -46,7 +46,8 @@ export const CSS = `
 .thead { width: 40px; height: 40px; border-radius: 50%; border: 0; padding: 2px; box-shadow: 0 3px 8px rgba(120,80,0,.3); }
 .thead .in { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; } .thead svg { width: 24px; height: 24px; }
 /* alternative 2: docked in the bottom bar (an action, not a sixth place to go) */
-#nav.dock { grid-template-columns: repeat(6, 1fr) !important; overflow: visible; }
+#nav.dock { overflow: visible; padding-left: 0; padding-right: 0; }
+#nav.dock > button { flex: 1 1 0; min-width: 0; font-size: .66rem; padding-left: 0; padding-right: 0; }
 #nav.dock .tdock { position: relative; display: grid; justify-items: center; align-content: end; gap: 2px; padding: 0 0 6px; background: none; color: #a8740a; font: 700 .68rem/1 system-ui; }
 #nav.dock .tdock .c { position: absolute; top: -22px; width: 58px; height: 58px; border-radius: 50%; padding: 3px; box-shadow: 0 6px 14px rgba(120,80,0,.35); }
 #nav.dock .tdock .c .in { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; } #nav.dock .tdock svg { width: 30px; height: 30px; }
@@ -72,8 +73,8 @@ export const SCREENS = [
   { id: 'D4-result', title: '4 · The plan, then Apply', sheet: talkSheet('Add Project Hail Mary to our reading list', `<div class="card" style="margin-top:10px"><b>Project Hail Mary</b><p class="small muted" style="margin:2px 0 8px">Andy Weir · 2021 → Want to Read, with Pat</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button">Add to Read</button><button type="button" class="ghost">Change</button></div></div>`) },
   { id: 'D5-done', title: '5 · Done: the sheet closes, you stay where you were — Undo or Open, and the button is back', float: circle, toast: '<span>📚 Added to Want to Read</span><span><b>Undo</b><b>Open ›</b></span>' },
   { id: 'D6-focused', title: '6 · Busy screens (a workout in progress, a sheet, typing): no button', view: train },
-  { id: 'E1-homebar', title: 'Alternative A · A Talk bar at the top of Home (nothing floating)', homebar: true },
+  { id: 'E1-homebar', title: 'Alternative A · A Talk bar at the top of Home (nothing floating)', homebar: true, nav: 'home' },
   { id: 'E2-headericon', title: 'Alternative A · Other tabs: a small gold icon in the header', headericon: true, nav: 'us' },
-  { id: 'E3-dock', title: 'Alternative B · Docked in the bottom bar (an action, not a sixth place to go)', dock: true },
+  { id: 'E3-dock', title: 'Alternative B · Docked in the bottom bar (an action, not a sixth place to go)', dock: true, nav: 'home' },
 ];
 export { TALKIC };
