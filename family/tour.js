@@ -61,16 +61,16 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-12d',
-  title: 'New in 💪 Health: log a meal in one tap',
-  text: 'Today’s weight, next meal and workout first; a photo or “Tell me” for anything else; workouts with All sets and last time',
+  id: '2026-12e',
+  title: 'New: 🗣️ Talk to Pawmily',
+  text: 'Just say it — add a show or a book, log a meal, a workout or a chore. You check a card first; nothing changes until you tap.',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '💪 Health: less to think about', cards: [
-  ['🍽', 'One tap for a planned meal', 'Today shows your weight, the next meal and your workout. ✓ As planned logs the meal.'],
-  ['📷', 'Photo or 🎙️ Tell me', 'Snap a plate, a label or a menu — or say what you had. Check it, then Log. Photos aren’t kept.'],
-  ['🔄', 'Plans change', 'After a bigger meal, see what’s left and adjust the rest of today. Your targets don’t change.'],
-  ['🏋️', 'Workouts you can finish', 'Last time’s numbers as you train, ✓ All sets, a short summary — and Log as done if you already did it.'],
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '🗣️ Talk to Pawmily', cards: [
+  ['🟡', 'Golden bar on Home', 'Under the greeting — or the small gold circle on other tabs. Tap it and type, or tap 🎤 on your keyboard.'],
+  ['📺', 'Shows, movies and books', '“Add Dune to our watchlist”, “We’re watching Severance now”, “Pat recommended Project Hail Mary”.'],
+  ['🍽', 'Meals, workouts, chores', '“Log lunch: chicken bowl”, “Make today’s workout lighter”, “Walked the dog”.'],
+  ['🔒', 'You approve, it’s private', 'A card first, then Undo. Your phone reads it; only what it can’t goes to Claude, with names swapped for roles.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);

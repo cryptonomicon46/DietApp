@@ -392,7 +392,62 @@ function show(view, extra) {
   if (view !== 'bingo') clearInterval(bingo.timer);
   $('#chatTop')?.classList.toggle('on', view === 'chats' || view === 'chat');
   if (view === 'chats' || view === 'chat') return dms().then((d) => (view === 'chat' ? d.convView(extra) : d.listView())).catch((e) => toast(e.message));
+  talkFab();
   ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, read: () => RM().then((R) => R.readView()), us: usView, health: healthView, fitness: fitnessView, look: lookView })[view]?.();
+}
+// 🗣️ Talk to Pawmily (family/talk.js, loaded on the first tap): a golden bar under the greeting on
+// Home, and a small gold circle on the other main tabs — hidden while you scroll down, while you're
+// typing, and in busy screens (Fitness, chats, Me), so it's never in the way.
+const TALK_IC = '<svg class="tk-ic" viewBox="0 0 32 32" aria-hidden="true"><path class="bub" d="M5 7.5A4.5 4.5 0 0 1 9.5 3h13A4.5 4.5 0 0 1 27 7.5v9a4.5 4.5 0 0 1-4.5 4.5H14l-6 5v-5h0A3 3 0 0 1 5 18z"/><rect class="mic" x="13.5" y="6.5" width="5" height="8" rx="2.5"/><path class="mic-s" d="M11 12a5 5 0 0 0 10 0M16 17v2"/></svg>';
+const talkBar = () => `<button type="button" class="talk-bar" data-act="talk"><span class="in">${TALK_IC}<span><b>Talk to Pawmily</b><small>Add, log or plan — just say it</small></span></span></button>`;
+const TALK_TABS = ['us', 'calendar', 'threads', 'health', 'watch', 'read', 'look', 'bingo'];
+function talkFab() {
+  let b = $('#talkFab');
+  if (!b) { b = document.createElement('button'); b.type = 'button'; b.id = 'talkFab'; b.className = 'talk-fab'; b.dataset.act = 'talk'; b.setAttribute('aria-label', 'Talk to Pawmily'); b.innerHTML = `<span class="in">${TALK_IC}</span>`; document.body.append(b); }
+  b.hidden = !state.fid || !TALK_TABS.includes(state.view);
+  b.classList.remove('away');
+  document.body.classList.toggle('has-talk', !b.hidden);
+}
+let talkY = 0;
+addEventListener('scroll', () => { const b = $('#talkFab'), y = scrollY; if (b && !b.hidden) b.classList.toggle('away', y > talkY + 4 && y > 80); if (Math.abs(y - talkY) > 4) talkY = y; }, { passive: true });
+document.addEventListener('focusin', (e) => { if (e.target.matches?.('input, textarea, select, [contenteditable]') && !e.target.closest('#sheet')) $('#talkFab')?.classList.add('typing'); });
+document.addEventListener('focusout', () => $('#talkFab')?.classList.remove('typing'));
+let talkMod = null;
+function talk() {
+  talkMod ||= import(`./talk.js?v=${VERSION}`).then((m) => {
+    const first = (n) => String(n || '').split(/\s+/)[0];
+    m.init({
+      api, esc, openSheet, closeSheet, toast, LS, show, iso: () => isoLocal(),
+      aiReady: async () => { const cfg = await api.liveConfig(); return cfg.missing || cfg.offline ? null : !!cfg.ai; },
+      // Names stay on the phone: they're swapped for roles before anything is sent (js/talkActions.js).
+      people: () => fam().members.filter((x) => x.kind === 'person').map((x) => ({ id: x.id, name: first(x.name), role: x.id === fam().me ? 'me' : x.id === partnerMember()?.id ? 'partner' : 'member' })),
+      partner: () => { const p = partnerMember(); return p ? { id: p.id, first: first(p.name) } : null; },
+      watchShows: async () => { const W = await WM(); await W.loadWatch(); return (watch.shows || []).filter((x) => !x.locked).map((x) => ({ id: x.id, title: x.title, kind: x.kind, status: x.status })); },
+      watchAdd: async ({ title, kind, status }) => {
+        if (lockedHere()) throw new Error('🔒 This device needs the family key first — Me › 🔐 Encryption');
+        const r = await api.post(`/families/${state.fid}/watch/shows`, { aud: 'us', status, date: isoLocal(), body: await lock({ title, service: 'other', kind: kind === 'movie' ? 'movie' : 'show', date: isoLocal() }) });
+        (await WM()).watchSaved().catch(() => {});
+        return r.show?.id;
+      },
+      watchStatus: async (id, status) => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { status, date: isoLocal() }); (await WM()).watchSaved().catch(() => {}); },
+      watchDelete: async (id) => { if (id) await api.del(`/families/${state.fid}/watch/shows/${id}`); (await WM()).watchSaved().catch(() => {}); },
+      read: () => RM(),
+      careKinds: () => {
+        const kinds = [...Object.keys(CARE).filter((k) => (fam()?.modules || []).includes('dogs') || !['breakfast', 'dinner', 'walk', 'park', 'treat', 'meds'].includes(k)), ...ownChores().map((x) => `x_${x.id}`)];
+        return kinds.map((k) => { const [icon, label] = careMeta(k); return { kind: k, icon, label }; });
+      },
+      careLog: async (kind) => { const r = await api.post(`/families/${state.fid}/care`, { kind, date: isoLocal(), by: 'me' }); if (state.view === 'home') { renderCare(); renderRace(); } return r.entry?.id; },
+      careUndo: async (id) => { if (id) await api.del(`/families/${state.fid}/care/${isoLocal()}/${id}`); if (state.view === 'home') { renderCare(); renderRace(); } },
+      dietTell: async (meal, text) => {
+        if (!health.data) { const d = await openData(await memberData().catch(() => null)); if (d?.locked) throw new Error('🔒 This device needs the family key first — Me › 🔐 Encryption'); health.data = d; }
+        const M = await meals(); M.setData(health.data); return M.tellWith(meal, text);
+      },
+      fitDescribe: async (text) => { const F = await fit(); if (state.view !== 'fitness') show('fitness'); return F.describeWith(text); },
+      fitLighter: async () => { const F = await fit(); if (!F.lighterState().can) return toast("There's no workout planned today to make lighter"); return F.onClick({ dataset: { fx: 'lighter' } }); },
+    });
+    return m;
+  }).catch((e) => { talkMod = null; throw e; });
+  return talkMod;
 }
 // 💪 Health: your own Diet and Fitness (family/health.js, loaded when you open it).
 async function healthView() {
@@ -636,6 +691,7 @@ async function homeView() {
   const { house, dogPart, fame } = petsParts();
   const h = new Date().getHours(), first = esc((me()?.name || state.user?.name || '').split(' ')[0]);
   const top = `<h1 class="home-hi">${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}. Here’s your ${esc(new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))}.</h1>
+    ${talkBar()}
     <div id="hello"></div><section class="nextup" id="nextUp" style="${homeH('nextUp')}" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section>
     ${homeLook()}
     <section class="card attn" id="attn" aria-labelledby="attnH" style="${homeH('attn')}"><div class="skeleton line"></div></section>
@@ -672,7 +728,7 @@ function homeLook() {
 // Home without the household's lists (the family's creator didn't give you Home): your own day.
 function homeOwnView() {
   const h = new Date().getHours(), first = esc((me()?.name || state.user?.name || '').split(' ')[0]);
-  $('#view').innerHTML = `${demoBanner()}<h1 class="home-hi">${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}.</h1>
+  $('#view').innerHTML = `${demoBanner()}<h1 class="home-hi">${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}.</h1>${talkBar()}
     <div id="hello"></div><section class="nextup" id="nextUp" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section>
     <section class="card"><p class="small muted">The household's lists, chores and the dogs are in Home for the people ${esc(fam().name)}'s creator chose. Ask them if you'd like to see it.</p></section>`;
   helloCard();
@@ -4217,6 +4273,8 @@ document.addEventListener('click', (e) => {
   const d = t.dataset;
   const post = t.closest('[data-post]');
   if (d.pact) return postAction(d.pact, t.closest('.menu').dataset);
+  if (d.act === 'talk') return act(async () => (await talk()).open(state.view));
+  if (d.talk || d.talkex != null || d.talkgo != null || d.talkset || d.talkpick || d.talkpickshow || d.talkcare) return act(async () => (await talk()).onClick(t));
   if (d.care) {
     const box = t.getBoundingClientRect();
     celebrate(d.care, box.left + box.width / 2, box.top + box.height / 2);
@@ -4816,6 +4874,7 @@ document.addEventListener('change', async (e) => {
 document.addEventListener('submit', (e) => {
   const f = e.target;
   if (f.dataset.weigh != null) { e.preventDefault(); return saveWeighIn(f); }
+  if (f.dataset.talkform != null) { e.preventDefault(); return act(async () => (await talk()).onSubmit(f)); }
   if (['rdManual', 'rdProg', 'rdEdit'].includes(f.id)) { e.preventDefault(); return act(async () => { const R = await RM(); if (!R.onSubmit(f)) await R.onSubmitAsync(f); }); }
   const v = Object.fromEntries(new FormData(f));
   if (f.id === 'chatForm') {
@@ -5250,3 +5309,6 @@ document.addEventListener('input', (e) => { if (e.target.dataset?.rdq != null) R
 document.addEventListener('input', (e) => { if (e.target.dataset?.fxe && fitMod) fitMod.then((F) => F.onInput(e.target)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.mle != null && mealMod) mealMod.then((M) => M.onInput(e.target)).catch(() => {}); });
 document.addEventListener('change', (e) => { if (e.target.dataset?.mlpick != null && mealMod) mealMod.then((M) => M.onPick(e.target)).catch(() => {}); });
+document.addEventListener('change', (e) => { if (e.target.dataset?.talkrec != null && talkMod) talkMod.then((T) => T.onChange(e.target)).catch(() => {}); });
+// Enter sends in the Talk box (Shift+Enter for a new line).
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'tkText') { e.preventDefault(); e.target.form?.requestSubmit(); } });

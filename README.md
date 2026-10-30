@@ -8,8 +8,15 @@
 
 The bottom bar has five places: **🏠 Home · 💞 Us · 📅 Calendar · 📖 Threads · 💪 Health**. 💞 Us shows only for a couple. 💪 Health shows when the family manages diet & fitness: your Diet and Fitness on one calm screen, with the detailed food and training screens a tap away. Along the top right: **💬** your chats, **❓** help, **＋** creates anything, and **Me** (your picture). 🍿 📺 Watch is the first thing in 💞 Us.
 
+### 🗣️ Talk to Pawmily
+Say or type what you'd like done instead of finding the screen for it. On 🏠 Home it's the golden **Talk to Pawmily** bar under the greeting; on Us, Calendar, Threads, Health, Watch, Read and Look it's a small gold circle at the bottom right, which slides away while you scroll down or type and isn't shown in busy screens (Fitness, chats, Me). Tapping either opens the Talk sheet with the box ready — type, or tap 🎤 on your phone's keyboard (only the words reach OurPawmily, never audio). Three example phrases for the tab you're on fill the box when tapped.
+- **What it can do now:** add a show or movie to your watchlist (*"Add Dune to our watchlist"*) or move one (*"We're watching Severance now"*, *"We finished The Bear"*); add a book (*"Add Project Hail Mary to our reading list — Pat recommended it"*, which records *Recommended by Pat* on the book) or move one (*"I'm starting Piranesi"*, *"I finished reading Piranesi"*); log a meal (*"Log lunch: chicken bowl and an iced latte"* opens 🎙️ Tell me already read); describe a workout (opens Describe it, read); *"Make today's workout lighter"* (its preview); and dogs and chores (*"Walked the dog"*, *"Fed the dogs dinner"*).
+- **You always approve:** each request becomes a small card — the show with *Show / Movie*, the book Open Library found (several matches → *Which book?*), *Severance: Want to Watch → Watching* — and nothing changes until you tap it. Then the sheet closes, you stay where you were, and the message has **Undo**.
+- **Private by design:** your phone reads everyday requests itself. Only what it can't read goes to Claude, and then only your words, with people's names swapped for roles (*"for Pat and me"* → *"for [partner] and me"*), the tab and today's date — never your watchlist, books, plans or anything else; your lists are matched on the phone. Nothing you said is kept. Without Claude on the connector, the phone's own reading still works.
+- **Not yet:** anything involving someone else's time (proposing a date, calendar events), places, bookings and *Plan my day* are later steps; Talk says so and suggests what it can do.
+
 ### 🏠 Home
-A greeting with today's date on top (*Good afternoon, Sam. Here's your Wednesday, October 28.*), then everything the household needs today. On a wide screen (a Mac, or an iPad held sideways) the dogs sit in a second column.
+A greeting with today's date on top (*Good afternoon, Sam. Here's your Wednesday, October 28.*), the golden **🗣️ Talk to Pawmily** bar, then everything the household needs today. On a wide screen (a Mac, or an iPad held sideways) the dogs sit in a second column.
 
 | Feature | What it does |
 |---|---|

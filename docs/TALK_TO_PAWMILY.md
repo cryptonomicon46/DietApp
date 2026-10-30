@@ -1,6 +1,6 @@
 # 🗣️ Talk to Pawmily — whole-life command layer (architecture review)
 
-**STATUS: DESIGN ONLY / NOT AUTHORIZED FOR IMPLEMENTATION.** Prepared 2026-10-30 from the owner's "Whole-Life Command Layer" proposal, fitted to the code on `main` `aa4fe63` and `v2/health-2b`. Nothing here is built. Voice, calendar planning, route/traffic intelligence, day-plan orchestration and background coaching need their own authorization. Examples use Sam and Pat.
+**STATUS: T0 (mockups + action registry as tested code) authorized and done 2026-10-30 — see `docs/mockups/talk/CHECKPOINT_T0.md` and `js/talkActions.js`. T1 (single-domain requests that are yours) is built — `js/talkParse.js`, `server/talkAi.js`, `family/talk.js`. T2–T4 are NOT authorized yet.** Prepared 2026-10-30 from the owner's "Whole-Life Command Layer" proposal, fitted to the code on `main` `aa4fe63` and `v2/health-2b`. Nothing here is built. Voice, calendar planning, route/traffic intelligence, day-plan orchestration and background coaching need their own authorization. Examples use Sam and Pat.
 
 Product model: **Understand → Plan → Capture → Coordinate.** You have a thought, tell Pawmily, it checks the facts it needs, proposes something sensible, you approve, and the right existing parts of OurPawmily update.
 

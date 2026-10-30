@@ -1,0 +1,179 @@
+// 🗣️ Talk to Pawmily (T1): the Talk sheet. Loaded the first time you tap the Talk bar on Home or the
+// gold circle on another tab. You type (or dictate with the keyboard's 🎤 — only words, never audio);
+// the phone reads everyday requests itself (js/talkParse.js), and only what it can't goes to Claude
+// (/ai/talk), with people swapped for roles first (js/talkActions.js toTokens). Every request becomes
+// a small card you approve; nothing changes until you tap. Each card saves through the area that owns
+// it — Watch, Read, the chores log — or opens that area's own preview (Tell me for meals, Describe it
+// for workouts, Make it lighter). T1 only does things that are yours: nothing here involves anyone
+// else's time, and nothing you said is kept (no history).
+import { parseTalk } from '../js/talkParse.js';
+import { toTokens, fromTokens } from '../js/talkActions.js';
+
+let c = null;
+export function init(ctx) { c = ctx; }
+const tk = { tab: 'home', text: '', busy: false, cards: null, say: '', error: '' };
+const E = (s) => c.esc(s);
+const SEEN = 'fam.talk.seen';
+export const ICON = '<svg class="tk-ic" viewBox="0 0 32 32" aria-hidden="true"><path class="bub" d="M5 7.5A4.5 4.5 0 0 1 9.5 3h13A4.5 4.5 0 0 1 27 7.5v9a4.5 4.5 0 0 1-4.5 4.5H14l-6 5v-5h0A3 3 0 0 1 5 18z"/><rect class="mic" x="13.5" y="6.5" width="5" height="8" rx="2.5"/><path class="mic-s" d="M11 12a5 5 0 0 0 10 0M16 17v2"/></svg>';
+// Phrases to start from (they fill the box — you finish or change them), for the tab you're on.
+const EXAMPLES = {
+  home: ['Add Dune to our watchlist', 'Log lunch: chicken bowl and an iced latte', 'Walked the dog'],
+  us: ["We're watching Severance now", 'Add Project Hail Mary to our reading list', 'I finished reading Piranesi'],
+  health: ['Log breakfast: two eggs and toast', 'Bench 3x8 at 135, rows 3x10 at 60', "Make today's workout lighter"],
+};
+const WATCH = { want: 'Want to Watch', watching: 'Watching', finished: 'Watched', upnext: 'Up Next', dropped: 'Stopped' };
+const READ = { want: 'Want to Read', reading: 'Reading', finished: 'Finished', dropped: 'Stopped' };
+const MEAL = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', extra: 'A snack or extra' };
+const norm = (t) => String(t || '').toLowerCase().replace(/^(the|a|an)\s+/, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+export function open(tab = 'home') {
+  tk.tab = EXAMPLES[tab] ? tab : tab === 'watch' || tab === 'read' ? 'us' : tab === 'fitness' ? 'health' : 'home';
+  Object.assign(tk, { text: '', busy: false, cards: null, say: '', error: '' });
+  draw();
+  setTimeout(() => document.getElementById('tkText')?.focus(), 60);
+}
+function draw() {
+  let first = false;
+  try { first = !c.LS.get(SEEN); } catch { /* private mode */ }
+  c.openSheet(`<div class="tk-sheet"><div class="row between tk-top"><h2>${ICON}Talk to Pawmily</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    ${first ? `<p class="tk-first">Say what you'd like done — add a show or a book, log a meal, a workout or a chore. Your phone reads it first; only what it can't read goes to Claude, with people's names swapped for roles. Nothing changes until you tap. <button type="button" class="linkish small" data-talk="seen">Got it</button></p>` : ''}
+    <form class="tk-form" data-talkform><label for="tkText" class="visually-hidden">What would you like?</label><textarea id="tkText" rows="2" maxlength="500" placeholder="Ask or tell Pawmily…" enterkeyhint="send">${E(tk.text)}</textarea><button ${tk.busy ? 'disabled' : ''} aria-label="Send">${tk.busy ? '…' : '↑'}</button></form>
+    <p class="tiny muted tk-hint">🎤 Tap the microphone on your keyboard to speak — only the words reach Pawmily.</p>
+    <div id="tkOut" role="status">${out()}</div></div>`);
+}
+function out() {
+  if (tk.busy) return '<p class="small muted">Reading…</p>';
+  if (tk.error) return `<p class="small">${E(tk.error)}</p>`;
+  if (tk.cards) return tk.cards.map(cardHtml).join('') + (tk.cards.length > 1 && tk.cards.filter((x) => x.go && !x.done).length > 1 ? '<button type="button" class="wide" data-talk="all">Do all of these</button>' : '');
+  if (tk.say) return `<div class="tk-card"><p class="small" style="margin:0">${E(tk.say)}</p></div>${examples()}`;
+  return examples();
+}
+const examples = () => `<div class="tk-ex">${(EXAMPLES[tk.tab] || EXAMPLES.home).map((x) => `<button type="button" data-talkex="${E(x)}">${E(x)}</button>`).join('')}</div>`;
+const redraw = () => { const o = document.getElementById('tkOut'); if (o) o.innerHTML = out(); else draw(); };
+
+// ---------- reading a request ----------
+export async function send(text) {
+  text = String(text || '').trim();
+  if (!text) return;
+  tk.text = text; tk.error = ''; tk.say = ''; tk.cards = null;
+  const people = c.people(), t = toTokens(text, people);
+  let steps = parseTalk(t.text)?.steps;
+  if (!steps) {
+    const ai = await c.aiReady().catch(() => null);
+    if (ai === false) { tk.say = "I couldn't read that on the phone, and Claude isn't set up here. I can add shows, movies and books, and log meals, workouts and chores — try one of these."; return redraw(); }
+    tk.busy = true; draw();
+    try {
+      const r = await c.api.post('/ai/talk', { text: t.text, tab: tk.tab, today: c.iso() });
+      steps = r.steps || [];
+      if (!steps.length) tk.say = r.say || "I can't do that yet. I can add shows, movies and books, and log meals, workouts and chores.";
+    } catch (e) { tk.error = e.status === 429 ? "That's all the Talk requests for today." : e.message || "Pawmily couldn't read that just now."; }
+    tk.busy = false;
+    if (!steps?.length) return draw();
+  }
+  // Roles back to names, in anything shown to you.
+  steps = steps.map((s) => Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === 'string' && k !== 'do' ? fromTokens(v, t.map, people) : v])));
+  // A meal, a described workout or "make it lighter" on its own: straight to that area's own preview.
+  if (steps.length === 1 && ['diet.log', 'fitness.describe', 'fitness.lighter'].includes(steps[0].do)) { c.closeSheet(); return handOff(steps[0]); }
+  tk.cards = await Promise.all(steps.map(resolve));
+  draw();
+}
+
+// ---------- each step → a card (looked up on the phone: your lists never leave it) ----------
+async function resolve(s) {
+  if (s.do === 'watch.add' || s.do === 'watch.status') {
+    const shows = await c.watchShows(), q = norm(s.title);
+    const hits = shows.filter((x) => norm(x.title) === q || (q.length > 3 && norm(x.title).startsWith(q)));
+    if (s.do === 'watch.status' && hits.length > 1) return { type: 'pickshow', title: s.title, status: s.status, hits };
+    if (hits.length) { const status = s.do === 'watch.add' && s.status === 'want' ? hits[0].status : s.status; return { type: 'watchstatus', show: hits[0], status, go: hits[0].status !== status }; }
+    return { type: 'watchadd', title: s.title, kind: s.kind || 'show', status: s.status, go: true, note: s.do === 'watch.status' ? 'Not on your list yet' : '' };
+  }
+  if (s.do === 'read.add' || s.do === 'read.state') {
+    const R = await c.read(), f = await R.talkFind(s.title).catch(() => ({ results: [] }));
+    if (f.have?.length) return { type: 'readstate', book: f.have[0], state: s.state, go: f.have[0].state !== s.state };
+    if (!f.results?.length) return { type: 'nobook', title: s.title };
+    return { type: 'readadd', results: f.results, pick: f.results.length === 1 ? 0 : null, state: s.state, recBy: s.recBy === 'partner' && c.partner() ? c.partner().id : '', go: true };
+  }
+  if (s.do === 'care.log') {
+    const kinds = c.careKinds(), q = norm(s.chore).replace(/^dog\s+/, '');
+    const k = kinds.find((x) => x.kind === q || norm(x.label) === q) || kinds.find((x) => norm(x.label).includes(q) || (q.length > 3 && q.includes(norm(x.label))));
+    return k ? { type: 'care', care: k, go: true } : { type: 'pickcare', chore: s.chore, kinds };
+  }
+  return { type: 'handoff', step: s, go: true };
+}
+function cardHtml(x, i) {
+  const btn = (label, ghost = false) => (x.done ? `<span class="tk-done">✓ ${E(x.done)}</span>` : `<button type="button"${ghost ? ' class="ghost"' : ''} data-talkgo="${i}">${E(label)}</button>`);
+  if (x.type === 'watchadd') return `<div class="tk-card"><b>${x.kind === 'movie' ? '🍿' : '📺'} ${E(x.title)}</b><small class="muted">${x.note ? `${E(x.note)} · ` : ''}→ ${E(WATCH[x.status] || 'Want to Watch')} · on your list${c.partner() ? ` with ${E(c.partner().first)}` : ''}</small>
+    ${x.done ? '' : `<div class="seg tk-seg"><button type="button" class="${x.kind === 'show' ? 'on' : ''}" data-talkset="${i}:kind:show">📺 Show</button><button type="button" class="${x.kind === 'movie' ? 'on' : ''}" data-talkset="${i}:kind:movie">🍿 Movie</button></div>`}${btn('Add to Watch')}</div>`;
+  if (x.type === 'watchstatus') return `<div class="tk-card"><b>📺 ${E(x.show.title)}</b><small class="muted">${x.go ? `${E(WATCH[x.show.status] || 'On your list')} → <b>${E(WATCH[x.status])}</b>` : `Already on your list · ${E(WATCH[x.show.status] || '')}`}</small>${x.go ? btn(`Move to ${WATCH[x.status]}`) : ''}</div>`;
+  if (x.type === 'pickshow') return `<div class="tk-card"><b>Which one?</b><div class="tk-pick">${x.hits.map((h, j) => `<button type="button" data-talkpickshow="${i}:${j}">${E(h.title)} <small class="muted">· ${E(WATCH[h.status] || '')}</small></button>`).join('')}</div></div>`;
+  if (x.type === 'readstate') return `<div class="tk-card"><b>📚 ${E(x.book.title)}</b><small class="muted">${x.go ? `${E(READ[x.book.state] || 'Not on your list')} → <b>${E(READ[x.state])}</b>` : `Already ${E(READ[x.book.state] || '')}`}</small>${x.go ? btn(`Move to ${READ[x.state]}`) : ''}</div>`;
+  if (x.type === 'nobook') return `<div class="tk-card"><b>📚 ${E(x.title)}</b><small class="muted">Couldn't find that book.</small><button type="button" class="ghost" data-talk="readopen">Add it in Read ›</button></div>`;
+  if (x.type === 'readadd') {
+    if (x.pick == null) return `<div class="tk-card"><b>Which book?</b><div class="tk-pick">${x.results.map((b, j) => `<button type="button" data-talkpick="${i}:${j}"><b>${E(b.title)}</b> <small class="muted">${E([(b.authors || []).map((a) => a.name || a).join(', '), b.year].filter(Boolean).join(' · '))}</small></button>`).join('')}</div></div>`;
+    const b = x.results[x.pick], p = c.partner();
+    return `<div class="tk-card"><b>📚 ${E(b.title)}</b><small class="muted">${E([(b.authors || []).map((a) => a.name || a).join(', '), b.year].filter(Boolean).join(' · '))} → ${E(READ[x.state])}</small>
+      ${p && !x.done ? `<label class="tk-rec"><input type="checkbox" data-talkrec="${i}" ${x.recBy ? 'checked' : ''}> Recommended by ${E(p.first)}</label>` : ''}${btn('Add to Read')}</div>`;
+  }
+  if (x.type === 'care') return `<div class="tk-card"><b>${E(x.care.icon)} ${E(x.care.label)}</b><small class="muted">Today · logged for you</small>${btn('Log it')}</div>`;
+  if (x.type === 'pickcare') return `<div class="tk-card"><b>Which one?</b><small class="muted">I don't know "${E(x.chore)}" — pick it:</small><div class="tk-ex">${x.kinds.map((k) => `<button type="button" data-talkcare="${i}:${E(k.kind)}">${E(k.icon)} ${E(k.label)}</button>`).join('')}</div></div>`;
+  const s = x.step;
+  const what = s.do === 'diet.log' ? `🍽 ${MEAL[s.meal]}: ${s.text}` : s.do === 'fitness.describe' ? `🏋️ Workout: ${s.text}` : "🪶 Make today's workout lighter";
+  return `<div class="tk-card"><b>${E(what)}</b><small class="muted">Opens its preview to check first</small>${btn('Open', true)}</div>`;
+}
+
+// ---------- doing one (after your tap) ----------
+async function handOff(s) {
+  if (s.do === 'diet.log') return c.dietTell(s.meal, s.text);
+  if (s.do === 'fitness.describe') return c.fitDescribe(s.text);
+  return c.fitLighter();
+}
+async function go(i) {
+  const x = tk.cards?.[i];
+  if (!x || x.done || x.busy) return null;
+  x.busy = true;
+  try {
+    if (x.type === 'watchadd') {
+      const id = await c.watchAdd({ title: x.title, kind: x.kind, status: x.status });
+      x.done = 'Added'; x.undo = () => c.watchDelete(id); x.said = `${x.kind === 'movie' ? '🍿' : '📺'} ${x.title} → ${WATCH[x.status]}`;
+    } else if (x.type === 'watchstatus') {
+      const before = x.show.status;
+      await c.watchStatus(x.show.id, x.status);
+      x.done = WATCH[x.status]; x.undo = () => c.watchStatus(x.show.id, before || 'want'); x.said = `📺 ${x.show.title} → ${WATCH[x.status]}`;
+    } else if (x.type === 'readadd') {
+      const R = await c.read(), b = x.results[x.pick];
+      const id = await R.talkAdd(b, x.state, x.recBy);
+      x.done = 'Added'; x.undo = () => R.talkUndoAdd(id); x.said = `📚 ${b.title} → ${READ[x.state]}`;
+    } else if (x.type === 'readstate') {
+      const R = await c.read(), before = await R.talkSetState(x.book.id, x.state);
+      x.done = READ[x.state]; x.undo = () => R.talkSetState(x.book.id, before || 'want'); x.said = `📚 ${x.book.title} → ${READ[x.state]}`;
+    } else if (x.type === 'care') {
+      const id = await c.careLog(x.care.kind);
+      x.done = 'Logged'; x.undo = () => c.careUndo(id); x.said = `${x.care.icon} ${x.care.label} logged`;
+    } else if (x.type === 'handoff') { x.done = 'Opened'; c.closeSheet(); await handOff(x.step); return null; }
+  } catch (e) { x.busy = false; c.toast(e.message || "Couldn't do that just now"); return redraw(); }
+  x.busy = false;
+  // All done: the sheet closes, you stay where you were, with Undo.
+  if (tk.cards.every((y) => y.done || !y.go)) {
+    c.closeSheet();
+    const done = tk.cards.filter((y) => y.said);
+    c.toast(done.length === 1 ? done[0].said : `✓ ${done.length} done`, async () => { for (const y of done) await y.undo?.(); c.toast('Undone'); });
+    return null;
+  }
+  return redraw();
+}
+
+export async function onClick(t) {
+  const d = t.dataset;
+  if (d.talkex) { const box = document.getElementById('tkText'); if (box) { box.value = d.talkex; box.focus(); box.setSelectionRange(box.value.length, box.value.length); } return null; }
+  if (d.talkgo != null) return go(+d.talkgo);
+  if (d.talkset) { const [i, k, v] = d.talkset.split(':'); tk.cards[+i][k] = v; return redraw(); }
+  if (d.talkpick) { const [i, j] = d.talkpick.split(':').map(Number); tk.cards[i].pick = j; return redraw(); }
+  if (d.talkpickshow) { const [i, j] = d.talkpickshow.split(':').map(Number); const x = tk.cards[i]; tk.cards[i] = { type: 'watchstatus', show: x.hits[j], status: x.status, go: true }; return redraw(); }
+  if (d.talkcare) { const [i, kind] = d.talkcare.split(':'); const k = tk.cards[+i].kinds.find((y) => y.kind === kind); tk.cards[+i] = { type: 'care', care: k, go: true }; return redraw(); }
+  if (d.talk === 'all') { for (let i = 0; i < tk.cards.length; i++) if (tk.cards[i].go && !tk.cards[i].done && tk.cards[i].type !== 'handoff') await go(i); return null; }
+  if (d.talk === 'seen') { try { c.LS.set(SEEN, '1'); } catch { /* private mode */ } return draw(); }
+  if (d.talk === 'readopen') { c.closeSheet(); return c.show('read'); }
+  return null;
+}
+export function onChange(t) { if (t.dataset.talkrec != null) { const x = tk.cards[+t.dataset.talkrec]; x.recBy = t.checked && c.partner() ? c.partner().id : ''; } }
+export function onSubmit(f) { const v = f.querySelector('textarea')?.value || ''; return send(v); }

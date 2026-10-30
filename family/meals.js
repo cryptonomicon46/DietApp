@@ -232,6 +232,8 @@ async function readPhoto() {
 }
 
 // ---------- 🎙️ Tell me ----------
+// 🗣️ From Talk to Pawmily: the same Tell me, already filled in and read — its preview is the check.
+export function tellWith(target, text) { ms.sheet = { kind: 'tell', target, text, est: null, error: '' }; drawTell(); return readTell(); }
 function tellSheet(target) {
   ms.sheet = { kind: 'tell', target, text: '', est: null, error: '' };
   drawTell();

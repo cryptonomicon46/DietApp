@@ -1,11 +1,69 @@
 # OurPawmily Build Progress
 
-Last update: 2026-10-30 — 💪 Health 2 Phase B (WHOOP) built on `v2/health-2b` from `main` `aa4fe63`, stopped at its checkpoint (not merged, not deployed). Health 2 Phase A merged as PR #6 (`aa4fe63`) and deployed (reported by the user). Earlier: 👔 Look MVP (L0–L6) on `v2/look-mvp` from `main` `f333274` (Health UX merged as PR #4 and deployed, reported by the user). Earlier: Health/Fitness/Diet UX (H1–H12 with amendments) on `v2/health-ux`. Phases 4–11 and the Describe-it change are merged to `main` (PR #2 `d94c25f`, PR #3 `e9708af`) and deployed (reported by the user).
+Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for review) on `v2/talk-t0` from `main` `5910e8a`, after T0 (mockups + action registry). Health 2 Phase B merged (PR #7 `5c9e5f2`, PR #8 `5910e8a`) and deployed (connector `37c7ea1c…` from `v2/health-2b` head, Pages from `main`; reported by the user) and checked on the owner's real WHOOP data. Health 2 Phase A merged as PR #6 (`aa4fe63`) and deployed (reported by the user). Earlier: 👔 Look MVP (L0–L6) on `v2/look-mvp` from `main` `f333274` (Health UX merged as PR #4 and deployed, reported by the user). Earlier: Health/Fitness/Diet UX (H1–H12 with amendments) on `v2/health-ux`. Phases 4–11 and the Describe-it change are merged to `main` (PR #2 `d94c25f`, PR #3 `e9708af`) and deployed (reported by the user).
 
 ## Current phase and task
 
+### 🗣️ Talk to Pawmily — T1 (authorized 2026-10-30 by choosing the placement — "Go with your recommendation the E1 and the small gold circle on the other tabs"; same branch)
+- **State: T1 built, tested and browser-verified. Stopped for review. Not merged, not deployed.** The connector must be deployed first (new `/ai/talk`); without it the phone's own reading still works and Claude-read requests say they couldn't be read.
+- **Decisions applied:**
+  - 1: the golden bar on Home plus a small gold circle on Us, Calendar, Threads, Health, Watch, Read and Look. The circle hides while scrolling down or typing, and in Fitness, chats and Me.
+  - 5: books get "Recommended by" (`recBy`, a member id).
+  - 7: no history of requests.
+  - Decisions 2–4 and 6 belong to T2/T3 and stay open. No confetti (owner).
+- **Built:**
+  - `js/talkParse.js`: the T1 step shapes (`watch.add` / `watch.status` / `read.add` / `read.state` / `diet.log` / `fitness.describe` / `fitness.lighter` / `care.log`), `tidySteps`, and `parseTalk`, the phone's own reader for everyday phrases.
+  - `server/talkAi.js` `routeTalk` (structured output, cleaned by the same `tidySteps`); gateway purpose `talk.route` (text ≤ 500, tab, today; 60/day); route `/ai/talk` (signed in, 501 without Claude).
+  - `family/talk.js`, the sheet, loaded lazily on the first tap:
+    - names → roles before sending (`toTokens`), and back for display;
+    - titles matched on the phone: Watch from the decrypted list; Read from your books, then Open Library;
+    - cards with Show/Movie, Which one?, Which book?, Recommended by, the chore picker;
+    - each card saves through the domain's own routes, then the sheet closes with an Undo toast;
+    - a meal, a workout or "lighter" opens that area's own preview (`meals.js tellWith`, `fitness.js describeWith`, the lighter sheet).
+  - `family/app.js`: `talkBar`, `talkFab`, the scroll/typing hide, the adapters. `family/read.js`: `talkFind` / `talkAdd` / `talkSetState` / `talkUndoAdd`, and "💬 Recommended by" in a book's details. `js/books.js`: `recBy`.
+- **Tests:** `npm test` 465 pass, 0 fail. `tests/talkparse.test.js` (5) covers:
+  - the phone's reader on every T1 phrase, and refusals for anything else;
+  - `tidySteps` against junk and unknown actions;
+  - every step maps to a registry action that affects no one else;
+  - the gateway fields are exactly text, tab and today;
+  - the `/ai/talk` route sends only tokenized words (no lists or names), keeps only steps it knows, writes a value-free audit line, and returns 400 / 501;
+  - `recBy` validation.
+- **Browser** (2026-10-30; local Pages + `wrangler dev` DEMO, seeded family; Open Library and Claude answers stubbed at the connector because this environment can't reach them). At 390 px, 320 px and dark, with no overflow and no page errors:
+  - Home bar → sheet (first-use note, examples);
+  - "Add Dune: Part Two to our watchlist" → card → Movie → Add → toast → Undo: shows 7 → 6, so the add was undone;
+  - "We finished Severance" → Watched; "walked the dog" → logged;
+  - the book with "Recommended by Pat" → added;
+  - an unreadable request went to Claude as "…for [partner] and me" (no name), giving a Watch card;
+  - "Log lunch: two eggs and toast" → Tell me already read (216 kcal);
+  - Us: circle shown; scroll down → away, scroll up → back; Us examples;
+  - Health: circle shown. Fitness: hidden.
+- **Performance** (same machine): start-up 14 requests, 0 duplicates, CLS 0.006 / 0, script 179 → 181 KB, cold first paint 1336 ms, warm 1072 ms, within budget. `family/talk.js` loads only on the first tap.
+- **Privacy:** what reaches Claude is the words with roles instead of names, the tab and the date. Lists, books, plans and food stay on the phone. Results are approved per card; the audit line holds no values; nothing is kept; no family key is involved beyond the existing sealed saves. "Recommended by" is sealed inside the book.
+- **Owner steps:** deploy the connector (`/ai/talk`), then merge.
+- **Not built:** T2 (calendar, proposals to Pat), T3 (places/travel), T4 (Plan my day).
+
+### 🗣️ Talk to Pawmily — T0 (authorized 2026-10-30: "move on to the next phase, talk to pawmily"; branch `v2/talk-t0` from `main` `5910e8a`)
+- **State: T0 done — stopped for review (design stop, as with Checkpoint A). No UI wired, no AI calls, no new routes, nothing deployed.**
+- **Built:**
+  - Mockups T1–T15 (`docs/mockups/talk/screens.mjs`, shown in the running app at 390 px, 320 px and dark; screenshots in the session scratchpad `talk/out/`).
+  - `docs/mockups/talk/CHECKPOINT_T0.md` with 7 decisions.
+  - `js/talkActions.js`:
+    - 21 actions with owner domain, kind, who they affect, reused code and strict schemas;
+    - `validate`, `modeOf` (read / apply / propose / open / unavailable), `checkPlan` (≤ 8 steps; places and times must cite a fact);
+    - `toTokens` / `fromTokens` (names → roles); `CONTEXT` / `minimizeFacts` (per-lookup field allowlists);
+    - `EXAMPLES` / `examplesFor`; `jsonSchema`.
+  - `tests/talk.test.js` (8): vocabularies match the domains; schemas are strict; bad steps are refused; the shared-person rule (no way to write someone else's calendar; shared steps propose); invented places are refused; names never leave; allowlists hold; examples only for built actions.
+- **Tests:** `npm test` 460 pass, 0 fail.
+- **Finding:** at 320 px a header 🗣️ button wraps the family name (decision 1).
+- **Next (needs approval):** T1, single-domain requests that only change your own things (Watch, Read, Diet, Fitness, dogs and chores) through a new gateway purpose `talk.route`.
+- **Last safe commit:** `main` `5910e8a`.
+
 ### 💪 Health 2 — Phase B, WHOOP context (authorized 2026-10-30 with amendments 1–9; branch `v2/health-2b` from `main` `aa4fe63`)
-- **State: B0–B7 built, tested and browser-verified. Stopped at the Phase B checkpoint for review. Not merged, not deployed.** Talk to Pawmily, voice, calendar planning, route/traffic, day-plan orchestration and background coaching are not built (design only: `docs/TALK_TO_PAWMILY.md`).
+- **State: built, merged and deployed.**
+  - Merged as PR #7 (`5c9e5f2`) and PR #8 (`5910e8a`, the WHOOP look and detail sheets); connector deployed `37c7ea1c…` (reported by the user).
+  - Checked on the owner's real WHOOP data (2026-10-30 screenshots): Sleep 76% and Recovery 63% match the WHOOP app. Recovery details (HRV, RHR, respiratory rate, SpO₂, skin temp with usual ranges), Sleep details (times, stages, need 10.1 h = 7.5 baseline + 2.1 debt + 0.4 strain, consistency, efficiency) and Strain details (calories, HR, steps, "updated" time from the 5-min refresh) all render.
+  - Open: on a wide desktop window the rings spread across the card (cap the row width; cosmetic).
+  - In the owner's desktop dark mode the near-white Awake stage colour showed dark (browser darkening); left as is by the owner. Talk to Pawmily, voice, calendar planning, route/traffic, day-plan orchestration and background coaching are not built (design only: `docs/TALK_TO_PAWMILY.md`).
 - **Commits:** `67f5cd5` workout variants, usual duration, planning-boundary docs · `c0569c9` Talk to Pawmily architecture review (design only) · `bdf1497` B1–B3 WHOOP Recovery/Sleep sync, date rule, usual range · `0f71b3b` B4–B6 Health WHOOP section, lighter preview, workout matching · the B7 commit (perf refactor, docs).
 - **B0 — WHOOP fields confirmed** (2026-10-30, after the owner allowed `developer.whoop.com`; `api.prod.whoop.com` stays blocked here, so no live call): API reference `developer.whoop.com/api/` and the data-model pages `…/docs/developing/user-data/{recovery,sleep,cycle}`, OAuth `…/docs/developing/oauth`, colour bands `…/docs/whoop-101`. Recovery `GET /v2/recovery` (`read:recovery`): `cycle_id`, `sleep_id`, `score_state` ∈ SCORED / PENDING_SCORE / UNSCORABLE, `score` {`user_calibrating`, `recovery_score`, `resting_heart_rate`, `hrv_rmssd_milli`, `spo2_percentage`, `skin_temp_celsius`} only when SCORED. Sleep `GET /v2/activity/sleep` (`read:sleep`): `id` (uuid), `cycle_id`, `start`, `end`, `timezone_offset` ("the user's timezone offset at the time the sleep was recorded", ±hh:mm or Z), `nap`, `score_state`, `score` {`stage_summary` {…_milli}, `sleep_needed` {`baseline_milli`, `need_from_sleep_debt_milli`, `need_from_recent_strain_milli`, `need_from_recent_nap_milli`}, `respiratory_rate`, `sleep_performance_percentage`, `sleep_consistency_percentage`, `sleep_efficiency_percentage`}. Cycle `GET /v2/cycle`: `id`, `start`, `end` (absent while current), `timezone_offset`, `score` {`strain`, `kilojoule`, `average_heart_rate`, `max_heart_rate`}. Workout: adds `max_heart_rate`, `zone_durations` {zone_zero…five_milli}. Collections: `limit` ≤ 25, `start`, `end`, `nextToken` → `next_token`. Token responses include `scope`. Bands: green 67–100, yellow 34–66, red 0–33.
 - **Usual-range minimum (amendment 5):** **14 scored, non-calibrating days** in the last 30 (middle half = 25th–75th percentile). Reasoning: HRV-guided-training practice builds a personal normal range from weeks of data (HRV4Training uses a rolling 60-day window; ~1 month is common in the literature), while Plews et al. 2013 showed ≥ 3 measurements a week suffice for a stable weekly mean — so two weeks of daily scores is the low end that still covers weekday/weekend variation; WHOOP also flags its own early calibration (`user_calibrating`), which doesn't count. Below 14: *Building your usual range — n of 14 days so far*, WHOOP's score and colour still shown. Sources: hrv4training.com "determining your normal range"; Plews et al., IJSPP 2013 (search excerpts — re-read before changing the number).
