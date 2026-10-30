@@ -4,6 +4,18 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 👥 Calendar — Together or one person's events (2026-10-30, `v2/cal-filter` from `main`; owner: "categorize them as [me], [partner] and Together")
+- **Built:**
+  - Chips at the top of the month card: **Together** (everything, the default) and one per grown-up, in their colours.
+  - A person's view shows their own events plus shared ones: both of you, the family, open dog appointments, or no one in particular. It never shows only someone else's events.
+  - The filter applies to the month dots, the chosen day and Coming up.
+  - An empty filtered day says how many events are under Together.
+  - The choice is kept on this phone (`fam.cal.who`).
+  - Rule: `js/calendar.js` `forPerson`.
+- **Tests:** `tests/calendar.test.js` covers the filter rule.
+- **Browser check** (390 px; 320 px in dark mode; synthetic family with three adults):
+  - Together had 8 in Coming up; the first person had 8 (all theirs); the second had 0.
+  - Chips wrap at 320 px with no overflow; no errors.
 ### 📅 Talk — any day you ask about, not just today and tomorrow (2026-10-30, `v2/talk-days` from `main`)
 - **Owner's live try:** "What's on the calendar for Sunday and Monday" got "I don't have anything for Sunday or Monday… only covers today and tomorrow", although those days had events.
 - **Cause:** `dayContext` always sent exactly today and tomorrow. All events are already on the phone (`loadCal` loads them all), so any day could be sent.
