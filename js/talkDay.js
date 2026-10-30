@@ -53,6 +53,51 @@ export function dayWeather(hourly, { dates = [], now = null, daily = null } = {}
   return { hours, sun };
 }
 
+// 🚗 Drive times (T3, Google Maps through the connector): only when the question is about going
+// somewhere or fitting something in, and only for places it names (or a known gym), or today's and
+// tomorrow's calendar places — never a place that mentions someone in the family.
+export const travelAsked = (text) => /\b(when|what time|best time|how long|leave|go|going|head|drive|driving|get (to|there)|traffic|travel|commute|fit|squeeze|make it|on time)\b/i.test(String(text || ''));
+const NOT_PLACES = /^(the|a|an|my|our|home|work|today|tonight|tomorrow|noon|night|morning|afternoon|evening|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december)$/i;
+export function destinations(text, { items = [], known = [], people = [], meId = null, max = 3 } = {}) {
+  const t = String(text || ''), out = [];
+  const add = (q) => {
+    q = String(q || '').replace(/\s+/g, ' ').replace(/[.,!?;:]+$/, '').trim();
+    if (q.length < 3 || NOT_PLACES.test(q) || /\[(partner|member:\d+)\]/.test(q) || /^\d{1,2}(:\d{2})?\s*([ap]\.?m\.?)?$/i.test(q)) return;
+    if (people.some((p) => p.name && new RegExp(`\\b${p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(q))) return;
+    if (!out.some((x) => x.toLowerCase() === q.toLowerCase())) out.push(q);
+  };
+  // A known place (the Movement gyms) when every one of its words is said, in any case.
+  for (const k of known) if (k.all.every((w) => new RegExp(`\\b${w}\\b`, 'i').test(t))) add(k.query);
+  // "…at Movement Santa Clara", "…to Trader Joe's on Hamilton": capitalised words after at / to / near.
+  for (const m of t.matchAll(/\b(?:at|to|near|from)\s+((?:[A-Z0-9][\w'’&.-]*)(?:\s+(?:[A-Z0-9][\w'’&.-]*|of|on|the|and|de|la))*)/g)) {
+    const q = m[1].replace(/\s+(?:of|on|the|and|de|la)$/i, '');
+    if (!out.some((x) => x.toLowerCase().includes(q.toLowerCase()))) add(q);
+  }
+  // Calendar places: only items that take your own time (yours, both of you, the family's).
+  for (const x of items) if (x.place && !x.allDay && mine(x.who, meId)) add(x.place);
+  return out.slice(0, max);
+}
+// When to ask about: now (live traffic), then up to 3 later times today — the next even hours
+// from 7 AM to 8 PM, at least an hour away. ISO times for the connector.
+export function departures(now = new Date()) {
+  const out = [null];
+  for (let h = now.getHours() + 1; h <= 20 && out.length < 4; h++) {
+    if (h < 7 || h % 2) continue;
+    const d = new Date(now); d.setHours(h, 0, 0, 0);
+    if (d - now >= 60 * 60000) out.push(d.toISOString());
+  }
+  return out;
+}
+// The connector's answer → facts for Claude: each place, today's hours, and drive minutes by
+// departure (local "HH:MM", or "now"). Place names are as Google gives them (no people in them).
+export function travelFacts(res) {
+  const hm = (iso) => { const d = new Date(iso); return `${p2(d.getHours())}:${p2(d.getMinutes())}`; };
+  const places = (res?.places || []).slice(0, 3).map((p) => (p.found === false ? { place: p.q, found: false }
+    : { place: p.name, ...(p.address ? { address: p.address } : {}), ...(typeof p.openNow === 'boolean' ? { openNow: p.openNow } : {}), ...(p.hoursToday ? { hoursToday: p.hoursToday } : {}),
+      drives: (p.drives || []).map((d) => ({ leave: d.leave === 'now' ? 'now' : hm(d.leave), minutes: d.minutes, ...(d.miles ? { miles: d.miles } : {}) })) }));
+  return places.length ? { from: 'where you are now', by: 'car, with traffic (now is live; later times are predicted)', places } : null;
+}
+
 // Your own food today, for a day question: the day's targets, what you've eaten, what's left, and
 // each main meal — logged (what you had) or still planned (title, calories, macros and its foods).
 // Built from the same numbers Health shows (js/dayPlan.js). Never weights, notes or other days.
@@ -70,7 +115,7 @@ export function foodFacts({ entry = null, planned = {}, logged = {}, extras = 0 
 // your free gaps, and — when the phone has them — the weather, your WHOOP numbers and your own food
 // today. Names become roles everywhere (titles too). Nothing else: no notes, no other lists, no history.
 export const CONTEXT_MAX = 11800; // the gateway takes up to 12,000 characters
-export function dayContext({ days = [], meId, people = [], now = null, today, weather = null, sun = null, health = null, food = null } = {}) {
+export function dayContext({ days = [], meId, people = [], now = null, today, weather = null, sun = null, health = null, food = null, travel = null } = {}) {
   const role = (who) => {
     if (who === 'both') return 'you and [partner]';
     if (!who || who === 'family') return 'the family';
@@ -94,6 +139,7 @@ export function dayContext({ days = [], meId, people = [], now = null, today, we
   if (weather?.length) out.weather = weather.slice(0, 16);
   if (sun?.length) out.daylight = sun;
   if (health) out.yourHealth = health;
+  if (travel) out.travel = travel;
   if (food) out.yourFood = { ...food, meals: food.meals.map((m) => ({ ...m, title: toTokens(m.title, people).text, ...(m.foods ? { foods: toTokens(m.foods, people).text } : {}) })) };
   // A very full calendar: tomorrow's weather goes first, then the last items of the fullest day.
   while (JSON.stringify(out).length > CONTEXT_MAX) {

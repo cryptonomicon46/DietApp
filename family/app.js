@@ -416,17 +416,30 @@ document.addEventListener('focusout', () => $('#talkFab')?.classList.remove('typ
 // the phone's own speech recognition — on an iPhone Apple's speech service turns the voice into text
 // (as with Siri dictation), on Android Google's. OurPawmily only ever gets the text. Where the
 // browser can't (or you turned it off in the sheet), the box opens for typing / the keyboard's 🎤.
+// 📍 Where you are, for drive times: asked only when a day question is about going somewhere
+// (the phone asks your permission the first time), rounded to about 100 m, never kept.
+function hereNow() {
+  return new Promise((ok) => {
+    if (!navigator.geolocation) return ok(null);
+    setTimeout(() => ok(null), 15000); // the browser's own timeout doesn't count a permission prompt left open
+    navigator.geolocation.getCurrentPosition((p) => ok({ lat: Math.round(p.coords.latitude * 1000) / 1000, lng: Math.round(p.coords.longitude * 1000) / 1000 }), () => ok(null), { enableHighAccuracy: false, timeout: 8000, maximumAge: 15 * 60000 });
+  });
+}
+// 🎙️ The browser VoiceInputProvider (family/voice.js describes the boundary): it must start inside
+// the tap, so it lives here; Talk only gets the session { text, ended, error, listener, stop, abort }.
 // `asked`: the 🎤 button itself — it listens even when "Don't listen when I open Talk" is on.
 function listenNow(asked = false) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR || (!asked && LS.get('fam.talk.voice') === 'off')) return null;
   try {
-    const r = new SR(), buf = { r, text: '', ended: false, error: '', listener: null };
+    const r = new SR(), buf = { text: '', ended: false, error: '', listener: null, stop: () => r.stop(), abort: () => r.abort() };
     r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
     r.onresult = (e) => { buf.text = [...e.results].map((x) => x[0]?.transcript || '').join(' ').replace(/\s+/g, ' ').trim(); buf.listener?.(); };
     r.onerror = (e) => { buf.error = e.error || 'error'; };
     r.onend = () => { buf.ended = true; buf.listener?.(); };
     r.start();
+    // iOS only lets a page speak after a tap has started speech once: a silent word now, in the tap.
+    try { if (window.speechSynthesis && LS.get('fam.talk.speak') !== 'off') { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch { /* no speech here */ }
     return buf;
   } catch { return null; }
 }
@@ -463,7 +476,7 @@ function talk() {
       fitDescribe: async (text) => { const F = await fit(); if (state.view !== 'fitness') show('fitness'); return F.describeWith(text); },
       who: () => `${state.fid}.${fam().me}`,
       // "Ask about my day": what the Calendar tab shows for today and tomorrow, put together here.
-      dayContext: async () => {
+      dayContext: async (asked = '') => {
         await loadCal({ golden: false });
         const today = isoLocal(), now = new Date(), D = await import(`../js/talkDay.js?v=${VERSION}`);
         const days = [];
@@ -491,7 +504,22 @@ function talk() {
           }
         } catch { /* no food facts on this phone */ }
         const people = fam().members.filter((x) => x.kind === 'person').map((x) => ({ id: x.id, name: String(x.name || '').split(/\s+/)[0], role: x.id === fam().me ? 'me' : x.id === partnerMember()?.id ? 'partner' : 'member' }));
-        return D.dayContext({ days, meId: fam().me, people, now: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, today, weather, sun, health: whoopNow, food });
+        // 🚗 Drive times (Google Maps, through the connector) — only for a question about going somewhere.
+        let travel = null;
+        if (D.travelAsked(asked)) {
+          const B = await import(`../js/brief.js?v=${VERSION}`);
+          const known = Object.values(B.GYMS).map((g) => ({ query: `${g.name}, ${g.address}`, all: ['movement', g.short.toLowerCase()] }));
+          const places = D.destinations(asked, { items: days.flatMap((d) => d.items), known, people, meId: fam().me });
+          if (places.length) {
+            const from = await hereNow();
+            if (!from) travel = { unavailable: 'Location is off for this app, so there are no drive times.' };
+            else {
+              try { travel = D.travelFacts(await api.post('/travel', { from, places, leaves: D.departures(now), dow: now.getDay() })); }
+              catch (e) { travel = e.status === 501 ? null : { unavailable: "Couldn't get drive times just now." }; }
+            }
+          }
+        }
+        return D.dayContext({ days, meId: fam().me, people, now: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, today, weather, sun, health: whoopNow, food, travel });
       },
       // A suggested time → your own calendar only (never anyone else's).
       calendarAdd: async ({ date, start, end, title }) => { const r = await api.post(`/families/${state.fid}/events`, { date, allDay: false, start, end, who: [fam().me], remind: null, repeat: null, body: await lock({ title, place: '', notes: '' }) }); calm.loadedAt = 0; return r.event?.id; },

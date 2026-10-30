@@ -156,8 +156,13 @@ export const CONTEXT = {
   'watch.find': ['id', 'title', 'year', 'media', 'status', 'addedBy'],
   'read.find': ['id', 'title', 'author', 'year', 'state'],
   'fitness.day': ['date', 'recovery', 'sleep', 'strain', 'plannedWorkout'], // whoopDay.js dayContextForPlanning
-  'place': ['id', 'name', 'area', 'open', 'closes', 'source', 'fetchedAt'], // T3, from a provider
-  'travel': ['id', 'from', 'to', 'minutes', 'mode', 'source', 'fetchedAt'], // T3, from a provider; "from" is an area
+  // External context adapters (T2a/T3): each provider's answer is normalised on the phone or the
+  // connector into these fields only — no provider objects travel further (js/talkDay.js).
+  'weather': ['date', 'at', 'tempF', 'rainChance', 'windMph'], // dayWeather ← Open-Meteo
+  'daylight': ['date', 'sunrise', 'sunset'], // dayWeather ← Open-Meteo
+  'food': ['target', 'eaten', 'left', 'meals', 'extrasLogged', 'doneLogging'], // foodFacts ← js/dayPlan.js
+  'travel': ['place', 'found', 'address', 'openNow', 'hoursToday', 'drives'], // travelFacts ← server/travel.js ← Google Maps
+  'drive': ['leave', 'minutes', 'miles'], // one departure inside travel.drives
 };
 export function minimizeFacts(adapter, facts) {
   const keep = CONTEXT[adapter];
@@ -184,3 +189,30 @@ function schemaOf(t) {
   return { type: 'string', ...(t.max ? { maxLength: t.max } : {}), ...(t.enum ? { enum: t.enum } : {}), ...(t.pattern ? { pattern: t.pattern } : {}) };
 }
 export const jsonSchema = (action) => schemaOf({ type: 'object', fields: ACTIONS[action].args });
+
+// ---------- the tool registry view: what every action declares ----------
+// Anything that can act for Talk — today's phone reader and Claude's steps, later a bounded skill
+// ("Day Planner", "Health Planner"…) or an external voice agent — goes through these specs: never
+// a database, never a provider's own objects. A future tool is added here first, with all fields.
+//   permission  the Family permission area the server already enforces for that domain
+//   privacy     what kind of data it touches (decides what may leave the phone, and to whom)
+//   access      read (changes nothing) · write (saves through the domain's own code)
+//   confirm     'none' (a read) · 'tap' (a card you approve, with Undo) · 'theirs' (a proposal the
+//               other person answers — never written for them)
+//   output      what comes back to Talk: facts (read), the saved record's id (write), or a proposal id
+//   onFailure   what the person sees; nothing is half-saved
+const PERMISSION = { Watch: 'us', Read: 'us', Us: 'us', Dates: 'us', Calendar: 'calendar', Home: 'home', 'Dogs & chores': 'home', Fitness: 'fitness', Diet: 'diet', Threads: 'threads', Look: 'look' };
+const PRIVACY = { Diet: 'health (yours alone unless you share Diet)', Fitness: 'health (yours alone unless you share Fitness)', Look: 'personal (yours alone)', Calendar: 'schedule (names become roles before any AI)', Threads: 'household messages (never sent to AI by Talk)' };
+export function toolSpec(action) {
+  const d = ACTIONS[action];
+  if (!d) return null;
+  const mode = modeOf(action), read = d.kind === 'read';
+  return {
+    action, domain: d.domain, input: jsonSchema(action),
+    output: read ? { type: 'facts', fields: CONTEXT[action] || CONTEXT[d.domain.toLowerCase()] || [] } : mode === 'propose' ? { type: 'proposal', fields: ['id', 'to', 'status'] } : { type: 'saved', fields: ['id'], undo: d.undo || null },
+    permission: PERMISSION[d.domain] || 'family', privacy: PRIVACY[d.domain] || (d.affects === 'self' ? 'yours' : d.affects === 'couple' ? 'shared with your partner' : 'shared with the household'),
+    access: read ? 'read' : 'write', confirm: read ? 'none' : mode === 'propose' ? 'theirs' : 'tap',
+    onFailure: read ? 'say what couldn\'t be looked up; the rest still answers' : 'show the error on the card; nothing is saved',
+    available: mode !== 'unavailable',
+  };
+}

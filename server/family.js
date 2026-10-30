@@ -68,6 +68,7 @@ import { estimatePhoto, estimateText } from './dietAi.js';
 import { routeTalk, answerDay } from './talkAi.js';
 import { cleanFacts, cleanTurns } from '../js/planCoach.js';
 import { bookRoutes, bookLookupRoutes, bookCover, forgetReader } from './books.js';
+import { travelRoutes } from './travel.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
@@ -370,6 +371,8 @@ export async function familyApi(req, env, path, ctx = null) {
 
   // ---- 📚 Read: book lookups (public details) and the family's books ----
   { const r = await bookLookupRoutes({ path, method, env, json, url, req, user, underLimit, db }); if (r) return r; }
+  // ---- 🚗 Drive times with live traffic for day questions (Google Maps) ----
+  { const r = await travelRoutes({ path, method, env, json, body, user, underLimit, db }); if (r) return r; }
   { const r = await bookRoutes({ path, method, body, db, loadFamily, meIn, isCouple, sealed, randomId, json }); if (r) return r; }
   // ---- 👔 Look: your own Closet (yours alone), its pictures, and Fit Checks with your partner ----
   if (/^\/families\/[a-z0-9]+\/(members\/[a-z0-9]+\/look|fitchecks)/.test(path)) {
