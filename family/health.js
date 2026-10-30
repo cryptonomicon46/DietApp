@@ -168,7 +168,7 @@ export function healthHtml(data, ctx) {
       ${t?.alc ? `<p class="tiny muted">Includes ${t.alc} kcal from alcohol (counted apart from protein, carbs and fat).</p>` : ''}
       ${pr ? `<a class="hl-plan" href="../#today"><span class="small">${esc(pr.phaseLabel)}${pr.week ? ` · week ${pr.week} of ${pr.weeks}` : ''}</span>${status}</a>` : ''}
       ${d.completeDays ? `<p class="tiny muted">${d.completeDays} complete day${d.completeDays === 1 ? '' : 's'} logged this week${d.completeDays >= 4 ? ' — enough for a useful weekly check-in' : ''}.</p>` : ''}
-      <a class="hl-go" href="../#today">Today's plan ›</a>`;
+      <div class="hl-mini"><button type="button" class="linkish small" data-ml="fits">🔎 What fits?</button><a class="hl-go" href="../#today">Today's plan ›</a></div>`;
   const reminder = ctx.reminder == null ? '' : `<button type="button" class="hl-line2" data-act="weighremind"><span>🔔 Morning weigh-in reminder</span><span class="go">${ctx.reminder ? 'On · turn off' : 'Off · turn on'}</span></button>`;
   return `<div class="hl-head"><h1 class="hl-h">💪 Health</h1><button type="button" class="linkish small" data-act="healthshare">${esc(ctx.sharing)} ›</button></div>
     <div class="hl-sec"><h2 class="hl-sech">Today</h2>${up.text ? `<span class="hl-next" role="status">Next: ${esc(up.text)}</span>` : ''}</div>

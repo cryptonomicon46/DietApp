@@ -43,7 +43,7 @@ export const SLIDES = [
     ['❤️', 'Plans and dates', 'A plan you both said yes to goes on both your calendars.'],
   ] },
   { id: 'me', eyebrow: 'Health and Me', title: 'Each person’s own', go: 'me', cards: [
-    ['💪', 'Health', 'Your day: today’s weight, calories and protein, how your plan is going, and today’s workout — Start Workout opens Train, and Resume picks it up. Private unless you share.'],
+    ['💪', 'Health', 'Today first: your weight, the next meal (✓ As planned in one tap) and today’s workout — then how your plan is going. Private unless you share.'],
     ['👤', 'Me', 'Your family, people and pets, notifications, light or dark, and your account.'],
     ['🔑', 'Recovery phrase', 'Write it down: it unlocks your family on a new phone if you lose this one.'],
   ] },
@@ -61,19 +61,19 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-12c',
-  title: 'New: Look — what to wear today',
-  text: 'Start with an outfit you already wear; three Looks for today, and a Fit Check with your partner',
+  id: '2026-12d',
+  title: 'New in 💪 Health: log a meal in one tap',
+  text: 'Today’s weight, next meal and workout first; a photo or “Tell me” for anything else; workouts with All sets and last time',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: 'Look: what to wear today', cards: [
-  ['📸', 'Start with a Look you wear', 'One photo of an outfit you already wear is a Look. Find its pieces later — or don’t.'],
-  ['👔', 'Three Looks for today', 'From your own clothes, for today’s plans and weather. Swap a piece, then Wear this.'],
-  ['❤️', 'Fit Check', 'Send one Look to your partner for a quick Hit or Miss. Only that Look is shared.'],
-  ['🔒', 'Yours alone', 'Your Closet and what you wear are private to you. Find it from Today’s Look on Calendar.'],
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '💪 Health: less to think about', cards: [
+  ['🍽', 'One tap for a planned meal', 'Today shows your weight, the next meal and your workout. ✓ As planned logs the meal.'],
+  ['📷', 'Photo or 🎙️ Tell me', 'Snap a plate, a label or a menu — or say what you had. Check it, then Log. Photos aren’t kept.'],
+  ['🔄', 'Plans change', 'After a bigger meal, see what’s left and adjust the rest of today. Your targets don’t change.'],
+  ['🏋️', 'Workouts you can finish', 'Last time’s numbers as you train, ✓ All sets, a short summary — and Log as done if you already did it.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);
 export const slide = (id) => SLIDES.find((s) => s.id === id) || null;
 // The tour page for the screen you're on.
-export const SCREEN = { look: 'calendar', home: 'home', threads: 'threads', us: 'us', watch: 'us', read: 'us', calendar: 'calendar', me: 'me', family: 'me', member: 'me', chats: 'chats', chat: 'chats' };
+export const SCREEN = { health: 'me', fitness: 'me', look: 'calendar', home: 'home', threads: 'threads', us: 'us', watch: 'us', read: 'us', calendar: 'calendar', me: 'me', family: 'me', member: 'me', chats: 'chats', chat: 'chats' };

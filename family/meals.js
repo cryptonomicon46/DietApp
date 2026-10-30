@@ -182,10 +182,10 @@ function drawPhoto() {
   open(`${head(hint === 'label' ? '📷 Snap the label' : '📷 Photo', NAME[meal] || '')}
     ${pic?.url ? `<img class="ml-pic" src="${pic.url}" alt="The photo you chose">` : `<p class="small">${hint === 'label' ? 'A clear photo of the nutrition facts.' : 'Your plate, a restaurant dish, a nutrition label or a menu with calories. A fork or your hand in the photo helps judge the portion.'}</p>`}
     <input type="file" accept="image/*" capture="environment" data-mlpick hidden>
-    <button type="button" class="wide ${pic?.url ? 'ghost' : ''}" data-ml="pick">${pic?.url ? 'Choose another' : 'Take or choose a photo'}</button>
-    ${pic?.url ? `<button type="button" class="wide" data-ml="pread" ${ms.busy ? 'disabled' : ''}>${ms.busy ? 'Reading… usually 5–15 seconds' : 'Estimate it'}</button>` : ''}
+    ${ms.busy ? '<p class="small" role="status">Estimating… usually 5–15 seconds</p>' : `<button type="button" class="wide ${pic?.url ? 'ghost' : ''}" data-ml="pick">${pic?.url ? 'Choose another' : 'Take or choose a photo'}</button>`}
+    ${pic?.url && !ms.busy ? '<button type="button" class="wide" data-ml="pread">Estimate it</button>' : ''}
     ${error ? `<p class="small" role="alert">${E(error)}</p>` : ''}
-    <p class="tiny muted">Estimate it sends only this picture — redrawn on your phone first, so no location or camera details — to Claude (Anthropic). It isn't kept: not by us, not in your log. Anthropic doesn't train on it and deletes it after a short safety check period.</p>`);
+    <p class="tiny muted">The photo you choose is sent to Claude (Anthropic) to estimate it — only that picture, redrawn on your phone first so it has no location or camera details. It isn't kept: not by us, not in your log. Anthropic doesn't train on it and deletes it after a short safety check period.</p>`);
 }
 async function aiCheck() { if (ms.ai == null) ms.ai = await ms.c.aiReady().catch(() => null); return ms.ai; }
 async function redraw(file) {
@@ -207,6 +207,8 @@ export async function onPick(input) {
   try { const { blob, b64 } = await redraw(file); ms.sheet.pic = { url: URL.createObjectURL(blob), b64 }; ms.sheet.error = ''; }
   catch { ms.sheet.error = "Couldn't open that picture — try a JPEG or PNG."; }
   input.value = '';
+  // Choosing it is the go-ahead (the sheet said so first): straight to the estimate.
+  if (ms.sheet.pic?.b64 && ms.ai !== false) return readPhoto();
   drawPhoto();
 }
 function dropPic() { if (ms.sheet?.pic?.url) URL.revokeObjectURL(ms.sheet.pic.url); }

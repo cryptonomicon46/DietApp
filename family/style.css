@@ -1297,7 +1297,7 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .hl-line2 .go { color: var(--brand); font-weight: 700; white-space: nowrap; }
 .hl-line2 .hl-spark { width: 70px; height: 22px; flex: none; }
 .hl-go { justify-content: flex-end; }
-@media (max-width: 359px) { .hl-acts:has(.hl-ico) { flex-wrap: wrap; } .hl-acts:has(.hl-ico) .grow { flex: 1 1 100%; } .hl-trend { display: none; } }
+@media (max-width: 359px) { .hl-acts { flex-wrap: wrap; } .hl-acts .grow { flex: 1 1 100%; } .hl-trend { display: none; } }
 /* 🍽 The meal sheet and the quick ways to log (family/meals.js). */
 .ml-sheet { display: grid; gap: 8px; }
 .ml-head h2 { margin: 0; font-size: 1.2rem; }
@@ -1359,3 +1359,4 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .fx-stats b { display: block; font-size: 1.1rem; } .fx-stats span { font-size: .74rem; color: var(--muted); }
 .fx-sug { display: grid; gap: 8px; }
 .fx-rest-all { margin: 4px 0 8px; min-height: 48px; }
+.hl-ctx b { display: inline; }
