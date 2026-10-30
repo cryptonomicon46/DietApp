@@ -493,6 +493,11 @@ async function setMatch(id, match) {
   summarySheet(id);
   fx.c.toast(match.none ? 'Unlinked — no WHOOP workout for this one' : '⌚ Matched');
 }
+// The logged workout a device workout went with ("✓ Upper Body in Fitness" on Health's Strain sheet).
+export function loggedFor(deviceId) {
+  for (const [id, m] of matched()) if (m.device.id === deviceId) return fx.log.find((w) => w.id === id)?.title || '';
+  return '';
+}
 // 🪶 Make it lighter (from Health's WHOOP section): a preview first, today only, Undo after.
 export function lighterState() {
   const t = open();

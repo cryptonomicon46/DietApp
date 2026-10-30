@@ -407,7 +407,7 @@ async function healthView() {
   if (mealMod) mealMod.then((M) => M.setData(data)).catch(() => {});
   const whoop = wh && WD ? { ...WD.recoveryContext(wh.daily, isoLocal()), dailyMissing: !WD.hasDaily(wh.t), lighter: F ? F.lighterState() : null } : null;
   $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), hour: new Date().getHours(), workout: F ? F.healthRow(esc) : undefined, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), devices: devicesLine(), whoop })}</div>`;
-  if (wh) whoopAutoSync(wh.t);
+  if (wh) { whoopAutoSync(wh.t); whoopTicker(); }
 }
 // ⌚ WHOOP on this phone (its sign-in and what it brought in live only here), read without loading
 // anything: null when WHOOP isn't connected, so Health shows nothing extra and asks for nothing.
@@ -415,7 +415,9 @@ function whoopHere() {
   try {
     const owner = JSON.parse(localStorage.getItem('lp.g.owner'));
     const t = owner && JSON.parse(localStorage.getItem(`lp.p.${owner}.devices`))?.whoop;
-    return t ? { t, daily: JSON.parse(localStorage.getItem(`lp.p.${owner}.whoopDaily`)) || {} } : null;
+    if (!t) return null;
+    const get = (k, d) => JSON.parse(localStorage.getItem(`lp.p.${owner}.${k}`)) || d;
+    return { t, daily: get('whoopDaily', {}), get history() { return get('workoutHistory', []); } };
   } catch { return null; }
 }
 // Opening Health brings in what's new from WHOOP (at most every 20 minutes), then shows it.
@@ -424,6 +426,39 @@ function whoopAutoSync(t) {
   if (whoopSyncing || t.problem === 'reconnect' || Date.now() - (t.lastSync || 0) < 20 * 60000) return;
   whoopSyncing = true;
   devices().then((m) => m.quietSync()).then((changed) => { if (changed && state.view === 'health') healthView(); }).catch(() => {}).finally(() => { whoopSyncing = false; });
+}
+// ⌚ While Health is open (and on screen), today's Strain every 5 minutes: only the day so far, kept
+// on this phone (js/devices.js refreshToday — 2 WHOOP requests; nothing saved to the account).
+let whoopTick = null;
+function whoopTicker() {
+  if (whoopTick) return;
+  const tick = async () => {
+    if (state.view !== 'health' || !whoopHere()) { clearInterval(whoopTick); whoopTick = null; return; }
+    if (document.visibilityState !== 'visible' || whoopSyncing) return;
+    const t = whoopHere().t;
+    if (Date.now() - Math.max(t.lastSync || 0, t.todayAt || 0) < 4.5 * 60000) return;
+    whoopSyncing = true;
+    const changed = await devices().then((m) => m.todayRefresh()).catch(() => false).finally(() => { whoopSyncing = false; });
+    if (!changed || state.view !== 'health') return;
+    if (open$('.whd[data-wd]')) whoopDetail(open$('.whd[data-wd]').dataset.wd);
+    else healthView();
+  };
+  whoopTick = setInterval(tick, 60000);
+}
+// Tap Sleep, Recovery or Strain: what's behind the number (WHOOP's, under WHOOP's names).
+async function whoopDetail(which) {
+  const wh = whoopHere();
+  if (!wh) return;
+  const [H, WD] = await Promise.all([import(`./health.js?v=${VERSION}`), import(`../js/whoopDay.js?v=${VERSION}`)]);
+  const today = isoLocal(), when = new Date(`${today}T12:00:00`).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  let html;
+  if (which === 'recovery') html = H.recoveryDetailHtml(WD.recoveryDetail(wh.daily, today), esc, when);
+  else if (which === 'sleep') html = H.sleepDetailHtml(WD.sleepDetail(wh.daily, today), esc);
+  else {
+    const F = fitMod ? await fitMod.catch(() => null) : null, at = Math.max(wh.t.lastSync || 0, wh.t.todayAt || 0);
+    html = H.strainDetailHtml(WD.strainDetail(wh.daily, today, wh.history), esc, { updated: at ? new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '', logged: (id) => F?.loggedFor?.(id) || '' });
+  }
+  openSheet(html.replace('<div class="whd">', `<div class="whd" data-wd="${which}">`));
 }
 // The last 7 days of WHOOP (Health › WHOOP › Last 7 days).
 async function whoopDays() {
@@ -4496,6 +4531,7 @@ document.addEventListener('click', (e) => {
     case 'grocclear': return act(() => grocAct(() => api.post(`/families/${state.fid}/groceries/clear`)));
     case 'devices': return act(async () => (await devices()).sheet());
     case 'whoopdays': return act(whoopDays);
+    case 'whoopdetail': return act(() => whoopDetail(d.wd));
     case 'devconnect': case 'devsync': case 'devoff': case 'devoffstrava': return act(async () => (await devices()).onAct(d.act, t));
     case 'weighremind': return act(async () => {
       if (callNudge.all?.weighin) setNudges(await api.del(`/account/nudges/weighin?today=${isoLocal()}`));
