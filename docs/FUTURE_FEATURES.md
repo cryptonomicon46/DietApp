@@ -212,7 +212,7 @@ Casual / non-work wardrobe bulk onboarding, seasonal Closet rotation, packing li
 
 ## 🗣️ Talk to Pawmily — whole-life command layer (design only)
 
-**NOT AUTHORIZED.** The architecture review is `docs/TALK_TO_PAWMILY.md` (2026-10-30). Do not build voice, calendar planning, route/traffic intelligence, day-plan orchestration, external place/routing providers or background coaching without explicit authorization.
+**T0 only (mockups + action registry, 2026-10-30); T1–T4 NOT AUTHORIZED.** The architecture review is `docs/TALK_TO_PAWMILY.md`; the checkpoint is `docs/mockups/talk/CHECKPOINT_T0.md`. Do not build voice, calendar planning, route/traffic intelligence, day-plan orchestration, external place/routing providers or background coaching without explicit authorization.
 
 - **Model:** Understand → Plan → Capture → Coordinate, across Home, Calendar, Health/Diet, Fitness, Dogs, chores, family requests, Threads, Dates, Watch, Read, Ideas, Look and reminders. It is not built around Health.
 - **Ownership:**
