@@ -8,10 +8,11 @@
 //   { do: 'read.state', title, state }
 //   { do: 'diet.log', meal: 'breakfast' | 'lunch' | 'dinner' | 'extra', text }
 //   { do: 'fitness.describe', text }      { do: 'fitness.lighter' }      { do: 'care.log', chore }
+//   { do: 'ask.day' } — a question about today/tomorrow (js/talkDay.js answers it, with your OK)
 // Titles stay titles: the phone finds the matching show or book itself, so lists never leave it.
 // Pure: text in, steps out.
 
-export const DOS = ['watch.add', 'watch.status', 'read.add', 'read.state', 'diet.log', 'fitness.describe', 'fitness.lighter', 'care.log'];
+export const DOS = ['watch.add', 'watch.status', 'read.add', 'read.state', 'diet.log', 'fitness.describe', 'fitness.lighter', 'care.log', 'ask.day'];
 const WATCH_ST = ['want', 'watching', 'finished'], READ_ST = ['want', 'reading', 'finished'], MEALS = ['breakfast', 'lunch', 'dinner', 'extra'];
 const clean = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().replace(/^["“'‘]|["”'’.!?]$/g, '').trim().slice(0, n);
 const pick = (v, list, d) => (list.includes(v) ? v : d);
@@ -36,6 +37,7 @@ export function tidySteps(list) {
       out.push(d === 'diet.log' ? { do: d, meal: pick(s.meal === 'snack' ? 'extra' : s.meal, MEALS, 'extra'), text } : { do: d, text });
     } else if (d === 'fitness.lighter') out.push({ do: d });
     else if (d === 'care.log') { const chore = clean(s.chore, 40); if (chore) out.push({ do: d, chore }); }
+    else if (d === 'ask.day') { out.length = 0; out.push({ do: d }); break; } // a question about the day: answered on its own
     if (out.length === 4) break;
   }
   return out;

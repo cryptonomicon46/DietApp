@@ -39,7 +39,7 @@ test('whatever the source, only the steps the app knows, cleaned, at most 4', ()
   assert.deepEqual(t, [{ do: 'watch.add', title: 'Dune', kind: '', status: 'want' }, { do: 'diet.log', meal: 'extra', text: 'an apple' }, { do: 'care.log', chore: 'walk' }, { do: 'fitness.lighter' }]);
   assert.deepEqual(tidySteps('nonsense'), []);
   // Every step maps to an action in the T0 registry (none of them involves anyone else).
-  const map = { 'watch.add': 'watch.add', 'watch.status': 'watch.setStatus', 'read.add': 'read.add', 'read.state': 'read.setState', 'diet.log': 'diet.log', 'fitness.describe': 'fitness.describe', 'fitness.lighter': 'fitness.variant', 'care.log': 'care.log' };
+  const map = { 'watch.add': 'watch.add', 'watch.status': 'watch.setStatus', 'read.add': 'read.add', 'read.state': 'read.setState', 'diet.log': 'diet.log', 'fitness.describe': 'fitness.describe', 'fitness.lighter': 'fitness.variant', 'care.log': 'care.log', 'ask.day': 'calendar.freeBusy' };
   for (const d of DOS) { assert.ok(ACTIONS[map[d]], d); assert.notEqual(ACTIONS[map[d]].affects, 'shared', d); }
   assert.deepEqual(TALK_SCHEMA.properties.steps.items.properties.do.enum, DOS);
   assert.match(TALK_INSTRUCTIONS, /Never invent/); assert.match(TALK_INSTRUCTIONS, /\[partner\]/);

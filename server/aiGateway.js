@@ -23,6 +23,10 @@ export const PURPOSES = {
   // 🗣️ Talk to Pawmily: the words of one request, with people already swapped for roles on the phone
   // ([partner], [member:N]), which tab it came from, and today's date. Never a list, a name, a plan.
   'talk.route': { provider: 'anthropic', payload: 'personal-text', fields: { text: 500, tab: 12, today: 10 }, perDay: 60 },
+  // 🗣️ "Ask about my day" (only after the person allowed it once): the question, today's date and
+  // time, and the day as the phone put it together (js/talkDay.js dayContext — calendar items with
+  // people as roles, their free gaps, the weather and their own WHOOP summary when available).
+  'talk.day': { provider: 'anthropic', payload: 'personal-text', fields: { text: 500, today: 10, now: 5, context: 12000 }, perDay: 40 },
   // 📈 "Ask about my plan": the plan's numbers only (rebuilt through js/planCoach.js cleanFacts —
   // phase, week, targets, a 7-day adherence summary, trend, planned rate, goal date, training-day
   // count), the question, and earlier questions and answers of the same chat. Never names, meals,
