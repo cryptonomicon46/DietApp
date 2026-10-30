@@ -416,9 +416,10 @@ document.addEventListener('focusout', () => $('#talkFab')?.classList.remove('typ
 // the phone's own speech recognition — on an iPhone Apple's speech service turns the voice into text
 // (as with Siri dictation), on Android Google's. OurPawmily only ever gets the text. Where the
 // browser can't (or you turned it off in the sheet), the box opens for typing / the keyboard's 🎤.
-function listenNow() {
+// `asked`: the 🎤 button itself — it listens even when "Don't listen when I open Talk" is on.
+function listenNow(asked = false) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR || LS.get('fam.talk.voice') === 'off') return null;
+  if (!SR || (!asked && LS.get('fam.talk.voice') === 'off')) return null;
   try {
     const r = new SR(), buf = { r, text: '', ended: false, error: '', listener: null };
     r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
@@ -467,16 +468,30 @@ function talk() {
         const today = isoLocal(), now = new Date(), D = await import(`../js/talkDay.js?v=${VERSION}`);
         const days = [];
         for (const d of [today, shiftLocal(today, 1)]) days.push({ date: d, items: (await dayEntries(d)).map((x) => ({ time: x.time || '', end: x.end || '', allDay: !!x.allDay, title: String(x.title || '').replace(/<[^>]+>/g, ''), place: x.place || '', who: x.who, kind: x.cls === 'plan' ? 'plan' : /^(Drop off|Pick up)/.test(x.title || '') ? 'dog appointment' : 'event' })) });
-        let weather = null;
-        try {
-          const cache = JSON.parse(localStorage.getItem('fam.dressWx') || 'null') || {}, c0 = Object.values(cache).find((x) => x?.forecast && Date.now() - x.at < 6 * 3600e3);
-          if (c0) { const B = await import(`../js/brief.js?v=${VERSION}`); weather = B.parseWeather(c0.forecast, null).filter((h) => isoLocal(h.time) === today && h.time.getHours() >= 7 && h.time.getHours() <= 21 && h.time.getHours() % 2 === 1).map((h) => ({ at: `${String(h.time.getHours()).padStart(2, '0')}:00`, tempF: Math.round(h.temp), rainChance: h.rain })); }
-        } catch { /* no weather here yet */ }
-        let health = null;
+        // The family's forecast (the one Home fetches for dog walks; fetched now if it's old).
+        let weather = null, sun = null;
+        try { const wx = await walkWeather(); ({ hours: weather, sun } = D.dayWeather(wx.hourly, { dates: days.map((d) => d.date), now, daily: wx.daily })); } catch { /* no weather just now */ }
+        // Your own WHOOP numbers for today (as the Health card shows them) and your own food today.
+        let whoopNow = null, food = null;
         const wh = whoopHere();
-        if (wh) { const WD = await import(`../js/whoopDay.js?v=${VERSION}`); const F = fitMod ? await fitMod.catch(() => null) : null; const h = WD.dayContextForPlanning({ daily: wh.daily, today, workout: F?.state?.today || null }); health = { recovery: h.recovery, sleep: h.sleep, strain: h.strain, plannedWorkout: h.plannedWorkout ? { name: h.plannedWorkout.name, minutes: h.plannedWorkout.estimatedMinutes, status: h.plannedWorkout.status } : null }; }
+        if (wh) {
+          const WD = await import(`../js/whoopDay.js?v=${VERSION}`), F = fitMod ? await fitMod.catch(() => null) : null;
+          const rc = WD.recoveryContext(wh.daily, today), pw = WD.dayContextForPlanning({ daily: wh.daily, today, workout: F?.state?.today || null }).plannedWorkout;
+          whoopNow = { recovery: { state: rc.recovery.state, score: rc.recovery.score, scoreBand: rc.recovery.band, relativeToUsual: rc.recovery.relative, hrv: rc.recovery.hrv, restingHr: rc.recovery.rhr },
+            sleep: { performance: rc.sleep.performance ?? null, hours: rc.sleep.hours ?? null, neededHours: rc.sleep.neededHours ?? null, deficitMinutes: rc.sleep.deficitMinutes ?? null },
+            strain: rc.strain, plannedWorkout: pw ? { name: pw.name, minutes: pw.estimatedMinutes, status: pw.status } : null };
+        }
+        try {
+          if (!health.data) { const d = await openData(await memberData().catch(() => null)); if (d && !d.locked) health.data = d; }
+          const data = health.data;
+          if (data?.profile) {
+            const P = await import(`../js/dayPlan.js?v=${VERSION}`), pl = P.planOf(data, today), log = P.logOf(data, today), planned = {};
+            for (const m of ['breakfast', 'lunch', 'snack', 'dinner']) if (pl[m]?.totals) planned[m] = P.snapshotOf(pl[m]);
+            food = D.foodFacts({ entry: P.dayEntry(data, today), planned, logged: log.meals || {}, extras: (log.extras || []).length });
+          }
+        } catch { /* no food facts on this phone */ }
         const people = fam().members.filter((x) => x.kind === 'person').map((x) => ({ id: x.id, name: String(x.name || '').split(/\s+/)[0], role: x.id === fam().me ? 'me' : x.id === partnerMember()?.id ? 'partner' : 'member' }));
-        return D.dayContext({ days, meId: fam().me, people, now: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, today, weather, health });
+        return D.dayContext({ days, meId: fam().me, people, now: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, today, weather, sun, health: whoopNow, food });
       },
       // A suggested time → your own calendar only (never anyone else's).
       calendarAdd: async ({ date, start, end, title }) => { const r = await api.post(`/families/${state.fid}/events`, { date, allDay: false, start, end, who: [fam().me], remind: null, repeat: null, body: await lock({ title, place: '', notes: '' }) }); calm.loadedAt = 0; return r.event?.id; },
@@ -1435,7 +1450,7 @@ async function walkWeather() {
   const w = B.dogWalks(hourly, from), hot = B.hottestPavement(hourly, from);
   const pick = [w.morning, w.evening].filter(Boolean).sort((a, b) => b.score - a.score)[0];
   const hr = (i) => hourly[i].time.toLocaleTimeString(undefined, { hour: 'numeric' }).replace(' ', '').toLowerCase();
-  return { B, hourly, now, from, w, hot, pick, hr };
+  return { B, hourly, daily: cached.f?.daily || null, now, from, w, hot, pick, hr };
 }
 async function renderWalk() {
   const el = $('#walk');
@@ -4312,7 +4327,7 @@ document.addEventListener('click', (e) => {
   const post = t.closest('[data-post]');
   if (d.pact) return postAction(d.pact, t.closest('.menu').dataset);
   if (d.act === 'talk') { const voice = d.talkmic != null || t.closest('.talk-bar, .talk-fab') ? listenNow() : null; return act(async () => (await talk()).open(state.view, { voice })); }
-  if (d.talk === 'mic') { const voice = listenNow(); return act(async () => (await talk()).listen(voice)); }
+  if (d.talk === 'mic') { const voice = listenNow(true); return act(async () => (await talk()).listen(voice)); }
   if (d.talk || d.talkex != null || d.talkgo != null || d.talkundo != null || d.talkset || d.talkpick || d.talkpickshow || d.talkcare) return act(async () => (await talk()).onClick(t));
   if (d.care) {
     const box = t.getBoundingClientRect();
