@@ -4,6 +4,19 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 👥 Calendar — Together or one person's events (2026-10-30, `v2/cal-filter` from `main`; owner: "categorize them as [me], [partner] and Together")
+- **Built:**
+  - Chips at the top of the month card: **Together** (everything, the default) and one per grown-up, in their colours.
+  - A person's view shows their own events plus shared ones: both of you, the family, open dog appointments, or no one in particular. It never shows only someone else's events.
+  - The filter applies to the month dots, the chosen day and Coming up.
+  - An empty filtered day says how many events are under Together.
+  - The choice is kept on this phone (`fam.cal.who`).
+  - Rule: `js/calendar.js` `forPerson`.
+- **Tests:** `tests/calendar.test.js` covers the filter rule.
+- **Browser check** (390 px; 320 px in dark mode; synthetic family with three adults):
+  - Together had 8 in Coming up; the first person had 8 (all theirs); the second had 0.
+  - Chips wrap at 320 px with no overflow; no errors.
+
 ### 🗣️ Talk — traffic and weather questions always reach the day facts (2026-10-30, `v2/talk-routing` from `main` `7f9c94a`)
 - **Owner's live try:** "I like to run later in the afternoon and go rock climb at movement Santa Clara how's the traffic and the weather" got "I can't check traffic or weather".
 - **Cause:** the phone didn't treat it as a day question. It starts "I like…", and none of the day words matched. It went to `talk.route`, where Claude's instructions listed "places, questions" as things to refuse. The Google key was never reached.

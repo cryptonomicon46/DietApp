@@ -293,3 +293,11 @@ export function parseIcs(text, { localTz = 'America/Los_Angeles', from = '0000',
   }
   return out;
 }
+
+// 👥 The Calendar's "whose" filter: 'all' (Together) shows everything; a person's id shows their own
+// events plus shared ones (both of you, the family, or no one in particular) — never only someone else's.
+export function forPerson(e, f) {
+  if (!f || f === 'all') return true;
+  const w = e?.whos?.length ? e.whos : Array.isArray(e?.who) ? e.who : [e?.who];
+  return !w.length || w.some((x) => !x || x === 'both' || x === 'family' || x === 'nobody' || x === f);
+}

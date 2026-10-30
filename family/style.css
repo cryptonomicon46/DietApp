@@ -1495,3 +1495,7 @@ body.has-talk main { padding-bottom: 96px; }
 .ml-pack { display: block; margin: 6px auto 0; }
 .ml-food { flex-wrap: wrap; } .ml-food .ml-slide { flex: 1 0 100%; width: 100%; accent-color: var(--brand); min-height: 32px; margin: 2px 0 0; }
 .ml-food .ml-unit { flex: 1 0 100%; display: block; margin-top: -2px; min-height: 1em; }
+/* 👥 Calendar: whose events — Together (everyone) or one person (theirs + shared) */
+.cal-who { display: flex; flex-wrap: wrap; margin: 0 0 10px; }
+.cal-who button { flex: 1 1 auto; min-width: 0; padding: 8px 12px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.cal-who .who-dot { width: 10px; height: 10px; }

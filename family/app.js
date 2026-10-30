@@ -3389,6 +3389,11 @@ function calWho(list) {
 }
 const whoCls = (w) => (w === 'both' ? 'w-both' : w === 'nobody' ? 'w-none' : `w-p${Math.min(3, Math.max(0, calPeople().findIndex((m) => m.id === w)))}`);
 const whoName = (w) => (w === 'both' ? 'Both' : w === 'nobody' ? 'Open' : w === fam().me ? 'You' : member(w)?.name || '');
+// 👥 Whose events to show: everyone ("Together", the default) or one grown-up — their own events plus
+// shared ones (both of you, the family). Kept on this phone only.
+const calFilter = () => { const v = LS.get('fam.cal.who'); return v && calPeople().some((m) => m.id === v) ? v : 'all'; };
+const calShows = (e, f = calFilter()) => calm.C.forPerson(e, f);
+const calFilterHtml = () => { const f = calFilter(), people = calPeople(); if (people.length < 2) return ''; return `<div class="seg cal-who" role="group" aria-label="Whose events">${[['all', 'Together', 'w-both'], ...people.map((m) => [m.id, m.name.split(/\s+/)[0], whoCls(m.id)])].map(([id, label, cls]) => `<button type="button" class="${f === id ? 'on' : ''}" data-calwho="${esc(id)}" aria-pressed="${f === id}"><i class="who-dot ${cls}"></i> ${esc(label)}</button>`).join('')}</div>`; };
 const calDayLabel = (d) => (d === isoLocal() ? 'Today' : d === shiftLocal(isoLocal(), 1) ? 'Tomorrow' : new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }));
 function calRow(e, day = null) {
   const t = e.allDay || !e.time ? 'All day' : timeLabel(e.time);
@@ -3409,7 +3414,7 @@ async function renderCal() {
   const cells = Array.from({ length: first.getDay() }, () => '<span class="cal-pad"></span>');
   for (let i = 1; i <= daysIn; i++) {
     const d = `${calm.month}-${String(i).padStart(2, '0')}`;
-    const evs = calItems(d).map((e) => e.who);
+    const evs = calItems(d).filter((e) => calShows(e)).map((e) => e.who);
     const dog = dogsHub.appts.some((a) => a.status !== 'done' && [a.dropAt, a.pickAt].some((x) => x?.startsWith(d)));
     const plan = us.plans.some((p) => !p.done && p.day === d);
     const marks = `${calm.golden.includes(d) ? '⭐' : ''}${hearts[d] ? '❤️' : ''}${dog ? '🐾' : ''}${plan ? '💞' : ''}`;
@@ -3418,25 +3423,25 @@ async function renderCal() {
   const people = calPeople().slice(0, 4);
   const gold = calm.golden.filter((d) => d.startsWith(calm.month)).length;
   const dates = Object.entries(hearts).filter(([d]) => d.startsWith(calm.month)).flatMap(([, l]) => l).filter((r) => r.kind === 'date').length;
-  $('#calMonth').innerHTML = `<div class="row between" style="margin-top:0"><button type="button" class="ghost small" data-calmove="-1" aria-label="Previous month">‹</button><b>${first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</b><button type="button" class="ghost small" data-calmove="1" aria-label="Next month">›</button></div>
+  $('#calMonth').innerHTML = `${calFilterHtml()}<div class="row between" style="margin-top:0"><button type="button" class="ghost small" data-calmove="-1" aria-label="Previous month">‹</button><b>${first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</b><button type="button" class="ghost small" data-calmove="1" aria-label="Next month">›</button></div>
     <div class="cal-grid month">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((x) => `<span class="cal-h">${x}</span>`).join('')}${cells.join('')}</div>
     <div class="cal-key small muted"><span><i class="w-both"></i>Both</span>${people.map((m) => `<span><i class="${whoCls(m.id)}"></i>${esc(m.id === fam().me ? `${m.name} (you)` : m.name)}</span>`).join('')}<span>⭐ Golden day</span><span>❤️ Us time</span><span>🐾 Dogs</span><span>💞 Plans</span></div>
     ${dates || gold ? `<p class="small cal-month-sum">This month: ${dates ? `❤️ ${dates} date${dates === 1 ? '' : 's'}` : ''}${dates && gold ? ' · ' : ''}${gold ? `⭐ ${gold} golden day${gold === 1 ? '' : 's'} for the dogs` : ''}</p>` : ''}`;
   // The chosen day.
-  const sel = await dayEntries(calm.day);
+  const all = await dayEntries(calm.day), sel = all.filter((e) => calShows(e));
   const dayMarks = [
     ...(hearts[calm.day] || []).map((r) => `<li class="mark-row">${calm.R ? calm.R.momentIcon(r) : '❤️'} <span>${esc(calm.R ? calm.R.momentText(r) : 'Us time')}${r.by && r.by !== fam().me ? ` <small class="muted">· ${esc(member(r.by)?.name || '')}</small>` : ''}</span><button type="button" class="linkish small" data-momentedit="${esc(r.id)}">✎ Edit</button></li>`),
     ...(calm.golden.includes(calm.day) ? ['<li class="mark-row">⭐ <span>Golden day for the dogs</span></li>'] : []),
   ];
   $('#calDay').innerHTML = `<section class="card"><div class="row between" style="margin-top:0"><div class="eyebrow">${esc(calDayLabel(calm.day))}${calm.day !== today ? ` · ${new Date(`${calm.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })}` : ''}</div><button type="button" class="linkish small" data-act="eventnew">＋ Event</button></div>
     ${dayMarks.length ? `<ul class="mark-list">${dayMarks.join('')}</ul>` : ''}
-    ${sel.length ? `<ul class="ev-list">${sel.map((e) => calRow(e)).join('')}</ul>` : dayMarks.length ? '' : '<p class="small muted">Nothing planned. Tap ＋ to add something.</p>'}
+    ${sel.length ? `<ul class="ev-list">${sel.map((e) => calRow(e)).join('')}</ul>` : all.length ? `<p class="small muted">Nothing for ${esc(member(calFilter())?.name?.split(/\s+/)[0] || 'them')} — ${all.length} other ${all.length === 1 ? 'event' : 'events'} under <button type="button" class="linkish small" data-calwho="all">Together</button>.</p>` : dayMarks.length ? '' : '<p class="small muted">Nothing planned. Tap ＋ to add something.</p>'}
     ${calm.day <= today ? `<button type="button" class="ghost small logdate" data-act="lognew">❤️ Log a date on this day</button>` : ''}</section>
     <div id="calLook"></div>`;
   renderCalLook(calm.day).catch(() => { const el = $('#calLook'); if (el) el.innerHTML = ''; });
   // Coming up: the next two weeks after the chosen day.
   const next = [];
-  for (let i = 1, d = shiftLocal(calm.day, 1); i <= 14 && next.length < 8; i++, d = shiftLocal(d, 1)) for (const e of await dayEntries(d)) next.push({ ...e, day: d });
+  for (let i = 1, d = shiftLocal(calm.day, 1); i <= 14 && next.length < 8; i++, d = shiftLocal(d, 1)) for (const e of await dayEntries(d)) if (calShows(e)) next.push({ ...e, day: d });
   $('#calNext').innerHTML = next.length ? `<section class="card"><div class="eyebrow">Coming up</div><ul class="ev-list">${next.slice(0, 8).map((e) => calRow(e, e.day)).join('')}</ul></section>` : '';
   const fc = feedCache();
   $('#calFeeds').innerHTML = `<details class="card"><summary><b>📲 Linked calendars</b> <span class="small muted">${calm.feeds.length ? `${calm.feeds.length} linked` : 'bring in your iPhone or Google calendar'}</span></summary>
@@ -4391,6 +4396,7 @@ document.addEventListener('click', (e) => {
   if (d.apptdel) { if (!confirm('Remove this appointment?')) return; return act(async () => { await api.del(`/families/${state.fid}/appts/${d.apptdel}`); closeSheet(); await apptChanged(); }); }
   if (d.apptundone) return act(async () => { await api.patch(`/families/${state.fid}/appts/${d.apptundone}`, { undone: true }); closeSheet(); await apptChanged(); });
   if (d.calmove) { const [y, m] = calm.month.split('-').map(Number); const x = new Date(y, m - 1 + +d.calmove, 1); calm.month = isoLocal(x).slice(0, 7); return renderCal(); }
+  if (d.calwho) { LS.set('fam.cal.who', d.calwho === 'all' ? null : d.calwho); return renderCal(); }
   if (d.calday) { calm.day = d.calday; if (!d.calday.startsWith(calm.month)) calm.month = d.calday.slice(0, 7); return renderCal(); }
   if (d.event) { const e = calm.events.find((x) => x.id === d.event); return e ? eventDetail(e) : null; }
   if (d.eventedit) return eventSheet(calm.events.find((x) => x.id === d.eventedit));

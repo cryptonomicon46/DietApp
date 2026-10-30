@@ -134,3 +134,13 @@ test('an iPhone (iCloud) public calendar: alarms ignored, moved and cancelled da
   assert.equal(ev.find((e) => e.title.startsWith('Dr. Kim')).notes, 'Bring insurance card');
   assert.deepEqual(title('2027-11-05'), ['all day Mom\'s birthday 🎂']);
 });
+
+test("the Calendar's whose filter: Together shows everything; a person sees their own events and shared ones, never only someone else's", async () => {
+  const { forPerson } = await import('../js/calendar.js');
+  const mine = { who: 'sam', whos: ['sam'] }, theirs = { who: 'pat', whos: ['pat'] }, both = { who: 'both', whos: ['sam', 'pat'] };
+  const family = { who: 'family' }, nobody = { who: 'nobody' }, plain = { who: '' }, list = { who: ['pat', 'kid1'] };
+  for (const e of [mine, theirs, both, family, nobody, plain, list]) assert.ok(forPerson(e, 'all'));
+  assert.deepEqual([mine, theirs, both, family, nobody, plain, list].map((e) => forPerson(e, 'sam')), [true, false, true, true, true, true, false]);
+  assert.deepEqual([mine, theirs, both].map((e) => forPerson(e, 'pat')), [false, true, true]);
+  assert.ok(forPerson(mine, undefined));
+});
