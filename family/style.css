@@ -1467,3 +1467,5 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .tk-rec input[type=checkbox] { width: 20px; height: 20px; min-height: 0; flex: none; margin: 0; }
 .tk-done { color: var(--brand); font-weight: 700; }
 body.has-talk main { padding-bottom: 96px; }
+.tk-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; } .tk-two button { min-height: 44px; }
+.tk-answer { font-size: .95rem; line-height: 1.45; } .tk-answer > button { justify-self: start; min-height: 0; padding: 0; }

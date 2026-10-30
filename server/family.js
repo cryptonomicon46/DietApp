@@ -65,7 +65,7 @@ import { askPlan } from './planCoach.js';
 import { lookRoutes, isLookBytes, forgetLooks, LOOK_IMG } from './look.js';
 import { nameItem, findPieces } from './lookAi.js';
 import { estimatePhoto, estimateText } from './dietAi.js';
-import { routeTalk } from './talkAi.js';
+import { routeTalk, answerDay } from './talkAi.js';
 import { cleanFacts, cleanTurns } from '../js/planCoach.js';
 import { bookRoutes, bookLookupRoutes, bookCover, forgetReader } from './books.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
@@ -421,6 +421,21 @@ export async function familyApi(req, env, path, ctx = null) {
     } catch (e) {
       if (e instanceof GatewayError) return json({ error: e.status === 413 ? "that's a lot at once — try one thing" : e.message }, e.status);
       return json({ error: "Pawmily couldn't read that just now" }, 502);
+    }
+  }
+  // 🗣️ "Ask about my day" (T2a): the question and the day as the phone put it together → an answer.
+  if (path === '/ai/talk/day' && method === 'POST') {
+    if (!aiReady(env)) return json({ error: 'this needs Claude on the connector', off: true }, 501);
+    const text = String(body.text || '').trim(), context = typeof body.context === 'string' ? body.context : JSON.stringify(body.context || {});
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(body.today || '') ? body.today : '';
+    if (text.length < 2 || !today) return json({ error: 'ask a question first' }, 400);
+    const now = /^\d{2}:\d{2}$/.test(body.now || '') ? body.now : '';
+    try {
+      return json(await aiCall({ db, purpose: 'talk.day', input: { text, today, now, context }, who: user.uid, underLimit },
+        async (payload) => answerDay(await claude(env), payload, { model: env.PARSE_MODEL || 'claude-sonnet-5-5' })));
+    } catch (e) {
+      if (e instanceof GatewayError) return json({ error: e.status === 413 ? 'that day is too full to send at once' : e.message }, e.status);
+      return json({ error: "Pawmily couldn't answer that just now" }, 502);
     }
   }
   if (path === '/ai/diet/text' && method === 'POST') {

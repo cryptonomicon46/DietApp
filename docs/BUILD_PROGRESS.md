@@ -4,6 +4,21 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 🗣️ Talk to Pawmily — T2a "Ask about my day" (2026-10-30, after the owner tried T1 live: "I'm okay sending this information to Claude… I want the intelligence built into the app"; same branch)
+- **State: built and tested; not merged, not deployed.** It needs the connector redeployed (`/ai/talk/day`).
+- **Built:**
+  - `js/talkDay.js`: `isDayQuestion`; `freeTime` (your own, both-of-you and family items block you, your partner's alone don't; today from now on; 7 AM–10 PM; ≥ 30 min); `dayContext` (items with roles, titles tokenized, free gaps, weather, WHOOP facts); `checkSuggestions` (kept only inside a free gap).
+  - `server/talkAi.js` `answerDay` (structured `{answer, suggestions}`); gateway `talk.day`; route `/ai/talk/day`.
+  - `talk.route` can answer `ask.day`.
+  - `family/talk.js`:
+    - a one-time consent card per member;
+    - the answer card with *Open Calendar ›*;
+    - suggestion cards with *Add to my calendar* (posts `who: [me]` only), and Undo on the card.
+  - `family/app.js` `dayContext` adapter (the Calendar tab's `dayEntries`, cached weather, `dayContextForPlanning`).
+- **Tests:** `tests/talkday.test.js` (5). `npm test` 470 pass, 0 fail.
+- **Browser** (local, Claude stubbed): question → consent → Allow → the request carried 2 days of items with "you" / "[partner]" and the free gaps, with no names → the answer showed "Pat" again → the suggested run added to the calendar → Undo available.
+- **Owner questions raised (2026-10-30):** the risks of Claude seeing calendar data (answered in the session); one-tap voice instead of the keyboard 🎤. The second needs a decision, since browser speech recognition sends audio to Apple or Google.
+
 ### 🗣️ Talk to Pawmily — T1 (authorized 2026-10-30 by choosing the placement — "Go with your recommendation the E1 and the small gold circle on the other tabs"; same branch)
 - **State: T1 built, tested and browser-verified. Stopped for review. Not merged, not deployed.** The connector must be deployed first (new `/ai/talk`); without it the phone's own reading still works and Claude-read requests say they couldn't be read.
 - **Decisions applied:**
