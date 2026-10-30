@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isDayQuestion, freeTime, dayContext, dayWeather, foodFacts, checkSuggestions, CONTEXT_MAX } from '../js/talkDay.js';
-import { DAY_INSTRUCTIONS } from '../server/talkAi.js';
+import { DAY_INSTRUCTIONS, TALK_INSTRUCTIONS } from '../server/talkAi.js';
 import { PURPOSES } from '../server/aiGateway.js';
 import { familyApi, TERMS_VERSION } from '../server/family.js';
 
@@ -109,4 +109,12 @@ test('the /ai/talk/day route: signed in, the question and the day only, an answe
   assert.equal((await call('/ai/talk/day', token, 'POST', { text: 'x', today: '2026-10-30' })).status, 400);
   delete env.__anthropic;
   assert.equal((await call('/ai/talk/day', token, 'POST', { text: "What's on?", today: '2026-10-30' })).status, 501);
+});
+
+test("traffic, weather and drive-time questions go the day way however they're phrased (the owner's sentence)", () => {
+  for (const q of ["I like to run later in the afternoon and go rock climb at movement Santa Clara how's the traffic and the weather",
+    'Is it going to rain later?', 'How long will it take to get to Movement Sunnyvale', 'Traffic to work', 'Is the gym still open', 'When does Trader Joe\'s close'])
+    assert.ok(isDayQuestion(q), q);
+  for (const q of ['I had eggs in the morning for breakfast', 'Log lunch: chicken bowl', 'Walked the dogs', 'Add Dune to our watchlist']) assert.ok(!isDayQuestion(q), q);
+  assert.match(TALK_INSTRUCTIONS, /traffic/); assert.doesNotMatch(TALK_INSTRUCTIONS, /booking, buying, places, questions/);
 });

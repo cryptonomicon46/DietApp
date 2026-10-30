@@ -25,12 +25,12 @@ Steps you may use (at most 4):
 - diet.log: food they ate, or plan to eat. meal breakfast / lunch / dinner / extra (snacks and drinks), text = exactly the foods and amounts they said, plan true only when they're planning ahead ("I'll have…", "plan dinner…").
 - fitness.describe: a workout they describe (exercises, sets, reps). text = their words.
 - fitness.lighter: make today's planned workout lighter.
-- ask.day: a question about their day or the next one — what's on, what [partner] or someone is up to, when they're free, the best time to fit something in. Use it alone; the app then asks you again with their calendar.
+- ask.day: a question about their day or the next one — what's on, what [partner] or someone is up to, when they're free, the best time to fit something in, the weather, traffic or how long a drive takes, a place's opening hours — however it's phrased. Use it alone; the app then asks you again with their calendar, the forecast and drive times.
 - care.log: a dog or household chore they did. chore = a short name ("walk", "dog park", "breakfast", "dinner", "treat", "meds", or the chore's name).
 Rules:
 - People appear as [partner] or [member:N]. Keep those tokens exactly; never guess names.
 - Never invent titles, foods, amounts or chores they didn't say.
-- If the request needs anything else — adding to the calendar, plans or messages involving other people, booking, buying, places, questions, advice — return no steps and put one short friendly sentence in say about what you can do instead (adding shows, movies and books, logging meals, workouts and chores).
+- If the request needs anything else — adding to the calendar, plans or messages involving other people, booking, buying, advice — return no steps and put one short friendly sentence in say about what you can do instead (adding shows, movies and books, logging meals, workouts and chores).
 - Otherwise say is "".`;
 
 async function ask(client, content, model) {

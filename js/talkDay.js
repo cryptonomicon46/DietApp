@@ -14,6 +14,9 @@ import { toTokens } from './talkActions.js';
 export function isDayQuestion(text) {
   const t = String(text || '').toLowerCase();
   if (/\b(agenda|schedule|calendar|free time|am i free|are we free|busy|plan my day|my day|up to (today|tonight|tomorrow)|up to\??$|what('s| is) on\b|what do (i|we) have|when (should|can|could) (i|we)|best time|what time should|fit in|squeeze in|this (morning|afternoon|evening)|tonight|tomorrow)\b/.test(t)) return true;
+  // Traffic, weather, drive times and opening hours are always about your day, however it's said
+  // ("I like to run later and climb at Movement Santa Clara — how's the traffic and the weather").
+  if (/\b(traffic|weather|forecast|raining|rain later|drive time|driving time|how long (will it take|does it take|to get|to drive)|commute|leave for|get there|opening hours|open until|still open|when does [\w'’]+(\s[\w'’]+){0,3} (open|close))\b/.test(t)) return true;
   const asks = /^(what|when|who|where|which|is|are|do|does|did|can|could|should|how)\b/.test(t);
   // Questions about today's food or WHOOP numbers go the same way (the facts carry them).
   if (asks && /\b(meal plan|meals?|macros?|calories|protein|carbs|fat|eat|breakfast|lunch|dinner|snacks?|recovery|sleep|strain|whoop|hrv)\b/.test(t)) return true;
