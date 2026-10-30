@@ -118,3 +118,19 @@ test("traffic, weather and drive-time questions go the day way however they're p
   for (const q of ['I had eggs in the morning for breakfast', 'Log lunch: chicken bowl', 'Walked the dogs', 'Add Dune to our watchlist']) assert.ok(!isDayQuestion(q), q);
   assert.match(TALK_INSTRUCTIONS, /traffic/); assert.doesNotMatch(TALK_INSTRUCTIONS, /booking, buying, places, questions/);
 });
+
+test('the days a question is about: today and tomorrow unless it names others (weekdays, weekend, next week, dates)', async () => {
+  const { daysAsked } = await import('../js/talkDay.js');
+  const T = '2026-10-30'; // a Friday
+  assert.deepEqual(daysAsked("What's on the calendar for Sunday and Monday", T), ['2026-11-01', '2026-11-02']);
+  assert.deepEqual(daysAsked("What's on the calendar for Saturday", T), ['2026-10-31']);
+  assert.deepEqual(daysAsked('When am I free?', T), ['2026-10-30', '2026-10-31']);
+  assert.deepEqual(daysAsked("What's on this weekend", T), ['2026-10-31', '2026-11-01']);
+  assert.equal(daysAsked('What do I have next week', T).length, 7); assert.equal(daysAsked('What do I have next week', T)[0], '2026-11-02');
+  assert.deepEqual(daysAsked('next Friday', T), ['2026-11-06']); assert.deepEqual(daysAsked('Friday', T), ['2026-10-30']);
+  assert.deepEqual(daysAsked('Nov 3', T), ['2026-11-03']); assert.deepEqual(daysAsked('what about 11/12', T), ['2026-11-12']); assert.deepEqual(daysAsked('the 5th', T), ['2026-11-05']);
+  assert.deepEqual(daysAsked('Oct 2', T), ['2026-10-30', '2026-10-31'], 'a past date (next year is beyond 30 days) → the usual two days; Claude says which days it looked at');
+  assert.deepEqual(daysAsked('I sat in the sun', T), ['2026-10-30', '2026-10-31'], 'sat/sun are words, not days');
+  assert.ok(daysAsked('every day this month and next week and the next 7 days', T).length <= 8);
+  assert.match(DAY_INSTRUCTIONS, /only the days in "days"/);
+});

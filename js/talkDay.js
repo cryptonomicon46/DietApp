@@ -101,6 +101,40 @@ export function travelFacts(res) {
   return places.length ? { from: 'where you are now', by: 'car, with traffic (now is live; later times are predicted)', places } : null;
 }
 
+// 📅 Which days a question is about (local YYYY-MM-DD, at most `max`, from today on): today and
+// tomorrow unless it names others — weekdays ("Sunday and Monday", "next Friday"), "this weekend",
+// "this week", "next week", "in 3 days", "the next 5 days", or a date ("Nov 3", "11/3", "the 3rd").
+const WD = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const MON = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const addDays = (iso, n) => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + n); return isoOf(d); };
+export function daysAsked(text, today, { max = 8 } = {}) {
+  const t = String(text || '').toLowerCase(), dow = new Date(`${today}T12:00:00`).getDay(), out = [];
+  const add = (iso) => { if (iso >= today && iso <= addDays(today, 30) && !out.includes(iso)) out.push(iso); };
+  const span = (from, n) => { for (let i = 0; i < n; i++) add(addDays(from, i)); };
+  if (/\btoday|tonight|this (morning|afternoon|evening)\b/.test(t)) add(today);
+  if (/\btomorrow\b/.test(t)) add(addDays(today, 1));
+  if (/\bday after tomorrow\b/.test(t)) add(addDays(today, 2));
+  if (/\b(this )?weekend\b/.test(t)) { const sat = (6 - dow + 7) % 7; span(addDays(today, sat === 0 && dow === 6 ? 0 : sat), dow === 0 ? 1 : 2); }
+  if (/\bthis week\b|\brest of the week\b/.test(t)) span(today, 7 - dow || 1);
+  if (/\bnext week\b/.test(t)) span(addDays(today, ((8 - dow) % 7) || 7), 7);
+  const nd = /\b(?:next|coming)\s+(\d{1,2}|two|three|four|five|six|seven)\s+days\b/.exec(t) || /\bin\s+(\d{1,2}|two|three|four|five|six|seven)\s+days\b/.exec(t);
+  if (nd) { const n = +nd[1] || ['two', 'three', 'four', 'five', 'six', 'seven'].indexOf(nd[1]) + 2; if (/^in/.test(nd[0])) add(addDays(today, n)); else span(today, n + 1); }
+  // Full weekday names only ("sat" and "sun" are ordinary words). Today's own name means today;
+  // "next Monday" on a Monday means a week on.
+  for (const m of t.matchAll(/\b(next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?\b/g)) {
+    let k = (WD.indexOf(m[2]) - dow + 7) % 7;
+    if (m[1] && k === 0) k = 7;
+    add(addDays(today, k));
+  }
+  const y = +today.slice(0, 4), cur = +today.slice(5, 7);
+  const at = (mo, d) => { if (mo < 1 || mo > 12 || d < 1 || d > 31) return; let iso = `${y}-${p2(mo)}-${p2(d)}`; if (iso < today) iso = `${y + 1}-${p2(mo)}-${p2(d)}`; add(iso); };
+  for (const m of t.matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/g)) at(MON.indexOf(m[1]) + 1, +m[2]);
+  for (const m of t.matchAll(/\b(\d{1,2})\/(\d{1,2})\b/g)) at(+m[1], +m[2]);
+  for (const m of t.matchAll(/\bthe\s+(\d{1,2})(?:st|nd|rd|th)\b/g)) { const d = +m[1]; at(d >= +today.slice(8) ? cur : cur + 1 > 12 ? 1 : cur + 1, d); }
+  if (!out.length) { add(today); add(addDays(today, 1)); }
+  return out.sort().slice(0, max);
+}
+
 // Your own food today, for a day question: the day's targets, what you've eaten, what's left, and
 // each main meal — logged (what you had) or still planned (title, calories, macros and its foods).
 // Built from the same numbers Health shows (js/dayPlan.js). Never weights, notes or other days.
