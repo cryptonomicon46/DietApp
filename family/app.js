@@ -439,7 +439,7 @@ function listenNow(asked = false) {
     r.onend = () => { buf.ended = true; buf.listener?.(); };
     r.start();
     // iOS only lets a page speak after a tap has started speech once: a silent word now, in the tap.
-    try { if (window.speechSynthesis && LS.get('fam.talk.speak') !== 'off') { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch { /* no speech here */ }
+    try { if (window.speechSynthesis && LS.get('fam.talk.speak') === 'on') { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch { /* no speech here */ }
     return buf;
   } catch { return null; }
 }

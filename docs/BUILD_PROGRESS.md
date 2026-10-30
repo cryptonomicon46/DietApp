@@ -4,6 +4,16 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 🗣️ Talk — traffic and weather questions always reach the day facts (2026-10-30, `v2/talk-routing` from `main` `7f9c94a`)
+- **Owner's live try:** "I like to run later in the afternoon and go rock climb at movement Santa Clara how's the traffic and the weather" got "I can't check traffic or weather".
+- **Cause:** the phone didn't treat it as a day question. It starts "I like…", and none of the day words matched. It went to `talk.route`, where Claude's instructions listed "places, questions" as things to refuse. The Google key was never reached.
+- **Fix:**
+  - `isDayQuestion` now catches traffic, weather, forecast, rain later, drive time, how long to get, commute, leave for, get there, opening hours, still open, and "when does … open/close", however the sentence is phrased.
+  - `TALK_INSTRUCTIONS`: `ask.day` covers weather, traffic, drive times and opening hours, and "places, questions" is no longer in the refuse list.
+  - Drive-time detection and the gym match already worked for this sentence (`travelAsked` true; Movement Santa Clara found).
+- **Read aloud is now off by default** (owner: "By default no speaking back, we can enable this later on with the eleven labs integration"). `fam.talk.speak` must be `on`. *🔊 Read answers aloud* in the sheet turns it on, and 🔊 on an answer still reads that one answer when tapped.
+- **Tests:** `tests/talkday.test.js` checks the owner's sentence and five other phrasings, and that logging sentences ("I had eggs in the morning for breakfast") still log. `npm test` 490 pass.
+
 ### 🍽 Meals you describe stay foods you can resize (2026-10-30; owner: "Build the v2 meals"; `v2/meals`, on top of `v2/talk-travel`)
 - **What changed** (brief: `docs/prompts/MEAL_EDITING_UX.md`; the owner asked to build rather than stop at mockups):
   - A meal from Tell me or Talk is saved as **foods and grams** (`custom.meals[meal].items`), not one total, whenever every item is a known food.
