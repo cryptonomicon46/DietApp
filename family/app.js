@@ -478,6 +478,9 @@ function talk() {
       // "Ask about my day": what the Calendar tab shows for today and tomorrow, put together here.
       dayContext: async (asked = '') => {
         await loadCal({ golden: false });
+        // Linked calendars (yours and your partner's) freshly fetched — up to 6 s — so their events are current.
+        await Promise.race([refreshFeeds().catch(() => {}), new Promise((ok) => setTimeout(ok, 6000))]);
+        const fc = feedCache(), linked = calm.feeds.map((f) => ({ who: f.who === 'both' ? 'both' : f.who || f.by, ok: !!fc[f.id]?.events && !fc[f.id]?.error }));
         const today = isoLocal(), now = new Date(), D = await import(`../js/talkDay.js?v=${VERSION}`);
         const days = [];
         // The days the question is about (today and tomorrow unless it names others; up to 8).
@@ -520,7 +523,7 @@ function talk() {
             }
           }
         }
-        return D.dayContext({ days, meId: fam().me, people, now: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, today, weather, sun, health: whoopNow, food, travel });
+        return D.dayContext({ days, meId: fam().me, people, now: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, today, weather, sun, health: whoopNow, food, travel, linked });
       },
       // A suggested time → your own calendar only (never anyone else's).
       calendarAdd: async ({ date, start, end, title }) => { const r = await api.post(`/families/${state.fid}/events`, { date, allDay: false, start, end, who: [fam().me], remind: null, repeat: null, body: await lock({ title, place: '', notes: '' }) }); calm.loadedAt = 0; return r.event?.id; },

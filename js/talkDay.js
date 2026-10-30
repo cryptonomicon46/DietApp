@@ -152,7 +152,7 @@ export function foodFacts({ entry = null, planned = {}, logged = {}, extras = 0 
 // your free gaps, and — when the phone has them — the weather, your WHOOP numbers and your own food
 // today. Names become roles everywhere (titles too). Nothing else: no notes, no other lists, no history.
 export const CONTEXT_MAX = 11800; // the gateway takes up to 12,000 characters
-export function dayContext({ days = [], meId, people = [], now = null, today, weather = null, sun = null, health = null, food = null, travel = null } = {}) {
+export function dayContext({ days = [], meId, people = [], now = null, today, weather = null, sun = null, health = null, food = null, travel = null, linked = null } = {}) {
   const role = (who) => {
     if (who === 'both') return 'you and [partner]';
     if (!who || who === 'family') return 'the family';
@@ -173,6 +173,8 @@ export function dayContext({ days = [], meId, people = [], now = null, today, we
       yourFreeTime: freeTime(d.items, { meId, now: d.date === today ? now : null }),
     })),
   };
+  // Which linked calendars (iPhone, Google) are in these facts, by whose they are — never their names or links.
+  if (Array.isArray(linked)) out.linkedCalendars = linked.slice(0, 8).map((l) => ({ whose: role(l.who), ok: !!l.ok }));
   if (weather?.length) out.weather = weather.slice(0, 16);
   if (sun?.length) out.daylight = sun;
   if (health) out.yourHealth = health;
