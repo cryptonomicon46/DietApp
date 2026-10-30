@@ -46,33 +46,64 @@ test('diet summary: phase, goal, today from the trackers (or the plan), weight t
   assert.equal(dietSummary({}, today).today, null);
 });
 
-test('the Health screen: calm, private, escapes what it shows', () => {
+test("the Health screen: Today's anchors first, calm, private, escapes what it shows", () => {
   const html = healthHtml({ profile: { sex: 'female', age: 35, heightIn: 64, phase: 'maintain' }, weights: [{ date: today, weight: 140 }], workouts: [{ name: 'Run', start: '2026-10-27T07:00' }] }, { esc, today, sharing: '🔒 Private <b>' });
   assert.match(html, /Maintenance/);
-  // Weighed in today: the status and where the trend is, not the form.
-  assert.match(html, /✓ <b>140\.0 lb<\/b> today/);
-  assert.match(html, /href="\.\.\/#weight">Weight trend →/);
+  // Weighed in today: a quiet ✓ line, not the form.
+  assert.match(html, /<b>Weight<\/b> <span class="good">✓ 140\.0 lb<\/span>/);
   assert.ok(!html.includes('data-weigh'));
-  assert.match(html, /href="\.\.\/#today">Today's plan →/);
+  // Food: the next meal with its quick ways to log it.
+  assert.match(html, /Breakfast is next/);
+  for (const a of ['plan:breakfast', 'photo:breakfast', 'tell:breakfast', 'out:breakfast']) assert.ok(html.includes(`data-ml="${a}"`), a);
+  // Today first, then Nutrition & plan, then More (weight trend, devices).
+  assert.ok(html.indexOf('hl-anchors') < html.indexOf('Nutrition &amp; plan') && html.indexOf('Nutrition &amp; plan') < html.indexOf('Weight trend'));
+  assert.match(html, /href="\.\.\/#weight"><span>⚖️ Weight trend/);
+  assert.match(html, /href="\.\.\/#today">Today's plan ›/);
   assert.match(html, /\/ \d[\d,]* kcal/);
-  assert.match(html, /g protein/);
-  assert.ok(!/🪙|coins|streak/i.test(html), 'no coins or streaks');
+  assert.ok(!/🪙|coins|streak|failed|behind plan/i.test(html), 'no coins, streaks or failure words');
   assert.ok(html.includes('&#60;b&#62;') && !html.includes('Private <b>'), 'escaped');
   assert.equal(fitnessSummary({ workouts: [{ start: '2026-10-27T07:00' }, { start: '2026-10-01T07:00' }] }, today).week, 1);
 });
 
-test('Health: the weigh-in form until today is in; one calm nudge; plan status from the plan module', () => {
+test('Health: the weigh-in form until today is in; one quiet "Next"; plan status from the plan module', () => {
   const p = { sex: 'female', age: 35, heightIn: 64, phase: 'cut', goalLb: 130, phaseStart: '2026-10-01' };
   const html = healthHtml({ profile: p, weights: [{ date: '2026-10-20', weight: 141 }] }, { esc, today, hour: 7, sharing: '' });
   assert.match(html, /<form class="hl-weigh" data-weigh>/);
   assert.match(html, /placeholder="141\.0"/);
-  assert.match(html, /quick weigh-in before breakfast/);
+  assert.match(html, /Next: log today&#39;s weight|Next: log today's weight/);
+  assert.match(html, /hl-row2 hot"><span class="hl-ic" aria-hidden="true">⚖️/, 'the weight row is the emphasised one in the morning');
+  assert.equal((html.match(/hl-row2 hot/g) || []).length, 1, 'only one emphasis');
   assert.match(html, /week 4 of 8/);
   assert.match(html, /Too early to tell/);
-  // The reminder link only once its state is known.
+  // The reminder only once its state is known.
   assert.ok(!html.includes('weighremind'));
-  assert.match(healthHtml({ profile: p, weights: [] }, { esc, today, sharing: '', reminder: false }), /Remind me each morning/);
-  assert.match(healthHtml({ profile: p, weights: [] }, { esc, today, sharing: '', reminder: true }), /Morning reminder on/);
+  assert.match(healthHtml({ profile: p, weights: [] }, { esc, today, sharing: '', reminder: false }), /Morning weigh-in reminder<\/span><span class="go">Off · turn on/);
+  assert.match(healthHtml({ profile: p, weights: [] }, { esc, today, sharing: '', reminder: true }), /On · turn off/);
+});
+
+test('the food anchor: next meal, adapting after a bigger meal, kind words for what\'s left, done for the day', async () => {
+  const { foodState, nextUp, leftText } = await import('../family/health.js');
+  const profile = { sex: 'male', age: 35, heightIn: 70, phase: 'cut', goalLb: 175, activity: 'light', pace: 'steady' };
+  const weights = [{ date: today, weight: 182 }];
+  const fresh = foodState({ profile, weights }, today, 8);
+  assert.equal(fresh.next, 'breakfast'); assert.ok(fresh.title && fresh.kcal > 200);
+  assert.deepEqual(nextUp({ hour: 8, weighed: true, food: fresh }), { anchor: 'food', text: 'breakfast' });
+  assert.equal(nextUp({ hour: 7, weighed: false, food: fresh }).anchor, 'weight');
+  assert.deepEqual(nextUp({ hour: 7, weighed: false, food: fresh, workout: 'active', title: 'Lower body' }), { anchor: 'workout', text: 'resume Lower body' });
+  const big = { date: today, meals: { breakfast: { title: 'b', kcal: 420, p: 40, c: 30, f: 14, target: { kcal: 420 } }, lunch: { title: 'Burger & fries', kcal: 1300, p: 45, c: 130, f: 65, target: { kcal: 600 } } }, extras: [] };
+  const off = foodState({ profile, weights, eaten: big }, today, 13);
+  assert.equal(off.off.meal, 'lunch');
+  assert.equal(nextUp({ hour: 13, weighed: true, food: off }).text, 'adjust the rest of today');
+  const dinnerTime = foodState({ profile, weights, eaten: big }, today, 18);
+  assert.equal(dinnerTime.off, null, 'at dinner time it is the next meal again');
+  assert.equal(dinnerTime.next, 'dinner');
+  assert.match(leftText({ kcal: -120, p: 60 }), /at its calorie target · about <b>60 g protein<\/b> to go/);
+  assert.ok(!/over|exceed|-\d/.test(leftText({ kcal: -400, p: 0 })));
+  assert.match(leftText({ kcal: 850, p: 55 }), /~850 kcal.*~55 g protein/);
+  const all = { ...big, meals: { ...big.meals, dinner: { title: 'd', kcal: 600, p: 50, c: 50, f: 20 } } };
+  assert.equal(foodState({ profile, weights, eaten: all }, today, 20).next, null);
+  assert.equal(nextUp({ hour: 20, weighed: true, food: foodState({ profile, weights, eaten: all }, today, 20) }).text, "finish today's log");
+  assert.equal(foodState({ profile, weights, eaten: { ...all, done: true } }, today, 20).done, true);
 });
 
 test('nudges are calm and pick the most useful thing', async () => {

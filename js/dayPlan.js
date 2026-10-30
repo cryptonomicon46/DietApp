@@ -135,7 +135,9 @@ export function drinkEntry(key, n, pour = 5, custom = null) {
 export function whatFits(data, today, { remaining, limit = 3, plan = null } = {}) {
   const left = remaining || dayEntry(data, today).left;
   const kcal = Math.max(left.kcal, 0), p = Math.max(left.p, 0);
-  if (kcal < 80) return [];
+  // Calories used up but protein still to go: light, protein-first options instead.
+  const proteinFirst = kcal < 250 && p >= 20;
+  if (kcal < 80 && !proteinFirst) return [];
   const pl = plan || planOf(data, today), log = logOf(data, today);
   const seen = new Set(), out = [];
   const add = (name, t, from, use) => {
@@ -154,6 +156,16 @@ export function whatFits(data, today, { remaining, limit = 3, plan = null } = {}
   for (const pm of data.preparedMeals || []) add(pm.name, { kcal: +pm.kcal > 0 ? +pm.kcal : (+pm.p || 0) * 4 + (+pm.c || 0) * 4 + (+pm.f || 0) * 9, p: +pm.p, c: +pm.c, f: +pm.f }, 'a packaged meal you saved', { kind: 'prepared', name: pm.name });
   const days = Object.keys(data.mealLog || {}).filter((d) => d < today).sort().slice(-14).reverse();
   for (const d of days) for (const e of Object.values(data.mealLog[d].meals || {})) if (e?.title) add(e.title.replace(/^[^\w(]+/u, '').trim() || e.title, e, 'you had this recently', { kind: 'recent', entry: { title: e.title, kcal: e.kcal, p: e.p, c: e.c, f: e.f } });
+  if (proteinFirst) {
+    // Everyday protein-dense foods, one usual serving each.
+    for (const k of ['greekYogurt', 'premierShake', 'corePower', 'eggWhites', 'turkeyDeli', 'tuna', 'chicken']) {
+      const f = FOODS[k]; if (!f) continue;
+      const g = k === 'turkeyDeli' ? 84 : k === 'eggWhites' ? 160 : k === 'chicken' ? 120 : f.unit?.grams || 100;
+      const x = g / 100;
+      add(f.name.replace(/\s*\(.*?\)/g, ''), { kcal: f.kcal * x, p: f.p * x, c: f.c * x, f: f.f * x }, 'quick protein', { kind: 'recent', entry: { title: f.name, kcal: r(f.kcal * x), p: r(f.p * x), c: r(f.c * x), f: r(f.f * x) } });
+    }
+    return out.filter((o) => o.kcal <= 400 && o.p / o.kcal >= 0.07).sort((a, b) => b.p / b.kcal - a.p / a.kcal || a.kcal - b.kcal).slice(0, limit);
+  }
   // Closest to "a sensible next meal": at most what's left, protein close to what's left.
   const aim = Math.min(kcal, Math.max(350, kcal * 0.85));
   const score = (o) => Math.abs(o.kcal - aim) / Math.max(aim, 1) + (o.kcal > kcal ? 1 + (o.kcal - kcal) / kcal : 0) + (p ? Math.abs(Math.min(o.p, p) - p) / p * 0.8 : 0);

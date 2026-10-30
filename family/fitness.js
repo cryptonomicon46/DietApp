@@ -93,17 +93,22 @@ if (typeof document !== 'undefined') document.addEventListener('visibilitychange
 // "4 of 7 exercises · 12 of 21 sets" (sets too: a circuit finishes its exercises only at the end).
 const doneText = (w) => { const p = W.progress(w), s = W.summary(w); return `${p.exDone} of ${p.exercises} exercises · ${s.done} of ${s.sets} sets`; };
 const meta = (w) => { const n = W.progress(w).exercises, m = W.estMinutes(w); return `${n} exercise${n === 1 ? '' : 's'}${m ? ` · ~${m} min` : ''}`; };
-export function card(esc) {
-  const t = open(), last = history()[0];
-  if (t) {
-    const p = W.progress(t), going = t.status === 'active';
-    return `<button type="button" class="fx-today" data-fx="${going ? 'train' : 'today'}"><span class="grow"><b>${esc(t.title)}</b><small class="muted">${going ? esc(doneText(t)) : esc(meta(t))}</small></span><span class="go">${going ? 'Resume Workout' : "Today's Workout"} →</span></button>
-      ${going ? '' : '<button type="button" class="wide" data-fx="start">Start Workout →</button>'}
-      <button type="button" class="linkish small" data-fx="main">Fitness and history ›</button>`;
+// The Workout anchor on Health: planned → Start, in progress → Resume, done today → View summary
+// (kept for the rest of the day), or nothing planned → Add.
+export function doneToday() { return fx.log.find((w) => w.status === 'done' && w.date === fx.c.iso()) || null; }
+export function healthRow(esc) {
+  const t = open(), d = doneToday(), last = history()[0];
+  const row = (hot, ic, body, acts) => `<div class="hl-row2${hot ? ' hot' : ''}"><span class="hl-ic" aria-hidden="true">${ic}</span>${body}<div class="hl-acts">${acts}</div></div>`;
+  if (t?.status === 'active') {
+    const s = W.summary(t);
+    return { state: 'active', title: t.title, html: (hot) => row(hot, '🏋️', `<button type="button" class="hl-what" data-fx="train"><b>${esc(t.title)} · in progress</b><small>${esc(doneText(t))}${t.startedAt ? ` · ${Math.max(1, Math.round((Date.now() - t.startedAt) / 60000))} min` : ''}</small></button><span class="hl-bar hl-prog" aria-hidden="true"><i style="width:${s.sets ? Math.round((s.done / s.sets) * 100) : 0}%"></i></span>`, `<button type="button" class="grow" data-fx="train">▶ Resume ${esc(t.title)}</button>`) };
   }
-  return `<button type="button" class="wide" data-fx="add">＋ Add Workout</button>
-    ${last ? `<p class="tiny muted">Last: ${esc(last.title)} · ${esc(last.date || '')}</p>` : ''}
-    <button type="button" class="linkish small" data-fx="main">Fitness and history ›</button>`;
+  if (t) return { state: 'planned', title: t.title, html: (hot) => row(hot, '🏋️', `<button type="button" class="hl-what" data-fx="today"><b>${esc(t.title)} today</b><small>${esc(meta(t))} ›</small></button>`, `<button type="button" class="grow${hot ? '' : ' ghost'}" data-fx="start">Start workout</button>`) };
+  if (d) {
+    const s = W.summary(d);
+    return { state: 'done', title: d.title, html: () => row(false, '✅', `<button type="button" class="hl-what" data-fx="summary:${esc(d.id)}"><b>${esc(d.title)} · done</b><small>${[s.minutes ? `${s.minutes} min` : '', `${s.done} sets`, s.volume ? `${s.volume.toLocaleString()} lb` : ''].filter(Boolean).join(' · ')}</small></button>`, `<button type="button" class="ghost grow" data-fx="summary:${esc(d.id)}">View summary</button>`) };
+  }
+  return { state: 'none', title: '', html: () => row(false, '🏋️', `<div><b>No workout planned</b><small>${last ? `Last: ${esc(last.title)} · ${esc(last.date || '')}` : 'Build one, describe it or snap a photo'}</small></div>`, '<button type="button" class="ghost grow" data-fx="add">＋ Add workout</button>') };
 }
 
 // ---------- screens ----------

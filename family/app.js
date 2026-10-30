@@ -395,8 +395,26 @@ async function healthView() {
   const data = await openData(rec);
   if (data.locked) { $('#view').innerHTML = `${demoBanner()}<section class="card"><b>🔒 Locked on this device</b><p class="small muted">This device needs the family key to show your Health. Me › 🔐 Encryption.</p></section>`; return; }
   if (F) F.setLegacy(data, LIFT_NAMES);
-  const w = F?.state.today && F.state.today.status !== 'done' ? F.state.today.status : null;
-  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), hour: new Date().getHours(), workout: w, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), fitness: F ? F.card(esc) : undefined, devices: devicesLine() })}</div>`;
+  health.data = data;
+  if (mealMod) mealMod.then((M) => M.setData(data)).catch(() => {});
+  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), hour: new Date().getHours(), workout: F ? F.healthRow(esc) : undefined, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), devices: devicesLine() })}</div>`;
+}
+// 🍽 Logging food from Health (family/meals.js, loaded the first time you tap a meal action):
+// it changes your trackers the way a weigh-in does (editMine), with js/dayPlan.js — the same
+// plan and totals as Today's plan.
+const health = { data: null };
+let mealMod = null;
+function meals() {
+  mealMod ||= (async () => {
+    const M = await import(`./meals.js?v=${VERSION}`);
+    M.init({
+      api, esc, toast, openSheet, closeSheet, editMine, iso: () => isoLocal(), confirm: (q) => confirm(q),
+      refresh: () => (state.view === 'health' ? healthView() : null),
+      aiReady: async () => { const cfg = await api.liveConfig(); return cfg.missing || cfg.offline ? null : !!cfg.ai; },
+    });
+    return M;
+  })().catch((e) => { mealMod = null; throw e; });
+  return mealMod;
 }
 // ⚖️ Today's weight from Health: saved into your trackers (so Meals and Weight show it too) and
 // it ticks off the morning reminder.
@@ -421,7 +439,7 @@ function devicesLine() {
   let w = null;
   try { const owner = JSON.parse(localStorage.getItem('lp.g.owner')); w = owner && JSON.parse(localStorage.getItem(`lp.p.${owner}.devices`))?.whoop; } catch { /* none */ }
   const line = !w ? 'No device connected' : w.problem === 'reconnect' ? '⚠️ WHOOP needs reconnecting' : `WHOOP connected${w.lastSync ? ` · synced ${new Date(w.lastSync).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : ''}`;
-  return `<button type="button" class="hl-row" data-act="devices"><span class="grow">${esc(line)}</span><span class="go">Devices ›</span></button>`;
+  return `<button type="button" class="hl-line2" data-act="devices"><span>⌚ Devices <small class="muted">· ${esc(line)}</small></span><span class="go">›</span></button>`;
 }
 // 🏋️ Fitness (family/fitness.js): loaded with your workouts the first time it's needed.
 let fitMod = null;
@@ -4318,6 +4336,7 @@ document.addEventListener('click', (e) => {
   if (d.rd) return act(async () => (await RM()).onClick(t));
   // From Health: open Fitness on the right screen (Start Workout starts it and opens Train).
   if (d.lk) return act(async () => (await looks()).onClick(t));
+  if (d.ml) return act(async () => { const M = await meals(); if (health.data) M.setData(health.data); return M.onClick(t); });
   if (d.fx) return act(async () => { const F = await fit(); if (['open', 'main', 'add', 'today', 'train', 'start'].includes(d.fx) && state.view !== 'fitness') { if (d.fx === 'start') F.begin(); else F.state.view = { open: 'today', today: 'today', train: 'train' }[d.fx] || 'main'; return show('fitness'); } return F.onClick(t); });
   if (d.discuss) return act(() => discuss(d.discuss, d.dtitle || '💬', d.dbody || ''));
   if (d.watchlife) {
@@ -5159,3 +5178,5 @@ document.addEventListener('input', (e) => { if (e.target.dataset?.lke && e.targe
 document.addEventListener('pointerdown', (e) => { if (e.target.closest?.('[data-lkmark]') && lookMod) lookMod.then((L) => L.onPointer(e)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.rdq != null) RM().then((R) => R.onInput(e.target)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.fxe && fitMod) fitMod.then((F) => F.onInput(e.target)).catch(() => {}); });
+document.addEventListener('input', (e) => { if (e.target.dataset?.mle != null && mealMod) mealMod.then((M) => M.onInput(e.target)).catch(() => {}); });
+document.addEventListener('change', (e) => { if (e.target.dataset?.mlpick != null && mealMod) mealMod.then((M) => M.onPick(e.target)).catch(() => {}); });

@@ -64,6 +64,7 @@ import { readWorkout } from './workoutAi.js';
 import { askPlan } from './planCoach.js';
 import { lookRoutes, isLookBytes, forgetLooks, LOOK_IMG } from './look.js';
 import { nameItem, findPieces } from './lookAi.js';
+import { estimatePhoto, estimateText } from './dietAi.js';
 import { cleanFacts, cleanTurns } from '../js/planCoach.js';
 import { bookRoutes, bookLookupRoutes, bookCover, forgetReader } from './books.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
@@ -389,6 +390,33 @@ export async function familyApi(req, env, path, ctx = null) {
     } catch (e) {
       if (e instanceof GatewayError) return json({ error: e.status === 413 ? 'that picture is too large' : e.message }, e.status);
       return json({ error: "Claude couldn't read that picture just now" }, 502);
+    }
+  }
+
+  // ---- 🍽 Health: a meal from a photo or from "Tell me" (an estimate; nothing kept) ----
+  if (path === '/ai/diet/photo' && method === 'POST') {
+    if (!aiReady(env)) return json({ error: 'this needs Claude on the connector', off: true }, 501);
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(body.mime)) return json({ error: 'a JPEG, PNG or WebP picture' }, 400);
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(String(body.image || '').slice(-4096))) return json({ error: 'that picture didn\'t arrive whole' }, 400);
+    const hint = ['plate', 'label', 'menu', 'restaurant'].includes(body.hint) ? body.hint : undefined;
+    try {
+      return json(await aiCall({ db, purpose: 'diet.photo', input: { image: String(body.image), mime: body.mime, hint }, who: user.uid, underLimit },
+        async (payload) => estimatePhoto(await claude(env), payload, { model: env.PARSE_MODEL || 'claude-sonnet-5-5' })));
+    } catch (e) {
+      if (e instanceof GatewayError) return json({ error: e.status === 413 ? 'that picture is too large' : e.message }, e.status);
+      return json({ error: "Claude couldn't read that picture just now" }, 502);
+    }
+  }
+  if (path === '/ai/diet/text' && method === 'POST') {
+    if (!aiReady(env)) return json({ error: 'this needs Claude on the connector', off: true }, 501);
+    const text = String(body.text || '').trim();
+    if (text.length < 2) return json({ error: 'say what you had first' }, 400);
+    try {
+      return json(await aiCall({ db, purpose: 'diet.text', input: { text }, who: user.uid, underLimit },
+        async (payload) => estimateText(await claude(env), payload, { model: env.PARSE_MODEL || 'claude-sonnet-5-5' })));
+    } catch (e) {
+      if (e instanceof GatewayError) return json({ error: e.status === 413 ? 'that\'s a lot at once — try a shorter list' : e.message }, e.status);
+      return json({ error: "Claude couldn't read that just now" }, 502);
     }
   }
 

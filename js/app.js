@@ -230,7 +230,7 @@ function renderDayBar() {
   bar.hidden = false;
   const g = pastTally();
   bar.innerHTML = `
-    <div class="daybar-game"><span title="Days with your meals logged and calories near your target">✓ ${consistency(state.days, isoDate()).on} of the last 7 days on target</span></div>
+    <div class="daybar-game"><span title="Days with your meals logged and calories near your target">✓ ${consistency(state.days, isoDate()).on} of the last 7 days near target</span></div>
     <div class="daybar-nums">
       <span><small>Eaten</small><b>${Math.round(ate.kcal)}</b></span>
       <span class="${left < 0 ? 'over' : ''}"><small>${left < 0 ? 'Over' : 'Left'}</small><b>${Math.abs(left)}</b></span>
@@ -854,7 +854,7 @@ function preparedBody(meal, m) {
       <div class="seg eo-seg">${[0.5, 1, 1.5, 2].map((v) => `<button type="button" class="${(+e.servings || 1) === v ? 'on' : ''}" data-pmserv="${v}">${v === 0.5 ? '½' : v === 1.5 ? '1½' : v} ${v > 1 ? 'meals' : 'meal'}</button>`).join('')}</div>
       <div class="row wrap">${saved ? `<span class="small tone-good">✓ In your prepared meals</span><button type="button" class="linkish small" data-pmdel>Remove from list</button>` : '<button type="button" class="ghost small" data-pmsave>☆ Save to my prepared meals</button>'}</div>
       <p class="small muted">Use the numbers printed on the meal's label (per container). No calories listed? They're worked out from the macros (4 per g protein and carbs, 9 per g fat).</p>
-      ${over > 100 ? `<p class="small">About <b>${over} kcal</b> over this meal's target — keep the other meals a little lighter.</p>` : ''}
+      ${over > 100 ? `<p class="small">Plans change — this one is about <b>${over} kcal</b> more than the meal's share, and your other meals re-fit around it.</p>` : ''}
     </div>`;
 }
 function savePrepared(e) {
@@ -887,7 +887,7 @@ function eatOutBody(meal, m) {
         <div class="small muted" style="margin-top:6px">How much you ate</div>${seg('ate', EAT_OUT_ATE, e.ate || 1)}
         <p class="small muted">Restaurant food usually has more oil and butter than it looks, so these estimates lean generous.</p>`}
       ${drinksBlock(e)}
-      ${over > 100 ? `<p class="small">That's about <b>${over} kcal</b> over this meal's target. No stress: one meal doesn't make or break a week. Keep the rest of today light and protein-first.</p>` : ''}
+      ${over > 100 ? `<p class="small">Plans change — this one is about <b>${over} kcal</b> more than the meal's share. The rest of today re-fits around it.</p>` : ''}
     </div>`;
 }
 
@@ -1720,7 +1720,7 @@ function renderDeficit() {
 
   // Calm feedback: how many of the last 7 days were on target (no coins or streaks).
   const cons = consistency(state.days, today);
-  const kudos = cons.logged ? `${name ? `${esc(name)}, ` : ''}${cons.on} of the last 7 days on target.` : 'Log your meals and each day shows here.';
+  const kudos = cons.logged ? `${name ? `${esc(name)}, ` : ''}${cons.on} of the last 7 days near target.` : 'Log your meals and each day shows here.';
 
   const atGoal = d.plannedDeficit === 0;
   const gaining = d.plannedDeficit < 0;
@@ -2891,7 +2891,7 @@ function renderHome() {
   const name = firstName();
   $('#homeHello').innerHTML = `<div class="greeting">${name ? `${greetingWord()}, ${esc(name)}` : greetingWord()}</div>
     <div class="eyebrow">${new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
-    ${(() => { const data = personData(ownerId() || activeProfile().id); const d = healthDay(data, isoDate()); const n = strongStreak(data, isoDate()); return d.strong || n ? `<div class="small cheer-home">💪 ${d.strong ? 'Checked in today' : 'Weigh in and log your meals to keep it going'}${n > 1 ? ` · ${n}-day streak` : ''}</div>` : ''; })()}`;
+    ${(() => { const data = personData(ownerId() || activeProfile().id); const d = healthDay(data, isoDate()); const n = strongStreak(data, isoDate()); return d.strong ? '<div class="small cheer-home">💪 Checked in today</div>' : n ? '<div class="small cheer-home">💪 A weigh-in and your meals make today count too</div>' : ''; })()}`;
   // Dogs, calendar and notes don't need a diet profile.
   document.body.classList.toggle('famlinked', famLinked());
   $('#homeDogs').innerHTML = famLinked() ? '' : homeDogs();
