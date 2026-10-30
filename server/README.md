@@ -86,6 +86,30 @@ npx wrangler deploy
   a request, the API retries it on Anthropic's recommended fallback model automatically.
 - Without the key, everything else works; unparsed commands just show a hint.
 
+### 🚗 Drive times with live traffic (Google Maps, optional)
+
+"Ask about my day" can add drive times with traffic and opening hours when a question is about going
+somewhere ("When should I leave for Movement Santa Clara?"). The connector asks Google Maps Platform;
+without the key the app simply leaves drive times out.
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create (or pick) a project and turn on billing.
+2. **APIs & Services › Library:** enable **Places API (New)** and **Routes API**.
+3. **APIs & Services › Credentials › Create credentials › API key.** Under *API restrictions*, restrict it to
+   those two APIs. (Calls come from the connector, not the browser, so no website restriction.)
+4. Optionally set a budget alert in **Billing › Budgets & alerts**, and per-API quotas under **Quotas**.
+5. Give it to the connector and deploy:
+
+```sh
+cd server
+npx wrangler secret put GOOGLE_MAPS_KEY --name lean-plate-connect   # paste the key only into this prompt
+npx wrangler deploy
+```
+
+- Each day question about going somewhere makes up to 3 place searches (with opening hours) and up to 4 route-matrix
+  requests (now, plus up to three later departures). Each member can do this 30 times a day (`/travel`).
+- What goes to Google: your position rounded to about 100 m, the place names or addresses, and departure times —
+  never names, the calendar or the family key. Nothing is stored on the connector but the daily counter.
+
 
 ## Dog documents (vaccine records, PDFs, photos)
 

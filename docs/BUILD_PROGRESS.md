@@ -4,6 +4,35 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 🚗 Talk to Pawmily — T3 drive times with live traffic (2026-10-30, owner: "Use Google for the information and build it"; `v2/talk-travel` from `v2/talk-weather`)
+- **Built:**
+  - `server/travel.js` and `POST /travel`, signed in, 30 a day per member:
+    - Google Places API (New) Text Search finds each place (biased to within 50 km of you) with `currentOpeningHours`.
+    - Routes API `computeRouteMatrix` gets `TRAFFIC_AWARE` drive times: live for "now", Google's prediction for up to three later departures.
+    - Returns name, address, open now, today's hours, minutes and miles. Stores nothing. Returns 501 without `GOOGLE_MAPS_KEY`.
+  - `js/talkDay.js`:
+    - `travelAsked` (when, leave, drive, traffic, best time…);
+    - `destinations`: Movement gyms when "movement" and the town are both said, in any case (voice gives lowercase); capitalised places after at/to/near/from; your own calendar places. Never people, roles or clock times.
+    - `departures`: now, then up to three even hours from 7 AM to 8 PM;
+    - `travelFacts` → `dayContext.travel`.
+  - `family/app.js` `hereNow`: geolocation, asked only for such questions, rounded to ~100 m, capped at 15 s. A prompt left open doesn't count toward the browser's own timeout, so this was found and fixed in testing.
+  - Answer card: 🚗 *Place · N min now · Directions ›* (a Google Maps link).
+  - Instructions: say when to leave, keep the trip inside free time, respect opening hours, say plainly when drive times aren't available.
+  - Day consent asked again (`fam.talk.dayok3`); the card names Google Maps and location.
+- **Docs:** `server/README.md` has the key setup (enable Places API (New) and Routes API, restrict the key to them, `wrangler secret put GOOGLE_MAPS_KEY`). README, help guide, privacy page and ARCHITECTURE also updated.
+- **Tests:** `tests/travel.test.js`, 6 tests with a fake Google:
+  - question matching, the owner's spoken sentence, departures, input cleaning;
+  - the Places and Routes request shapes, and the facts built from the answers;
+  - the route: 401 signed out, 501 without the key, 400 on bad input, 429 at the limit, Google errors passed on plainly, nothing kept but the counter.
+- **Browser check** (local Pages and `wrangler dev`; Google and Claude stubbed; fake position): 390 px, 320 px dark, and location not allowed.
+  - The phone sent a rounded position, "Movement Santa Clara, 801 Martin Ave, Santa Clara" and 4 departures.
+  - The context carried hours and minutes.
+  - The Directions link opens Google Maps.
+  - With location not allowed: "Location is off…", no request to Google, and an answer still came back.
+  - No errors and no names in any run.
+- **Not verified:** real Google answers. developers.google.com is blocked from this environment, so the request shapes follow the published Places (New) and Routes API formats and are checked only against a stand-in. The first real call will show any mismatch: Google's error message is passed on as "Google Maps: …".
+- **State:** built; not merged, not deployed. Needs `GOOGLE_MAPS_KEY`, then `pawdeploy` (new route, new instructions). Merge after PR #11.
+
 ### 🗣️ Talk to Pawmily — T2a follow-up: weather, food and WHOOP numbers in day questions (2026-10-30, `v2/talk-weather` from `main` `a56143f`)
 - **Why:** the owner's live tries. *"best time for a run and indoor climbing at Movement Santa Clara"* got no weather (the day facts only used Look's weather cache, so usually none); *"meal plan for the rest of the day and my sleep and recovery"* got "I don't have a meal plan" and a recovery band without numbers.
 - **Built:**
