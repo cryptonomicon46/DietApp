@@ -1,0 +1,145 @@
+<!doctype html>
+<!-- 🍽 Simpler meal logging — design mockups only (nothing here is wired up). Uses the family app's
+     real style.css; each screen is chosen by #hash and photographed by shoot.mjs. Synthetic data. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../../family/style.css">
+<style>
+  body { margin: 0; background: var(--bg); }
+  .screen { display: none; min-height: 100vh; position: relative; }
+  .screen.on { display: block; }
+  .app { padding: 14px 16px 0; }
+  .apphead { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 10px; }
+  .apphead b { font-size: 1.35rem; }
+  .apphead span { display: flex; gap: 8px; }
+  .apphead i { width: 36px; height: 36px; border-radius: 50%; background: var(--card); border: 1px solid var(--line); display: inline-block; }
+  .title { font-size: 1.6rem; font-weight: 800; margin: 6px 0 12px; }
+  .eyebrow2 { font-size: .78rem; letter-spacing: .08em; font-weight: 800; color: var(--muted); margin: 8px 0 6px; }
+  .card2 { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  .shade::after { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,.38); }
+  .sheet2 { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; background: var(--card); border-radius: 22px 22px 0 0; padding: 16px 16px 26px; box-shadow: 0 -6px 24px rgba(0,0,0,.18); }
+  .sheet2 h2 { margin: 0; font-size: 1.2rem; }
+  .shead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .shead .x { font-size: 1.2rem; color: var(--muted); }
+  .tag { position: absolute; top: 8px; right: 10px; z-index: 3; background: #222; color: #fff; font: 700 .72rem/1 system-ui; padding: 5px 8px; border-radius: 999px; }
+  .ways { display: grid; gap: 10px; }
+  .way { display: grid; grid-template-columns: 40px minmax(0,1fr) 14px; gap: 10px; align-items: center; text-align: left; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; padding: 12px; min-height: 64px; font-weight: 700; }
+  .way .ic { font-size: 1.5rem; text-align: center; }
+  .way small { display: block; font-weight: 500; color: var(--muted); font-size: .82rem; margin-top: 2px; }
+  .way.talk { background: linear-gradient(180deg, #f7e7b0, #e9c45c); border-color: #d8b24a; color: #3b2f0b; }
+  .way.talk small { color: #5d4a14; }
+  .minis { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .minis button { background: var(--card); color: var(--ink); border: 1px solid var(--line); font-size: .86rem; padding: 8px 12px; min-height: 40px; }
+  .fld { display: grid; gap: 4px; font-size: .86rem; color: var(--muted); margin: 8px 0; }
+  .fld input { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+  .pic { height: 150px; border-radius: 14px; background: linear-gradient(135deg, #c99a63, #7a4f2d 55%, #3c5a37); display: grid; place-items: end start; color: #fff; font-weight: 700; padding: 10px; margin: 6px 0 10px; }
+  .callout { background: var(--brand-soft); border-radius: 12px; padding: 9px 11px; font-size: .85rem; margin: 8px 0; }
+  .when { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 4px; }
+  .alt { border: 2px dashed var(--warn); border-radius: 16px; padding: 6px; margin-top: 10px; }
+</style></head><body>
+
+<!-- 1. Health › Today: the food row, after (two buttons, not four) -->
+<section class="screen" id="row"><div class="tag">1 · Health, after</div><div class="app">
+  <div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div>
+  <div class="title">💪 Health</div>
+  <div class="eyebrow2">TODAY</div>
+  <div class="card2">
+    <div class="hl-row2"><span class="hl-ic">⚖️</span><div><b>Weight ✓ 160.0 lb</b><small>gaining 0.8 lb/week</small></div></div>
+    <div class="hl-row2 hot"><span class="hl-ic">🍽</span><div><b>Lunch is next</b><small>Whole eggs, egg whites, avocado · 581 kcal ›</small></div>
+      <div class="hl-acts"><button class="grow">✓ As planned</button><button class="ghost grow">＋ Something else</button></div>
+      <div class="hl-meals"><button class="hl-meal on">✓ <b>Breakfast</b><small>399 kcal</small></button><button class="hl-meal next"><b>Lunch</b><small>581 kcal</small></button><button class="hl-meal on">✓ <b>Snack</b><small>314 kcal</small></button><button class="hl-meal"><b>Dinner</b><small>920 kcal</small></button><a class="hl-meal all">All meals ›</a></div>
+    </div>
+    <div class="hl-row2"><span class="hl-ic">🏋️</span><div><b>No workout planned</b><small>Last: Full body circuit · 3 rounds</small></div></div>
+  </div>
+</div></section>
+
+<!-- 2. "Something else" — one sheet with every other way, Talk first -->
+<section class="screen shade" id="other"><div class="tag">2 · Something else</div><div class="app">
+  <div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div><div class="title">💪 Health</div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>Log lunch</h2><span class="small muted">Lunch ▾ &nbsp; <span class="x">✕</span></span></div>
+    <div class="ways">
+      <button class="way talk"><span class="ic">🎙️</span><span>Say what you had<small>"Two eggs and a slice of sourdough" — Talk to Pawmily</small></span><span>›</span></button>
+      <button class="way"><span class="ic">📷</span><span>From a photo<small>Choose one from Photos, or take one now</small></span><span>›</span></button>
+      <button class="way"><span class="ic">🍴</span><span>Ate out<small>Pick the closest dish and how much</small></span><span>›</span></button>
+      <button class="way"><span class="ic">📦</span><span>Packaged<small>The numbers from the label</small></span><span>›</span></button>
+    </div>
+    <div class="minis"><button>🔁 Same as yesterday</button><button>🍷 Drinks</button><button>🥑 Low-carb today</button></div>
+  </div>
+</section>
+
+<!-- 3. Photo — Photos first, camera second, and when you ate it -->
+<section class="screen shade" id="photo"><div class="tag">3 · From a photo</div><div class="app">
+  <div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div><div class="title">💪 Health</div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>📷 From a photo</h2><span class="x">✕</span></div>
+    <p class="small" style="margin:0 0 10px">Your plate, a restaurant dish or a menu with calories. A photo from earlier is fine.</p>
+    <div class="ml-primary"><button>🖼 Choose from Photos</button><button class="ghost">📷 Take a photo now</button></div>
+    <div class="ml-label small" style="margin-top:12px">When did you eat it?</div>
+    <div class="when"><button class="chip on">Lunch</button><button class="chip">Breakfast</button><button class="chip">Snack</button><button class="chip">Dinner</button></div>
+    <div class="when"><button class="chip on">Today</button><button class="chip">Yesterday</button></div>
+    <p class="tiny muted" style="margin-top:10px">Only the picture goes to Claude (Anthropic) to estimate it — redrawn on your phone first, so no location or camera details. It isn't kept.</p>
+  </div>
+</section>
+
+<!-- 4. Photo → the estimate (foods you can resize, like Tell me) -->
+<section class="screen shade" id="photoest"><div class="tag">4 · Photo estimate</div><div class="app">
+  <div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>📷 Estimate</h2><span class="small muted">Lunch · today &nbsp;<span class="x">✕</span></span></div>
+    <div class="pic">photo from 12:41 PM</div>
+    <div class="ml-est">
+      <div class="ml-ei"><span><b>Grilled salmon</b><small class="muted">170 g · 39P 0C 13F</small></span><span>350 kcal</span></div>
+      <div class="ml-ei"><span><b>White rice</b><small class="muted">1 cup · 158 g · 4P 45C 0F</small></span><span>203 kcal</span></div>
+      <div class="ml-ei"><span><b>Mixed veggies</b><small class="muted">1 cup · 100 g · 2P 4C 0F</small></span><span>19 kcal</span></div>
+    </div>
+    <p class="ml-tot" style="margin-top:8px"><span><b>572</b> kcal</span><span class="ml-p"><b>45</b> P</span><span class="ml-c"><b>49</b> C</span><span class="ml-f"><b>13</b> F</span></p>
+    <div class="ml-primary"><button>✓ Plan &amp; log · 572 kcal</button><div class="ml-two"><button class="ghost">Plan it</button><button class="ghost">✏️ Edit amounts</button></div></div>
+  </div>
+</section>
+
+<!-- 5. Ate out — one job: pick the closest dish (photo is its own way now) -->
+<section class="screen shade" id="out"><div class="tag">5 · Ate out</div><div class="app"><div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>🍴 Ate out</h2><span class="small muted">Lunch &nbsp;<span class="x">✕</span></span></div>
+    <label class="fld">Where (optional)<input placeholder="e.g. the Thai place"></label>
+    <div class="ml-label small">What's closest?</div>
+    <div class="chips"><button class="chip on">Grilled protein &amp; veggies</button><button class="chip">Protein, rice/potato &amp; veggies</button><button class="chip">Burrito or rice bowl</button><button class="chip">Stir-fry or curry with rice</button><button class="chip">Sushi (3 rolls)</button><button class="chip">Sandwich &amp; a side</button><button class="chip">Burger &amp; fries</button><button class="chip">Pizza (3 slices)</button><button class="chip">Pasta</button><button class="chip">More…</button></div>
+    <div class="ml-label small">How much</div>
+    <div class="seg"><button>Light</button><button class="on">Regular</button><button>Large</button></div>
+    <div class="seg"><button class="on">All</button><button>Most</button><button>Half</button></div>
+    <p class="ml-tot" style="margin-top:10px"><span><b>650</b> kcal</span><span class="ml-p"><b>50</b> P</span><span class="ml-c"><b>30</b> C</span><span class="ml-f"><b>35</b> F</span></p>
+    <div class="ml-primary"><button>✓ Log it</button></div>
+    <div class="minis" style="justify-content:center"><button>📷 Have a photo?</button><button>🧾 Menu shows calories</button><button>🍷 Drinks</button></div>
+  </div>
+</section>
+
+<!-- 6. Packaged — the only place macros are typed -->
+<section class="screen shade" id="pack"><div class="tag">6 · Packaged</div><div class="app"><div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>📦 Packaged</h2><span class="small muted">Lunch &nbsp;<span class="x">✕</span></span></div>
+    <button class="ghost wide">📷 Snap or choose the label</button>
+    <label class="fld">Name<input value="Chicken burrito bowl"></label>
+    <div class="ml-label small">Per serving, from the label</div>
+    <div class="grid4"><label class="fld">Calories<input value="450"></label><label class="fld">Protein g<input value="30"></label><label class="fld">Carbs g<input value="48"></label><label class="fld">Fat g<input value="14"></label></div>
+    <div class="ml-label small">Servings</div><div class="seg"><button>½</button><button class="on">1</button><button>1½</button><button>2</button></div>
+    <label class="check small" style="margin-top:10px"><input type="checkbox" checked> <span>Save it for next time</span></label>
+    <div class="ml-primary" style="margin-top:10px"><button>✓ Log 450 kcal</button></div>
+  </div>
+</section>
+
+<!-- 7. Alternative (not recommended): Talk right on the row, everything else under ⋯ -->
+<section class="screen" id="alt"><div class="tag">7 · Alternative</div><div class="app">
+  <div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div><div class="title">💪 Health</div><div class="eyebrow2">TODAY</div>
+  <div class="card2"><div class="hl-row2 hot"><span class="hl-ic">🍽</span><div><b>Lunch is next</b><small>Whole eggs, egg whites, avocado · 581 kcal ›</small></div>
+    <div class="hl-acts"><button class="grow">✓ As planned</button><button class="ghost">🎙️ Say it</button><button class="ghost hl-ico">⋯</button></div>
+    <div class="hl-meals"><button class="hl-meal on">✓ <b>Breakfast</b><small>399 kcal</small></button><button class="hl-meal next"><b>Lunch</b><small>581 kcal</small></button><button class="hl-meal"><b>Dinner</b><small>920 kcal</small></button><a class="hl-meal all">All meals ›</a></div>
+  </div></div>
+  <p class="small muted" style="margin:12px 4px">⋯ opens Photo · Ate out · Packaged · Same as yesterday · Drinks.</p>
+</div></section>
+
+<script>
+  const show = () => { const id = location.hash.slice(1) || 'row'; for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id); };
+  addEventListener('hashchange', show); show();
+</script>
+</body></html>
