@@ -11,7 +11,7 @@ const STEP = {
     do: { type: 'string', enum: DOS },
     title: { type: 'string' }, kind: { type: 'string', enum: ['movie', 'show', ''] }, status: { type: 'string', enum: ['want', 'watching', 'finished'] },
     author: { type: 'string' }, state: { type: 'string', enum: ['want', 'reading', 'finished'] }, recBy: { type: 'string', enum: ['partner', ''] },
-    meal: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'extra'] }, text: { type: 'string' }, chore: { type: 'string' },
+    meal: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'extra'] }, text: { type: 'string' }, plan: { type: 'boolean' }, chore: { type: 'string' },
   },
 };
 export const TALK_SCHEMA = { type: 'object', additionalProperties: false, required: ['steps', 'say'], properties: { steps: { type: 'array', items: STEP }, say: { type: 'string' } } };
@@ -22,7 +22,7 @@ Steps you may use (at most 4):
 - watch.status: a show or movie they already have moved to want / watching / finished. title as said.
 - read.add: add a book. title, author if said, state want / reading / finished, recBy "partner" when [partner] recommended it.
 - read.state: a book they have moved to want / reading / finished.
-- diet.log: food they ate. meal breakfast / lunch / dinner / extra (snacks and drinks), text = exactly the foods and amounts they said.
+- diet.log: food they ate, or plan to eat. meal breakfast / lunch / dinner / extra (snacks and drinks), text = exactly the foods and amounts they said, plan true only when they're planning ahead ("I'll have…", "plan dinner…").
 - fitness.describe: a workout they describe (exercises, sets, reps). text = their words.
 - fitness.lighter: make today's planned workout lighter.
 - ask.day: a question about their day or the next one — what's on, what [partner] or someone is up to, when they're free, the best time to fit something in. Use it alone; the app then asks you again with their calendar.

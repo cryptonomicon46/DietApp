@@ -22,9 +22,9 @@ const SEEN = 'fam.talk.seen';
 export const ICON = '<svg class="tk-ic" viewBox="0 0 32 32" aria-hidden="true"><path class="bub" d="M5 7.5A4.5 4.5 0 0 1 9.5 3h13A4.5 4.5 0 0 1 27 7.5v9a4.5 4.5 0 0 1-4.5 4.5H14l-6 5v-5h0A3 3 0 0 1 5 18z"/><rect class="mic" x="13.5" y="6.5" width="5" height="8" rx="2.5"/><path class="mic-s" d="M11 12a5 5 0 0 0 10 0M16 17v2"/></svg>';
 // Phrases to start from (they fill the box — you finish or change them), for the tab you're on.
 const EXAMPLES = {
-  home: ["What's on today?", 'When should I go for a run today?', 'Add Dune to our watchlist', 'Walked the dog'],
+  home: ["What's on today?", 'When should I go for a run today?', 'Add Dune to our watchlist', 'Walked the dogs', 'Fed the dogs dinner'],
   us: ["We're watching Severance now", 'Add Project Hail Mary to our reading list', 'I finished reading Piranesi'],
-  health: ['Log breakfast: two eggs and toast', 'Bench 3x8 at 135, rows 3x10 at 60', "Make today's workout lighter"],
+  health: ['Log 2 eggs and a slice of sourdough for breakfast', 'Plan dinner: salmon and rice', 'Log a packaged meal for lunch', 'How much protein is left today?', "Make today's workout lighter"],
 };
 const WATCH = { want: 'Want to Watch', watching: 'Watching', finished: 'Watched', upnext: 'Up Next', dropped: 'Stopped' };
 const READ = { want: 'Want to Read', reading: 'Reading', finished: 'Finished', dropped: 'Stopped' };
@@ -208,7 +208,7 @@ function cardHtml(x, i) {
 
 // ---------- doing one (after your tap) ----------
 async function handOff(s) {
-  if (s.do === 'diet.log') return c.dietTell(s.meal, s.text);
+  if (s.do === 'diet.log') return c.dietTell(s.meal, s.text, { plan: !!s.plan });
   if (s.do === 'fitness.describe') return c.fitDescribe(s.text);
   return c.fitLighter();
 }

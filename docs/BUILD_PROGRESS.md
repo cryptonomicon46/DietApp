@@ -4,6 +4,29 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 🍽 Meals you describe stay foods you can resize (2026-10-30; owner: "Build the v2 meals"; `v2/meals`, on top of `v2/talk-travel`)
+- **What changed** (brief: `docs/prompts/MEAL_EDITING_UX.md`; the owner asked to build rather than stop at mockups):
+  - A meal from Tell me or Talk is saved as **foods and grams** (`custom.meals[meal].items`), not one total, whenever every item is a known food.
+    - Claude's items are matched back to known foods on the phone where possible.
+    - Anything else is resized in servings.
+  - The estimate sheet has **✓ Plan & log** and **Plan it** (`planAs`). "Plan dinner: …" and "I'll have … for …" put Plan it first.
+  - **✏️ Edit amounts:** a slider and − / + per food, in its unit (eggs, slices; small units by halves, big ones by about an eighth) or in grams.
+  - "Edit the numbers" (a macros form) is gone. Macros are typed only for **packaged** meals: 📦 It's packaged, or "log a packaged meal…" (any numbers said are filled in).
+  - **Health:** every meal today is a chip (✓ logged / planned, kcal) plus *All meals ›*. A chip opens the meal sheet, where each food now has a slider with its unit and live totals. Saving a logged meal corrects it (`setGrams`).
+  - Talk suggestions: meal, packaged, plan and dog phrases.
+- **Tests:**
+  - `tests/mealestimate.test.js` (6): units and steps, Claude's items matched to foods, meals kept as foods, Plan it → log → resize corrects the log, packaged phrases, Talk's plan intent.
+  - `tests/health.test.js`: the meal chips, and "Lunch is next" showing the described meal.
+  - `npm test` 489 pass, 0 fail.
+- **Browser check** (390 px; 320 px in dark mode; local Pages, `wrangler dev` and a synthetic family):
+  - Talk "Log 2 eggs, a cup of egg whites, an avocado and a slice of sourdough for breakfast" read the four foods; editing amounts (2½ eggs, ½ avocado) gave 536 kcal; Plan & log worked.
+  - The Health chip showed ✓ Breakfast 536. Opening it showed four sliders; ¼ avocado updated the totals live; Save worked.
+  - "Plan dinner: salmon and rice" put Plan it first and planned dinner.
+  - "Log a packaged meal for lunch" opened the label form.
+  - No page overflow and no errors.
+- **Not done:** Undo after Plan & log (Unlog is under More in the meal sheet). The "Replace logged lunch?" prompt: describing a logged meal again replaces it.
+- **State:** built; not merged. The phone reads the common planning phrases itself. For Claude to mark `plan` on requests it reads, the connector needs `pawdeploy` from this branch (the Talk instructions changed).
+
 ### 🔊 Talk — answers read aloud, and the extensibility seams (2026-10-30; owner: "I'd also like Claude to speak back the responses", then the voice/agent/integration note; on `v2/talk-travel`, PR #12)
 - **Read aloud:**
   - Answers to spoken questions are read by the phone's own voice: day answers (plus "I found N times…"), the "can't do that" line, errors, and "Here it is — check it and tap to confirm" for cards.

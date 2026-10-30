@@ -100,6 +100,12 @@ export function foodState(data = {}, today, hour = 12) {
     set: true, next, meal: next ? MEAL_NAMES[next] : null,
     title: next && plan?.[next] ? plan[next].title : '', kcal: next && plan?.[next] ? plan[next].totals.kcal : null,
     logged: MAIN_MEALS.filter((m) => log.meals?.[m]).length, done: !!log.done, left,
+    // Every meal today, one tap from Health: what you logged, else what's planned (yours if you
+    // described it — a meal from Talk or Tell me becomes that meal's plan).
+    meals: ['breakfast', 'lunch', 'snack', 'dinner'].map((m) => {
+      const l = log.meals?.[m], p = plan?.[m];
+      return l ? { meal: m, logged: true, title: l.title, kcal: l.kcal } : p?.totals ? { meal: m, logged: false, title: p.title, kcal: p.totals.kcal } : null;
+    }).filter(Boolean),
     eaten: d.today?.kcal || 0, protein: d.today?.p || 0,
     // A bigger meal than planned, with meals still to come: until the next meal's time comes,
     // the rest of today can adapt; then it's the next meal again (already re-fitted).
@@ -128,6 +134,7 @@ export function nextUp({ hour = 12, weighed = false, set = true, food = {}, work
 }
 
 const r0 = (n) => Math.round(n || 0);
+const mealList = (f, esc) => (f.meals?.length ? `<div class="hl-meals" role="list" aria-label="Today's meals">${f.meals.map((m) => `<button type="button" role="listitem" class="hl-meal${m.logged ? ' on' : ''}${m.meal === f.next ? ' next' : ''}" data-ml="open:${m.meal}" aria-label="${esc(MEAL_NAMES[m.meal])}: ${esc(m.title)}, ${r0(m.kcal)} kcal, ${m.logged ? 'logged' : 'planned'} — open to change">${m.logged ? '✓ ' : ''}<b>${esc(MEAL_NAMES[m.meal])}</b><small>${r0(m.kcal)} kcal</small></button>`).join('')}<a class="hl-meal all" href="../#today">All meals ›</a></div>` : '');
 function foodRow(f, esc, hot) {
   const cls = `hl-row2${hot ? ' hot' : ''}`;
   if (!f.set) return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><div><b>Your food plan</b><small>Set your goal and Health shows each meal here.</small></div><div class="hl-acts"><a class="btn grow" href="../#weight">Set up Diet</a></div></div>`;
@@ -135,14 +142,14 @@ function foodRow(f, esc, hot) {
   if (f.off) {
     return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><div><b>${esc(MEAL_NAMES[f.off.meal])} logged ✓</b><small>${esc(f.off.title)} · ${r0(f.off.kcal)} kcal</small></div>
       <p class="hl-ctx">Plans change. ${leftText(f.left)}</p>
-      <div class="hl-acts"><button type="button" class="grow" data-ml="adjust">Adjust the rest of today</button><button type="button" class="ghost" data-ml="fits">What fits?</button></div></div>`;
+      <div class="hl-acts"><button type="button" class="grow" data-ml="adjust">Adjust the rest of today</button><button type="button" class="ghost" data-ml="fits">What fits?</button></div>${mealList(f, esc)}</div>`;
   }
   if (f.next) {
-    return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><button type="button" class="hl-what" data-ml="open:${f.next}"><b>${esc(f.meal)} is next</b><small>${f.title ? `${esc(f.title)} · ${r0(f.kcal)} kcal` : 'See it in Today\'s plan'}${f.refit ? ' · re-fitted to what\'s left' : f.logged ? ` · ${f.logged} of 3 logged` : ''} ›</small></button>${acts(f.next)}</div>`;
+    return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><button type="button" class="hl-what" data-ml="open:${f.next}"><b>${esc(f.meal)} is next</b><small>${f.title ? `${esc(f.title)} · ${r0(f.kcal)} kcal` : 'See it in Today\'s plan'}${f.refit ? ' · re-fitted to what\'s left' : f.logged ? ` · ${f.logged} of 3 logged` : ''} ›</small></button>${acts(f.next)}${mealList(f, esc)}</div>`;
   }
   if (f.done) return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><div class="hl-mini"><span><b>Food</b> <span class="good">✓ done for today</span></span><button type="button" class="linkish small" data-ml="undone">Undo</button></div></div>`;
   return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><div><b>${f.logged} meals logged</b><small>${r0(f.eaten).toLocaleString()} kcal · ${r0(f.protein)} g protein${f.left && f.left.kcal > 60 ? ` · ~${r0(f.left.kcal)} kcal left` : ''}</small></div>
-    <div class="hl-acts"><button type="button" class="grow" data-ml="done">✓ Done logging today</button><button type="button" class="ghost" data-ml="extra">＋ Add</button></div></div>`;
+    <div class="hl-acts"><button type="button" class="grow" data-ml="done">✓ Done logging today</button><button type="button" class="ghost" data-ml="extra">＋ Add</button></div>${mealList(f, esc)}</div>`;
 }
 
 // The Health screen. `ctx`: { esc, sharing (one line), today, hour, workout: { state: 'planned' |
