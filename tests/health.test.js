@@ -139,6 +139,10 @@ test('⌚ WHOOP on Health: nothing without WHOOP, reconnect asked once, "Not sco
   const ctx = { recovery: { state: 'scored', score: 30, band: 'red', relative: 'lower' }, sleep: { state: 'scored', hours: 6.2, neededHours: 7.9 }, strain: { today: 3.1, yesterday: 15.2 }, line: 'Recovery is lower than your usual.', lighterHint: true };
   h = whoopHtml({ ...ctx, lighter: { can: true } }, esc);
   assert.match(h, /30%/); assert.match(h, /lower than usual/); assert.match(h, /6.2 h/); assert.match(h, /of 7.9 h needed/); assert.match(h, /yesterday 15.2/);
+  // WHOOP's own order: Sleep (its performance %), Recovery, Strain.
+  const order = ['>Sleep<', '>Recovery<', '>Strain<'].map((k) => h.indexOf(k));
+  assert.ok(order[0] > 0 && order[0] < order[1] && order[1] < order[2], order.join());
+  assert.match(whoopHtml({ ...ctx, sleep: { ...ctx.sleep, performance: 74 }, lighter: {} }, esc), /74%<\/b><small>6.2 h of 7.9 h<\/small>/);
   assert.match(h, /data-fx="lighter"/);
   assert.ok(!whoopHtml({ ...ctx, lighter: { can: false } }, esc).includes('data-fx="lighter"'), 'no workout today, no offer');
   h = whoopHtml({ ...ctx, lighter: { can: true, applied: 'lighter' } }, esc);

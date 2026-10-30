@@ -150,7 +150,7 @@ export function recoveryContext(daily = {}, today) {
 export function lastDays(daily = {}, today, n = 7) {
   return Array.from({ length: n }, (_, i) => addDays(today, -i)).map((d) => {
     const e = daily[d], r = e?.whoop?.recovery, s = sleepNumbers(e?.whoop?.sleep);
-    return { date: d, state: stateOf(r), recovery: r?.score_state === 'SCORED' ? r.score?.recovery_score ?? null : null, band: scoreBand(r?.score?.recovery_score), sleepHours: s?.hours ?? null, strain: strainOf(e) };
+    return { date: d, state: stateOf(r), recovery: r?.score_state === 'SCORED' ? r.score?.recovery_score ?? null : null, band: scoreBand(r?.score?.recovery_score), sleepHours: s?.hours ?? null, sleepPerf: s?.performance != null ? Math.round(s.performance) : null, strain: strainOf(e) };
   });
 }
 
