@@ -1431,3 +1431,39 @@ details.more summary { cursor: pointer; padding: 8px 0; color: var(--muted); }
 .fx-zones .z3 { background: #facc15; } .fx-zones .z4 { background: #fb923c; } .fx-zones .z5 { background: #ef4444; }
 .fx-changes { margin: 6px 0; padding-left: 20px; display: grid; gap: 3px; }
 .fx-hist.on { outline: 2px solid var(--brand); }
+/* 🗣️ Talk to Pawmily: a golden bar on Home, a small gold circle on the other tabs, and the sheet. */
+.tk-ic .bub { fill: #fffbe8; stroke: #8a5a00; stroke-width: 1.6; } .tk-ic .mic { fill: #8a5a00; } .tk-ic .mic-s { fill: none; stroke: #8a5a00; stroke-width: 1.8; stroke-linecap: round; }
+.talk-bar, .talk-fab { border: 0; padding: 4px; background: conic-gradient(from 200deg, #f6e7b0, #b98a1e, #fff3c4, #8a6410, #f3d77a, #b98a1e, #f6e7b0); box-shadow: 0 6px 16px rgba(120,80,0,.25); cursor: pointer; }
+.talk-bar .in, .talk-fab .in { background: radial-gradient(120% 140% at 30% 20%, #fffbe2 0%, #ffe680 18%, #ffc928 48%, #e09b00 78%, #a56c00 100%); box-shadow: inset 0 -5px 9px rgba(120,70,0,.35), inset 0 4px 7px rgba(255,255,255,.65); }
+.talk-bar { display: block; width: 100%; border-radius: 999px; margin: 2px 0 14px; text-align: left; }
+.talk-bar .in { display: flex; align-items: center; gap: 12px; border-radius: 999px; padding: 6px 18px 6px 8px; min-height: 52px; color: #4f3400; }
+.talk-bar .tk-ic { width: 36px; height: 36px; flex: none; }
+.talk-bar b { display: block; font-size: 1.02rem; font-weight: 900; text-shadow: 0 1px 0 rgba(255,248,210,.8); }
+.talk-bar small { display: block; font-size: .8rem; font-weight: 600; color: #6e4c00; }
+.talk-bar:focus-visible, .talk-fab:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+.talk-fab { position: fixed; z-index: 7; right: 16px; bottom: calc(var(--nav-h, 64px) + 14px + env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 50%; padding: 3px; transition: transform .2s ease, opacity .2s ease; }
+.talk-fab .in { display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%; }
+.talk-fab .tk-ic { width: 30px; height: 30px; }
+.talk-fab.away, .talk-fab.typing { transform: translateY(90px); opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .talk-fab { transition: none; } }
+@media (min-width: 1100px) { .talk-fab { right: 28px; bottom: 28px; } }
+/* the sheet */
+.tk-sheet .tk-top h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1.15rem; }
+.tk-sheet .tk-top .tk-ic { width: 28px; height: 28px; }
+.tk-first { background: var(--brand-soft); border-radius: 12px; padding: 10px 12px; font-size: .86rem; margin: 10px 0 0; }
+.tk-form { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; }
+.tk-form textarea { flex: 1; field-sizing: content; min-height: 50px; max-height: 140px; font: inherit; padding: 12px 14px; border-radius: 16px; border: 2px solid var(--brand); background: var(--card); color: var(--ink); resize: none; }
+.tk-form button { min-height: 50px; min-width: 50px; padding: 0 14px; font-size: 1.1rem; }
+.tk-hint { margin: 6px 2px 0; }
+.tk-ex { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 2px; }
+.tk-ex button { background: var(--card); color: var(--ink); border: 1px solid var(--line); font-weight: 600; font-size: .88rem; padding: 8px 12px; min-height: 40px; text-align: left; }
+.tk-card { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); padding: 12px 14px; margin: 10px 0 0; }
+.tk-card > b { font-size: 1rem; } .tk-card small { font-size: .84rem; }
+.tk-card > button { justify-self: start; min-height: 44px; }
+.tk-seg { margin: 2px 0; }
+.tk-pick { display: grid; gap: 6px; }
+.tk-pick button { justify-content: flex-start; text-align: left; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-height: 48px; font-weight: 600; }
+.tk-rec { display: flex !important; flex-direction: row; gap: 10px; align-items: center; justify-content: flex-start; font-size: .9rem; font-weight: 600; margin: 0; }
+.tk-rec input[type=checkbox] { width: 20px; height: 20px; min-height: 0; flex: none; margin: 0; }
+.tk-done { color: var(--brand); font-weight: 700; }
+body.has-talk main { padding-bottom: 96px; }

@@ -65,6 +65,7 @@ import { askPlan } from './planCoach.js';
 import { lookRoutes, isLookBytes, forgetLooks, LOOK_IMG } from './look.js';
 import { nameItem, findPieces } from './lookAi.js';
 import { estimatePhoto, estimateText } from './dietAi.js';
+import { routeTalk } from './talkAi.js';
 import { cleanFacts, cleanTurns } from '../js/planCoach.js';
 import { bookRoutes, bookLookupRoutes, bookCover, forgetReader } from './books.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
@@ -405,6 +406,21 @@ export async function familyApi(req, env, path, ctx = null) {
     } catch (e) {
       if (e instanceof GatewayError) return json({ error: e.status === 413 ? 'that picture is too large' : e.message }, e.status);
       return json({ error: "Claude couldn't read that picture just now" }, 502);
+    }
+  }
+  // 🗣️ Talk to Pawmily (T1): one request the phone couldn't read itself → steps it knows, or a line.
+  if (path === '/ai/talk' && method === 'POST') {
+    if (!aiReady(env)) return json({ error: 'this needs Claude on the connector', off: true }, 501);
+    const text = String(body.text || '').trim();
+    if (text.length < 2) return json({ error: 'say what you need first' }, 400);
+    const tab = ['home', 'us', 'calendar', 'threads', 'health', 'fitness', 'watch', 'read', 'me'].includes(body.tab) ? body.tab : 'home';
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(body.today || '') ? body.today : '';
+    try {
+      return json(await aiCall({ db, purpose: 'talk.route', input: { text, tab, today }, who: user.uid, underLimit },
+        async (payload) => routeTalk(await claude(env), payload, { model: env.PARSE_MODEL || 'claude-sonnet-5-5' })));
+    } catch (e) {
+      if (e instanceof GatewayError) return json({ error: e.status === 413 ? "that's a lot at once — try one thing" : e.message }, e.status);
+      return json({ error: "Pawmily couldn't read that just now" }, 502);
     }
   }
   if (path === '/ai/diet/text' && method === 'POST') {

@@ -206,6 +206,13 @@ async function checkClaude() {
   const box = document.getElementById('fxReadBtns');
   if (box && fx.view === 'describe') box.innerHTML = readButtons();
 }
+// 🗣️ From Talk to Pawmily: Describe it, filled in and read (with Claude when it's on) — then the
+// usual review before anything becomes Today's Workout.
+export async function describeWith(text) {
+  fx.said = { text }; fx.view = 'describe'; fx.c.show();
+  if (fx.ai == null) fx.ai = await fx.c.aiReady().catch(() => null);
+  return fx.ai ? readWithClaude() : readSaid();
+}
 async function readSaid(note = '') {
   const text = (document.getElementById('fxSaid')?.value ?? fx.said?.text ?? '').trim();
   if (!text) return fx.c.toast('Type your workout first');

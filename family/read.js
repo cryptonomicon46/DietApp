@@ -151,6 +151,25 @@ async function addAs(s, f) {
   refresh();
 }
 function refresh() { if (state.view === 'read') renderRead(); else if (state.view === 'us') renderUsRead(); }
+// 🗣️ For Talk to Pawmily: find a book (yours first, then Open Library), add one, change your state,
+// and undo — the same records and calls as the screens above.
+const norm = (t) => String(t || '').toLowerCase().replace(/^(the|a|an)\s+/, '').replace(/[^a-z0-9]+/g, ' ').trim();
+export async function talkFind(title) {
+  await loadBooks();
+  const q = norm(title), have = rd.books.filter((b) => !b.locked && (norm(b.title) === q || (q.length > 3 && norm(b.title).startsWith(q))));
+  if (have.length) return { have: have.map((b) => ({ id: b.id, title: b.title, author: B.authorLine(b), state: mine(b.id)?.s || null })) };
+  const r = await api.get(`/books/search?q=${encodeURIComponent(title)}`).catch(() => ({ results: [] }));
+  return { results: (r.results || []).slice(0, 3) };
+}
+export async function talkAdd(pick, s, recBy = '') {
+  const book = B.normalizeBook({ ...pick, ...(recBy ? { recBy } : {}) });
+  const st = { s, f: 'read', ...(s === 'reading' ? { start: isoLocal() } : s === 'finished' ? { done: isoLocal() } : {}) };
+  const r = await api.post(P(), { body: await lock(book), state: st });
+  await loadBooks(true); refresh();
+  return r.book?.id || null;
+}
+export async function talkSetState(id, s) { const before = mine(id)?.s || null; await setMine(id, { s }); refresh(); return before; }
+export async function talkUndoAdd(id) { await api.del(`${P()}/${id}`); await loadBooks(true); refresh(); }
 
 // ---------- a book's details ----------
 export function detail(id) {
@@ -163,7 +182,7 @@ export function detail(id) {
   const prog = st?.p || {};
   const unit = prog.page ? 'page' : prog.ch ? 'ch' : prog.min ? 'min' : 'pct';
   openSheet(`<div class="row between"><h2>${E(b.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
-    <div class="bk-pick">${coverImg(b, 'M', 'bk-cov-m')}<div><p class="small">${E(B.authorLine(b))}${b.year ? ` · ${b.year}` : ''}</p>${B.seriesLine(b) ? `<p class="small">📚 ${E(B.seriesLine(b))}</p>` : ''}${b.genres?.length ? `<p class="tiny muted">${E(b.genres.join(' · '))}</p>` : ''}${b.audio?.narrator ? `<p class="tiny muted">🎧 Narrated by ${E(b.audio.narrator)}</p>` : ''}</div></div>
+    <div class="bk-pick">${coverImg(b, 'M', 'bk-cov-m')}<div><p class="small">${E(B.authorLine(b))}${b.year ? ` · ${b.year}` : ''}</p>${B.seriesLine(b) ? `<p class="small">📚 ${E(B.seriesLine(b))}</p>` : ''}${b.genres?.length ? `<p class="tiny muted">${E(b.genres.join(' · '))}</p>` : ''}${b.audio?.narrator ? `<p class="tiny muted">🎧 Narrated by ${E(b.audio.narrator)}</p>` : ''}${b.recBy && member(b.recBy) ? `<p class="tiny muted">💬 Recommended by ${E(firstName(member(b.recBy).name))}</p>` : ''}</div></div>
     ${others.map((m) => `<p class="small">${E(firstName(m.name))}: ${E(B.stateLine(rd.state[id][m.id], b))}</p>`).join('')}
     <h3 class="card-h">You</h3>
     <div class="seg" role="group" aria-label="Your status">${seg('want', 'Want to Read')}${seg('reading', 'Reading')}${seg('finished', 'Finished')}</div>

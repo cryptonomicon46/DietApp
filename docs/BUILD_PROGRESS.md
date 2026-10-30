@@ -1,8 +1,46 @@
 # OurPawmily Build Progress
 
-Last update: 2026-10-30 — 🗣️ Talk to Pawmily T0 (mockups + action registry, design stop) on `v2/talk-t0` from `main` `5910e8a`. Health 2 Phase B merged (PR #7 `5c9e5f2`, PR #8 `5910e8a`) and deployed (connector `37c7ea1c…` from `v2/health-2b` head, Pages from `main`; reported by the user) and checked on the owner's real WHOOP data. Health 2 Phase A merged as PR #6 (`aa4fe63`) and deployed (reported by the user). Earlier: 👔 Look MVP (L0–L6) on `v2/look-mvp` from `main` `f333274` (Health UX merged as PR #4 and deployed, reported by the user). Earlier: Health/Fitness/Diet UX (H1–H12 with amendments) on `v2/health-ux`. Phases 4–11 and the Describe-it change are merged to `main` (PR #2 `d94c25f`, PR #3 `e9708af`) and deployed (reported by the user).
+Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for review) on `v2/talk-t0` from `main` `5910e8a`, after T0 (mockups + action registry). Health 2 Phase B merged (PR #7 `5c9e5f2`, PR #8 `5910e8a`) and deployed (connector `37c7ea1c…` from `v2/health-2b` head, Pages from `main`; reported by the user) and checked on the owner's real WHOOP data. Health 2 Phase A merged as PR #6 (`aa4fe63`) and deployed (reported by the user). Earlier: 👔 Look MVP (L0–L6) on `v2/look-mvp` from `main` `f333274` (Health UX merged as PR #4 and deployed, reported by the user). Earlier: Health/Fitness/Diet UX (H1–H12 with amendments) on `v2/health-ux`. Phases 4–11 and the Describe-it change are merged to `main` (PR #2 `d94c25f`, PR #3 `e9708af`) and deployed (reported by the user).
 
 ## Current phase and task
+
+### 🗣️ Talk to Pawmily — T1 (authorized 2026-10-30 by choosing the placement — "Go with your recommendation the E1 and the small gold circle on the other tabs"; same branch)
+- **State: T1 built, tested and browser-verified. Stopped for review. Not merged, not deployed.** The connector must be deployed first (new `/ai/talk`); without it the phone's own reading still works and Claude-read requests say they couldn't be read.
+- **Decisions applied:**
+  - 1: the golden bar on Home plus a small gold circle on Us, Calendar, Threads, Health, Watch, Read and Look. The circle hides while scrolling down or typing, and in Fitness, chats and Me.
+  - 5: books get "Recommended by" (`recBy`, a member id).
+  - 7: no history of requests.
+  - Decisions 2–4 and 6 belong to T2/T3 and stay open. No confetti (owner).
+- **Built:**
+  - `js/talkParse.js`: the T1 step shapes (`watch.add` / `watch.status` / `read.add` / `read.state` / `diet.log` / `fitness.describe` / `fitness.lighter` / `care.log`), `tidySteps`, and `parseTalk`, the phone's own reader for everyday phrases.
+  - `server/talkAi.js` `routeTalk` (structured output, cleaned by the same `tidySteps`); gateway purpose `talk.route` (text ≤ 500, tab, today; 60/day); route `/ai/talk` (signed in, 501 without Claude).
+  - `family/talk.js`, the sheet, loaded lazily on the first tap:
+    - names → roles before sending (`toTokens`), and back for display;
+    - titles matched on the phone: Watch from the decrypted list; Read from your books, then Open Library;
+    - cards with Show/Movie, Which one?, Which book?, Recommended by, the chore picker;
+    - each card saves through the domain's own routes, then the sheet closes with an Undo toast;
+    - a meal, a workout or "lighter" opens that area's own preview (`meals.js tellWith`, `fitness.js describeWith`, the lighter sheet).
+  - `family/app.js`: `talkBar`, `talkFab`, the scroll/typing hide, the adapters. `family/read.js`: `talkFind` / `talkAdd` / `talkSetState` / `talkUndoAdd`, and "💬 Recommended by" in a book's details. `js/books.js`: `recBy`.
+- **Tests:** `npm test` 465 pass, 0 fail. `tests/talkparse.test.js` (5) covers:
+  - the phone's reader on every T1 phrase, and refusals for anything else;
+  - `tidySteps` against junk and unknown actions;
+  - every step maps to a registry action that affects no one else;
+  - the gateway fields are exactly text, tab and today;
+  - the `/ai/talk` route sends only tokenized words (no lists or names), keeps only steps it knows, writes a value-free audit line, and returns 400 / 501;
+  - `recBy` validation.
+- **Browser** (2026-10-30; local Pages + `wrangler dev` DEMO, seeded family; Open Library and Claude answers stubbed at the connector because this environment can't reach them). At 390 px, 320 px and dark, with no overflow and no page errors:
+  - Home bar → sheet (first-use note, examples);
+  - "Add Dune: Part Two to our watchlist" → card → Movie → Add → toast → Undo: shows 7 → 6, so the add was undone;
+  - "We finished Severance" → Watched; "walked the dog" → logged;
+  - the book with "Recommended by Pat" → added;
+  - an unreadable request went to Claude as "…for [partner] and me" (no name), giving a Watch card;
+  - "Log lunch: two eggs and toast" → Tell me already read (216 kcal);
+  - Us: circle shown; scroll down → away, scroll up → back; Us examples;
+  - Health: circle shown. Fitness: hidden.
+- **Performance** (same machine): start-up 14 requests, 0 duplicates, CLS 0.006 / 0, script 179 → 181 KB, cold first paint 1336 ms, warm 1072 ms, within budget. `family/talk.js` loads only on the first tap.
+- **Privacy:** what reaches Claude is the words with roles instead of names, the tab and the date. Lists, books, plans and food stay on the phone. Results are approved per card; the audit line holds no values; nothing is kept; no family key is involved beyond the existing sealed saves. "Recommended by" is sealed inside the book.
+- **Owner steps:** deploy the connector (`/ai/talk`), then merge.
+- **Not built:** T2 (calendar, proposals to Pat), T3 (places/travel), T4 (Plan my day).
 
 ### 🗣️ Talk to Pawmily — T0 (authorized 2026-10-30: "move on to the next phase, talk to pawmily"; branch `v2/talk-t0` from `main` `5910e8a`)
 - **State: T0 done — stopped for review (design stop, as with Checkpoint A). No UI wired, no AI calls, no new routes, nothing deployed.**

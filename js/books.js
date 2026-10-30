@@ -97,6 +97,8 @@ export function normalizeBook(o = {}) {
   b.subjects = (Array.isArray(o.subjects) ? o.subjects : []).map((g) => text(g, 60)).filter(Boolean).slice(0, 8);
   if (o.series?.name) { b.series = { name: text(o.series.name, 80) }; const n = +o.series.n; if (Number.isFinite(n) && n > 0 && n < 1000) b.series.n = n; }
   if (/^\/works\/OL\d+W$/.test(o.ol || '')) b.ol = o.ol;
+  // 💬 Who in the family recommended it (a member id), when someone said so — structured, not a note.
+  if (/^[a-z0-9]{2,16}$/.test(o.recBy || '')) b.recBy = o.recBy;
   if (o.audio && (o.audio.narrator || o.audio.minutes)) { b.audio = {}; if (o.audio.narrator) b.audio.narrator = text(o.audio.narrator, 80); const mn = int(o.audio.minutes, 1, 10000); if (mn) b.audio.minutes = mn; }
   return b;
 }

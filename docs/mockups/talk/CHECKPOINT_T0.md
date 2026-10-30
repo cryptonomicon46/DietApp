@@ -1,6 +1,6 @@
 # 🗣️ Talk to Pawmily — Checkpoint T0 (design, stop for review)
 
-**Status:** T0 only, authorized 2026-10-30 ("move on to the next phase, talk to pawmily").
+**Status (update):** decision 1 chosen — the golden bar on Home (E1, `flow.mjs`) and a small gold circle on the other tabs, no confetti; 5 and 7 as recommended; T1 built. **Original status:** T0 only, authorized 2026-10-30 ("move on to the next phase, talk to pawmily").
 - Built: mockups, plus the action list and its rules as tested code (`js/talkActions.js`, `tests/talk.test.js`).
 - Not built: nothing is wired to a screen, nothing calls Claude, and there are no new routes. Nothing is deployed.
 - Architecture: `docs/TALK_TO_PAWMILY.md`.
