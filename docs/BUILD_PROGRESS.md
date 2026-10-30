@@ -4,6 +4,16 @@ Last update: 2026-10-29 — 👔 Look MVP (L0–L6) on `v2/look-mvp` from `main`
 
 ## Current phase and task
 
+### 💪 Health 2 — N0 / Checkpoint A (authorized 2026-10-30 with product changes 1–11 and the Daily Habit addendum A1–A15; branch `v2/health-2` from `main` `a3fbe02`)
+- **State:** N0 done — audit, research, 27 mockups (390/320 px, light and dark), tap-count table, CORE NOW / SMALL ADDITION / FOLLOW-UP classification. **Stopped for product-owner review. Nothing implemented.**
+- **Report:** `docs/mockups/health-2/CHECKPOINT_A.md`; mockup source `docs/mockups/health-2/screens.mjs` (injected into the running app, photographed with Playwright against local Pages :8098 + `wrangler dev` :8787 DEMO, seeded family).
+- **Phases (once approved):** A = landing + N1–N4 (+ approved small additions) → verify → checkpoint; B = N5 WHOOP; then N6 Weekly balance (Fitness) and A11 weekly review as separate checkpoints.
+- **Findings:** Ate out and drinks already exist but sit two taps deep; the workout button is below the fold on Health; a completed workout is cleared from Health; last-time numbers are stored but not shown; Build-it starts with a superset; several adherence-judging strings (see report §1).
+- **Voice:** keyboard dictation → text only; OurPawmily never handles audio (report §3). No stop condition.
+- **Blocked item:** developer.whoop.com isn't reachable from this environment; WHOOP v2 field names to be confirmed at the start of Phase B.
+- **Tests:** `npm test` 413 pass, 0 fail (no code changed).
+- **Last safe commit:** `main` `a3fbe02` (deployed).
+
 ### 👔 Look MVP — L0–L6 (authorized 2026-10-29; branch `v2/look-mvp` from `main` `f333274`)
 - **Scope:** Look as a secondary destination (`family/#look`, Today · Closet · Saved), private per-member Closet, Add a Look / Add an item, on-device background removal, Find pieces, confirmation and same-piece suggestions, flat-lay boards from the person's own garments, Saved Looks, weather- and calendar-aware Top 3, Wear this, Swap with Undo, refinements, preference learning, wear history, Fit Check (Hit / Miss / reasons / Fix it / A vs B / Discuss), compact Calendar card, optional Home line. **Not built (not authorized):** Preview on Me / try-on / avatars / body models, shopping / Wishlist / retailers, casual bulk onboarding, public profiles. Do not merge or deploy; stop for review.
 - **L0 audit (2026-10-29):** Dress-for-today lived in `family/app.js` (`renderCalDress`, `dressHours`, `eventPlaces`) over `js/dress.js`; family photos are family-readable by id (`/photos/:id` → `f/<fid>/<id>`), so Closet pictures needed their own owner-only route; the AI gateway supports image purposes; `discuss(ref)` dedupes threads by a one-letter ref prefix; push kind `us` fits Fit Check. No blocking conflict. Baseline on `main` `f333274` (same machine): 14 start-up requests, 0 duplicates, CLS 0–0.007, start-up script 178 KB, cold paint ≈ 1284 ms (first run 2492 warm-up outlier), warm 1008–1024 ms.
