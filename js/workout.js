@@ -33,6 +33,7 @@ export function makeSet(o = {}) {
     bw: !!o.bw, time: int(o.time, MAX.time), distance: num(o.distance, MAX.distance), distUnit: DIST.includes(o.distUnit) ? o.distUnit : 'mi', done: !!o.done,
   };
   if (o.got && typeof o.got === 'object') s.got = { reps: int(o.got.reps, MAX.reps), weight: num(o.got.weight, MAX.weight), time: int(o.got.time, MAX.time), distance: num(o.got.distance, MAX.distance) };
+  if (o.asPlanned && s.done) s.asPlanned = true; // ticked with "log as planned", not typed in
   const u = okFields(o.uncertain, ['reps', 'weight', 'time', 'distance']);
   if (u.length) s.uncertain = u;
   return s;
@@ -136,7 +137,24 @@ export function logSet(w, bi, ii, si, got = {}) {
   if (c.status === 'planned') { c.status = 'active'; c.startedAt ||= Date.now(); }
   return c;
 }
-export function unlogSet(w, bi, ii, si) { const c = clone(w), s = c.blocks[bi].items[ii].sets[si]; s.done = false; delete s.got; return c; }
+export function unlogSet(w, bi, ii, si) { const c = clone(w), s = c.blocks[bi].items[ii].sets[si]; s.done = false; delete s.got; delete s.asPlanned; return c; }
+// ✓ All sets of one exercise, or every set still open: recorded as done with the planned reps
+// and weights (marked "as planned", so the history says so). Sets already ticked keep what you typed.
+export function logAll(w, bi, ii) {
+  let c = w;
+  c.blocks[bi].items[ii].sets.forEach((s, si) => { if (!s.done) { c = logSet(c, bi, ii, si); c.blocks[bi].items[ii].sets[si].asPlanned = true; } });
+  return c;
+}
+export function remaining(w) {
+  const out = [];
+  w.blocks.forEach((b, bi) => b.items.forEach((it, ii) => it.sets.forEach((s, si) => { if (!s.done) out.push({ bi, ii, si, name: it.name, set: s }); })));
+  return out;
+}
+export function logRemaining(w) {
+  let c = w;
+  w.blocks.forEach((b, bi) => b.items.forEach((_, ii) => { c = logAll(c, bi, ii); }));
+  return c;
+}
 export function complete(w, at = Date.now()) { const c = clone(w); c.status = 'done'; c.doneAt = at; c.startedAt ||= at; return c; }
 // A finished or saved workout as a fresh plan for another day (Repeat): targets kept, logs cleared.
 export function repeatOf(w, date) {
@@ -144,6 +162,41 @@ export function repeatOf(w, date) {
   Object.assign(c, { id: newId(), date, status: 'planned', source: 'repeat' }); delete c.startedAt; delete c.doneAt;
   for (const b of c.blocks) for (const it of b.items) for (const s of it.sets) { const g = s.got; s.done = false; delete s.got; if (g) { if (g.reps != null) s.reps = g.reps; if (g.weight != null) s.weight = g.weight; } }
   return normalize(c);
+}
+
+// 🧠 Last time: the most recent finished workout with the same exercise (by name), its sets as done.
+const same = (a, b) => String(a || '').trim().toLowerCase().replace(/\s+/g, ' ') === String(b || '').trim().toLowerCase().replace(/\s+/g, ' ');
+export function lastTime(history, name, notId = null) {
+  for (const w of history) {
+    if (w.id === notId || w.status !== 'done') continue;
+    for (const b of w.blocks || []) for (const it of b.items) if (same(it.name, name) && it.sets.some((x) => x.done)) return { date: w.date, sets: it.sets.filter((x) => x.done).map((x) => ({ ...x, ...(x.got || {}) })) };
+  }
+  return null;
+}
+// "40 × 8, 40 × 8, 40 × 7" (or "85 × 10 ×3" when they're all the same).
+export function lastText(l) {
+  if (!l?.sets.length) return '';
+  const one = (x) => (x.bw ? `${x.reps ?? '?'} reps` : x.reps != null && x.weight != null ? `${x.weight} × ${x.reps}` : setText(x));
+  const parts = l.sets.map(one);
+  return parts.every((p) => p === parts[0]) && parts.length > 1 ? `${parts[0]} ×${parts.length}` : parts.join(', ');
+}
+// 📈 A conservative next step: every planned set of a straight-sets exercise done at the planned
+// weight with at least the planned reps → a little more next time (+10 lb for a lower-body compound
+// lift, +5 lb otherwise; 5 / 2.5 kg). A suggestion only — nothing changes unless you accept it.
+const LOWER = /squat|deadlift|\brdl\b|leg press|hip thrust|lunge|split squat/i;
+export function progression(w) {
+  const out = [];
+  for (const b of w.blocks) {
+    if (b.items.length !== 1) continue;
+    const it = b.items[0], sets = it.sets;
+    if (!it.name || !sets.length || sets.some((x) => x.bw || x.weight == null || !x.reps)) continue;
+    const ok = sets.every((x) => x.done && !x.asPlanned && (x.got?.reps ?? x.reps) >= x.reps && (x.got?.weight ?? x.weight) >= x.weight);
+    const wt = Math.max(...sets.map((x) => x.weight));
+    if (!ok || sets.some((x) => x.weight !== wt)) continue;
+    const kg = sets[0].unit === 'kg', step = LOWER.test(it.name) ? (kg ? 5 : 10) : kg ? 2.5 : 5;
+    out.push({ name: it.name, from: wt, to: wt + step, unit: sets[0].unit, reps: sets[0].reps });
+  }
+  return out.slice(0, 2);
 }
 
 // Numbers for a card: exercises, sets done of planned, volume (reps × weight, in the set's unit → lb).

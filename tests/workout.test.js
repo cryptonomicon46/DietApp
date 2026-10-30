@@ -187,3 +187,38 @@ test('a program workout keeps its program day and exercise ids', () => {
   assert.equal(w.blocks[0].items[0].ref, 'ohp');
   assert.equal(W.normalize({ program: { day: 'lowercase' } }).program, undefined);
 });
+
+test('✓ All sets and "log remaining sets as planned": the plan is recorded as done, marked as planned, undo-able', async () => {
+  const W = await import('../js/workout.js');
+  let w = W.normalize({ title: 'Lower body', blocks: [{ items: [{ name: 'Leg curl', sets: [{ reps: 10, weight: 90 }, { reps: 10, weight: 90 }, { reps: 10, weight: 90 }] }] }, { items: [{ name: 'Bulgarian split squat', sets: [{ reps: 8, weight: 40 }, { reps: 8, weight: 40 }] }] }] });
+  w = W.logSet(w, 0, 0, 0, { reps: 9 });
+  assert.equal(W.remaining(w).length, 4);
+  const one = W.logAll(w, 0, 0);
+  assert.deepEqual(one.blocks[0].items[0].sets.map((s) => [s.done, s.asPlanned || false, s.got.reps]), [[true, false, 9], [true, true, 10], [true, true, 10]], 'what you typed stays; the rest as planned');
+  const all = W.logRemaining(w);
+  assert.equal(W.remaining(all).length, 0);
+  assert.equal(W.summary(all).done, 5);
+  assert.equal(W.normalize(all).blocks[1].items[0].sets[0].asPlanned, true, 'kept when saved and loaded');
+  assert.equal(W.unlogSet(all, 1, 0, 0).blocks[1].items[0].sets[0].asPlanned, undefined);
+});
+
+test('last time: the most recent finished workout with the same exercise, in one short line', async () => {
+  const W = await import('../js/workout.js');
+  const done = (id, date, sets) => W.normalize({ id, date, status: 'done', title: 't', blocks: [{ items: [{ name: 'Bench press', sets: sets.map(([r, wt]) => ({ reps: r, weight: wt, done: true, got: { reps: r, weight: wt } })) }] }] });
+  const hist = [done('b', '2026-10-28', [[10, 135], [10, 135], [8, 135]]), done('a', '2026-10-21', [[10, 130], [10, 130], [10, 130]])];
+  const l = W.lastTime(hist, 'bench  Press');
+  assert.equal(l.date, '2026-10-28');
+  assert.equal(W.lastText(l), '135 × 10, 135 × 10, 135 × 8');
+  assert.equal(W.lastText(W.lastTime(hist, 'Bench press', 'b')), '130 × 10 ×3', 'not the workout itself');
+  assert.equal(W.lastTime(hist, 'Squat'), null);
+});
+
+test('progression: only when every planned set was done at the planned weight and reps — and never from "as planned" ticks', async () => {
+  const W = await import('../js/workout.js');
+  const mk = (name, sets, extra = {}) => W.normalize({ blocks: [{ items: [{ name, sets: sets.map(([r, wt, gr]) => ({ reps: r, weight: wt, done: true, got: { reps: gr ?? r, weight: wt }, ...extra })) }] }] });
+  assert.deepEqual(W.progression(mk('Bench press', [[10, 135], [10, 135], [10, 135]])).map((p) => [p.from, p.to]), [[135, 140]]);
+  assert.deepEqual(W.progression(mk('Romanian deadlift', [[8, 185], [8, 185], [8, 185]])).map((p) => p.to), [195], 'lower-body compound: +10');
+  assert.deepEqual(W.progression(mk('Bench press', [[10, 135], [10, 135], [10, 135, 8]])), [], 'a set short: no');
+  assert.deepEqual(W.progression(mk('Bench press', [[10, 135], [10, 135]], { asPlanned: true })), [], 'ticked as planned: no evidence');
+  assert.deepEqual(W.progression(mk('Push-ups', [[15, null]])), []);
+});

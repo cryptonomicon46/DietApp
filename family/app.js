@@ -103,10 +103,17 @@ const me = () => fam()?.members.find((m) => m.id === fam().me);
 const member = (id) => fam()?.members.find((m) => m.id === id);
 
 // ---------- little helpers ----------
-function toast(text) {
+// undo: optional — the toast gets an Undo button and stays a little longer.
+function toast(text, undo) {
   const t = $('#toast');
   t.textContent = text; t.hidden = false;
-  clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 3200);
+  if (typeof undo === 'function') {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'toast-undo'; b.textContent = 'Undo';
+    b.addEventListener('click', (e) => { e.stopPropagation(); t.hidden = true; undo(); });
+    t.append(' ', b);
+  }
+  clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, typeof undo === 'function' ? 7000 : 3200);
 }
 const hue = (id = '') => HUES[[...id].reduce((a, c) => a + c.charCodeAt(0), 0) % HUES.length];
 function avatar(m, size = 40) {

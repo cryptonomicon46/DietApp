@@ -116,7 +116,7 @@ export function leftText(left, esc = (x) => x) {
 }
 // One quiet "Next: …" for the time of day, and which anchor it belongs to. Never a list.
 export function nextUp({ hour = 12, weighed = false, set = true, food = {}, workout = 'none', title = '' } = {}) {
-  if (workout === 'active') return { anchor: 'workout', text: `resume ${title || 'your workout'}` };
+  if (workout === 'active') return { anchor: 'workout', text: `resume ${title && title.length <= 18 ? title : 'your workout'}` };
   if (set && !weighed && hour < 11) return { anchor: 'weight', text: "log today's weight" };
   if (food.off) return { anchor: 'food', text: 'adjust the rest of today' };
   const [a, b] = MEAL_HOURS[food.next] || [];
