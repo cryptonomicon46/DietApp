@@ -10,10 +10,10 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
   - Fitness History listed only strength and circuit workouts (`family/fitness.js` `history()` filtered by `isStrength`); climbing, runs and rides were reduced to one "Also N other activities" line.
   - The header's *Over* is against the day's **target**, which already has the cut's deficit planned in (plus +250 kcal added back for the climb), not against calories burned.
 - **Fix:**
-  - `family/fitness.js`: History lists device activities too (`listed()`; minutes, kcal, *from your device*; open and rename). Strength-only features — "last time", 🔁 Do it again, Save it — still use `history()`.
+  - `family/fitness.js`: History lists device activities too (`listed()`; minutes, kcal, *from your device*; open and rename). Each day's light ones — walks, stretches, breathwork, anything under 20 min — are one *Everyday activity* row (`js/workout.js` `isLight`/`groupLight`; owner chose grouping, 2026-10-31); a day with one keeps it as is. Strength-only features — "last time", 🔁 Do it again, Save it — still use `history()`.
   - `js/app.js` header: *Over* → *Over plan*, plus a 🔥 line once food is logged: burned (a WHOOP total you typed, else WHOOP so far, else the day's estimate) and the deficit or surplus against it — e.g. *Burned 2,079 (WHOOP, so far) · 240 kcal deficit — over the plan, still a deficit*. Pure `burnSummary` in `js/dietDays.js`.
-- **Tests:** `tests/burn.test.js` (the owner's numbers; device climb is not strength). `npm test` 495 pass.
-- **Browser check** (390 px and 320 px dark; local Pages + `wrangler dev`, synthetic family with a WHOOP climb, a weightlifting and a run): History lists all three with minutes and kcal; the climb opens; the header shows the 🔥 line; no overflow, no errors.
+- **Tests:** `tests/burn.test.js` (the owner's numbers; device climb is not strength; the owner's Thursday — walk, hike, walk, stretch — grouped, climb/lift/long hike separate). `npm test` 496 pass.
+- **Browser check** (390 px and 320 px dark; local Pages + `wrangler dev`, synthetic family with a WHOOP climb, a weightlifting and a run): History lists the climb, lift and run with minutes and kcal, and Thursday's four light activities as one *Everyday activity · walking, hiking, stretching · 46 min · 209 kcal* row that opens to each; the climb opens; the header shows the 🔥 line; no overflow, no errors.
 - **Docs:** README (History, header), help guide.
 
 ### 🍽 Simpler meal logging (2026-10-30, `v2/meals-simplify` from `main`; mockups first in `docs/mockups/meals/`, then built after the owner's answers)

@@ -69,8 +69,9 @@ const matched = () => matchAll(fx.log, fx.device);
 const allDone = (withOthers = false) => { const hide = new Set([...matched().values()].map((m) => devId(m.device))); return [...fx.log, ...[...fx.legacy, ...(withOthers ? fx.others : [])].filter((x) => !fx.log.some((y) => y.id === x.id) && !hide.has(x.id))].filter((w) => w.status === 'done'); };
 const byDate = (a, b) => (b.date || '').localeCompare(a.date || '') || (b.doneAt || 0) - (a.doneAt || 0);
 const history = () => allDone().filter(W.isStrength).sort(byDate);
-// What History lists: strength work plus the device's other activities, one copy each.
-const listed = () => allDone(true).sort(byDate);
+// What History lists: strength work plus the device's other activities, one copy each, with each
+// day's light ones (walks, stretches, short bits) as one "Everyday activity" row.
+const listed = () => W.groupLight(allDone(true).sort(byDate));
 const open = () => (fx.today && fx.today.status !== 'done' ? fx.today : null);
 
 // ---------- saving (batched; never over a newer copy from another phone) ----------
@@ -160,7 +161,7 @@ function mainHtml() {
       ${fx.templates.length ? `<p class="small muted">Saved: ${fx.templates.slice(0, 6).map((w, i) => `<button type="button" class="linkish small" data-fx="tpl:${i}">${E(w.title)}</button>`).join(' · ')}</p>` : ''}
       ${programLine()}</section>
     <h3 class="wl-h">History</h3>
-    ${h.length ? h.map((w) => { const s = W.summary(w); return `<button type="button" class="card fx-hist" data-fx="hist:${E(w.id)}"><span class="grow"><b>${E(w.title)}</b><small class="muted">${E(w.date || '')}${w.source === 'device' ? ` · ${w.activity?.minutes ?? '?'} min${w.activity?.kcal ? ` · ${w.activity.kcal} kcal` : ''} · from your device` : ` · ${s.exercises} exercise${s.exercises === 1 ? '' : 's'} · ${s.done || s.sets} sets`}</small></span><span class="go">›</span></button>`; }).join('') : '<p class="small muted pad">Finished workouts show here.</p>'}`;
+    ${h.length ? h.map((w) => { const s = W.summary(w); return `<button type="button" class="card fx-hist" data-fx="hist:${E(w.id)}"><span class="grow"><b>${E(w.title)}</b><small class="muted">${E(w.date || '')}${w.source === 'device' ? `${w.group ? ` · ${E(w.activity.kind)}` : ''} · ${w.activity?.minutes ?? '?'} min${w.activity?.kcal ? ` · ${w.activity.kcal} kcal` : ''} · from your device` : ` · ${s.exercises} exercise${s.exercises === 1 ? '' : 's'} · ${s.done || s.sets} sets`}</small></span><span class="go">›</span></button>`; }).join('') : '<p class="small muted pad">Finished workouts show here.</p>'}`;
 }
 // Today's Workout: the plan, before and between training.
 const blockLabel = (b) => (b.items.length > 1 ? `${b.kind === 'circuit' ? '🔁 Circuit' : '🔗 Superset'} · ${b.rounds} round${b.rounds === 1 ? '' : 's'}` : '');
@@ -526,6 +527,13 @@ function undoLighter() {
 function histSheet(id) {
   const w = listed().find((x) => x.id === id);
   if (!w) return;
+  if (w.group) {
+    fx.c.openSheet(`<div class="row between"><h2>${E(w.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+      <p class="small muted">${E(w.date || '')} · ${w.activity.minutes} min${w.activity.kcal ? ` · ${w.activity.kcal} kcal` : ''} · from your device</p>
+      ${w.group.map((x) => `<p class="small"><b>${E(x.title)}</b> · ${x.activity?.minutes ?? '?'} min${x.activity?.kcal ? ` · ${x.activity.kcal} kcal` : ''}</p>`).join('')}
+      <p class="tiny muted">Walks, stretches and short activities are grouped here. They all count in your Diet calories.</p>`);
+    return;
+  }
   const s = W.summary(w);
   const lines = w.blocks.flatMap((b) => b.items.map((it) => `<p class="small"><b>${E(it.name || '?')}</b>${it.perSide ? ' <small class="muted">each side</small>' : ''} ${it.sets.map((x) => (x.done ? `${E(didText(x))}${changed(x) ? ` <small class="muted">(plan ${E(planText(x))})</small>` : ''}` : `<s class="muted" title="Not done">${E(planText(x)) || '—'}</s>`)).join(' · ')}</p>`));
   fx.c.openSheet(`<div class="row between"><h2>${E(w.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
