@@ -63,3 +63,29 @@ test('cooking counts, and a family can add (and retire) its own chores', async (
   await call(`/families/${family.fid}/chores/custom`, token, 'PUT', { chores: [], hidden: [] });
   assert.equal((await call(C, token, 'POST', { date: '2026-10-24', kind: 'trash' })).status, 200);
 });
+
+test("a chore's new points count from now on; what's already logged keeps the points it earned", async () => {
+  const m = new Map();
+  const env = { DEMO: true, HOUSEHOLD: { get: async (k) => m.get(k) ?? null, put: async (k, v) => { m.set(k, v); }, delete: async (k) => { m.delete(k); } } };
+  const call = async (path, token, method = 'GET', body) => { const r = await familyApi(new Request(`https://x.test${path}`, { method, headers: token ? { Authorization: `Bearer ${token}` } : {}, body: body ? JSON.stringify(body) : undefined }), env, path.split('?')[0]); return { status: r.status, ...(r.data || {}) }; };
+  const { token } = await call('/auth/demo', null, 'POST', { email: 'sam@example.com' });
+  await call('/account/consent', token, 'POST', { version: TERMS_VERSION, age13: true });
+  const { family } = await call('/families', token, 'POST', { name: 'Fam' });
+  const F = `/families/${family.fid}`, C = `${F}/care`;
+  const board = async () => (await call(`${F}/chores?month=2026-10&today=2026-10-24`, token)).board[0].points;
+  // Built-in Garbage (+1): logged once, then made +3 the way ✎ Edit chores does it — put away, and
+  // an identical chore of the family's own with the new points takes its place.
+  await call(C, token, 'POST', { date: '2026-10-24', kind: 'trash' });
+  assert.equal(await board(), 1);
+  let r = await call(`${F}/chores/custom`, token, 'PUT', { chores: [{ icon: '🗑️', label: 'Garbage', pts: 3, section: 'house' }], hidden: ['trash'] });
+  const g = r.chores.find((c) => c.label === 'Garbage' && !c.gone);
+  assert.equal((await call(C, token, 'POST', { date: '2026-10-24', kind: `x_${g.id}` })).status, 200);
+  assert.equal(await board(), 1 + 3, 'the old one keeps +1, the new one earns +3');
+  assert.equal((await call(C, token, 'POST', { date: '2026-10-24', kind: 'trash' })).status >= 400, true, 'the put-away built-in no longer logs');
+  // One of your own, +3 → +2: a fresh copy in the same spot; the old copy is kept (gone) for its entries.
+  r = await call(`${F}/chores/custom`, token, 'PUT', { chores: [{ icon: '🗑️', label: 'Garbage', pts: 2, section: 'house' }], hidden: ['trash'] });
+  const g2 = r.chores.find((c) => c.label === 'Garbage' && !c.gone);
+  assert.notEqual(g2.id, g.id); assert.equal(r.chores.find((c) => c.id === g.id).gone, true);
+  await call(C, token, 'POST', { date: '2026-10-24', kind: `x_${g2.id}` });
+  assert.equal(await board(), 1 + 3 + 2);
+});
