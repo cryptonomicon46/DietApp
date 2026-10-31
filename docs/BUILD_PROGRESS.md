@@ -4,6 +4,12 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### ✎ Change a chore's points (2026-10-31, `v2/chore-points` from `main` `a9fc0bc`; owner: Garbage should be worth more without deleting and re-adding it; merge authorized when no `pawdeploy` is needed)
+- **Cause:** ✎ Edit chores could only remove or add. Built-in points are fixed on the connector (`POINTS`), and the scoreboard counts each entry by its chore's points when read.
+- **Built (phone only — no connector change):** each chore in ✎ Edit chores has a ♡/+1…+5 picker (`family/app.js` `setChorePoints`). A new value replaces the chore with the same chore at the new points: a built-in one is put away (`hiddenChores`) and an identical one of the family's own takes its place; one of your own gets a fresh copy in the same spot (the old copy stays as `gone`). So entries already logged keep the points they earned, and new ones count the new value. The removed list doesn't show a built-in that was replaced; Talk's chore list skips removed and replaced chores.
+- **Tests:** `tests/care.test.js` — Garbage +1 logged, made +3, logged again → 1 + 3; the built-in no longer logs; +3 → +2 → 1 + 3 + 2. `npm test` passes.
+- **Browser check** (local Pages + `wrangler dev`, synthetic family; 390 px and 320 px dark): Garbage +1 → +3 (*🗑️ Garbage is now +3 — what's already logged keeps its points*) → +2; the Garbage button shows +2; one Garbage row, nothing in Removed; no overflow, no errors.
+
 ### ⚖️ Talk logs today's weight (2026-10-31, `v2/talk-weight` from `main` `a9fc0bc`; owner: "I would like it to log my weight as well by talking to the app"; merge authorized when no `pawdeploy` is needed)
 - **Owner's try:** "Log my weight for today 160.6 pounds" → Claude answered "I can't log weight".
 - **Built:**
