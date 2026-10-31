@@ -79,6 +79,8 @@ export default {
         if (!env.HOUSEHOLD) return json({ error: 'HOUSEHOLD storage not set up — see server/README.md' }, 501);
         const r = await familyApi(req, env, url.pathname.slice(3), ctx);
         // 📸 A photo file: locked bytes, the same forever for that id, so phones can keep it.
+        // 🔊 Spoken audio (the Pawmily voice): never cached.
+        if (r.audio) return new Response(r.audio, { status: 200, headers: { ...cors, 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' } });
         if (r.raw) return new Response(r.raw, { status: 200, headers: { ...cors, 'Content-Type': 'application/octet-stream', 'Cache-Control': 'private, max-age=31536000, immutable' } });
         return json(r.data, r.status);
       }

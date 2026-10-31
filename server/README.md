@@ -86,6 +86,58 @@ npx wrangler deploy
   a request, the API retries it on Anthropic's recommended fallback model automatically.
 - Without the key, everything else works; unparsed commands just show a hint.
 
+### 🔊 Pawmily Voice (ElevenLabs, optional; Phase 1)
+
+Talk can read answers in a natural voice made with ElevenLabs (a neutral voice, or a family member's own
+clone). It is **completely optional**: without these secrets, or with it switched off, Talk works exactly the
+same with the phone's own voice (or none). The app says "Pawmily Voice"; ElevenLabs is named only here, in
+settings and in the privacy policy.
+
+**How it decides (privacy-first):** the phone sends each day-question fact's domain and owner; the connector
+keeps only the facts every owner allowed for cloud voice (each person's categories, all OFF by default), has
+Claude write a ≤40-word sentence from those alone (gateway purpose `talk.spoken`), drops it if it looks like a
+code/account/email/phone/address, and signs a one-time **speakable ticket** (2 minutes) bound to the exact text
+hash, member, family, voice (and its provider id), policy version, purpose and the (owner, category) grants.
+`POST /voice/tts` speaks only a ticketed sentence or one of the fixed confirmation phrases, re-checking all of
+that against today's settings. See `server/voiceTts.js` and `js/voicePolicy.js`.
+
+**Setup requirements (do these in ElevenLabs first):**
+1. Settings › privacy: turn **off** "Improve the models for everyone" (training use of the account's data).
+2. Decide on History: generations are kept in the account's history under ElevenLabs' terms. Deleting history
+   is optional and is **not** zero retention (ElevenLabs' zero-retention mode isn't available on this plan).
+3. Create **separate dev and prod API keys**, each restricted to **Text to Speech** (plus **Voices: Read** for
+   `scripts/elevenlabs-check.mjs`), each with a **monthly credit limit**. The prod key goes only into the
+   production Worker; the dev key only into `wrangler dev` (`server/.dev.vars`, never committed).
+4. Copy the voice's ID (Voices › the voice › Copy voice ID). No ElevenLabs Agents, Calendar or other
+   integrations are used or needed.
+
+```sh
+cd server
+npx wrangler secret put ELEVENLABS_API_KEY  --name lean-plate-connect   # paste the key only into this prompt
+npx wrangler secret put ELEVENLABS_VOICE_ID --name lean-plate-connect
+npx wrangler secret put ELEVENLABS_VOICE_OWNER_EMAIL --name lean-plate-connect   # only for a member's own clone
+npx wrangler deploy
+```
+
+Then the family's creator switches **Cloud voice** on in Talk › 🎙 Pawmily Voice (it starts OFF), and each
+person ticks what it may read for them. With a personal clone, nothing is read in it until its owner ticks
+"My own answers" and/or "Answers for others in the family"; they can turn it off at any time.
+
+| Setting | Where | Default | What it does |
+| --- | --- | --- | --- |
+| `ELEVENLABS_API_KEY` | secret | — | Server-side only; never sent to phones or logged. Without it: no cloud voice (safe). |
+| `ELEVENLABS_VOICE_ID` | secret | — | The household's voice. Changing it voids outstanding tickets and resets a personal voice's purposes. |
+| `ELEVENLABS_VOICE_OWNER_EMAIL` | secret | — | Marks the voice as that member's own clone (owner-approved purposes only). |
+| `CLOUD_VOICE` | `[vars]` | on | `off` is the operator kill switch: no tickets, no ElevenLabs calls, for every family. |
+| `ELEVENLABS_MODEL` | `[vars]` | `eleven_flash_v2_5` | ElevenLabs' low-latency model. |
+| `ELEVENLABS_PER_DAY` | `[vars]` | 30 | Spoken answers per member per day. |
+| `ELEVENLABS_FAMILY_DAILY_CHARS` | `[vars]` | 20000 | The household's daily character budget; over it → "Using device voice for now." |
+| `ELEVENLABS_DELETE_HISTORY` | `[vars]` | off | `1`: ask ElevenLabs to delete each generation's history item (if its id comes back). Not zero retention. Unverified against the live API. |
+| `VOICE_TICKET_SECRET` | secret | derived from the key | Optional separate key for signing tickets. |
+
+After a billing, auth, quota or rate-limit error from ElevenLabs the connector pauses cloud voice for an hour
+(every phone uses its own voice; no retry storm). Nothing about it is logged: no text, tickets, audio or keys.
+
 ### 🚗 Drive times with live traffic (Google Maps, optional)
 
 "Ask about my day" can add drive times with traffic and opening hours when a question is about going
