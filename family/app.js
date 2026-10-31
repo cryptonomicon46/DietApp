@@ -631,11 +631,21 @@ async function saveWeighIn(f) {
   if (!(lb >= 60 && lb <= 700)) return toast('Type your weight in pounds (60–700)');
   const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Saving…';
   const today = isoLocal();
+  let streak = 0, day = null;
+  const [H, CF] = await Promise.all([import(`../js/habit.js?v=${VERSION}`), import(`../js/confetti.js?v=${VERSION}`)]);
   try {
-    await editMine((s) => s.set('weights', [...(s.get('weights', []) || []).filter((x) => x.date !== today), { date: today, weight: lb }].sort((a, b) => a.date.localeCompare(b.date))));
+    await editMine((s) => {
+      const weights = [...(s.get('weights', []) || []).filter((x) => x.date !== today), { date: today, weight: lb }].sort((a, b) => a.date.localeCompare(b.date));
+      s.set('weights', weights);
+      streak = H.weighStreak(weights, today);
+      day = H.healthDay({ weights, eaten: s.get('eaten', {}) || {}, mealLog: s.get('mealLog', {}) || {} }, today);
+    });
   } catch (e) { btn.disabled = false; btn.textContent = 'Save'; return toast(e.message); }
   if (callNudge.all?.weighin) api.post(`/account/nudges/weighin/done?today=${today}`, { date: today }).then(setNudges).catch(() => {});
-  toast(`⚖️ ${lb.toFixed(1)} lb saved — Meals and Weight have it too`);
+  // 🎉 Confetti and the mornings in a row (js/cheer.js, js/confetti.js).
+  const cheer = H.logCheer(day, today, { weighStreak: streak });
+  toast(`⚖️ ${lb.toFixed(1)} lb saved · ${cheer.line}`);
+  CF.confetti({ ...CF.fromEl(btn), big: cheer.big });
   if (state.view === 'health') healthView();
 }
 // ⌚ Devices (Health › Devices): family/deviceScreen.js, loaded when you open Devices or come back

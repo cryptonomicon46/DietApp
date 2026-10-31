@@ -27,7 +27,8 @@ import { findCopies, combine, applyRecovery, counts, describe, readBackup, partn
 import { renderHousehold, initHousehold } from './household.js';
 import { renderRhythm, initRhythm } from './rhythm.js';
 import { renderDexa, initDexa, allScans } from './dexa.js';
-import { healthDay, strongStreak, cheerFor, personData, lowerCheer } from './cheer.js';
+import { healthDay, strongStreak, cheerFor, personData, lowerCheer, logCheer, weighStreak } from './cheer.js';
+import { confetti, fromEl } from './confetti.js';
 import { renderPhotos, initPhotos, allPhotos, photosFor, compareImage, stackImages, photoTitle } from './photos.js';
 import { renderClimb, initClimb, openClimb, climbSummary, renderProgress, initProgress, openProgress } from './climb.js';
 import { buildTables, toCsv, summary, weekRows } from './analytics.js';
@@ -1581,9 +1582,12 @@ $('#meals').addEventListener('click', (e) => {
     editMeal(meal, (c) => { if (c.grams) delete c.grams[unlock]; });
     refreshMeal(meal);
   } else if (e.target.closest('[data-eat]')) {
+    const at = fromEl(e.target.closest('[data-eat]'));
     todaysLog().meals[meal] = snapshot(todayPlan()[meal]);
     saveLog();
     renderToday();
+    // 🎉 Confetti for the habit (bigger once all three meals — or those and the weigh-in — are in).
+    confetti({ ...at, big: logCheer(healthDay(personData(activeProfile().id), isoDate()), isoDate(), { meal }).big });
   } else if (e.target.closest('[data-uneat]')) {
     delete todaysLog().meals[meal];
     saveLog();
@@ -2315,6 +2319,8 @@ $('#weighForm').addEventListener('submit', (e) => {
   store.set('weights', state.weights);
   $('#weighValue').value = '';
   renderAll();
+  // 🎉 Today's weigh-in: confetti (bigger on a week-long streak); the line shows under the form.
+  if (date === isoDate()) confetti({ ...fromEl($('#weighForm')), big: logCheer(healthDay(personData(activeProfile().id), date), date, { weighStreak: weighStreak(state.weights, date) }).big });
 });
 
 $('#weighList').addEventListener('click', (e) => {

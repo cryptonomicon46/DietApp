@@ -4,6 +4,14 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 🎉 Confetti for logging meals and weigh-ins (2026-10-31, `v2/log-cheer` from `main` `f3f7233`; owner: "show confetti… encouraging this habit of logging meals and weight"; merge authorized when no `pawdeploy` is needed)
+- **Built:** `js/confetti.js` (a short emoji burst; bigger for milestones; none with reduced motion) and `js/habit.js` (pure: `healthDay`, the lines, `weighStreak`, `logCheer` — moved out of `js/cheer.js`, which re-exports them, so Health can use them without the trackers' storage).
+  - Health: every meal newly logged through `family/meals.js` `commit` (✓ As planned, Plan & log, photo, ate out, packaged, Same as yesterday, Talk's meal hand-off) → toast with *🎉 N of 3 meals logged today* and confetti; the weigh-in (`family/app.js` `saveWeighIn`, modules loaded on save) → *🎉 N mornings in a row* and confetti.
+  - Meals (trackers): ✓ I ate this and today's weigh-in → confetti (the existing inline cheer line stays).
+  - Big burst: all three meals, weigh-in + all three, or a weigh-in streak of a whole number of weeks.
+- **Tests:** `tests/habit.test.js` (lines, milestones, streak gaps, re-exports). `npm test` 499 pass.
+- **Browser check** (local Pages + `wrangler dev`, synthetic family): ✓ As planned → *✓ Breakfast logged · 422 kcal · 🎉 1 of 3 meals logged today* + 16 pieces; dinner after weigh-in → the 💪 line + 30; weigh-in → *🎉 7 mornings in a row — a full week!* + 30; reduced motion → the lines, 0 pieces; Meals ✓ I ate this → 16 pieces; no page errors.
+
 ### 🔥 WHOOP activities in Fitness, and "over plan" vs a real deficit (2026-10-31, `v2/whoop-burn` from `main` `fb00a03`)
 - **Owner's report:** a WHOOP rock-climbing workout (75 min, 417 kcal) didn't appear in Fitness; the Meals header said *Over 88* although WHOOP showed 2,079 kcal burned against 1,839 eaten.
 - **Causes (repository-verified):**
