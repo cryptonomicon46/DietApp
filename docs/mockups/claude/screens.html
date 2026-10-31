@@ -1,0 +1,161 @@
+<!doctype html>
+<!-- ✳️ Claude in Pawmily + 📧 Inbox to-dos — DESIGN MOCKUPS ONLY (nothing here is wired up). Uses the
+     family app's real style.css; each screen is chosen by #hash and photographed by shoot.mjs.
+     Synthetic data; Sam and Pat are example names. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../../family/style.css">
+<style>
+  body { margin: 0; background: var(--bg); }
+  .screen { display: none; min-height: 100vh; position: relative; }
+  .screen.on { display: block; }
+  .app { padding: 14px 16px 90px; }
+  .apphead { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 10px; }
+  .apphead b { font-size: 1.35rem; }
+  .apphead span { display: flex; gap: 8px; }
+  .apphead i { width: 36px; height: 36px; border-radius: 50%; background: var(--card); border: 1px solid var(--line); display: inline-block; }
+  .tag { position: absolute; top: 8px; right: 10px; z-index: 5; background: #222; color: #fff; font: 700 .72rem/1 system-ui; padding: 5px 8px; border-radius: 999px; }
+  .shade::after { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,.38); z-index: 1; }
+  .sheet2 { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; background: var(--card); border-radius: 22px 22px 0 0; padding: 16px 16px 26px; box-shadow: 0 -6px 24px rgba(0,0,0,.18); }
+  .sheet2 h2 { margin: 0; font-size: 1.2rem; }
+  .shead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .x { font-size: 1.2rem; color: var(--muted); }
+  .seg2 { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 3px; margin: 4px 0 12px; }
+  .seg2 span { text-align: center; padding: 9px 0; border-radius: 999px; font-weight: 700; font-size: .92rem; color: var(--muted); }
+  .seg2 span.on { background: var(--brand); color: var(--brand-ink); }
+  .ask { display: flex; gap: 8px; align-items: center; }
+  .ask .box { flex: 1; border: 2px solid var(--brand); border-radius: 18px; padding: 12px 14px; color: var(--muted); background: var(--bg); }
+  .ask .round { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--brand); color: var(--brand-ink); font-weight: 800; flex: none; }
+  .ask .round.ghost2 { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .chips span { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; font-size: .86rem; background: var(--card); }
+  .chips span.on { background: var(--brand-soft); border-color: var(--brand); }
+  /* chat */
+  .chathead { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .chathead .ttl { flex: 1; }
+  .chathead .ttl b { display: block; font-size: 1.05rem; }
+  .chathead .ttl small { color: var(--muted); font-size: .78rem; }
+  .spark { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: #d97757; color: #fff; font-weight: 800; }
+  .msgs { padding: 14px 16px 150px; display: grid; gap: 12px; }
+  .me { justify-self: end; max-width: 82%; background: var(--brand); color: var(--brand-ink); padding: 10px 13px; border-radius: 18px 18px 4px 18px; font-size: .95rem; }
+  .cl { max-width: 92%; font-size: .95rem; line-height: 1.45; }
+  .cl p { margin: 0 0 6px; } .cl ul { margin: 4px 0 6px 18px; padding: 0; }
+  .typing { color: var(--muted); font-size: .85rem; }
+  .act { border: 1px solid var(--line); background: var(--card); border-radius: 16px; padding: 10px 12px; display: grid; gap: 6px; }
+  .act b { font-size: .93rem; } .act small { color: var(--muted); font-size: .8rem; }
+  .act .row2 { display: flex; gap: 8px; } .act button { min-height: 40px; flex: 1; }
+  .compose2 { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; background: var(--bg); border-top: 1px solid var(--line); padding: 10px 14px 18px; }
+  .compose2 .meta { display: flex; justify-content: space-between; font-size: .74rem; color: var(--muted); margin-top: 6px; }
+  .note { background: var(--brand-soft); border-radius: 12px; padding: 9px 11px; font-size: .84rem; margin: 6px 0 4px; }
+  /* tab bar */
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; display: grid; background: var(--card); border-top: 1px solid var(--line); padding: 8px 4px 18px; }
+  .tabbar span { text-align: center; font-size: .72rem; color: var(--muted); } .tabbar span b { display: block; font-size: 1.25rem; font-weight: 400; }
+  .tabbar span.on { color: var(--brand); font-weight: 700; }
+  .warnbox { border: 2px dashed var(--warn); border-radius: 14px; padding: 8px 10px; font-size: .84rem; margin: 10px 0; }
+  /* inbox */
+  .card2 { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 12px 14px; margin: 0 0 12px; }
+  .eyebrow2 { font-size: .78rem; letter-spacing: .08em; font-weight: 800; color: var(--muted); margin: 8px 0 6px; }
+  .mail { display: grid; grid-template-columns: 30px minmax(0,1fr); gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .mail:first-of-type { border-top: 0; }
+  .mail .ic { font-size: 1.35rem; } .mail b { display: block; } .mail small { color: var(--muted); font-size: .82rem; display: block; }
+  .mail .btns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; } .mail .btns button { min-height: 38px; font-size: .86rem; padding: 6px 12px; }
+  .way { display: grid; grid-template-columns: 40px minmax(0,1fr); gap: 10px; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 16px; padding: 12px; margin: 8px 0; }
+  .way .ic { font-size: 1.5rem; text-align: center; } .way small { display: block; color: var(--muted); font-size: .82rem; margin-top: 2px; }
+  .way.rec { border: 2px solid var(--brand); }
+  .meter { height: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; margin: 6px 0; } .meter i { display: block; height: 100%; width: 21%; background: var(--brand); }
+  dl.kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: .9rem; margin: 6px 0; } dl.kv dt { color: var(--muted); } dl.kv dd { margin: 0; text-align: right; }
+</style></head><body>
+
+<!-- 1. The way in: Talk gets a second mode, "Ask Claude" (no new tab) -->
+<section class="screen shade" id="entry"><div class="tag">1 · Talk › Ask Claude</div><div class="app">
+  <div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div>
+  <h1 class="home-hi">Good evening, Sam.</h1></div>
+  <div class="sheet2">
+    <div class="shead"><h2>Talk to Pawmily</h2><span class="x">✕</span></div>
+    <div class="seg2"><span>⚡ Do it</span><span class="on">✳️ Ask Claude</span></div>
+    <p class="small muted" style="margin:0 0 10px">A full conversation with Claude — anything you'd ask the Claude app. It can also offer to add things to Pawmily; nothing changes until you tap.</p>
+    <div class="ask"><div class="box">Ask Claude anything…</div><span class="round ghost2">🎤</span><span class="round">↑</span></div>
+    <div class="chips"><span>Plan a dog-friendly weekend</span><span>Draft a reply to the school</span><span>What should we cook tonight?</span></div>
+    <p class="tiny muted" style="margin:6px 0 0">Recent chats: <u>Tahoe trip</u> · <u>Grocery budget</u> · <u>Dentist questions</u></p>
+  </div>
+</section>
+
+<!-- 2. The Claude screen (full height, slides up from Talk; ‹ goes back to where you were) -->
+<section class="screen" id="chat"><div class="tag">2 · Claude chat</div>
+  <div class="chathead"><span class="x">‹</span><span class="spark">✳</span><span class="ttl"><b>Claude</b><small>Private to you · saved on this phone</small></span><span class="small muted">⋯</span></div>
+  <div class="msgs">
+    <div class="me">Help me plan a 3-day Tahoe trip with the dogs in mid-December</div>
+    <div class="cl"><p>Here's a relaxed plan that works with two dogs in snow season:</p>
+      <ul><li><b>Fri</b> — drive up early (chains in the car), check in to a dog-friendly cabin near Kings Beach.</li>
+      <li><b>Sat</b> — snowshoe the Page Meadows trail (dogs allowed), hot cocoa in Tahoe City.</li>
+      <li><b>Sun</b> — easy lakeside walk at Kings Beach, head home before 2 PM to miss the traffic.</li></ul>
+      <p>Want me to put it on your calendar?</p></div>
+    <div class="act"><b>🗓 Add "Tahoe with the dogs" · Dec 12–14</b><small>To your calendar only — you can share it with Pat after.</small><div class="row2"><button>Add</button><button class="ghost">Not now</button></div></div>
+    <div class="me">Also what should I pack for them?</div>
+    <div class="cl typing">Claude is writing…</div>
+  </div>
+  <div class="compose2"><div class="ask"><div class="box">Reply to Claude…</div><span class="round ghost2">🎤</span><span class="round">↑</span></div>
+    <div class="meta"><span>Answers stream as they're written</span><span>Open in Claude app ↗</span></div></div>
+</section>
+
+<!-- 3. What Claude may see (all off to start; per chat) -->
+<section class="screen shade" id="context"><div class="tag">3 · What Claude sees</div>
+  <div class="chathead"><span class="x">‹</span><span class="spark">✳</span><span class="ttl"><b>Claude</b><small>Private to you</small></span></div>
+  <div class="sheet2">
+    <div class="shead"><h2>What Claude can see</h2><span class="x">✕</span></div>
+    <p class="small" style="margin:0 0 8px">Only what you type — unless you switch something on for this chat:</p>
+    <div class="chips"><span>📅 My calendar (next 7 days)</span><span class="on">🍽 My food today ✓</span><span>⌚ My WHOOP today</span><span>🛒 Groceries list</span></div>
+    <div class="note">People's names become roles ("your partner"). Never sent: notes, threads, other people's health, the family key. Anthropic doesn't train on API chats.</div>
+    <p class="tiny muted">Chats are kept on this phone (locked with the family key) — 🗑 delete any time. Not shared with Pat.</p>
+  </div>
+</section>
+
+<!-- 4. Alternative (needs your OK): a sixth tab -->
+<section class="screen" id="tab6"><div class="tag">4 · Alternative: a 6th tab</div><div class="app">
+  <div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div>
+  <div class="warnbox"><b>Option B — not recommended.</b> A sixth tab changes the approved five-tab design and squeezes every label. Option A (Talk › Ask Claude, screen 1) gives the same chat one tap away from every tab.</div>
+  <div class="card2"><b>✳️ Claude</b><p class="small muted" style="margin:4px 0 0">Recent chats, a big "New chat" button, and your usage this month.</p></div></div>
+  <div class="tabbar" style="grid-template-columns:repeat(6,1fr)"><span><b>🏠</b>Home</span><span><b>💗</b>Us</span><span><b>📅</b>Calendar</span><span><b>💬</b>Threads</span><span><b>💪</b>Health</span><span class="on"><b>✳️</b>Claude</span></div>
+</section>
+
+<!-- 5. Inbox: what needs doing, on Home › Needs you (yours only) -->
+<section class="screen" id="inbox"><div class="tag">5 · Inbox to-dos on Home</div><div class="app">
+  <div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div>
+  <div class="eyebrow2">🔔 NEEDS YOU</div>
+  <div class="card2">
+    <div class="mail"><span class="ic">💡</span><div><b>PG&amp;E bill · $142.18 due Nov 8</b><small>From your email · Oct 30</small><div class="btns"><button>⏰ Remind me Nov 6</button><button class="ghost">✓ Paid</button><button class="ghost">Dismiss</button></div></div></div>
+    <div class="mail"><span class="ic">🦷</span><div><b>Dentist asks you to confirm Tue 3:30 PM</b><small>From your email · reply needed</small><div class="btns"><button>🗓 Add to calendar</button><button class="ghost">✍️ Draft reply</button><button class="ghost">Dismiss</button></div></div></div>
+    <div class="mail"><span class="ic">📦</span><div><b>Package arrives Saturday</b><small>From your email · FYI</small><div class="btns"><button class="ghost">OK</button></div></div></div>
+    <p class="tiny muted" style="margin:8px 0 0">📧 3 from your inbox today · only you see these · <u>Inbox settings</u></p>
+  </div>
+  <div class="card2"><b>🙋 Pat asked for a ride to the airport Fri</b><small class="muted"> · a family request (as today)</small></div></div>
+  <div class="tabbar" style="grid-template-columns:repeat(5,1fr)"><span class="on"><b>🏠</b>Home</span><span><b>💗</b>Us</span><span><b>📅</b>Calendar</span><span><b>💬</b>Threads</span><span><b>💪</b>Health</span></div>
+</section>
+
+<!-- 6. Connecting an inbox: two ways, your choice -->
+<section class="screen shade" id="setup"><div class="tag">6 · Connect your inbox</div><div class="app"><div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>📧 Things from your email</h2><span class="x">✕</span></div>
+    <p class="small" style="margin:0 0 6px">Pawmily can pick out bills, appointments, RSVPs and forms that need you — and show them only to you.</p>
+    <div class="way rec"><span class="ic">✉️</span><div><b>Forward what matters (recommended)</b><small>A Gmail filter sends bills and appointments to your own private Pawmily address. Nothing else is read.</small></div></div>
+    <div class="way"><span class="ic">🔗</span><div><b>Connect Gmail (read-only)</b><small>Pawmily looks at new mail in the labels you pick, every hour. Google asks you to reconnect every 7 days while the app is in testing.</small></div></div>
+    <div class="way"><span class="ic">📤</span><div><b>Share one email</b><small>From Mail or Gmail: Share › Pawmily. Good for one-offs.</small></div></div>
+    <div class="note">Claude reads each email to find what needs doing; Pawmily keeps only the to-do (locked), not the email. Pat never sees your inbox.</div>
+  </div>
+</section>
+
+<!-- 7. Me › Claude & AI: usage, cap, model -->
+<section class="screen" id="usage"><div class="tag">7 · Me › Claude &amp; AI</div><div class="app">
+  <div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div>
+  <div class="eyebrow2">✳️ CLAUDE &amp; AI</div>
+  <div class="card2"><b>This month: $4.12 of your $20 cap</b><div class="meter"><i></i></div>
+    <dl class="kv"><dt>✳️ Chats</dt><dd>$2.90</dd><dt>🗣️ Talk &amp; day questions</dt><dd>$0.71</dd><dt>📧 Inbox to-dos</dt><dd>$0.38</dd><dt>🍽 Meals &amp; workouts</dt><dd>$0.13</dd></dl>
+    <p class="tiny muted" style="margin:4px 0 0">Billed to the family's Anthropic API account (pay as you go) — not your Claude subscription. At the cap, chats pause until next month; Talk keeps working on the phone.</p></div>
+  <div class="card2"><b>Chat model</b><div class="chips"><span class="on">Sonnet · fast, ~1–2¢ a message</span><span>Opus · deepest, ~2–4¢</span><span>Haiku · quickest, well under 1¢</span></div></div>
+  <div class="card2"><b>Prefer your Claude app?</b><p class="small muted" style="margin:4px 0 0">"Open in Claude app ↗" hands the question to the Claude app instead — uses your Claude plan, no API cost, but without Pawmily's buttons.</p></div></div>
+</section>
+
+<script>
+  const show = () => { const id = location.hash.slice(1) || 'entry'; document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === id)); };
+  addEventListener('hashchange', show); show();
+</script>
+</body></html>
