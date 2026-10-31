@@ -4,6 +4,18 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 🔥 WHOOP activities in Fitness, and "over plan" vs a real deficit (2026-10-31, `v2/whoop-burn` from `main` `fb00a03`)
+- **Owner's report:** a WHOOP rock-climbing workout (75 min, 417 kcal) didn't appear in Fitness; the Meals header said *Over 88* although WHOOP showed 2,079 kcal burned against 1,839 eaten.
+- **Causes (repository-verified):**
+  - Fitness History listed only strength and circuit workouts (`family/fitness.js` `history()` filtered by `isStrength`); climbing, runs and rides were reduced to one "Also N other activities" line.
+  - The header's *Over* is against the day's **target**, which already has the cut's deficit planned in (plus +250 kcal added back for the climb), not against calories burned.
+- **Fix:**
+  - `family/fitness.js`: History lists device activities too (`listed()`; minutes, kcal, *from your device*; open and rename). Strength-only features — "last time", 🔁 Do it again, Save it — still use `history()`.
+  - `js/app.js` header: *Over* → *Over plan*, plus a 🔥 line once food is logged: burned (a WHOOP total you typed, else WHOOP so far, else the day's estimate) and the deficit or surplus against it — e.g. *Burned 2,079 (WHOOP, so far) · 240 kcal deficit — over the plan, still a deficit*. Pure `burnSummary` in `js/dietDays.js`.
+- **Tests:** `tests/burn.test.js` (the owner's numbers; device climb is not strength). `npm test` 495 pass.
+- **Browser check** (390 px and 320 px dark; local Pages + `wrangler dev`, synthetic family with a WHOOP climb, a weightlifting and a run): History lists all three with minutes and kcal; the climb opens; the header shows the 🔥 line; no overflow, no errors.
+- **Docs:** README (History, header), help guide.
+
 ### 👫 Talk — your partner's day (2026-10-30, `v2/talk-partner` from `main`)
 - **Owner's live try:** "What's on my wife's calendar today" got "I can only see your own items, not [partner]'s calendar".
 - **Cause:**
