@@ -19,7 +19,7 @@ import { initBrief, renderBrief, renderFeed, homeDogs, homeGym } from './briefTa
 import { initDress } from './dressTab.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
-import { consistency } from './dietDays.js';
+import { consistency, burnSummary } from './dietDays.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
 import { sync, pushNow } from './sync.js';
 import { account } from './account.js';
@@ -229,14 +229,20 @@ function renderDayBar() {
   const mLeft = (k) => { const v = Math.round(t[k] - ate[k]); return v >= 0 ? `${v}` : `<span class="over">+${-v}</span>`; };
   bar.hidden = false;
   const g = pastTally();
+  // 🔥 Burned vs eaten (WHOOP when it has more than the estimate): over the plan can still be a deficit.
+  // WHOOP's own number first (typed, else synced so far) so it matches the WHOOP app; else the estimate.
+  const typedW = state.whoopTotal[isoDate()], syncedW = store.get('deviceTotal', {})[isoDate()];
+  const bt = typedW ? { kcal: typedW, source: 'WHOOP (you entered)' } : syncedW ? { kcal: syncedW, source: 'WHOOP (so far today)' } : burnedToday();
+  const b = burnSummary({ burned: bt.kcal, source: bt.source, eaten: ate.kcal });
   bar.innerHTML = `
     <div class="daybar-game"><span title="Days with your meals logged and calories near your target">✓ ${consistency(state.days, isoDate()).on} of the last 7 days near target</span></div>
     <div class="daybar-nums">
       <span><small>Eaten</small><b>${Math.round(ate.kcal)}</b></span>
-      <span class="${left < 0 ? 'over' : ''}"><small>${left < 0 ? 'Over' : 'Left'}</small><b>${Math.abs(left)}</b></span>
+      <span class="${left < 0 ? 'over' : ''}"><small>${left < 0 ? 'Over plan' : 'Left'}</small><b>${Math.abs(left)}</b></span>
       <span class="daybar-macros"><small>Macros left</small><span><em class="p">${mLeft('p')}P</em> <em class="f">${mLeft('f')}F</em> <em class="c">${mLeft('c')}C</em></span></span>
     </div>
-    <div class="daybar-track" role="progressbar" aria-valuemin="0" aria-valuemax="${t.kcal}" aria-valuenow="${Math.round(ate.kcal)}" aria-label="Calories eaten today"><i style="width:${pct}%"></i></div>`;
+    <div class="daybar-track" role="progressbar" aria-valuemin="0" aria-valuemax="${t.kcal}" aria-valuenow="${Math.round(ate.kcal)}" aria-label="Calories eaten today"><i style="width:${pct}%"></i></div>
+    ${b ? `<div class="daybar-burn small">🔥 Burned <b>${b.burned.toLocaleString()}</b> <span class="muted">(${b.from})</span> · <b class="${b.deficit ? 'good' : 'over'}">${b.kcal.toLocaleString()} kcal ${b.deficit ? 'deficit' : 'surplus'}</b>${b.deficit && left < 0 ? ' <span class="muted">— over the plan, still a deficit</span>' : ''}</div>` : ''}`;
 }
 
 // The day shown on the Today tab: today, a past day (review) or a future day (plan ahead).

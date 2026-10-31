@@ -49,8 +49,8 @@ async function recover() {
   saveToday();
 }
 // Older workouts (the trackers' lifting sessions and device workouts), read-only in history.
-// Device workouts that aren't strength or circuit work stay out of the history (one quiet line
-// instead); they're still synced and still count in your Diet calories.
+// Device activities that aren't strength or circuit work (climbing, runs, rides…) are listed in
+// History too (owner, 2026-10-31), but stay out of strength features ("last time", repeat, templates).
 export function setLegacy(data, names = {}) {
   const all = [...(data?.lift?.sessions || []).map((s) => W.fromLiftSession(s, names)), ...(data?.workoutHistory || []).filter((x) => x?.start).slice(-200).map(W.fromDeviceWorkout)];
   fx.legacy = all.filter(W.isStrength);
@@ -66,8 +66,12 @@ Object.defineProperties(fx, {
 // A device workout matched to one you logged shows on that one (its WHOOP numbers), not twice.
 const devId = (x) => `dev${String(x.id || x.start).replace(/[^a-z0-9]/gi, '')}`.slice(0, 16);
 const matched = () => matchAll(fx.log, fx.device);
-const allDone = () => { const hide = new Set([...matched().values()].map((m) => devId(m.device))); return [...fx.log, ...fx.legacy.filter((x) => !fx.log.some((y) => y.id === x.id) && !hide.has(x.id))].filter((w) => w.status === 'done'); };
-const history = () => allDone().filter(W.isStrength).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.doneAt || 0) - (a.doneAt || 0));
+const allDone = (withOthers = false) => { const hide = new Set([...matched().values()].map((m) => devId(m.device))); return [...fx.log, ...[...fx.legacy, ...(withOthers ? fx.others : [])].filter((x) => !fx.log.some((y) => y.id === x.id) && !hide.has(x.id))].filter((w) => w.status === 'done'); };
+const byDate = (a, b) => (b.date || '').localeCompare(a.date || '') || (b.doneAt || 0) - (a.doneAt || 0);
+const history = () => allDone().filter(W.isStrength).sort(byDate);
+// What History lists: strength work plus the device's other activities, one copy each, with each
+// day's light ones (walks, stretches, short bits) as one "Everyday activity" row.
+const listed = () => W.groupLight(allDone(true).sort(byDate));
 const open = () => (fx.today && fx.today.status !== 'done' ? fx.today : null);
 
 // ---------- saving (batched; never over a newer copy from another phone) ----------
@@ -141,13 +145,6 @@ const TILES = [
   ['describe', '💬', 'Describe it', "Type or paste it the way you'd text it — a WOD, a coach's plan."],
   ['photo', '📷', 'Photo', 'A photo or screenshot of a WOD, a whiteboard or a workout app.'],
 ];
-function othersLine() {
-  const since = new Date(Date.parse(`${fx.c.iso()}T12:00:00Z`) - 30 * 864e5).toISOString().slice(0, 10);
-  const o = fx.others.filter((w) => (w.date || '') >= since);
-  if (!o.length) return '';
-  const kinds = [...new Set(o.map((w) => w.activity?.kind || w.title))].slice(0, 3).map((k) => k.toLowerCase()).join(', ');
-  return `<p class="tiny muted pad">Also ${o.length} other activit${o.length === 1 ? 'y' : 'ies'} from your device in the last 30 days (${E(kinds)}) — not listed here, still counted in your Diet calories.</p>`;
-}
 function programLine() {
   if (!fx.programOn) return '<p class="small center"><button type="button" class="linkish small" data-fx="program">Set up a lifting program</button></p>';
   const n = fx.programNext;
@@ -155,7 +152,7 @@ function programLine() {
 }
 function mainHtml() {
   const t = open();
-  const h = history().slice(0, 25);
+  const h = listed().slice(0, 25);
   return `${head('data-view="health"', 'Health', '🏋️ Fitness')}
     ${t ? `<section class="card fx-todaycard"><div class="eyebrow">Today's Workout</div><h3>${E(t.title)}</h3><p class="small muted">${t.status === 'active' ? `${E(doneText(t))} · in progress` : E(meta(t))}</p>
       <div class="row"><button type="button" class="grow" data-fx="${t.status === 'active' ? 'train' : 'start'}">${t.status === 'active' ? 'Resume Workout' : 'Start Workout'} →</button><button type="button" class="ghost" data-fx="today">View</button></div></section>` : ''}
@@ -164,8 +161,7 @@ function mainHtml() {
       ${fx.templates.length ? `<p class="small muted">Saved: ${fx.templates.slice(0, 6).map((w, i) => `<button type="button" class="linkish small" data-fx="tpl:${i}">${E(w.title)}</button>`).join(' · ')}</p>` : ''}
       ${programLine()}</section>
     <h3 class="wl-h">History</h3>
-    ${h.length ? h.map((w) => { const s = W.summary(w); return `<button type="button" class="card fx-hist" data-fx="hist:${E(w.id)}"><span class="grow"><b>${E(w.title)}</b><small class="muted">${E(w.date || '')}${w.source === 'device' ? ` · ${w.activity?.minutes ?? '?'} min · from your device` : ` · ${s.exercises} exercise${s.exercises === 1 ? '' : 's'} · ${s.done || s.sets} sets`}</small></span><span class="go">›</span></button>`; }).join('') : '<p class="small muted pad">Finished workouts show here.</p>'}
-    ${othersLine()}`;
+    ${h.length ? h.map((w) => { const s = W.summary(w); return `<button type="button" class="card fx-hist" data-fx="hist:${E(w.id)}"><span class="grow"><b>${E(w.title)}</b><small class="muted">${E(w.date || '')}${w.source === 'device' ? `${w.group ? ` · ${E(w.activity.kind)}` : ''} · ${w.activity?.minutes ?? '?'} min${w.activity?.kcal ? ` · ${w.activity.kcal} kcal` : ''} · from your device` : ` · ${s.exercises} exercise${s.exercises === 1 ? '' : 's'} · ${s.done || s.sets} sets`}</small></span><span class="go">›</span></button>`; }).join('') : '<p class="small muted pad">Finished workouts show here.</p>'}`;
 }
 // Today's Workout: the plan, before and between training.
 const blockLabel = (b) => (b.items.length > 1 ? `${b.kind === 'circuit' ? '🔁 Circuit' : '🔗 Superset'} · ${b.rounds} round${b.rounds === 1 ? '' : 's'}` : '');
@@ -529,8 +525,15 @@ function undoLighter() {
   fx.c.toast('Back to the original workout'); fx.c.refresh?.(); render();
 }
 function histSheet(id) {
-  const w = history().find((x) => x.id === id);
+  const w = listed().find((x) => x.id === id);
   if (!w) return;
+  if (w.group) {
+    fx.c.openSheet(`<div class="row between"><h2>${E(w.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+      <p class="small muted">${E(w.date || '')} · ${w.activity.minutes} min${w.activity.kcal ? ` · ${w.activity.kcal} kcal` : ''} · from your device</p>
+      ${w.group.map((x) => `<p class="small"><b>${E(x.title)}</b> · ${x.activity?.minutes ?? '?'} min${x.activity?.kcal ? ` · ${x.activity.kcal} kcal` : ''}</p>`).join('')}
+      <p class="tiny muted">Walks, stretches and short activities are grouped here. They all count in your Diet calories.</p>`);
+    return;
+  }
   const s = W.summary(w);
   const lines = w.blocks.flatMap((b) => b.items.map((it) => `<p class="small"><b>${E(it.name || '?')}</b>${it.perSide ? ' <small class="muted">each side</small>' : ''} ${it.sets.map((x) => (x.done ? `${E(didText(x))}${changed(x) ? ` <small class="muted">(plan ${E(planText(x))})</small>` : ''}` : `<s class="muted" title="Not done">${E(planText(x)) || '—'}</s>`)).join(' · ')}</p>`));
   fx.c.openSheet(`<div class="row between"><h2>${E(w.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
@@ -573,7 +576,7 @@ export async function onClick(t) {
     case 'fromprogram': return startWith(PG.programWorkout(fx.lift || {}, fx.log, { date: c.iso() }), 'program');
     case 'hist': return histSheet(r.join(':'));
     case 'rename': {
-      const id = r.join(':'), w = history().find((x) => x.id === id), name = document.getElementById('fxRename')?.value.trim();
+      const id = r.join(':'), w = listed().find((x) => x.id === id), name = document.getElementById('fxRename')?.value.trim();
       if (!w || !name || name === w.title) return null;
       // An older workout (the trackers' program, a device) gets a renamed copy in your history.
       await appendLog(W.normalize({ ...w, title: name }));

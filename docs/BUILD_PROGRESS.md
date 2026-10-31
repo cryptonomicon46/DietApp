@@ -16,6 +16,18 @@ Last update: 2026-10-31 — 🎙 Pawmily Voice Phase 1 (privacy-first, optional 
 - **Not verified:** real ElevenLabs audio with the owner's voice; iPhone playback; whether ElevenLabs returns a `history-item-id` header (so `ELEVENLABS_DELETE_HISTORY` is unverified).
 - **Needs from the owner (after review):** ElevenLabs training opt-out, history decision, separate dev/prod TTS-only keys with credit limits; `wrangler secret put ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_VOICE_OWNER_EMAIL`; deploy; switch Cloud voice on; tick categories / own-voice purposes.
 
+### 🔥 WHOOP activities in Fitness, and "over plan" vs a real deficit (2026-10-31, `v2/whoop-burn` from `main` `fb00a03`)
+- **Owner's report:** a WHOOP rock-climbing workout (75 min, 417 kcal) didn't appear in Fitness; the Meals header said *Over 88* although WHOOP showed 2,079 kcal burned against 1,839 eaten.
+- **Causes (repository-verified):**
+  - Fitness History listed only strength and circuit workouts (`family/fitness.js` `history()` filtered by `isStrength`); climbing, runs and rides were reduced to one "Also N other activities" line.
+  - The header's *Over* is against the day's **target**, which already has the cut's deficit planned in (plus +250 kcal added back for the climb), not against calories burned.
+- **Fix:**
+  - `family/fitness.js`: History lists device activities too (`listed()`; minutes, kcal, *from your device*; open and rename). Each day's light ones — walks, stretches, breathwork, anything under 20 min — are one *Everyday activity* row (`js/workout.js` `isLight`/`groupLight`; owner chose grouping, 2026-10-31); a day with one keeps it as is. Strength-only features — "last time", 🔁 Do it again, Save it — still use `history()`.
+  - `js/app.js` header: *Over* → *Over plan*, plus a 🔥 line once food is logged: burned (a WHOOP total you typed, else WHOOP so far, else the day's estimate) and the deficit or surplus against it — e.g. *Burned 2,079 (WHOOP, so far) · 240 kcal deficit — over the plan, still a deficit*. Pure `burnSummary` in `js/dietDays.js`.
+- **Tests:** `tests/burn.test.js` (the owner's numbers; device climb is not strength; the owner's Thursday — walk, hike, walk, stretch — grouped, climb/lift/long hike separate). `npm test` 496 pass.
+- **Browser check** (390 px and 320 px dark; local Pages + `wrangler dev`, synthetic family with a WHOOP climb, a weightlifting and a run): History lists the climb, lift and run with minutes and kcal, and Thursday's four light activities as one *Everyday activity · walking, hiking, stretching · 46 min · 209 kcal* row that opens to each; the climb opens; the header shows the 🔥 line; no overflow, no errors.
+- **Docs:** README (History, header), help guide.
+
 ### 🍽 Simpler meal logging (2026-10-30, `v2/meals-simplify` from `main`; mockups first in `docs/mockups/meals/`, then built after the owner's answers)
 - **Owner's ask:** the 📷 🎙️ 🍴 icons on Health's next meal were confusing now that Talk handles voice. Photos had to come from the camera, not Photos.
 - **Built:**
