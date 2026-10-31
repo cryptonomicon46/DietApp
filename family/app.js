@@ -468,6 +468,8 @@ function talk() {
         return kinds.map((k) => { const [icon, label] = careMeta(k); return { kind: k, icon, label }; });
       },
       careLog: async (kind) => { const r = await api.post(`/families/${state.fid}/care`, { kind, date: isoLocal(), by: 'me' }); if (state.view === 'home') { renderCare(); renderRace(); } return r.entry?.id; },
+      weighLog: (lb) => saveWeight(lb),
+      weighUndo: (prev) => undoWeight(prev),
       careUndo: async (id) => { if (id) await api.del(`/families/${state.fid}/care/${isoLocal()}/${id}`); if (state.view === 'home') { renderCare(); renderRace(); } },
       dietTell: async (meal, text, opts = {}) => {
         if (!health.data) { const d = await openData(await memberData().catch(() => null)); if (d?.locked) throw new Error('🔒 This device needs the family key first — Me › 🔐 Encryption'); health.data = d; }
@@ -626,27 +628,39 @@ function meals() {
 }
 // ⚖️ Today's weight from Health: saved into your trackers (so Meals and Weight show it too) and
 // it ticks off the morning reminder.
+// The one weigh-in write (Health's form and Talk): today's weight in your own trackers, plus the
+// mornings in a row and confetti (js/habit.js, js/confetti.js). Returns the weight it replaced.
+async function saveWeight(lb, { from = null } = {}) {
+  const today = isoLocal();
+  let streak = 0, day = null, prev = null;
+  const [H, CF] = await Promise.all([import(`../js/habit.js?v=${VERSION}`), import(`../js/confetti.js?v=${VERSION}`)]);
+  await editMine((s) => {
+    const all = s.get('weights', []) || [];
+    prev = all.find((x) => x.date === today)?.weight ?? null;
+    const weights = [...all.filter((x) => x.date !== today), { date: today, weight: lb }].sort((a, b) => a.date.localeCompare(b.date));
+    s.set('weights', weights);
+    streak = H.weighStreak(weights, today);
+    day = H.healthDay({ weights, eaten: s.get('eaten', {}) || {}, mealLog: s.get('mealLog', {}) || {} }, today);
+  });
+  if (callNudge.all?.weighin) api.post(`/account/nudges/weighin/done?today=${today}`, { date: today }).then(setNudges).catch(() => {});
+  const cheer = H.logCheer(day, today, { weighStreak: streak });
+  CF.confetti({ ...CF.fromEl(from), big: cheer.big });
+  if (state.view === 'health') healthView();
+  return { prev, line: cheer.line };
+}
+// Undo a weigh-in from Talk: back to the weight it replaced (or none).
+async function undoWeight(prev) {
+  const today = isoLocal();
+  await editMine((s) => s.set('weights', [...(s.get('weights', []) || []).filter((x) => x.date !== today), ...(prev != null ? [{ date: today, weight: prev }] : [])].sort((a, b) => a.date.localeCompare(b.date))));
+  if (state.view === 'health') healthView();
+}
 async function saveWeighIn(f) {
   const lb = Math.round(parseFloat(f.lb.value) * 10) / 10;
   if (!(lb >= 60 && lb <= 700)) return toast('Type your weight in pounds (60–700)');
   const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Saving…';
-  const today = isoLocal();
-  let streak = 0, day = null;
-  const [H, CF] = await Promise.all([import(`../js/habit.js?v=${VERSION}`), import(`../js/confetti.js?v=${VERSION}`)]);
-  try {
-    await editMine((s) => {
-      const weights = [...(s.get('weights', []) || []).filter((x) => x.date !== today), { date: today, weight: lb }].sort((a, b) => a.date.localeCompare(b.date));
-      s.set('weights', weights);
-      streak = H.weighStreak(weights, today);
-      day = H.healthDay({ weights, eaten: s.get('eaten', {}) || {}, mealLog: s.get('mealLog', {}) || {} }, today);
-    });
-  } catch (e) { btn.disabled = false; btn.textContent = 'Save'; return toast(e.message); }
-  if (callNudge.all?.weighin) api.post(`/account/nudges/weighin/done?today=${today}`, { date: today }).then(setNudges).catch(() => {});
-  // 🎉 Confetti and the mornings in a row (js/cheer.js, js/confetti.js).
-  const cheer = H.logCheer(day, today, { weighStreak: streak });
-  toast(`⚖️ ${lb.toFixed(1)} lb saved · ${cheer.line}`);
-  CF.confetti({ ...CF.fromEl(btn), big: cheer.big });
-  if (state.view === 'health') healthView();
+  let r;
+  try { r = await saveWeight(lb, { from: btn }); } catch (e) { btn.disabled = false; btn.textContent = 'Save'; return toast(e.message); }
+  toast(`⚖️ ${lb.toFixed(1)} lb saved · ${r.line}`);
 }
 // ⌚ Devices (Health › Devices): family/deviceScreen.js, loaded when you open Devices or come back
 // from connecting WHOOP.
