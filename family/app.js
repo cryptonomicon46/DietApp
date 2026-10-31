@@ -464,7 +464,8 @@ function talk() {
       watchDelete: async (id) => { if (id) await api.del(`/families/${state.fid}/watch/shows/${id}`); (await WM()).watchSaved().catch(() => {}); },
       read: () => RM(),
       careKinds: () => {
-        const kinds = [...Object.keys(CARE).filter((k) => (fam()?.modules || []).includes('dogs') || !['breakfast', 'dinner', 'walk', 'park', 'treat', 'meds'].includes(k)), ...ownChores().map((x) => `x_${x.id}`)];
+        // Only the chores on the buttons now (not removed or replaced ones).
+        const kinds = [...Object.keys(CARE).filter((k) => !hiddenChores().includes(k) && ((fam()?.modules || []).includes('dogs') || !['breakfast', 'dinner', 'walk', 'park', 'treat', 'meds'].includes(k))), ...ownChores().filter((x) => !x.gone).map((x) => `x_${x.id}`)];
         return kinds.map((k) => { const [icon, label] = careMeta(k); return { kind: k, icon, label }; });
       },
       careLog: async (kind) => { const r = await api.post(`/families/${state.fid}/care`, { kind, date: isoLocal(), by: 'me' }); if (state.view === 'home') { renderCare(); renderRace(); } return r.entry?.id; },
@@ -4177,15 +4178,33 @@ if (pushOk()) navigator.serviceWorker.addEventListener('message', (e) => {
   if (e.data?.pushed && state.family) loadThreads().then(() => { if (state.view === 'threads' && state.famTab === 'threads') threadsView(); }).catch(() => {});
 });
 
-// ✎ Edit chores: remove any chore (built-in or your own) from the buttons, bring one back, or
-// add your own to the dogs or the house. What's already logged always keeps its points.
+// ✎ Edit chores: change any chore's points, remove any chore (built-in or your own) from the
+// buttons, bring one back, or add your own to the dogs or the house. What's already logged always
+// keeps its points.
+// New points (owner, 2026-10-31): the chore is replaced by the same chore with the new points — a
+// built-in one is put away and an identical one of your own takes its place; one of your own gets a
+// fresh copy in the same spot. So what's already logged keeps the points it earned, and only new
+// entries count the new value.
+async function setChorePoints(k, pts) {
+  if (!(pts >= 0 && pts <= 5) || pts === ptsOf(k)) return;
+  const own = ownChores().filter((c) => !c.gone), [icon, label] = careMeta(k);
+  if (k.startsWith('x_')) {
+    const i = own.findIndex((c) => `x_${c.id}` === k);
+    if (i < 0) return;
+    const next = [...own];
+    next.splice(i, 1, { icon: own[i].icon, label: own[i].label, pts, section: own[i].section });
+    await saveChores(next);
+  } else await saveChores([...own, { icon, label, pts, section: DOG_KINDS.includes(k) ? 'dogs' : 'house' }], [...hiddenChores(), k]);
+}
 function choresSheet() {
   const mods = fam().modules || [];
   const SECT = { ...(mods.includes('dogs') ? { dogs: ['🐾 The dogs', DOG_KINDS] } : {}), ...(mods.includes('chores') ? { house: ['🏠 The house', HOUSE_KINDS] } : {}) };
-  const row = (k, on) => { const [ico, label] = careMeta(k); return `<li class="row between"><span>${esc(ico)} <b>${esc(label)}</b> <small class="muted">${ptsOf(k) ? `+${ptsOf(k)}` : '♡'}</small></span>${on ? `<button type="button" class="linkish small danger" data-act="chorehide" data-chorekind="${k}">Remove</button>` : `<button type="button" class="linkish small" data-act="choreshow" data-chorekind="${k}">＋ Bring back</button>`}</li>`; };
+  const ptsPick = (k) => `<label class="chore-pts"><span class="visually-hidden">Points for ${esc(careMeta(k)[1])}</span><select data-chorepts="${k}">${[0, 1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === ptsOf(k) ? 'selected' : ''}>${n ? `+${n}` : '♡'}</option>`).join('')}</select></label>`;
+  const row = (k, on) => { const [ico, label] = careMeta(k); return `<li class="row between chore-row"><span class="grow">${esc(ico)} <b>${esc(label)}</b>${on ? '' : ` <small class="muted">${ptsOf(k) ? `+${ptsOf(k)}` : '♡'}</small>`}</span><span class="row chore-acts">${on ? `${ptsPick(k)}<button type="button" class="linkish small danger" data-act="chorehide" data-chorekind="${k}">Remove</button>` : `<button type="button" class="linkish small" data-act="choreshow" data-chorekind="${k}">＋ Bring back</button>`}</span></li>`; };
   openSheet(`<h2>✎ Edit chores</h2>
     ${Object.entries(SECT).map(([sec, [title, base]]) => {
-      const off = base.filter((k) => hiddenChores().includes(k));
+      const own = ownChores().filter((c) => !c.gone);
+      const off = base.filter((k) => hiddenChores().includes(k) && !own.some((c) => c.label === careMeta(k)[1] && c.icon === careMeta(k)[0]));
       return `<h3>${title}</h3><ul class="list">${kindsIn(sec, base).map((k) => row(k, true)).join('')}</ul>${off.length ? `<details class="small"><summary class="muted">Removed (${off.length})</summary><ul class="list">${off.map((k) => row(k, false)).join('')}</ul></details>` : ''}`;
     }).join('')}
     <h3>＋ Add a chore</h3>
@@ -4193,7 +4212,7 @@ function choresSheet() {
       <div class="row"><label style="flex:0 0 74px">Emoji<input name="icon" maxlength="4" value="✅" autocomplete="off"></label><label class="grow">Chore<input name="label" maxlength="24" required placeholder="e.g. Water the plants"></label></div>
       <div class="seg">${Object.entries(SECT).map(([k, [l]], i) => `<label class="segopt"><input type="radio" name="section" value="${k}" ${(k === 'house' || Object.keys(SECT).length === 1) && i >= 0 ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
       <label>Points <select name="pts">${[0, 1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === 2 ? 'selected' : ''}>${n ? `+${n}` : '♡ just for love'}</option>`).join('')}</select></label>
-      <p class="tiny muted">Points by effort: dishes +1, walks +2, cooking dinner +3, cleaning +4. Removing a chore keeps what's already logged.</p>
+      <p class="tiny muted">Points by effort: dishes +1, walks +2, cooking dinner +3, cleaning +4. Change a chore's points with its +N above — what's already logged keeps the points it earned. Removing a chore keeps what's already logged.</p>
       <div class="row end"><button type="button" class="ghost" data-act="close">Done</button><button>＋ Add</button></div>
     </form>`);
 }
@@ -4883,6 +4902,12 @@ function redrawThreadKeepingReply() {
   renderThread();
   const ta = $('#thReplyForm textarea'); if (ta) { ta.value = keep; ta.focus(); }
 }
+document.addEventListener('change', (e) => {
+  const k = e.target.dataset?.chorepts;
+  if (!k) return;
+  const pts = +e.target.value, [ico, label] = careMeta(k);
+  act(async () => { await setChorePoints(k, pts); choresSheet(); renderCare(); toast(`${ico} ${label} is now ${pts ? `+${pts}` : '♡'} — what's already logged keeps its points`); });
+});
 document.addEventListener('change', async (e) => {
   const t = e.target;
   if (t.dataset.rshots != null && t.files?.length) {
