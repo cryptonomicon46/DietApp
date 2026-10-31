@@ -57,7 +57,12 @@ export function open(tab = 'home', { voice = null, meal = null } = {}) {
 }
 // 🎤 Listening (started by the tap in app.js): your words show as you speak; when you pause, the
 // request is read like a typed one. "Type instead" stops it.
-const SPEECH_ERR = { 'not-allowed': 'Speech recognition is off for this app — allow it in your phone\'s settings, or type.', 'service-not-allowed': 'Speech recognition is off for this app — allow it in your phone\'s settings, or type.', 'no-speech': "I didn't hear anything — tap 🎤 to try again, or type.", 'audio-capture': "The microphone isn't available — type instead.", network: "Speech recognition needs a connection — type instead." };
+// Once "Don't Allow" is tapped, the phone remembers it (removing and re-adding the Home Screen icon
+// doesn't reset it), so say exactly where to turn it back on.
+const BLOCKED = /iPhone|iPad|iPod/.test(globalThis.navigator?.userAgent || '')
+  ? "The microphone or speech recognition is blocked for Pawmily. On iPhone: Settings › Privacy & Security › Speech Recognition and › Microphone — turn on Safari (or OurPawmily); and Settings › Apps › Safari › Microphone › Ask. Then close Pawmily fully and open it again. Or type."
+  : "The microphone is blocked for this app — allow it in your browser's or phone's settings, then open the app again. Or type.";
+const SPEECH_ERR = { 'not-allowed': BLOCKED, 'service-not-allowed': BLOCKED, 'no-speech': "I didn't hear anything — tap 🎤 to try again, or type.", 'audio-capture': "The microphone isn't available — type instead.", network: "Speech recognition needs a connection — type instead." };
 export function listen(voice) {
   hush();
   if (!voice) { tk.error = "Listening isn't available here — type, or tap 🎤 on your keyboard."; return draw(); }

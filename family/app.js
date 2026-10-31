@@ -806,6 +806,7 @@ async function homeView() {
     ${homeLook()}
     <section class="card attn" id="attn" aria-labelledby="attnH" style="${homeH('attn')}"><div class="skeleton line"></div></section>
     <section class="card groc" id="groc" aria-labelledby="grocH" style="${homeH('groc')}"><div class="skeleton line"></div></section>
+    ${homeClasses()}
     <div id="goldNews"></div><section class="card movies" id="moviesCard" hidden></section>`;
   const pins = '<section class="card pins" id="pins" hidden></section>';
   // 🖥 Wide: what needs doing on one side, the house and the dogs on the other.
@@ -826,6 +827,42 @@ async function homeView() {
   await dogsDone;
 }
 
+// 🧗 Fitness class schedules on Home (they lived in the old feed's "Your day" card until the five-tab
+// redesign hid it): Movement's live calendars — the same links as js/brief.js GYMS / gymSchedule —
+// and Hot 8 Yoga at Santana Row. Each person chooses (owner, 2026-10-31: "ask if interested"): the
+// card first asks which studios you go to; "Not interested" keeps it off your Home (Me › ✨ Next up
+// & reminders › 🧗 Fitness classes brings it back). Kept on this phone, per family and person.
+// Plain links, nothing loaded; they open the studios' own pages.
+const movementCal = (slug, activity = '') => `https://movementgyms.com/${slug}/calendar/#${activity ? `activity=${activity}&` : ''}location=${slug}`;
+const STUDIOS = [
+  { id: 'sunnyvale', name: 'Movement Sunnyvale', links: [[movementCal('sunnyvale', 'yoga'), '🧘 Yoga'], [movementCal('sunnyvale', 'fitness'), '🏋️ Fitness'], [movementCal('sunnyvale'), '📅 Calendar']] },
+  { id: 'santa-clara', name: 'Movement Santa Clara', links: [[movementCal('santa-clara', 'yoga'), '🧘 Yoga'], [movementCal('santa-clara', 'fitness'), '🏋️ Fitness'], [movementCal('santa-clara'), '📅 Calendar']] },
+  { id: 'hot8', name: 'Hot 8 Yoga Santana Row', links: [['https://hot8yoga.com/studio/santana-row', '🔥 Classes &amp; booking']] },
+];
+const classKey = () => `fam.classes.${state.fid}.${fam()?.me || ''}`;
+// null = not asked yet · [] = not interested · ['sunnyvale', …] = the studios you go to
+function classPicks() { try { const v = JSON.parse(LS.get(classKey()) || 'null'); return Array.isArray(v?.on) ? v.on.filter((id) => STUDIOS.some((s) => s.id === id)) : null; } catch { return null; } }
+function classForm(picked = []) {
+  return `<form id="classForm" class="stack class-form">${STUDIOS.map((s) => `<label class="class-pick"><input type="checkbox" name="studio" value="${s.id}" ${picked.includes(s.id) ? 'checked' : ''}><span>${esc(s.name)}</span></label>`).join('')}
+    <div class="row"><button class="grow">Show on my Home</button><button type="button" class="ghost grow" data-act="classnone">Not interested</button></div></form>`;
+}
+function homeClasses() {
+  const picks = classPicks();
+  if (picks && !picks.length) return '';
+  if (!picks) return `<section class="card classlinks" id="classes" aria-labelledby="classH"><h3 id="classH" class="card-h">🧗 Fitness classes</h3>
+    <p class="small">Interested in any of these? Tick the ones you go to and their schedules stay on your Home — or tap Not interested.</p>${classForm()}</section>`;
+  const a = (href, label) => `<a href="${href}" target="_blank" rel="noopener">${label}</a>`;
+  return `<section class="card classlinks" id="classes" aria-labelledby="classH"><div class="row between"><h3 id="classH" class="card-h">🧗 Classes</h3><button type="button" class="linkish small" data-act="classpick">✎ Change</button></div>
+    ${STUDIOS.filter((s) => picks.includes(s.id)).map((s) => `<p class="small"><b>${esc(s.name)}</b><span>${s.links.map(([h, l]) => a(h, l)).join(' · ')}</span></p>`).join('')}</section>`;
+}
+function saveClassPicks(on) {
+  try { LS.set(classKey(), JSON.stringify({ on })); } catch { /* private mode */ }
+  closeSheet();
+  const el = $('#classes');
+  if (el) el.outerHTML = homeClasses() || '';
+  toast(on.length ? `🧗 On your Home: ${STUDIOS.filter((s) => on.includes(s.id)).map((s) => s.name).join(', ')}` : '🧗 Fitness classes hidden — bring them back in Me › ✨ Next up & reminders');
+}
+const classSheet = () => openSheet(`<h2>🧗 Fitness classes on your Home</h2><p class="small muted">Tick the studios you go to; only you see your choice (on this phone).</p>${classForm(classPicks() || [])}`);
 // 👔 Today's Look on Home — only when Look has something for today, from what Look left on this
 // phone (no request, no pictures at start-up).
 function homeLook() {
@@ -1741,7 +1778,7 @@ function meView() {
     <section class="card stack"><div class="seg theme-seg">${[['auto', '📱 Automatic'], ['light', '☀️ Light'], ['dark', '🌙 Dark']].map(([k, l]) => `<label class="segopt"><input type="radio" name="theme" value="${k}" ${(LS.get('pawmily.theme') || 'auto') === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
       <p class="tiny muted">Automatic follows your phone — on iPhone, Settings › Display &amp; Brightness › Automatic switches to dark at sunset. Applies to OurPawmily and your trackers on this device.</p></section>
     <h3>✨ Next up &amp; reminders</h3>
-    <section class="card stack"><button type="button" class="ghost wide" data-act="nuknows">✨ Next up: what it knows, show or hide it</button><button type="button" class="ghost wide" data-act="habits">🔁 Run, ride and hot yoga reminders</button></section>
+    <section class="card stack"><button type="button" class="ghost wide" data-act="nuknows">✨ Next up: what it knows, show or hide it</button><button type="button" class="ghost wide" data-act="habits">🔁 Run, ride and hot yoga reminders</button><button type="button" class="ghost wide" data-act="classpick">🧗 Fitness classes on my Home</button></section>
     <h3>🎬 Movies</h3>
     <section class="card stack" id="moviePrefs"><label class="switch-row"><span>🎬 Movie releases &amp; reviews<small class="muted">A card on 🏠 Home: what's in theaters with critic and audience scores, what's coming, where it's streaming, and 🔔 alerts for the ones you're waiting for. Just for you.</small></span><input type="checkbox" data-moviesonoff="1" ${mv.prefs?.on ? 'checked' : ''}><i class="switch"></i></label></section>
     <h3>🔔 Notifications</h3>
@@ -4740,6 +4777,8 @@ document.addEventListener('click', (e) => {
     case 'games': bingo.game = null; bingo.season = null; return show('bingo');
     case 'watchadd': return watchAddSheet();
     case 'chores': return choresSheet();
+    case 'classpick': return classSheet();
+    case 'classnone': return saveClassPicks([]);
     case 'chorehide': case 'choreshow': {
       const k = t.dataset.chorekind, show = d.act === 'choreshow';
       const own = ownChores().filter((c) => !c.gone);
@@ -5136,6 +5175,10 @@ document.addEventListener('submit', (e) => {
       closeSheet(); toast(id ? 'Saved ❤️' : '❤️ Logged');
       if (state.view === 'calendar') { calm.day = date; calm.month = date.slice(0, 7); rhythmLine(); renderCal(); }
     });
+  }
+  if (f.id === 'classForm') {
+    e.preventDefault();
+    return saveClassPicks([...f.querySelectorAll('input[name=studio]:checked')].map((x) => x.value));
   }
   if (f.id === 'choreForm') {
     e.preventDefault();

@@ -1518,3 +1518,8 @@ body.has-talk main { padding-bottom: 96px; }
 .chore-row { flex-wrap: nowrap; gap: 8px; } .chore-row > .grow { min-width: 0; }
 .chore-acts { flex: none; gap: 10px; margin: 0; align-items: center; }
 .chore-pts select { width: auto; min-width: 64px; min-height: 40px; padding: 2px 8px; margin: 0; font-size: .9rem; }
+/* 🧗 Class schedules on Home */
+.classlinks p { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; margin: 6px 0; }
+.class-form { gap: 4px; } .class-pick { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: .95rem; }
+.class-pick input { width: 20px; height: 20px; margin: 0; flex: none; }
+.classlinks a { display: inline-block; padding: 6px 0; font-weight: 600; color: var(--brand); text-decoration: none; }
