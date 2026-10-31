@@ -54,7 +54,9 @@ test("the Health screen: Today's anchors first, calm, private, escapes what it s
   assert.ok(!html.includes('data-weigh'));
   // Food: the next meal with its quick ways to log it.
   assert.match(html, /Breakfast is next/);
-  for (const a of ['plan:breakfast', 'photo:breakfast', 'tell:breakfast', 'out:breakfast']) assert.ok(html.includes(`data-ml="${a}"`), a);
+  // Two buttons on the next meal: ✓ As planned and ＋ Something else (Talk, photo, ate out, packaged live in one sheet).
+  for (const a of ['plan:breakfast', 'other:breakfast']) assert.ok(html.includes(`data-ml="${a}"`), a);
+  for (const a of ['photo:breakfast', 'tell:breakfast', 'out:breakfast']) assert.ok(!html.includes(`data-ml="${a}"`), `no ${a} on the row`);
   // Today first, then Nutrition & plan, then More (weight trend, devices).
   assert.ok(html.indexOf('hl-anchors') < html.indexOf('Nutrition &amp; plan') && html.indexOf('Nutrition &amp; plan') < html.indexOf('Weight trend'));
   assert.match(html, /href="\.\.\/#weight"><span>⚖️ Weight trend/);
