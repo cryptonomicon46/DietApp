@@ -4363,7 +4363,7 @@ document.addEventListener('click', (e) => {
   const d = t.dataset;
   const post = t.closest('[data-post]');
   if (d.pact) return postAction(d.pact, t.closest('.menu').dataset);
-  if (d.act === 'talk') { const voice = d.talkmic != null || t.closest('.talk-bar, .talk-fab') ? listenNow() : null; return act(async () => (await talk()).open(state.view, { voice })); }
+  if (d.act === 'talk') { const voice = d.talkmic != null || d.talkmeal != null || t.closest('.talk-bar, .talk-fab') ? listenNow() : null; return act(async () => (await talk()).open(state.view, { voice, meal: d.talkmeal || null })); }
   if (d.talk === 'mic') { const voice = listenNow(true); return act(async () => (await talk()).listen(voice)); }
   if (d.talk || d.talkex != null || d.talkgo != null || d.talkundo != null || d.talkset || d.talkpick || d.talkpickshow || d.talkcare) return act(async () => (await talk()).onClick(t));
   if (d.care) {

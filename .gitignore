@@ -25,3 +25,4 @@ lean-plate-*.json
 link-report/
 scripts/perf/.seeded.json
 perf-report/
+docs/mockups/meals/out/
