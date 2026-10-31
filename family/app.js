@@ -418,8 +418,9 @@ document.addEventListener('focusout', () => $('#talkFab')?.classList.remove('typ
 // browser can't (or you turned it off in the sheet), the box opens for typing / the keyboard's 🎤.
 // 📍 Where you are, for drive times: asked only when a day question is about going somewhere
 // (the phone asks your permission the first time), rounded to about 100 m, never kept.
-// iOS plays an audio element only after a tap has started it: the one shared player (family/voice.js
-// uses window.__pawPlayer) is started silently right here, inside the tap, for the Pawmily voice.
+// iOS plays an audio element only after a tap has started it: the one shared player (family/voiceCloud.js
+// uses window.__pawPlayer) is started silently right here, inside the tap — only when you chose Pawmily
+// Voice and the family's cloud voice is on (otherwise nothing cloud-related runs at all).
 const SILENT = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA';
 function primeAudioNow() { try { window.__pawPlayer ||= new Audio(); window.__pawPlayer.src = SILENT; window.__pawPlayer.play().catch(() => {}); } catch { /* no audio here */ } }
 function hereNow() {
@@ -444,24 +445,48 @@ function listenNow(asked = false) {
     r.start();
     // iOS only lets a page speak after a tap has started speech once: a silent word now, in the tap.
     try { if (window.speechSynthesis && LS.get('fam.talk.speak') === 'on') { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch { /* no speech here */ }
-    if (LS.get('fam.talk.speak') === 'on' && LS.get('fam.talk.voiceOut') === 'pawmily') primeAudioNow();
+    if (LS.get('fam.talk.speak') === 'on' && cloudWanted()) primeAudioNow();
     return buf;
   } catch { return null; }
 }
 let talkMod = null;
+// 🔊 Pawmily Voice (optional; ElevenLabs behind the connector). The family's state — master switch,
+// your privacy choices, the voice — is asked for only when the connector has a voice set up at all;
+// the cloud provider (family/voiceCloud.js) is loaded only when the family's cloud voice is ON and you
+// chose it. Talk works the same without any of it (the phone's own voice, or none).
+const voiceSt = { fid: null, s: null, at: 0 };
+let cloudProv = null;
+const cloudWanted = () => LS.get('fam.talk.voiceOut') === 'cloud' && voiceSt.fid === state.fid && !!voiceSt.s?.ready && api.mode() !== 'demo';
+async function voiceStateNow(force = false) {
+  if (api.mode() === 'demo' || !state.fid) return null;
+  if (!force && voiceSt.fid === state.fid && Date.now() - voiceSt.at < 5 * 60000) return voiceSt.s;
+  const fid = state.fid;
+  try { voiceSt.s = await api.get(`/families/${fid}/voice`); } catch { voiceSt.s = null; }
+  voiceSt.fid = fid; voiceSt.at = Date.now();
+  return voiceSt.s;
+}
 function talk() {
-  // (The connector's settings — usually already here — say whether the Pawmily voice is offered.)
+  // (The connector's settings — usually already here — say whether a cloud voice is set up at all.)
   const cfgSoon = Promise.race([api.liveConfig().catch(() => null), new Promise((ok) => setTimeout(ok, 1500, null))]);
-  talkMod ||= Promise.all([import(`./talk.js?v=${VERSION}`), import(`./voice.js?v=${VERSION}`), cfgSoon]).then(([m, V, cfg]) => {
+  talkMod ||= Promise.all([import(`./talk.js?v=${VERSION}`), cfgSoon]).then(([m, cfg]) => {
     const first = (n) => String(n || '').split(/\s+/)[0];
-    // 🔊 The Pawmily voice (ElevenLabs pilot): offered when the connector has it; used when chosen here.
     let voiceCfg = !!cfg?.voice;
-    if (!cfg) api.liveConfig().then((c2) => { voiceCfg = !!c2?.voice; }).catch(() => {});
-    const pawVoice = V.pawmilyVoiceOutput({ base: () => api.base(), token: () => api.token() });
+    const refreshVoice = () => (voiceCfg ? voiceStateNow().catch(() => null) : null);
+    if (!cfg) api.liveConfig().then((c2) => { voiceCfg = !!c2?.voice; refreshVoice(); }).catch(() => {});
+    refreshVoice();
     m.init({
       api, esc, openSheet, closeSheet, toast, LS, show, iso: () => isoLocal(),
-      voiceReady: () => voiceCfg && api.mode() !== 'demo',
-      get voiceOut() { return voiceCfg && api.mode() !== 'demo' && LS.get('fam.talk.voiceOut') === 'pawmily' ? pawVoice : undefined; },
+      fid: () => state.fid,
+      // Offered (the settings link shows) only when the connector has a voice; ON only when the family's
+      // owner switched it on and nothing paused it (cost, quota) — the connector decides, not the phone.
+      voiceOffered: () => voiceCfg && api.mode() !== 'demo',
+      cloudOn: () => voiceCfg && voiceSt.fid === state.fid && !!voiceSt.s?.ready && api.mode() !== 'demo',
+      vstate: () => (voiceSt.fid === state.fid ? voiceSt.s : null),
+      vprefs: () => (voiceSt.fid === state.fid ? voiceSt.s?.prefs : null),
+      voiceState: (force) => (voiceCfg ? voiceStateNow(force) : Promise.resolve(null)),
+      voiceSave: async (what, body) => { const r = await api.put(`/families/${state.fid}/voice${what ? `/${what}` : ''}`, body); voiceSt.at = 0; await voiceStateNow(true); return r; },
+      cloudVoice: () => (cloudProv ||= import(`./voiceCloud.js?v=${VERSION}`).then((M) => M.cloudVoiceOutput({ base: () => api.base(), token: () => api.token(), fid: () => state.fid,
+        onFallback: (msg) => { toast(msg || 'Using device voice for now.'); voiceSt.at = 0; voiceStateNow(true); } }))),
       aiReady: async () => { const cfg = await api.liveConfig(); return cfg.missing || cfg.offline ? null : !!cfg.ai; },
       // Names stay on the phone: they're swapped for roles before anything is sent (js/talkActions.js).
       people: () => fam().members.filter((x) => x.kind === 'person').map((x) => ({ id: x.id, name: first(x.name), role: x.id === fam().me ? 'me' : x.id === partnerMember()?.id ? 'partner' : 'member' })),
@@ -489,7 +514,9 @@ function talk() {
       fitDescribe: async (text) => { const F = await fit(); if (state.view !== 'fitness') show('fitness'); return F.describeWith(text); },
       who: () => `${state.fid}.${fam().me}`,
       // "Ask about my day": what the Calendar tab shows for today and tomorrow, put together here.
-      dayContext: async (asked = '') => {
+      // { voice: true } (Pawmily Voice chosen and on): also each fact's provenance — domain and owner —
+      // so the connector can keep only what every owner allows for cloud voice (js/voicePolicy.js).
+      dayContext: async (asked = '', { voice = false } = {}) => {
         await loadCal({ golden: false });
         // Linked calendars (yours and your partner's) freshly fetched — up to 6 s — so their events are current.
         await Promise.race([refreshFeeds().catch(() => {}), new Promise((ok) => setTimeout(ok, 6000))]);
@@ -536,7 +563,8 @@ function talk() {
             }
           }
         }
-        return D.dayContext({ days, meId: fam().me, people, now: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, today, weather, sun, health: whoopNow, food, travel, linked });
+        const ctx = D.dayContext({ days, meId: fam().me, people, now: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, today, weather, sun, health: whoopNow, food, travel, linked });
+        return voice ? { ...ctx, voiceFacts: D.voiceFacts({ days, meId: fam().me, partnerId: partnerMember()?.id || null, people, weather: ctx.weather, sun: ctx.daylight, travel: ctx.travel, health: ctx.yourHealth, food: ctx.yourFood }) } : ctx;
       },
       // A suggested time → your own calendar only (never anyone else's).
       calendarAdd: async ({ date, start, end, title }) => { const r = await api.post(`/families/${state.fid}/events`, { date, allDay: false, start, end, who: [fam().me], remind: null, repeat: null, body: await lock({ title, place: '', notes: '' }) }); calm.loadedAt = 0; return r.event?.id; },
@@ -4377,7 +4405,7 @@ document.addEventListener('click', (e) => {
   const post = t.closest('[data-post]');
   if (d.pact) return postAction(d.pact, t.closest('.menu').dataset);
   if (d.act === 'talk') { const voice = d.talkmic != null || t.closest('.talk-bar, .talk-fab') ? listenNow() : null; return act(async () => (await talk()).open(state.view, { voice })); }
-  if (d.talk === 'speak' && LS.get('fam.talk.voiceOut') === 'pawmily') primeAudioNow();
+  if (d.talk === 'speak' && cloudWanted()) primeAudioNow();
   if (d.talk === 'mic') { const voice = listenNow(true); return act(async () => (await talk()).listen(voice)); }
   if (d.talk || d.talkex != null || d.talkgo != null || d.talkundo != null || d.talkset || d.talkpick || d.talkpickshow || d.talkcare) return act(async () => (await talk()).onClick(t));
   if (d.care) {
@@ -5415,6 +5443,6 @@ document.addEventListener('input', (e) => { if (e.target.dataset?.rdq != null) R
 document.addEventListener('input', (e) => { if (e.target.dataset?.fxe && fitMod) fitMod.then((F) => F.onInput(e.target)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.mle != null && mealMod) mealMod.then((M) => M.onInput(e.target)).catch(() => {}); });
 document.addEventListener('change', (e) => { if (e.target.dataset?.mlpick != null && mealMod) mealMod.then((M) => M.onPick(e.target)).catch(() => {}); });
-document.addEventListener('change', (e) => { if (e.target.dataset?.talkrec != null && talkMod) talkMod.then((T) => T.onChange(e.target)).catch(() => {}); });
+document.addEventListener('change', (e) => { if ((e.target.dataset?.talkrec != null || e.target.dataset?.talkv) && talkMod) talkMod.then((T) => T.onChange(e.target)).catch(() => {}); });
 // Enter sends in the Talk box (Shift+Enter for a new line).
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'tkText') { e.preventDefault(); e.target.form?.requestSubmit(); } });

@@ -65,11 +65,11 @@ import { askPlan } from './planCoach.js';
 import { lookRoutes, isLookBytes, forgetLooks, LOOK_IMG } from './look.js';
 import { nameItem, findPieces } from './lookAi.js';
 import { estimatePhoto, estimateText } from './dietAi.js';
-import { routeTalk, answerDay } from './talkAi.js';
+import { routeTalk, answerDay, spokenSummary } from './talkAi.js';
 import { cleanFacts, cleanTurns } from '../js/planCoach.js';
 import { bookRoutes, bookLookupRoutes, bookCover, forgetReader } from './books.js';
 import { travelRoutes } from './travel.js';
-import { ttsRoutes, voiceReady } from './voiceTts.js';
+import { voiceRoutes, providerConfigured, spokenFor } from './voiceTts.js';
 import { NOTIFY_KINDS, wants, okEndpoint, okSubKeys, vapidKeys, sendTo, uidsOf, adultsOf, runReminders } from './push.js';
 import { ACCOUNT_TOOLS, GUEST_TOOLS, helpSystem, toMessages, runHelpAgent, offlineAnswer } from './helpAgent.js';
 
@@ -200,7 +200,7 @@ export async function familyApi(req, env, path, ctx = null) {
 
   if (path === '/config') return json({ googleClientId: env.GOOGLE_CLIENT_ID || '', ready: !!env.GOOGLE_CLIENT_ID, supportEmail: env.SUPPORT_EMAIL || '', termsVersion: TERMS_VERSION, photos: !!blobStore(env),
     // 🔌 Which device connections are set up here (only whether; never the keys), so the app never offers a Connect that can't work.
-    devices: { whoop: !!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET) }, ai: aiReady(env), voice: voiceReady(env) });
+    devices: { whoop: !!(env.WHOOP_CLIENT_ID && env.WHOOP_CLIENT_SECRET) }, ai: aiReady(env), voice: providerConfigured(env) });
 
   // 📚 A book cover (an image tag, so no sign-in): passed through from Open Library and cached.
   if (path.startsWith('/books/cover/') && method === 'GET') { const r = await bookCover({ path, env }); if (r) return r; }
@@ -375,7 +375,7 @@ export async function familyApi(req, env, path, ctx = null) {
   // ---- 🚗 Drive times with live traffic for day questions (Google Maps) ----
   { const r = await travelRoutes({ path, method, env, json, body, user, underLimit, db }); if (r) return r; }
   // ---- 🔊 The Pawmily voice (ElevenLabs pilot): answer text → audio, off unless the key is set ----
-  { const r = await ttsRoutes({ path, method, env, json, body, user, underLimit, db }); if (r) return r; }
+  { const r = await voiceRoutes({ path, method, env, json, body, user, underLimit, db, loadFamily, meIn, ctx }); if (r) return r; }
   { const r = await bookRoutes({ path, method, body, db, loadFamily, meIn, isCouple, sealed, randomId, json }); if (r) return r; }
   // ---- 👔 Look: your own Closet (yours alone), its pictures, and Fit Checks with your partner ----
   if (/^\/families\/[a-z0-9]+\/(members\/[a-z0-9]+\/look|fitchecks)/.test(path)) {
@@ -437,8 +437,23 @@ export async function familyApi(req, env, path, ctx = null) {
     if (text.length < 2 || !today) return json({ error: 'ask a question first' }, 400);
     const now = /^\d{2}:\d{2}$/.test(body.now || '') ? body.now : '';
     try {
-      return json(await aiCall({ db, purpose: 'talk.day', input: { text, today, now, context }, who: user.uid, underLimit },
-        async (payload) => answerDay(await claude(env), payload, { model: env.PARSE_MODEL || 'claude-sonnet-5-5' })));
+      const out = await aiCall({ db, purpose: 'talk.day', input: { text, today, now, context }, who: user.uid, underLimit },
+        async (payload) => answerDay(await claude(env), payload, { model: env.PARSE_MODEL || 'claude-sonnet-5-5' }));
+      // 🔊 Pawmily Voice (optional): a cloud-safe spoken summary + ticket, only from facts every owner
+      // allowed. Any failure leaves the answer as it is — the phone reads it on the device.
+      if (Array.isArray(body.voice?.facts) && body.voice.facts.length) {
+        try {
+          const fam = await loadFamily(String(body.fid || ''));
+          if (fam) {
+            const facts = body.voice.facts.slice(0, 60);
+            const sp = await spokenFor({ env, db, fam, me: meIn(fam), facts, summarize: async (ok) => (await aiCall({ db, purpose: 'talk.spoken', input: { text, facts: JSON.stringify(ok.map((f) => ({ about: f.d, fact: f.v }))).slice(0, 6000) }, who: user.uid, underLimit },
+              async (payload) => spokenSummary(await claude(env), payload, { model: env.PARSE_MODEL || 'claude-sonnet-5-5' }))) });
+            out.spoken = sp.ticket ? { text: sp.text, ticket: sp.ticket } : null;
+            out.voicePrivate = sp.private || null;
+          }
+        } catch { out.spoken = null; out.voicePrivate = 'error'; }
+      }
+      return json(out);
     } catch (e) {
       if (e instanceof GatewayError) return json({ error: e.status === 413 ? 'that day is too full to send at once' : e.message }, e.status);
       return json({ error: "Pawmily couldn't answer that just now" }, 502);

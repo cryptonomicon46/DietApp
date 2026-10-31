@@ -69,3 +69,19 @@ export async function answerDay(client, payload, { model } = {}) {
   const sugs = (Array.isArray(j.suggestions) ? j.suggestions : []).slice(0, 3).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x?.date) && /^\d{2}:\d{2}$/.test(x?.start) && /^\d{2}:\d{2}$/.test(x?.end));
   return { answer: String(j.answer || '').trim().slice(0, 900), suggestions: sugs.map((x) => ({ date: x.date, start: x.start, end: x.end, title: String(x.title || '').slice(0, 60), why: String(x.why || '').slice(0, 140) })) };
 }
+
+// ---------- 🔊 the cloud-safe spoken summary (Pawmily Voice) ----------
+// Written from ONLY the facts every owner allowed for cloud voice (server/voiceTts.js eligibleFacts) —
+// never from the full context — so nothing else can leak into what the cloud voice hears.
+export const SPOKEN_SCHEMA = { type: 'object', additionalProperties: false, required: ['spoken'], properties: { spoken: { type: 'string' } } };
+export const SPOKEN_INSTRUCTIONS = `Write what a voice assistant says aloud to answer the person's question: one or two short sentences, at most 40 words, warm and plain, as the JSON asked for.
+- Use ONLY the facts below. Anything not in them is unknown: never mention, hint at or guess it, and don't repeat details from the question that aren't in the facts.
+- No exact addresses, codes, account or phone numbers. Times like "4:30 PM" and temperatures are fine when they are in the facts.
+- People appear as [partner] or [member:N]: keep those tokens exactly; never guess names.
+- If these facts can't usefully answer the question, return spoken "".`;
+export async function spokenSummary(client, payload, { model } = {}) {
+  const res = await client.messages.create({ model, max_tokens: 300, output_config: { effort: 'low', format: { type: 'json_schema', schema: SPOKEN_SCHEMA } },
+    messages: [{ role: 'user', content: [{ type: 'text', text: `${SPOKEN_INSTRUCTIONS}\n\nFacts:\n${payload.facts}\n\nTheir question:\n${payload.text}` }] }] });
+  if (res.stop_reason === 'refusal' || res.stop_reason === 'max_tokens') return '';
+  try { return String(JSON.parse((res.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('')).spoken || '').replace(/\s+/g, ' ').trim().slice(0, 400); } catch { return ''; }
+}

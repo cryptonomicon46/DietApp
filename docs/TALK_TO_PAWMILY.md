@@ -232,6 +232,9 @@ A tool is added to the registry first. External callers (a future voice agent in
 - **Speech** sits behind 12.1.
 - The UI works without each optional provider. With no Claude, the phone reader still handles everyday requests. With no Maps key, location or speech, those parts are simply left out.
 
+### 12.5a Pawmily Voice — built in Phase 1 (2026-10-31, PR #19, under review)
+ElevenLabs text-to-speech only, behind `routeVoice` and the connector's speakable tickets (see `server/voiceTts.js`, `js/voicePolicy.js`, `docs/ARCHITECTURE.md` §6). Principle: Pawmily knows the family's life; the cloud voice should usually know only the sentence it is asked to speak. No ElevenLabs Agents, Calendar or other integrations; no voice input through ElevenLabs; Threads and notes are not voiced (Phase 2: sensitive by default, only the author decides, no retroactive consent, quotes don't carry consent — mockups first). A future provider replaces `voiceCloud.js` and `speak()` in `voiceTts.js`; profiles are already provider-neutral.
+
 ### 12.6 A future ElevenLabs evaluation (design only; needs its own authorization)
 - **First, a chained test:** ElevenLabs realtime speech-to-text (as a `VoiceInputProvider`) → the existing Pawmily orchestration → ElevenLabs streaming text-to-speech (as a `VoiceOutputProvider`).
 - **Setup:**

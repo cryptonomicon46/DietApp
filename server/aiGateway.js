@@ -28,6 +28,9 @@ export const PURPOSES = {
   // people as roles, their free gaps, the area's forecast, and their own WHOOP numbers and food today
   // — targets, meals planned or logged, what's left — when available; never weight or notes).
   'talk.day': { provider: 'anthropic', payload: 'personal-text', fields: { text: 500, today: 10, now: 5, context: 12000 }, perDay: 40 },
+  // 🔊 Pawmily Voice: a short spoken summary written ONLY from facts every owner allowed for cloud voice
+  // (server/voiceTts.js) — never the full day context. Only when the family's cloud voice is ON.
+  'talk.spoken': { provider: 'anthropic', payload: 'personal-text', fields: { text: 500, facts: 6000 }, perDay: 40 },
   // 📈 "Ask about my plan": the plan's numbers only (rebuilt through js/planCoach.js cleanFacts —
   // phase, week, targets, a 7-day adherence summary, trend, planned rate, goal date, training-day
   // count), the question, and earlier questions and answers of the same chat. Never names, meals,

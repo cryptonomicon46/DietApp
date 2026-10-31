@@ -199,3 +199,27 @@ export function checkSuggestions(list, ctx) {
     return free[s.date].some((w) => a >= mins(w.from) && b <= mins(w.to));
   }).map((s) => ({ date: s.date, start: s.start, end: s.end, title: String(s.title || '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Plan', why: String(s.why || '').replace(/\s+/g, ' ').trim().slice(0, 140) }));
 }
+
+// 🔊 Pawmily Voice provenance: the facts a cloud-safe spoken summary may be written from, each with its
+// domain and owner (js/voicePolicy.js). Built by this code — never by a model — from what the phone
+// already holds, people as roles, and minimised: no places, notes or exact addresses. The connector
+// keeps only what every owner allowed (all off by default) before anything is written for the voice.
+export function voiceFacts({ days = [], meId, partnerId = null, people = [], weather = null, sun = null, travel = null, health = null, food = null } = {}) {
+  const out = [];
+  const ownerOf = (who) => {
+    const w = Array.isArray(who) ? who : [who];
+    if (w.length === 1 && w[0] === meId) return meId;
+    if (w.length === 1 && w[0] && !['both', 'family'].includes(w[0])) return w[0];
+    if (w.includes('both') || (partnerId && w.length === 2 && w.includes(meId) && w.includes(partnerId))) return 'both';
+    return 'family';
+  };
+  for (const d of days) for (const x of (d.items || []).slice(0, 20)) {
+    out.push({ d: 'calendar', o: ownerOf(x.who), v: { date: d.date, ...(x.allDay ? { allDay: true } : { time: x.time || '', ...(x.end ? { end: x.end } : {}) }), title: toTokens(String(x.title || '').slice(0, 80), people).text } });
+  }
+  for (const w of (weather || []).slice(0, 16)) out.push({ d: 'weather', o: 'public', v: w });
+  for (const x of (sun || []).slice(0, 8)) out.push({ d: 'daylight', o: 'public', v: x });
+  for (const p of travel?.places || []) if (p.found !== false) out.push({ d: 'travel', o: meId, v: { place: p.place, hoursToday: p.hoursToday, drives: p.drives } });
+  if (health) out.push({ d: 'health', o: meId, v: health });
+  if (food) out.push({ d: 'food', o: meId, v: { left: food.left, meals: (food.meals || []).map((m) => ({ meal: m.meal, status: m.status, title: m.title, kcal: m.kcal })) } });
+  return out;
+}

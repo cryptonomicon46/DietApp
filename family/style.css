@@ -1471,6 +1471,17 @@ body.has-talk main { padding-bottom: 96px; }
 .tk-answer { font-size: .95rem; line-height: 1.45; } .tk-answer > button { justify-self: start; min-height: 0; padding: 0; }
 .tk-go { display: block; padding: .45rem 0; color: var(--brand); font-weight: 600; text-decoration: none; min-height: 44px; box-sizing: border-box; line-height: 1.6; }
 .tk-answer > .tk-say { float: right; padding: 0; margin: -6px -8px 0 6px; min-width: 44px; min-height: 44px; font-size: 1.1rem; }
+/* 🎙 Pawmily Voice: the label on an answer and its settings (inside Talk) */
+.tk-voice { font-size: .78rem; }
+.tk-vset h3 { margin: 10px 0 4px; font-size: 1.05rem; }
+.tk-vset .tk-note { background: var(--brand-soft); border-radius: 12px; padding: 8px 10px; }
+.tk-field { border: 1px solid var(--line); border-radius: 16px; padding: 8px 12px 10px; margin: 10px 0 0; display: grid; gap: 2px; min-width: 0; }
+.tk-field legend { font-weight: 600; font-size: .9rem; padding: 0 4px; }
+.tk-chk { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: .95rem; }
+.tk-chk input { width: 20px; height: 20px; flex: none; margin: 0; }
+.tk-field > button { justify-self: start; margin-top: 6px; }
+.tk-dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 4px 0; font-size: .88rem; }
+.tk-dl dt { color: var(--muted); } .tk-dl dd { margin: 0; overflow-wrap: anywhere; }
 /* 🎤 listening */
 .tk-listen { display: grid; justify-items: center; gap: 10px; text-align: center; margin: 14px 0 4px; }
 .tk-pulse { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; font-size: 2rem; background: radial-gradient(120% 140% at 30% 20%, #fffbe2 0%, #ffe680 18%, #ffc928 48%, #e09b00 78%, #a56c00 100%); box-shadow: 0 0 0 0 rgba(224,155,0,.45); animation: tkPulse 1.4s ease-out infinite; }

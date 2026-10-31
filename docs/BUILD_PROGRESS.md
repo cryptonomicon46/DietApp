@@ -1,44 +1,20 @@
 # OurPawmily Build Progress
 
-Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for review) on `v2/talk-t0` from `main` `5910e8a`, after T0 (mockups + action registry). Health 2 Phase B merged (PR #7 `5c9e5f2`, PR #8 `5910e8a`) and deployed (connector `37c7ea1c…` from `v2/health-2b` head, Pages from `main`; reported by the user) and checked on the owner's real WHOOP data. Health 2 Phase A merged as PR #6 (`aa4fe63`) and deployed (reported by the user). Earlier: 👔 Look MVP (L0–L6) on `v2/look-mvp` from `main` `f333274` (Health UX merged as PR #4 and deployed, reported by the user). Earlier: Health/Fitness/Diet UX (H1–H12 with amendments) on `v2/health-ux`. Phases 4–11 and the Describe-it change are merged to `main` (PR #2 `d94c25f`, PR #3 `e9708af`) and deployed (reported by the user).
+Last update: 2026-10-31 — 🎙 Pawmily Voice Phase 1 (privacy-first, optional ElevenLabs) on `v2/voice-elevenlabs-pilot` (PR #19, not to be merged; stopped for independent review). Talk T1–T3, meals, calendar filter and partner calendar merged as PRs #10–#17 (reported by the user); PR #18 (meals simplify) open.
 
 ## Current phase and task
 
-### 🎙 The Pawmily voice — ElevenLabs pilot (2026-10-30, `v2/voice-elevenlabs-pilot` from `main`; owner: "proceed with integrating with Eleven labs. I'll purchase the subscription")
-- **Built (behind `VoiceOutputProvider`; off by default):**
-  - `server/voiceTts.js` `POST /voice/tts`:
-    - signed in; text ≤ 600 characters; a daily limit per member (`ELEVENLABS_PER_DAY`, default 30);
-    - calls ElevenLabs text-to-speech with `ELEVENLABS_VOICE_ID` (`eleven_flash_v2_5`, mp3);
-    - returns the audio (`no-store`);
-    - answers 501 without `ELEVENLABS_API_KEY`/`ELEVENLABS_VOICE_ID`;
-    - passes on ElevenLabs' errors as "ElevenLabs: …".
-  - `/config` gives `voice`.
-  - `family/voice.js` `pawmilyVoiceOutput`: fetches the audio and plays it in one shared `<audio>`. That player is started silently inside the tap (iOS). On any failure the phone's voice reads instead.
-  - In Talk: *🎙 Use the Pawmily voice* (`fam.talk.voiceOut`), offered only when the connector has the voice. It's used for read-aloud (still off by default) and for 🔊.
-- **Privacy (owner asked):**
-  - Only the words being read go to ElevenLabs, names included. Not audio, not other data, not the family key. Nothing is stored but the daily counter.
-  - ElevenLabs may keep a generation history in the account.
-  - Privacy page, README, help guide, server README and ARCHITECTURE updated.
-- **Not built (needs the owner's decisions, mockups first):** Threads read aloud.
-  - It would send decrypted thread text through the connector to ElevenLabs: an exception to end-to-end encryption, tap-only.
-  - Other people's messages need their opt-in.
-  - Each message should be read in its author's voice once both voices exist.
-- **Tests:** `tests/voice.test.js`:
-  - text cleaning;
-  - 401 / 501, `/config` `voice`;
-  - only the words and the model are sent;
-  - nothing kept but the counter;
-  - 400, the 600-character cap, 429 at the daily limit, ElevenLabs errors passed on.
-  - `npm test` 495 pass.
-- **Browser check** (390 px; local Pages and `wrangler dev`, voice service stubbed):
-  - The choice appears when `/config` says `voice`; picking it is remembered.
-  - 🔊 sends only `{"text":"You have book club at 6 PM."}`.
-  - With undecodable test audio, the phone's voice read the answer (the fallback). No errors.
-- **Not verified:** real ElevenLabs audio, and playback on a real iPhone.
-- **Needs from the owner:**
-  1. `scripts/elevenlabs-check.mjs` with the clone → `API_OK`.
-  2. `wrangler secret put ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID`.
-  3. `pawdeploy`.
+### 🎙 Pawmily Voice — privacy-first, optional ElevenLabs (Phase 1; 2026-10-31, `v2/voice-elevenlabs-pilot`, PR #19 — DO NOT MERGE, stopped for independent review)
+- **Owner direction:** "Privacy-First ElevenLabs Voice Architecture" (Phase 1 only) plus "ElevenLabs must be completely optional". Not authorized: ElevenAgents, Threads voice (Phase 2 waits for Thread mockups), merging PR #19.
+- **Built (repository-verified, uncommitted → this commit):**
+  - `js/voicePolicy.js` (pure, shared): categories all OFF (`defaultPrefs`), names always out, provenance owners (`ownersOf`: only weather/daylight may be public), `eligibleFacts` (listener + every owner must allow the category), `grantsHold`, `rolesForSpeech`, `looksSensitive` backstop, fixed `PHRASES`, `POLICY_VERSION = 1`.
+  - `server/voiceTts.js`: master state (`CLOUD_VOICE`, key + voice, family switch `voiceadmin:<fid>` by the creator — starts OFF, cost budget `ttschars:<fid>:<date>`, 1 h pause after billing/auth/quota/429), member prefs `voicepref:<fid>:<member>`, provider-neutral voice profile (owner by `ELEVENLABS_VOICE_OWNER_EMAIL`, purposes `talk:self`/`talk:family`, revoke; new voice id resets), `spokenFor` (summary only from eligible facts → roles → sensitive scan → HMAC ticket bound to text hash, uid, fid, member, voice + id hash, policy version, grants, purpose, 2-min expiry, nonce), `GET/PUT /families/:fid/voice[/prefs|/profile|/admin]`, `POST /voice/tts` (ticket or fixed phrase only; every check repeated; one-time nonce; budget; per-member limit; errors → `Using device voice for now.`). No logging.
+  - `server/talkAi.js` `spokenSummary`, gateway purpose `talk.spoken`; `/ai/talk/day` adds `spoken`/`voicePrivate` only when the phone sends provenance facts; any failure leaves the answer untouched.
+  - Phone: `family/voice.js` `routeVoice` (one decision point) + on-device voices preferred; `family/voiceCloud.js` (lazy; POST only; replays a played clip instead of re-using a ticket); `family/app.js` fetches the family's voice state only when `/config` says a voice exists, loads the cloud provider only when on and chosen; `js/talkDay.js` `voiceFacts`; `family/talk.js` 🎙 Pawmily Voice settings (read with phone / Pawmily Voice; six categories; names out locked; your-voice purposes and revoke; creator's Cloud voice switch, provider, fallback, usage today), answer label "🎙 Pawmily Voice" / "Pawmily using Sam's voice" / "🔒 Heard privately on this device", fixed confirmation phrases.
+- **Tests:** `tests/voicepolicy.test.js` (12), `tests/voice.test.js` (15, spec 33 matrix 33.1–33.16 + acceptance `cloudVoiceEnabled=false`), `tests/voiceclient.test.js` (11: provider replacement — disabled, error, quota, missing key, revoked, global off, device chosen; cloud provider POST-only/replay/fallback). `npm test`: 530 pass, 0 fail (2026-10-31).
+- **Docs:** privacy page (flow 1–6, retention stated as not zero), README, help guide, server README (setup requirements, settings table), ARCHITECTURE (§6 row, §7 ElevenLabs, §9 boundary).
+- **Not verified:** real ElevenLabs audio with the owner's voice; iPhone playback; whether ElevenLabs returns a `history-item-id` header (so `ELEVENLABS_DELETE_HISTORY` is unverified).
+- **Needs from the owner (after review):** ElevenLabs training opt-out, history decision, separate dev/prod TTS-only keys with credit limits; `wrangler secret put ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_VOICE_OWNER_EMAIL`; deploy; switch Cloud voice on; tick categories / own-voice purposes.
 
 ### 👫 Talk — your partner's day (2026-10-30, `v2/talk-partner` from `main`)
 - **Owner's live try:** "What's on my wife's calendar today" got "I can only see your own items, not [partner]'s calendar".

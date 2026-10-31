@@ -10,11 +10,12 @@
 import { parseTalk } from '../js/talkParse.js';
 import { toTokens, fromTokens } from '../js/talkActions.js';
 import { isDayQuestion, checkSuggestions } from '../js/talkDay.js';
-import { browserVoiceOutput } from './voice.js';
+import { browserVoiceOutput, routeVoice } from './voice.js';
+import { CATEGORIES, CATEGORY_LABELS, PHRASES } from '../js/voicePolicy.js';
 
 let c = null;
 export function init(ctx) { document.getElementById('sheet')?.addEventListener('close', hush); c = ctx; }
-const tk = { tab: 'home', text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null };
+const tk = { tab: 'home', text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null, vset: null };
 // v4: food (v2), drive times from where you are (v3), and any day you ask about, not just today and
 // tomorrow (v4) — each widened what's sent, so it's asked again.
 const DAYOK = () => `fam.talk.dayok4.${c.who()}`;
@@ -32,25 +33,38 @@ const READ = { want: 'Want to Read', reading: 'Reading', finished: 'Finished', d
 const MEAL = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', extra: 'A snack or extra' };
 const MIC_OK = () => typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 const voiceOff = () => { try { return c.LS.get('fam.talk.voice') === 'off'; } catch { return false; } };
-// 🔊 Answers read aloud (family/voice.js VoiceOutputProvider; the phone's own voice today) — only
-// when you asked by voice, and never if you turned it off. Nothing extra leaves the phone.
-const out$ = () => c?.voiceOut || browserVoiceOutput;
-const SPEAK_OK = () => out$().available();
-// Off unless you switch it on (owner, 2026-10-30: no speaking back by default; a richer voice may come later).
+// 🔊 Answers read aloud — off unless you switch it on (owner, 2026-10-30), and then only when you asked
+// by voice (or tap 🔊). Who speaks is decided in ONE place, family/voice.js routeVoice: the Pawmily
+// Voice (cloud, optional) only when the family's cloud voice is on, you chose it, and the connector made
+// that exact sentence speakable (a ticket or a fixed phrase); otherwise the phone's own voice; any
+// cloud failure ends on the phone. The cloud provider is loaded only on that path (c.cloudVoice()).
+const SPEAK_OK = () => browserVoiceOutput.available() || !!c?.cloudOn?.();
 const speakOn = () => { try { return c.LS.get('fam.talk.speak') === 'on'; } catch { return false; } };
-// The Pawmily voice (ElevenLabs pilot): offered only when the connector has it set up; off unless chosen.
-const pawVoice = () => { try { return c.LS.get('fam.talk.voiceOut') === 'pawmily'; } catch { return false; } };
+// Your choice of voice: 'cloud' = Pawmily Voice where allowed; anything else = the phone's voice.
+const cloudPick = () => { try { return c.LS.get('fam.talk.voiceOut') === 'cloud'; } catch { return false; } };
+const cloudLive = () => !!c?.cloudOn?.() && cloudPick();
 let heard = false; // this request came from your voice
-export function hush() { out$().stop(); }
-export function speak(text, { always = false } = {}) {
-  if (!SPEAK_OK() || (!always && (!heard || !speakOn()))) return;
-  out$().speak(text);
+let cloudP = null; // the cloud provider, once loaded
+export function hush() { browserVoiceOutput.stop(); cloudP?.stop(); }
+// `cloud`: { text, ticket } from the connector, or { phrase } — what the cloud voice may say instead.
+export async function speak(text, { always = false, cloud = null } = {}) {
+  if (!always && (!heard || !speakOn())) return 'none';
+  const route = routeVoice({ cloudOn: !!c?.cloudOn?.(), mode: cloudPick() ? 'cloud' : 'device', speakable: !!cloud, deviceOk: browserVoiceOutput.available() });
+  hush();
+  if (route === 'cloud') {
+    try { cloudP = await c.cloudVoice(); if (await cloudP.speak(cloud)) return 'cloud'; } catch { /* the phone reads it instead */ }
+    if (!browserVoiceOutput.available()) return 'none';
+  } else if (route === 'none') return 'none';
+  browserVoiceOutput.speak(text);
+  return 'device';
 }
+// A fixed confirmation (the connector's own words): cloud only if you allow simple confirmations.
+const sayPhrase = (key) => speak(PHRASES[key], { cloud: cloudLive() && c.vprefs?.()?.cats?.confirmations ? { phrase: key } : null });
 const norm = (t) => String(t || '').toLowerCase().replace(/^(the|a|an)\s+/, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
 export function open(tab = 'home', { voice = null } = {}) {
   tk.tab = EXAMPLES[tab] ? tab : tab === 'watch' || tab === 'read' ? 'us' : tab === 'fitness' ? 'health' : 'home';
-  Object.assign(tk, { text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null });
+  Object.assign(tk, { text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null, vset: null });
   if (voice) return listen(voice);
   draw();
   setTimeout(() => document.getElementById('tkText')?.focus(), 60);
@@ -89,15 +103,16 @@ function draw() {
   try { first = !c.LS.get(SEEN); } catch { /* private mode */ }
   c.openSheet(`<div class="tk-sheet"><div class="row between tk-top"><h2>${ICON}Talk to Pawmily</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     ${first ? `<p class="tk-first">Say what you'd like done — add a show or a book, log a meal, a workout or a chore. Your phone reads it first; only what it can't read goes to Claude, with people's names swapped for roles. Nothing changes until you tap. <button type="button" class="linkish small" data-talk="seen">Got it</button></p>` : ''}
-    ${tk.voice ? `<div class="tk-listen" role="status"><span class="tk-pulse" aria-hidden="true">🎤</span><p id="tkLive" class="tk-live">${E(tk.voice.text || 'Listening…')}</p>
+    ${tk.vset ? '' : tk.voice ? `<div class="tk-listen" role="status"><span class="tk-pulse" aria-hidden="true">🎤</span><p id="tkLive" class="tk-live">${E(tk.voice.text || 'Listening…')}</p>
       <div class="tk-two"><button type="button" data-talk="stop">Done</button><button type="button" class="ghost" data-talk="type">Type instead</button></div>
       <p class="tiny muted">Your phone's speech service turns your voice into text (Apple's on iPhone, Google's on Android); Pawmily only gets the words.</p></div>`
     : `<form class="tk-form" data-talkform><label for="tkText" class="visually-hidden">What would you like?</label><textarea id="tkText" rows="2" maxlength="500" placeholder="Ask or tell Pawmily…" enterkeyhint="send">${E(tk.text)}</textarea>${MIC_OK() ? '<button type="button" class="ghost tk-mic" data-talk="mic" aria-label="Speak">🎤</button>' : ''}<button ${tk.busy ? 'disabled' : ''} aria-label="Send">${tk.busy ? '…' : '↑'}</button></form>
-    <p class="tiny muted tk-hint">${MIC_OK() ? '🎤 Tap to speak, or type.' : '🎤 Tap the microphone on your keyboard to speak — only the words reach Pawmily.'}${MIC_OK() ? ` <button type="button" class="linkish tiny" data-talk="voiceoff">${voiceOff() ? 'Listen when I open Talk' : "Don't listen when I open Talk"}</button>` : ''}${MIC_OK() && SPEAK_OK() ? ` · <button type="button" class="linkish tiny" data-talk="speakoff">${speakOn() ? '🔇 Don\'t read answers aloud' : '🔊 Read answers aloud'}</button>` : ''}${c.voiceReady?.() ? ` · <button type="button" class="linkish tiny" data-talk="voicepick">${pawVoice() ? '🎙 Pawmily voice ✓' : '🎙 Use the Pawmily voice'}</button>` : ''}</p>`}
+    <p class="tiny muted tk-hint">${MIC_OK() ? '🎤 Tap to speak, or type.' : '🎤 Tap the microphone on your keyboard to speak — only the words reach Pawmily.'}${MIC_OK() ? ` <button type="button" class="linkish tiny" data-talk="voiceoff">${voiceOff() ? 'Listen when I open Talk' : "Don't listen when I open Talk"}</button>` : ''}${MIC_OK() && SPEAK_OK() ? ` · <button type="button" class="linkish tiny" data-talk="speakoff">${speakOn() ? '🔇 Don\'t read answers aloud' : '🔊 Read answers aloud'}</button>` : ''}${c.voiceOffered?.() ? ` · <button type="button" class="linkish tiny" data-talk="vset">${cloudLive() ? '🎙 Pawmily Voice ✓' : '🎙 Pawmily Voice'}</button>` : ''}</p>`}
     <div id="tkOut" role="status">${out()}</div></div>`);
 }
 function out() {
   if (tk.voice) return '';
+  if (tk.vset) return voiceSettings();
   if (tk.busy) return '<p class="small muted">Reading…</p>';
   if (tk.error) return `<p class="small">${E(tk.error)}</p>`;
   if (tk.consent) return `<div class="tk-card"><b>📅 Answer questions about your day?</b><small>To answer, Pawmily sends Claude the calendar from this app for the days you ask about (today and tomorrow unless you name others, up to about a week) — times, titles, places and whose (names swapped for roles) — your free time, the forecast for your area, and, when you have them, your own WHOOP numbers and your own food today (your meal plan, what you've logged and what's left). Never your weight or notes. When you ask about going somewhere, your location (to about 100 m) and the place go to Google Maps for drive times with traffic and opening hours. Nothing is kept, and nothing changes unless you tap.</small><div class="tk-two"><button type="button" data-talk="dayok">Allow and ask</button><button type="button" class="ghost" data-talk="dayno">Not now</button></div></div>`;
@@ -134,7 +149,7 @@ export async function send(text) {
   // A meal, a described workout or "make it lighter" on its own: straight to that area's own preview.
   if (steps.length === 1 && ['diet.log', 'fitness.describe', 'fitness.lighter'].includes(steps[0].do)) { c.closeSheet(); return handOff(steps[0]); }
   tk.cards = await Promise.all(steps.map(resolve));
-  speak(tk.cards.length > 1 ? `Here are ${tk.cards.length} things — check them and tap to confirm.` : 'Here it is — check it and tap to confirm.');
+  sayPhrase(tk.cards.length > 1 ? 'confirm.many' : 'confirm.one');
   draw();
 }
 
@@ -149,16 +164,20 @@ async function askDay(text, t) {
   tk.busy = true; draw();
   const people = c.people();
   try {
-    const ctx = await c.dayContext(t.text);
-    const r = await c.api.post('/ai/talk/day', { text: t.text, today: ctx.today, now: ctx.now, context: JSON.stringify(ctx) });
+    // Pawmily Voice chosen and on: each fact's provenance goes too, so the connector can write a short
+    // cloud-safe sentence from only what every owner allowed (and sign it). Otherwise nothing extra.
+    const cloud = cloudLive();
+    const { voiceFacts, ...ctx } = await c.dayContext(t.text, { voice: cloud });
+    const r = await c.api.post('/ai/talk/day', { text: t.text, today: ctx.today, now: ctx.now, context: JSON.stringify(ctx), ...(cloud && voiceFacts?.length ? { fid: c.fid(), voice: { facts: voiceFacts } } : {}) });
     const all = toTokens(people.map((p) => p.name).join(', '), people).map;
     const back = (s) => fromTokens(s, all, people).replace(/\byou and ([A-Z][a-z]+)\b/g, 'you and $1');
     const to = /\b(meals?|macros?|calories|protein|carbs|fat|eat|breakfast|lunch|dinner|snacks?|recovery|sleep|strain|whoop|hrv)\b/i.test(t.text) ? 'health' : 'calendar';
     const go = (ctx.travel?.places || []).filter((p) => p.found !== false).map((p) => ({ name: p.place, q: p.address || p.place, min: p.drives?.find((d) => d.leave === 'now')?.minutes }));
-    tk.cards = [{ type: 'answer', text: back(r.answer || "I couldn't work that out."), to, go },
+    tk.cards = [{ type: 'answer', text: back(r.answer || "I couldn't work that out."), to, go, spoken: r.spoken?.ticket ? r.spoken : null, cloud },
       ...checkSuggestions(r.suggestions, ctx).map((x) => ({ type: 'suggest', s: { ...x, title: back(x.title), why: back(x.why) }, go: true }))];
     const n = tk.cards.length - 1;
-    speak(`${tk.cards[0].text}${n ? ` I found ${n === 1 ? 'a time' : `${n} times`} you could add to your calendar.` : ''}`);
+    // The Pawmily Voice says only the cloud-safe sentence; the phone's voice reads the whole answer.
+    speak(`${tk.cards[0].text}${n ? ` ${PHRASES['day.times']}` : ''}`, { cloud: tk.cards[0].spoken });
   } catch (e) { tk.error = e.status === 429 ? "That's all the day questions for today." : e.message || "Pawmily couldn't answer that just now."; }
   if (tk.error) speak(tk.error);
   tk.busy = false;
@@ -201,7 +220,7 @@ function cardHtml(x, i) {
     return `<div class="tk-card"><b>📚 ${E(b.title)}</b><small class="muted">${E([(b.authors || []).map((a) => a.name || a).join(', '), b.year].filter(Boolean).join(' · '))} → ${E(READ[x.state])}</small>
       ${p && !x.done ? `<label class="tk-rec"><input type="checkbox" data-talkrec="${i}" ${x.recBy ? 'checked' : ''}> Recommended by ${E(p.first)}</label>` : ''}${btn('Add to Read')}</div>`;
   }
-  if (x.type === 'answer') return `<div class="tk-card tk-answer">${SPEAK_OK() ? '<button type="button" class="icon-btn tk-say" data-talk="speak" aria-label="Read this aloud">🔊</button>' : ''}${E(x.text).replace(/\n/g, '<br>')}${(x.go || []).map((g) => `<a class="tk-go small" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(g.q)}&travelmode=driving" target="_blank" rel="noopener">🚗 ${E(g.name)}${g.min ? ` · ${g.min} min now` : ''} · Directions ›</a>`).join('')}${x.to === 'health' ? '<button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button>' : '<button type="button" class="linkish small" data-talk="calopen">Open Calendar ›</button>'}</div>`;
+  if (x.type === 'answer') return `<div class="tk-card tk-answer">${SPEAK_OK() ? '<button type="button" class="icon-btn tk-say" data-talk="speak" aria-label="Read this aloud">🔊</button>' : ''}${E(x.text).replace(/\n/g, '<br>')}${x.cloud ? `<small class="tk-voice muted">${x.spoken ? `🎙 ${E(voiceName())}` : '🔒 Heard privately on this device'}</small>` : ''}${(x.go || []).map((g) => `<a class="tk-go small" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(g.q)}&travelmode=driving" target="_blank" rel="noopener">🚗 ${E(g.name)}${g.min ? ` · ${g.min} min now` : ''} · Directions ›</a>`).join('')}${x.to === 'health' ? '<button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button>' : '<button type="button" class="linkish small" data-talk="calopen">Open Calendar ›</button>'}</div>`;
   if (x.type === 'suggest') { const d = new Date(`${x.s.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' }); return `<div class="tk-card"><b>🗓 ${E(x.s.title)} · ${E(d)} ${E(time12(x.s.start))}–${E(time12(x.s.end))}</b>${x.s.why ? `<small class="muted">${E(x.s.why)}</small>` : ''}${btn('Add to my calendar', true)}</div>`; }
   if (x.type === 'care') return `<div class="tk-card"><b>${E(x.care.icon)} ${E(x.care.label)}</b><small class="muted">Today · logged for you</small>${btn('Log it')}</div>`;
   if (x.type === 'pickcare') return `<div class="tk-card"><b>Which one?</b><small class="muted">I don't know "${E(x.chore)}" — pick it:</small><div class="tk-ex">${x.kinds.map((k) => `<button type="button" data-talkcare="${i}:${E(k.kind)}">${E(k.icon)} ${E(k.label)}</button>`).join('')}</div></div>`;
@@ -269,14 +288,78 @@ export async function onClick(t) {
   if (d.talk === 'voiceoff') { try { c.LS.set('fam.talk.voice', voiceOff() ? '' : 'off'); } catch { /* private mode */ } c.toast(voiceOff() ? 'Talk opens ready to type' : 'Talk starts listening when you open it'); return draw(); }
   if (d.talk === 'dayok') { try { c.LS.set(DAYOK(), '1'); } catch { /* private mode */ } const q = tk.consent?.text || tk.text; tk.consent = null; return send(q); }
   if (d.talk === 'dayno') { tk.consent = null; tk.say = "OK — I won't look at your calendar. I can still add shows, movies and books, and log meals, workouts and chores."; return draw(); }
-  if (d.talk === 'voicepick') { try { c.LS.set('fam.talk.voiceOut', pawVoice() ? '' : 'pawmily'); } catch { /* private mode */ } hush(); c.toast(pawVoice() ? 'Answers are read in the Pawmily voice (when read aloud)' : 'Answers are read in your phone\'s voice'); return draw(); }
+  if (d.talk === 'vset') return openVoiceSettings();
+  if (d.talk === 'vback') { tk.vset = null; return draw(); }
+  if (d.talk === 'vrevoke') return voiceSave('profile', { enabled: false, purposes: [] }, 'Your voice is switched off for Pawmily');
+  if (d.talk === 'vrestore') return voiceSave('profile', { enabled: true, purposes: [] }, 'Your voice is back — choose who may hear it');
   if (d.talk === 'speakoff') { try { c.LS.set('fam.talk.speak', speakOn() ? '' : 'on'); } catch { /* private mode */ } if (!speakOn()) hush(); c.toast(speakOn() ? 'Answers to spoken questions are read aloud' : 'Answers stay on screen'); return draw(); }
-  if (d.talk === 'speak') { const a = tk.cards?.find((x) => x.type === 'answer'); return speak(a?.text, { always: true }); }
+  if (d.talk === 'speak') { const a = tk.cards?.find((x) => x.type === 'answer'); return speak(a?.text, { always: true, cloud: a?.spoken }); }
   if (d.talk === 'calopen') { c.closeSheet(); return c.show('calendar'); }
   if (d.talk === 'healthopen') { c.closeSheet(); return c.show('health'); }
   if (d.talk === 'seen') { try { c.LS.set(SEEN, '1'); } catch { /* private mode */ } return draw(); }
   if (d.talk === 'readopen') { c.closeSheet(); return c.show('read'); }
   return null;
 }
-export function onChange(t) { if (t.dataset.talkrec != null) { const x = tk.cards[+t.dataset.talkrec]; x.recBy = t.checked && c.partner() ? c.partner().id : ''; } }
+export function onChange(t) {
+  if (t.dataset.talkrec != null) { const x = tk.cards[+t.dataset.talkrec]; x.recBy = t.checked && c.partner() ? c.partner().id : ''; return null; }
+  const v = t.dataset.talkv;
+  if (!v || !tk.vset?.s) return null;
+  const s = tk.vset.s;
+  if (v === 'mode') { try { c.LS.set('fam.talk.voiceOut', t.value === 'cloud' ? 'cloud' : 'device'); } catch { /* private mode */ } hush(); return redraw(); }
+  if (v.startsWith('cat:')) { const cats = { ...s.prefs.cats, [v.slice(4)]: t.checked }; return voiceSave('prefs', { prefs: { cats } }); }
+  if (v === 'admin') return voiceSave('admin', { cloud: t.checked }, t.checked ? 'Cloud voice is on for the family' : 'Cloud voice is off — everyone uses their phone\'s voice');
+  if (v.startsWith('purp:')) { const set = new Set(s.voice?.purposes || []); if (t.checked) set.add(v.slice(5)); else set.delete(v.slice(5)); return voiceSave('profile', { enabled: true, purposes: [...set] }); }
+  return null;
+}
+
+// ---------- 🎙 Pawmily Voice settings (inside Talk) ----------
+// Everything here is OFF until switched on. What you allow is stored on the connector (it decides what
+// may be spoken); which voice you hear (phone or Pawmily Voice) stays on this phone.
+async function openVoiceSettings() {
+  tk.vset = { s: null, busy: true }; draw();
+  tk.vset = { s: await c.voiceState(true).catch(() => null), busy: false };
+  return redraw();
+}
+async function voiceSave(what, body, msg) {
+  try { await c.voiceSave(what, body); tk.vset = { s: await c.voiceState().catch(() => null), busy: false }; if (msg) c.toast(msg); }
+  catch (e) { c.toast(e.message || "Couldn't save that just now"); }
+  return redraw();
+}
+const firstOf = (id) => (c.people?.() || []).find((p) => p.id === id)?.name || '';
+// Synthetic-voice attribution: a personal voice is always said to be Pawmily using it.
+function voiceName() {
+  const v = c.vstate?.()?.voice;
+  if (!v?.personal) return 'Pawmily Voice';
+  return v.mine ? 'Pawmily using your voice' : `Pawmily using ${firstOf(v.owner) || 'a family member'}'s voice`;
+}
+function voiceSettings() {
+  const back = '<button type="button" class="linkish small" data-talk="vback">‹ Back to Talk</button>';
+  if (tk.vset.busy) return `${back}<p class="small muted">Loading…</p>`;
+  const s = tk.vset.s;
+  if (!s) return `${back}<div class="tk-card"><p class="small" style="margin:0">Pawmily Voice isn't available just now. Answers use your phone's own voice.</p></div>`;
+  const a = s.admin || {}, v = s.voice, on = !!s.ready, cats = s.prefs?.cats || {};
+  const box = (k, label, checked, dis = false, extra = '') => `<label class="tk-chk"><input type="checkbox" data-talkv="${k}" ${checked ? 'checked' : ''} ${dis ? 'disabled' : ''}><span>${label}${extra}</span></label>`;
+  return `${back}<div class="tk-vset">
+    <h3>🎙 Pawmily Voice</h3>
+    <p class="small">Pawmily Voice reads answers in a natural voice made by ElevenLabs, a voice service. It hears only the short sentence it reads — written from just the kinds of things you allow below. Everything else is read by your phone's own voice, or stays on screen.</p>
+    ${on ? '' : `<p class="small tk-note">${!a.configured ? "Pawmily Voice isn't set up for this family." : a.paused || (a.cloud && a.used >= a.cap) ? 'Using device voice for now.' : 'Cloud voice is off for this family.'} Answers use your phone's voice.</p>`}
+    <fieldset class="tk-field"><legend>Read answers with</legend>
+      <label class="tk-chk"><input type="radio" name="tkvm" value="device" data-talkv="mode" ${cloudPick() ? '' : 'checked'}><span>My phone's voice <small class="muted">· stays on this phone</small></span></label>
+      <label class="tk-chk"><input type="radio" name="tkvm" value="cloud" data-talkv="mode" ${cloudPick() ? 'checked' : ''} ${on ? '' : 'disabled'}><span>${E(voiceName())} where allowed</span></label>
+      <small class="muted">Reading aloud is ${speakOn() ? 'on' : 'off'} for spoken questions; 🔊 on an answer always reads it.</small></fieldset>
+    <fieldset class="tk-field"><legend>What Pawmily Voice may read for you</legend>
+      ${CATEGORIES.map((k) => box(`cat:${k}`, E(CATEGORY_LABELS[k]), cats[k] === true)).join('')}
+      ${box('names', "Leave people's names out", true, true, ' <small class="muted">· always, for now</small>')}
+      <small class="muted">All off to start. Something about someone else — like your partner's calendar — is read only if they allow it too. Anything that looks like a code, an account number, an email or an address is always read by your phone instead.</small></fieldset>
+    ${v?.personal && v.mine ? `<fieldset class="tk-field"><legend>Your voice</legend>
+      ${v.enabled ? `${box('purp:talk:self', 'My own answers', (v.purposes || []).includes('talk:self'))}${box('purp:talk:family', 'Answers for others in the family', (v.purposes || []).includes('talk:family'))}
+      <small class="muted">It's said as "Pawmily using your voice". Nothing is read in your voice until you tick one.</small>
+      <button type="button" class="ghost small" data-talk="vrevoke">Turn my voice off</button>` : '<small class="muted">Your voice is off for Pawmily.</small> <button type="button" class="ghost small" data-talk="vrestore">Turn it back on</button>'}</fieldset>` : ''}
+    ${a.canChange ? `<fieldset class="tk-field"><legend>For the family (you set this up)</legend>
+      ${box('admin', 'Cloud voice', !!a.cloud, !a.configured, a.configured ? '' : ' <small class="muted">· not set up on the connector</small>')}
+      <dl class="tk-dl"><dt>Provider</dt><dd>${E(a.provider || 'ElevenLabs')}</dd><dt>If it's off or fails</dt><dd>${E(a.fallback || 'Device voice')}</dd><dt>Used today</dt><dd>${(+a.used || 0).toLocaleString()} of ${(+a.cap || 0).toLocaleString()} characters${a.paused ? ' · paused for now' : ''}</dd></dl>
+      <small class="muted">Off turns it off for everyone at once — Talk keeps working with phones' own voices.</small></fieldset>` : ''}
+    <p class="tiny muted">ElevenLabs keeps what it reads for a time under its own terms — see the privacy policy. Pawmily never sends it your family key, your calendar, notes or threads.</p>
+  </div>`;
+}
 export function onSubmit(f) { heard = false; hush(); const v = f.querySelector('textarea')?.value || ''; return send(v); }
