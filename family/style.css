@@ -1510,3 +1510,14 @@ body.has-talk main { padding-bottom: 96px; }
 .cal-who { display: flex; flex-wrap: wrap; margin: 0 0 10px; }
 .cal-who button { flex: 1 1 auto; min-width: 0; padding: 8px 12px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .cal-who .who-dot { width: 10px; height: 10px; }
+/* ＋ Something else: every other way to log a meal */
+.ml-ways { display: grid; gap: 10px; }
+.ml-way { display: grid; grid-template-columns: 36px minmax(0, 1fr) 12px; gap: 10px; align-items: center; text-align: left; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; padding: 12px; min-height: 62px; font-weight: 700; justify-content: stretch; }
+.ml-way .ic { font-size: 1.45rem; text-align: center; }
+.ml-way small { display: block; font-weight: 500; color: var(--muted); font-size: .82rem; margin-top: 2px; }
+.ml-way.talk { background: linear-gradient(180deg, #f7e7b0, #e9c45c); border-color: #d8b24a; color: #3b2f0b; }
+.ml-way.talk small { color: #5d4a14; }
+.ml-minis { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ml-minis.center { justify-content: center; }
+.ml-minis button { font-size: .86rem; padding: 8px 12px; min-height: 40px; }
+.tk-meal { background: var(--brand-soft); border-radius: 12px; padding: 8px 10px; margin: 0 0 8px; }

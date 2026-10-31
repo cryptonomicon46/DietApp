@@ -30,7 +30,7 @@ const EXAMPLES = {
 };
 const WATCH = { want: 'Want to Watch', watching: 'Watching', finished: 'Watched', upnext: 'Up Next', dropped: 'Stopped' };
 const READ = { want: 'Want to Read', reading: 'Reading', finished: 'Finished', dropped: 'Stopped' };
-const MEAL = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', extra: 'A snack or extra' };
+const MEAL = { breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Snack', dinner: 'Dinner', extra: 'A snack or extra' };
 const MIC_OK = () => typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 const voiceOff = () => { try { return c.LS.get('fam.talk.voice') === 'off'; } catch { return false; } };
 // 🔊 Answers read aloud — off unless you switch it on (owner, 2026-10-30), and then only when you asked
@@ -62,9 +62,10 @@ export async function speak(text, { always = false, cloud = null } = {}) {
 const sayPhrase = (key) => speak(PHRASES[key], { cloud: cloudLive() && c.vprefs?.()?.cats?.confirmations ? { phrase: key } : null });
 const norm = (t) => String(t || '').toLowerCase().replace(/^(the|a|an)\s+/, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
-export function open(tab = 'home', { voice = null } = {}) {
+// `meal`: opened from a meal's "Say what you had" — what you say is logged for that meal unless you name one.
+export function open(tab = 'home', { voice = null, meal = null } = {}) {
   tk.tab = EXAMPLES[tab] ? tab : tab === 'watch' || tab === 'read' ? 'us' : tab === 'fitness' ? 'health' : 'home';
-  Object.assign(tk, { text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null, vset: null });
+  Object.assign(tk, { text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null, vset: null, meal: ['breakfast', 'lunch', 'snack', 'dinner', 'extra'].includes(meal) ? meal : null });
   if (voice) return listen(voice);
   draw();
   setTimeout(() => document.getElementById('tkText')?.focus(), 60);
@@ -102,6 +103,7 @@ function draw() {
   let first = false;
   try { first = !c.LS.get(SEEN); } catch { /* private mode */ }
   c.openSheet(`<div class="tk-sheet"><div class="row between tk-top"><h2>${ICON}Talk to Pawmily</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    ${tk.meal ? `<p class="tk-meal small">🍽 Logging <b>${E(MEAL[tk.meal].toLowerCase())}</b> — say what you had.</p>` : ''}
     ${first ? `<p class="tk-first">Say what you'd like done — add a show or a book, log a meal, a workout or a chore. Your phone reads it first; only what it can't read goes to Claude, with people's names swapped for roles. Nothing changes until you tap. <button type="button" class="linkish small" data-talk="seen">Got it</button></p>` : ''}
     ${tk.vset ? '' : tk.voice ? `<div class="tk-listen" role="status"><span class="tk-pulse" aria-hidden="true">🎤</span><p id="tkLive" class="tk-live">${E(tk.voice.text || 'Listening…')}</p>
       <div class="tk-two"><button type="button" data-talk="stop">Done</button><button type="button" class="ghost" data-talk="type">Type instead</button></div>
@@ -128,6 +130,9 @@ export async function send(text) {
   text = String(text || '').trim();
   if (!text) return;
   tk.text = text; tk.error = ''; tk.say = ''; tk.cards = null; tk.consent = null;
+  // From a meal's "Say what you had": "two eggs and toast" → "Log lunch: two eggs and toast".
+  const mealSaid = /\b(breakfast|lunch|dinner|snack)\b/i.test(text), forMeal = tk.meal && !mealSaid && !isDayQuestion(text);
+  if (forMeal) text = `Log ${tk.meal === 'extra' || tk.meal === 'snack' ? 'a snack' : tk.meal}: ${text}`;
   const people = c.people(), t = toTokens(text, people);
   if (isDayQuestion(t.text)) return askDay(text, t);
   let steps = parseTalk(t.text)?.steps;
@@ -144,6 +149,7 @@ export async function send(text) {
     if (!steps?.length) { speak(tk.say || tk.error); return draw(); }
   }
   if (steps[0]?.do === 'ask.day') return askDay(text, t);
+  if (forMeal) steps = steps.map((s) => (s.do === 'diet.log' ? { ...s, meal: tk.meal } : s));
   // Roles back to names, in anything shown to you.
   steps = steps.map((s) => Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === 'string' && k !== 'do' ? fromTokens(v, t.map, people) : v])));
   // A meal, a described workout or "make it lighter" on its own: straight to that area's own preview.
