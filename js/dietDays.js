@@ -17,3 +17,14 @@ export function consistency(days = {}, today, n = 7) {
   return { on: marks.filter((m) => m.state === 'on').length, logged: marks.filter((m) => m.state !== 'none').length, of: n, marks };
 }
 
+
+// 🔥 Eaten against burned today, for the header. The plan's target already has the deficit built in,
+// so being over the plan can still be a deficit — this says which. `source` as js/dayPlan.js burnedOf
+// gives it (WHOOP so far, a WHOOP total you typed, or an estimate). The header prefers WHOOP's own
+// number when there is one, so it matches the WHOOP app.
+export function burnSummary({ burned, source = '', eaten }) {
+  if (!(burned > 0) || !(eaten > 0)) return null;
+  const diff = Math.round(burned - eaten);
+  const from = /so far/i.test(source) ? 'WHOOP, so far' : /whoop/i.test(source) ? 'WHOOP' : 'estimate for today';
+  return { burned: Math.round(burned), from, deficit: diff >= 0, kcal: Math.abs(diff) };
+}

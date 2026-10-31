@@ -335,6 +335,26 @@ export const untitled = (t) => !t || /^(workout|lifting|today'?s workout)$/i.tes
 // quiet line instead of filling the history.
 const STRENGTH_SPORT = /weight|strength|lift|power|functional|cross ?fit|circuit|hiit|interval|boot ?camp|kettlebell|calisthenic|body ?building|body ?weight|f45|orange ?theory|barry|training/i;
 export const isStrength = (w) => !!w.blocks?.length || STRENGTH_SPORT.test(w.activity?.kind || w.title || '');
+// Light or short device activity — walks, stretches, breathwork, anything under 20 minutes — becomes
+// one "Everyday activity" row per day in History, so a 2-minute walk doesn't sit beside a climb
+// (owner, 2026-10-31). A day with just one keeps it as it is. All of it still counts in Diet.
+const LIGHT_SPORT = /walk|stretch|meditat|breath/i;
+export const isLight = (w) => w.source === 'device' && !isStrength(w) && (LIGHT_SPORT.test(w.activity?.kind || w.title || '') || (w.activity?.minutes ?? 0) < 20);
+export function groupLight(list) {
+  const byDay = new Map();
+  for (const w of list) if (isLight(w)) byDay.set(w.date || '', [...(byDay.get(w.date || '') || []), w]);
+  const out = [], seen = new Set();
+  for (const w of list) {
+    const g = isLight(w) ? byDay.get(w.date || '') : null;
+    if (!g || g.length < 2) { out.push(w); continue; }
+    if (seen.has(w.date)) continue;
+    seen.add(w.date);
+    const kcal = g.reduce((a, x) => a + (x.activity?.kcal || 0), 0);
+    out.push({ id: `day${String(w.date || '').replace(/-/g, '')}`, title: 'Everyday activity', date: w.date, status: 'done', source: 'device', blocks: [], group: g,
+      activity: { kind: [...new Set(g.map((x) => String(x.activity?.kind || x.title).toLowerCase()))].join(', '), minutes: g.reduce((a, x) => a + (x.activity?.minutes || 0), 0), kcal: kcal || null } });
+  }
+  return out;
+}
 
 // One line per item: "Overhead press 12/12/11/11 @ 35 lb" — previews, history, sharing.
 export function setText(s) {
