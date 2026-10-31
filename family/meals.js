@@ -10,6 +10,8 @@ import { FOODS } from '../js/foods.js';
 import { EAT_OUT, EAT_OUT_SIZE, DRINKS, labelKcal } from '../js/plan.js';
 import { parseMeal, totalOf } from '../js/foodText.js';
 import { leftText } from './health.js';
+import { healthDay, logCheer } from '../js/habit.js';
+import { confetti } from '../js/confetti.js';
 import { amountOf, resize, nudge, placeItems, asMealItems, packagedAsk } from '../js/mealEstimate.js';
 
 const ms = { c: null, data: null, sheet: null, ops: [], ai: null, busy: false };
@@ -36,10 +38,23 @@ async function commit(action, msg) {
   ms.busy = true;
   const ops = ms.ops.slice();
   try {
-    const out = await ms.c.editMine((s) => { for (const [k, ...a] of ops) OPS[k](s, a); return action ? action(s) : null; });
+    // 🎉 A meal newly logged today gets confetti and a line on how the day is going (js/cheer.js).
+    const loggedNow = (s) => { const e = s.get('eaten', {}) || {}; return e.date === today() ? Object.keys(e.meals || {}) : []; };
+    let added = [], day = null;
+    const out = await ms.c.editMine((s) => {
+      const before = loggedNow(s);
+      for (const [k, ...a] of ops) OPS[k](s, a);
+      const r = action ? action(s) : null;
+      added = loggedNow(s).filter((m) => !before.includes(m));
+      if (added.length) day = healthDay({ weights: s.get('weights', []) || [], eaten: s.get('eaten', {}) || {}, mealLog: s.get('mealLog', {}) || {} }, today());
+      return r;
+    });
     ms.ops = [];
     ms.c.closeSheet();
-    if (msg) ms.c.toast(typeof msg === 'function' ? msg(out) : msg);
+    const cheer = day ? logCheer(day, today(), { meal: added[added.length - 1] }) : null;
+    const text = msg ? (typeof msg === 'function' ? msg(out) : msg) : '';
+    if (text || cheer) ms.c.toast([text, cheer?.line].filter(Boolean).join(' · '));
+    if (cheer) confetti({ big: cheer.big });
     await ms.c.refresh();
     return out;
   } finally { ms.busy = false; }

@@ -127,7 +127,7 @@ export const GUIDE = [
 - 📷 Photo: a plate, a restaurant dish, a nutrition label or a menu. Claude makes a rough estimate (it says so), with Portion (Light, Regular, Large) and How much you ate (All, Most, Half); nothing is logged until you tap Log, and the photo isn't kept.
 - 🍷 Drinks: red, white, beer or a cocktail with − / ＋, a wine pour (5, 6 or 9 oz), or Something else. With a meal or on their own. Alcohol counts in calories but apart from protein, carbs and fat.
 - After a bigger meal than planned, Health says what's left ("Plans change. You have ~850 kcal and ~55 g protein left today") with Adjust the rest of today (your remaining meals, re-fitted) and What fits? (ideas from your planned and saved meals, ranked on your phone). Your targets never change there.
-- Once your meals are in, ✓ Done logging today marks the day complete for your weekly check-in.` },
+- Once your meals are in, ✓ Done logging today marks the day complete for your weekly check-in. Logging a meal or your weight shows a quick burst of confetti and a line on how you're doing (like 2 of 3 meals logged today, or 5 mornings in a row) — bigger for all three meals or a week of weigh-ins; none if your phone is set to reduce motion.` },
   { id: 'diet-meals', title: 'Diet app: meals and macros', keys: 'meal macros protein carbs fat add food swap portion grams packaged factor prepared enter macros manual low carb rest day same every day lock daily combo',
     text: `Tap a meal to open its page:
 - Bars show Protein, Carbs and Fat against the meal's target.
