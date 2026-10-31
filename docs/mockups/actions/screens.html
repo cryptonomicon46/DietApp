@@ -1,0 +1,153 @@
+<!doctype html>
+<!-- ⚡ Quick actions (Muse, Shortcuts, OpenTable) — DESIGN MOCKUPS ONLY (nothing here is wired up). Uses the
+     family app's real style.css; each screen is chosen by #hash and photographed by shoot.mjs.
+     Synthetic data: "Blue Door Coffee" and "Luna Trattoria" are made-up places; Sam and Pat are example names. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../../family/style.css">
+<style>
+  body { margin: 0; background: var(--bg); }
+  .screen { display: none; min-height: 100vh; position: relative; }
+  .screen.on { display: block; }
+  .app { padding: 14px 16px 90px; }
+  .apphead { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 10px; }
+  .apphead b { font-size: 1.35rem; }
+  .apphead span { display: flex; gap: 8px; }
+  .apphead i { width: 36px; height: 36px; border-radius: 50%; background: var(--card); border: 1px solid var(--line); display: inline-block; }
+  .tag { position: absolute; top: 8px; right: 10px; z-index: 5; background: #222; color: #fff; font: 700 .72rem/1 system-ui; padding: 5px 8px; border-radius: 999px; }
+  .shade::after { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,.38); z-index: 1; }
+  .sheet2 { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; background: var(--card); border-radius: 22px 22px 0 0; padding: 16px 16px 26px; box-shadow: 0 -6px 24px rgba(0,0,0,.18); }
+  .sheet2 h2 { margin: 0; font-size: 1.2rem; }
+  .shead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .x { font-size: 1.2rem; color: var(--muted); }
+  .seg2 { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 3px; margin: 4px 0 12px; }
+  .seg2 span { text-align: center; padding: 9px 0; border-radius: 999px; font-weight: 700; font-size: .92rem; color: var(--muted); }
+  .seg2 span.on { background: var(--brand); color: var(--brand-ink); }
+  .ask { display: flex; gap: 8px; align-items: center; }
+  .ask .box { flex: 1; border: 2px solid var(--brand); border-radius: 18px; padding: 12px 14px; color: var(--muted); background: var(--bg); }
+  .ask .round { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--brand); color: var(--brand-ink); font-weight: 800; flex: none; }
+  .ask .round.ghost2 { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .chips span { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; font-size: .86rem; background: var(--card); }
+  .chips span.on { background: var(--brand-soft); border-color: var(--brand); }
+  /* chat */
+  .chathead { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .chathead .ttl { flex: 1; }
+  .chathead .ttl b { display: block; font-size: 1.05rem; }
+  .chathead .ttl small { color: var(--muted); font-size: .78rem; }
+  .spark { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: #d97757; color: #fff; font-weight: 800; }
+  .msgs { padding: 14px 16px 150px; display: grid; gap: 12px; }
+  .me { justify-self: end; max-width: 82%; background: var(--brand); color: var(--brand-ink); padding: 10px 13px; border-radius: 18px 18px 4px 18px; font-size: .95rem; }
+  .cl { max-width: 92%; font-size: .95rem; line-height: 1.45; }
+  .cl p { margin: 0 0 6px; } .cl ul { margin: 4px 0 6px 18px; padding: 0; }
+  .typing { color: var(--muted); font-size: .85rem; }
+  .act { border: 1px solid var(--line); background: var(--card); border-radius: 16px; padding: 10px 12px; display: grid; gap: 6px; }
+  .act b { font-size: .93rem; } .act small { color: var(--muted); font-size: .8rem; }
+  .act .row2 { display: flex; gap: 8px; } .act button { min-height: 40px; flex: 1; }
+  .compose2 { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; background: var(--bg); border-top: 1px solid var(--line); padding: 10px 14px 18px; }
+  .compose2 .meta { display: flex; justify-content: space-between; font-size: .74rem; color: var(--muted); margin-top: 6px; }
+  .note { background: var(--brand-soft); border-radius: 12px; padding: 9px 11px; font-size: .84rem; margin: 6px 0 4px; }
+  /* tab bar */
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; display: grid; background: var(--card); border-top: 1px solid var(--line); padding: 8px 4px 18px; }
+  .tabbar span { text-align: center; font-size: .72rem; color: var(--muted); } .tabbar span b { display: block; font-size: 1.25rem; font-weight: 400; }
+  .tabbar span.on { color: var(--brand); font-weight: 700; }
+  .warnbox { border: 2px dashed var(--warn); border-radius: 14px; padding: 8px 10px; font-size: .84rem; margin: 10px 0; }
+  /* inbox */
+  .card2 { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 12px 14px; margin: 0 0 12px; }
+  .eyebrow2 { font-size: .78rem; letter-spacing: .08em; font-weight: 800; color: var(--muted); margin: 8px 0 6px; }
+  .mail { display: grid; grid-template-columns: 30px minmax(0,1fr); gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .mail:first-of-type { border-top: 0; }
+  .mail .ic { font-size: 1.35rem; } .mail b { display: block; } .mail small { color: var(--muted); font-size: .82rem; display: block; }
+  .mail .btns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; } .mail .btns button { min-height: 38px; font-size: .86rem; padding: 6px 12px; }
+  .way { display: grid; grid-template-columns: 40px minmax(0,1fr); gap: 10px; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 16px; padding: 12px; margin: 8px 0; }
+  .way .ic { font-size: 1.5rem; text-align: center; } .way small { display: block; color: var(--muted); font-size: .82rem; margin-top: 2px; }
+  .way.rec { border: 2px solid var(--brand); }
+  .meter { height: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; margin: 6px 0; } .meter i { display: block; height: 100%; width: 21%; background: var(--brand); }
+  dl.kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: .9rem; margin: 6px 0; } dl.kv dt { color: var(--muted); } dl.kv dd { margin: 0; text-align: right; }
+  .qa { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+  .qa button { display: grid; justify-items: center; gap: 4px; padding: 12px 6px; min-height: 84px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; font-weight: 700; font-size: .84rem; }
+  .qa button b { font-size: 1.6rem; font-weight: 400; } .qa button small { color: var(--muted); font-weight: 500; font-size: .72rem; }
+  .qa button.add { border-style: dashed; color: var(--muted); }
+  .big { font-size: 1.05rem; margin: 2px 0 6px; }
+  .sends { font-family: ui-monospace, Menlo, monospace; font-size: .8rem; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+  .fld { display: grid; gap: 4px; font-size: .86rem; color: var(--muted); margin: 8px 0; }
+  .fld .in { color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; }
+  .opt { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); } .opt:first-of-type { border-top: 0; }
+  .opt .dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line); flex: none; margin-top: 2px; } .opt .dot.on { border: 6px solid var(--brand); }
+  .opt small { display: block; color: var(--muted); font-size: .8rem; }
+  .log { font-size: .86rem; } .log div { display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid var(--line); } .log div:first-child { border-top: 0; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .two button { min-height: 46px; }
+</style></head><body>
+
+<!-- 1. Home: your quick actions (yours only) -->
+<section class="screen" id="home"><div class="tag">1 · Home › Quick actions</div><div class="app">
+  <div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div>
+  <h1 class="home-hi">Good morning, Sam.</h1>
+  <div class="card2"><div class="row between" style="margin:0 0 8px"><b>⚡ Quick actions</b><span class="small muted">✎ Edit</span></div>
+    <div class="qa"><button><b>☕</b>My usual coffee<small>via Muse</small></button><button><b>🍽</b>Dinner for 2<small>via Muse · OpenTable</small></button><button><b>🛵</b>Dog food reorder<small>via Shortcut</small></button>
+      <button><b>🚗</b>Ride home<small>via Shortcut</small></button><button class="add"><b>＋</b>Add</button></div>
+    <p class="tiny muted" style="margin:8px 0 0">Only you see these. Each one asks before it runs.</p></div>
+  <div class="eyebrow2">🔔 NEEDS YOU</div><div class="card2"><b>🙋 Pat asked for a ride to the airport Fri</b></div></div>
+  <div class="tabbar" style="grid-template-columns:repeat(5,1fr)"><span class="on"><b>🏠</b>Home</span><span><b>💗</b>Us</span><span><b>📅</b>Calendar</span><span><b>💬</b>Threads</span><span><b>💪</b>Health</span></div>
+</section>
+
+<!-- 2. Confirm: one tap to send, nothing personal goes with it -->
+<section class="screen shade" id="confirm"><div class="tag">2 · Confirm</div><div class="app"><div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>☕ My usual coffee</h2><span class="x">✕</span></div>
+    <p class="big">Ask Muse to order your usual from <b>Blue Door Coffee</b>?</p>
+    <p class="small muted" style="margin:0">Muse places the order and pays with what you set up in Muse.</p>
+    <div class="sends">Pawmily sends Muse only:<br>{ "action": "coffee.usual" }</div>
+    <div class="two"><button>Send to Muse</button><button class="ghost">Cancel</button></div>
+    <p class="tiny muted" style="margin:8px 0 0">Your calendar, location, names and family data are never sent. Can run at most once every 10 minutes.</p>
+  </div>
+</section>
+
+<!-- 3. Sent: status and a short history -->
+<section class="screen" id="sent"><div class="tag">3 · Sent</div><div class="app">
+  <div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div>
+  <div class="card2"><b>☕ Sent to Muse · 8:02 AM</b><p class="small muted" style="margin:4px 0 0">Muse confirmed: <b>ready at 8:12 AM</b> (only if Muse reports back — otherwise you'll see it in Muse).</p></div>
+  <div class="card2"><b>Recent</b><div class="log" style="margin-top:6px"><div><span>☕ My usual coffee</span><span class="muted">Today 8:02 · ✓</span></div><div><span>🍽 Dinner for 2 · Sat 7 PM</span><span class="muted">Thu 6:40 PM · ✓ booked</span></div><div><span>🛵 Dog food reorder</span><span class="muted">Oct 24 · Shortcut ran</span></div></div>
+    <p class="tiny muted" style="margin:6px 0 0">Kept on this phone. Clear any time.</p></div></div>
+  <div class="tabbar" style="grid-template-columns:repeat(5,1fr)"><span class="on"><b>🏠</b>Home</span><span><b>💗</b>Us</span><span><b>📅</b>Calendar</span><span><b>💬</b>Threads</span><span><b>💪</b>Health</span></div>
+</section>
+
+<!-- 4. Dinner: pick the details on the button, then Muse or OpenTable -->
+<section class="screen shade" id="dinner"><div class="tag">4 · Dinner for 2</div><div class="app"><div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>🍽 Dinner for 2</h2><span class="x">✕</span></div>
+    <div class="chips"><span class="on">Luna Trattoria</span><span>Somewhere new</span></div>
+    <div class="chips"><span>Tonight</span><span class="on">Sat Nov 7</span><span>Pick a day</span></div>
+    <div class="chips"><span>6:30</span><span class="on">7:00 PM</span><span>7:30</span><span>👥 2 ▾</span></div>
+    <div class="sends">To Muse: { "action": "dinner.book", "place": "Luna Trattoria", "date": "2026-11-07", "time": "19:00", "people": 2 }</div>
+    <div class="two"><button>Ask Muse to book</button><button class="ghost">Open OpenTable ›</button></div>
+    <p class="tiny muted" style="margin:8px 0 0">OpenTable opens with the restaurant, date, time and party filled in — you tap Reserve there. Once it's booked, ＋ Add to our calendar.</p>
+  </div>
+</section>
+
+<!-- 5. Set up a quick action -->
+<section class="screen shade" id="setup"><div class="tag">5 · New quick action</div><div class="app"><div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>＋ Quick action</h2><span class="x">✕</span></div>
+    <div class="row" style="gap:8px"><label class="fld" style="flex:0 0 70px">Emoji<span class="in">☕</span></label><label class="fld grow">Name<span class="in">My usual coffee</span></label></div>
+    <b class="small">How it runs</b>
+    <div class="opt"><span class="dot on"></span><div><b>Muse</b><small>Pawmily sends Muse a short signal ("coffee.usual"). Muse's link is kept on the connector, locked.</small></div></div>
+    <div class="opt"><span class="dot"></span><div><b>iPhone Shortcut</b><small>Runs a Shortcut you made (it can call Muse, order, text…). Nothing leaves Pawmily at all.</small></div></div>
+    <div class="opt"><span class="dot"></span><div><b>Open a link</b><small>OpenTable, a coffee app or any page, filled in. You finish there.</small></div></div>
+    <div class="chips"><span class="on">🔒 Ask before running</span><span class="on">Just me</span><span>Share with Pat</span></div>
+  </div>
+</section>
+
+<!-- 6. Talk: say it -->
+<section class="screen shade" id="talk"><div class="tag">6 · Say it in Talk</div><div class="app"><div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>Talk to Pawmily</h2><span class="x">✕</span></div>
+    <div class="ask"><div class="box" style="color:var(--ink)">Get me my usual coffee</div><span class="round ghost2">🎤</span><span class="round">↑</span></div>
+    <div class="act" style="margin-top:12px"><b>☕ My usual coffee · via Muse</b><small>Matched your quick action on the phone — nothing went to Claude.</small><div class="row2"><button>Send to Muse</button><button class="ghost">Cancel</button></div></div>
+  </div>
+</section>
+
+<script>
+  const show = () => { const id = location.hash.slice(1) || 'home'; document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === id)); };
+  addEventListener('hashchange', show); show();
+</script>
+</body></html>
