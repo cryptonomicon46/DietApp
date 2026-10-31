@@ -146,6 +146,48 @@
   </div>
 </section>
 
+<!-- 7. Ask Muse: one box for anything, with your two usual requests as chips -->
+<section class="screen shade" id="muse"><div class="tag">7 · Ask Muse</div><div class="app"><div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>🤖 Ask Muse</h2><span class="x">✕</span></div>
+    <div class="qa" style="grid-template-columns:1fr 1fr; margin-bottom:10px"><button><b>☕</b>My usual coffee<small>Blue Door · one tap</small></button><button><b>🍽</b>Book a table<small>place · day · time · people</small></button></div>
+    <div class="ask"><div class="box">Or say what you'd like Muse to do…</div><span class="round ghost2">🎤</span><span class="round">↑</span></div>
+    <p class="tiny muted" style="margin:8px 0 0">Muse pays and books with what you set up in Muse. Pawmily sends only the words you say here — nothing from the app.</p>
+  </div>
+</section>
+
+<!-- 8. Before it goes: exactly what Muse gets -->
+<section class="screen shade" id="musesend"><div class="tag">8 · Check, then send</div><div class="app"><div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>🤖 Ask Muse</h2><span class="x">✕</span></div>
+    <p class="small muted" style="margin:0 0 4px">You said:</p>
+    <p class="big">"Book a table for 2 at Luna Trattoria this Saturday around 7"</p>
+    <div class="sends">Muse gets exactly this sentence — and your name, which Muse already has. No calendar, location or family data.</div>
+    <div class="note">💳 Muse may pay or put a card on hold for this. It confirms with you in Muse if it needs to.</div>
+    <div class="two"><button>Send to Muse</button><button class="ghost">Edit</button></div>
+  </div>
+</section>
+
+<!-- 9. Muse answers back: confirmations land in Pawmily, one tap to the calendar -->
+<section class="screen" id="musereply"><div class="tag">9 · Muse replies</div><div class="app">
+  <div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div>
+  <div class="eyebrow2">🤖 MUSE</div>
+  <div class="card2"><div class="mail"><span class="ic">🍽</span><div><b>Booked: Luna Trattoria · Sat Nov 7, 7:00 PM · 2 people</b><small>Muse · 2 min ago · confirmation LT-4821</small><div class="btns"><button>🗓 Add to our calendar</button><button class="ghost">Open in Muse</button></div></div></div>
+    <div class="mail"><span class="ic">☕</span><div><b>Your oat latte is ordered — ready 8:12 AM</b><small>Muse · this morning · $5.75 paid</small></div></div>
+    <div class="mail"><span class="ic">⏳</span><div><b>Working on: "find a dog-friendly brunch Sunday"</b><small>Muse · sent 9:40 AM</small></div></div></div>
+  <p class="tiny muted">Muse's replies come back to Pawmily (only if Muse can send them) and show only to you.</p></div>
+  <div class="tabbar" style="grid-template-columns:repeat(5,1fr)"><span class="on"><b>🏠</b>Home</span><span><b>💗</b>Us</span><span><b>📅</b>Calendar</span><span><b>💬</b>Threads</span><span><b>💪</b>Health</span></div>
+</section>
+
+<!-- 10. From Talk: "ask Muse to…" goes straight to the same check -->
+<section class="screen shade" id="musetalk"><div class="tag">10 · From Talk</div><div class="app"><div class="apphead"><b>The Pack ▾</b><span><i></i><i></i><i></i></span></div></div>
+  <div class="sheet2">
+    <div class="shead"><h2>Talk to Pawmily</h2><span class="x">✕</span></div>
+    <div class="ask"><div class="box" style="color:var(--ink)">Ask Muse to order my usual coffee</div><span class="round ghost2">🎤</span><span class="round">↑</span></div>
+    <div class="act" style="margin-top:12px"><b>🤖 To Muse: "order my usual coffee"</b><small>Your phone saw "ask Muse" — nothing went to Claude. Muse gets only this sentence.</small><div class="row2"><button>Send to Muse</button><button class="ghost">Cancel</button></div></div>
+  </div>
+</section>
+
 <script>
   const show = () => { const id = location.hash.slice(1) || 'home'; document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === id)); };
   addEventListener('hashchange', show); show();

@@ -10,7 +10,7 @@ const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' })
 for (const [w, dark] of [[390, false], [320, false], [390, true]]) {
   const ctx = await b.newContext({ viewport: { width: w, height: 844 }, deviceScaleFactor: 2, colorScheme: dark ? 'dark' : 'light' });
   const p = await ctx.newPage();
-  for (const id of ['home', 'confirm', 'sent', 'dinner', 'setup', 'talk']) {
+  for (const id of ['home', 'confirm', 'sent', 'dinner', 'setup', 'talk', 'muse', 'musesend', 'musereply', 'musetalk']) {
     await p.goto(`${page}#${id}`); await p.waitForTimeout(150);
     const wide = await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
     if (wide) console.log('OVERFLOW', w, dark ? 'dark' : '', id);

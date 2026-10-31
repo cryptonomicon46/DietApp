@@ -52,3 +52,29 @@ The Shortcut way is the most private and needs no server work. The webhook way i
 1. How does Muse take a trigger: webhook URL, Shortcuts action, email or text, or a link?
 2. Which buttons first: ☕ usual coffee and 🍽 dinner for 2?
 3. Who sees them: just you, or some shared with your partner?
+
+## Revision (owner, 2026-10-31): one "Ask Muse" box instead of many buttons
+Owner: sending a request to Muse makes more sense than Shortcuts; speak what you want rather than
+building many shortcuts. Start with coffee and dinner reservations. Muse holds the card and pays.
+
+**Recommended design** (screens `#muse`, `#musesend`, `#musereply`, `#musetalk`):
+1. **🤖 Ask Muse** (`#muse`): one sheet with two one-tap requests (☕ My usual coffee, 🍽 Book a
+   table with place, day, time and people) and a box to say or type anything else.
+2. **Check, then send** (`#musesend`): you see exactly what Muse gets, which is the sentence you said
+   and nothing from the app. Muse pays with the card it already holds and confirms in Muse if it needs
+   to. Pawmily never sees the card.
+3. **Muse replies** (`#musereply`): if Muse can call back, confirmations land in Pawmily, visible only
+   to you, e.g. "Booked: Luna Trattoria · Sat 7 PM" with 🗓 Add to our calendar. Without a callback,
+   you see "Sent ✓" and the details stay in Muse.
+4. **From Talk** (`#musetalk`): "Ask Muse to …" is recognised on the phone, with nothing going to
+   Claude, and goes to the same check.
+
+**Plumbing:**
+- The connector forwards the request to Muse's request URL or API, with Muse's key kept on the
+  connector as a secret.
+- A second, small route would receive Muse's replies if Muse supports callbacks.
+- This is a connector change, so it needs a `pawdeploy`.
+- Shortcuts stay an optional fallback for things Muse can't do.
+
+**Still needed from the owner:** how Muse receives a request (an API or webhook URL and key, an email
+or text address, or only its own app), and whether it can send a confirmation back.
