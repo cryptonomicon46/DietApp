@@ -4,6 +4,17 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### ⚖️ Talk logs today's weight (2026-10-31, `v2/talk-weight` from `main` `a9fc0bc`; owner: "I would like it to log my weight as well by talking to the app"; merge authorized when no `pawdeploy` is needed)
+- **Owner's try:** "Log my weight for today 160.6 pounds" → Claude answered "I can't log weight".
+- **Built:**
+  - `js/talkParse.js`: a new step `{ do: 'weight.log', lb }` (`toLb`: pounds, or kilograms × 2.20462; 60–700 lb), read on the phone from "log my weight 160.6", "record my weigh-in as 160.6 lb", "I weigh 72.5 kg", "weighed in at 160.6 this morning", "my weight today is 161", "weight 160.6". Nothing goes to Claude for these.
+  - `js/talkActions.js`: `weight.log` in the registry (affects self, undo = previous weight); a `number` arg type.
+  - `family/talk.js`: a ⚖️ card (*Log it*), Undo, and a weigh-in is never mistaken for a day question ("this morning"). Health's examples include "Log my weight 160.6".
+  - `family/app.js`: one `saveWeight` for Health's form and Talk (mornings-in-a-row line, confetti, nudge ticked) and `undoWeight`.
+  - `server/talkAi.js`: the schema and instructions know `weight.log`, so Claude can read unusual phrasings **after the next `pawdeploy`** (not needed for the phone's reader).
+- **Tests:** `tests/talkparse.test.js` (phrasings, kg, out-of-range, tidySteps, registry validation). `npm test` 500 pass.
+- **Browser check** (local Pages + `wrangler dev`, synthetic family; 390 px and 320 px dark): "Log my weight for today 160.6 pounds" → card, nothing sent to Claude → Log it → *⚖️ 160.6 lb logged · 🎉 7 mornings in a row — a full week!* + confetti → Health shows ✓ 160.6 lb; "Weighed in at 72.8 kg this morning" → 160.5 lb, Undo → today's weigh-in removed; no errors.
+
 ### 🎉 Confetti for logging meals and weigh-ins (2026-10-31, `v2/log-cheer` from `main` `f3f7233`; owner: "show confetti… encouraging this habit of logging meals and weight"; merge authorized when no `pawdeploy` is needed)
 - **Built:** `js/confetti.js` (a short emoji burst; bigger for milestones; none with reduced motion) and `js/habit.js` (pure: `healthDay`, the lines, `weighStreak`, `logCheer` — moved out of `js/cheer.js`, which re-exports them, so Health can use them without the trackers' storage).
   - Health: every meal newly logged through `family/meals.js` `commit` (✓ As planned, Plan & log, photo, ate out, packaged, Same as yesterday, Talk's meal hand-off) → toast with *🎉 N of 3 meals logged today* and confetti; the weigh-in (`family/app.js` `saveWeighIn`, modules loaded on save) → *🎉 N mornings in a row* and confetti.

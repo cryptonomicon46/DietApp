@@ -25,7 +25,7 @@ export const ICON = '<svg class="tk-ic" viewBox="0 0 32 32" aria-hidden="true"><
 const EXAMPLES = {
   home: ["What's on today?", 'When should I go for a run today?', 'Add Dune to our watchlist', 'Walked the dogs', 'Fed the dogs dinner'],
   us: ["We're watching Severance now", 'Add Project Hail Mary to our reading list', 'I finished reading Piranesi'],
-  health: ['Log 2 eggs and a slice of sourdough for breakfast', 'Plan dinner: salmon and rice', 'Log a packaged meal for lunch', 'How much protein is left today?', "Make today's workout lighter"],
+  health: ['Log my weight 160.6', 'Log 2 eggs and a slice of sourdough for breakfast', 'Plan dinner: salmon and rice', 'Log a packaged meal for lunch', 'How much protein is left today?', "Make today's workout lighter"],
 };
 const WATCH = { want: 'Want to Watch', watching: 'Watching', finished: 'Watched', upnext: 'Up Next', dropped: 'Stopped' };
 const READ = { want: 'Want to Read', reading: 'Reading', finished: 'Finished', dropped: 'Stopped' };
@@ -117,16 +117,17 @@ export async function send(text) {
   const mealSaid = /\b(breakfast|lunch|dinner|snack)\b/i.test(text), forMeal = tk.meal && !mealSaid && !isDayQuestion(text);
   if (forMeal) text = `Log ${tk.meal === 'extra' || tk.meal === 'snack' ? 'a snack' : tk.meal}: ${text}`;
   const people = c.people(), t = toTokens(text, people);
-  if (isDayQuestion(t.text)) return askDay(text, t);
   let steps = parseTalk(t.text)?.steps;
+  // "Weighed in at 160.6 this morning" is a weigh-in, not a question about the morning.
+  if (steps?.[0]?.do !== 'weight.log' && isDayQuestion(t.text)) return askDay(text, t);
   if (!steps) {
     const ai = await c.aiReady().catch(() => null);
-    if (ai === false) { tk.say = "I couldn't read that on the phone, and Claude isn't set up here. I can add shows, movies and books, and log meals, workouts and chores — try one of these."; return redraw(); }
+    if (ai === false) { tk.say = "I couldn't read that on the phone, and Claude isn't set up here. I can add shows, movies and books, and log meals, your weight, workouts and chores — try one of these."; return redraw(); }
     tk.busy = true; draw();
     try {
       const r = await c.api.post('/ai/talk', { text: t.text, tab: tk.tab, today: c.iso() });
       steps = r.steps || [];
-      if (!steps.length) tk.say = r.say || "I can't do that yet. I can add shows, movies and books, and log meals, workouts and chores.";
+      if (!steps.length) tk.say = r.say || "I can't do that yet. I can add shows, movies and books, and log meals, your weight, workouts and chores.";
     } catch (e) { tk.error = e.status === 429 ? "That's all the Talk requests for today." : e.message || "Pawmily couldn't read that just now."; }
     tk.busy = false;
     if (!steps?.length) { speak(tk.say || tk.error); return draw(); }
@@ -184,6 +185,7 @@ async function resolve(s) {
     if (!f.results?.length) return { type: 'nobook', title: s.title };
     return { type: 'readadd', results: f.results, pick: f.results.length === 1 ? 0 : null, state: s.state, recBy: s.recBy === 'partner' && c.partner() ? c.partner().id : '', go: true };
   }
+  if (s.do === 'weight.log') return { type: 'weight', lb: s.lb, go: true };
   if (s.do === 'care.log') {
     const kinds = c.careKinds(), q = norm(s.chore).replace(/^dog\s+/, '');
     const k = kinds.find((x) => x.kind === q || norm(x.label) === q) || kinds.find((x) => norm(x.label).includes(q) || (q.length > 3 && q.includes(norm(x.label))));
@@ -207,6 +209,7 @@ function cardHtml(x, i) {
   }
   if (x.type === 'answer') return `<div class="tk-card tk-answer">${SPEAK_OK() ? '<button type="button" class="icon-btn tk-say" data-talk="speak" aria-label="Read this aloud">🔊</button>' : ''}${E(x.text).replace(/\n/g, '<br>')}${(x.go || []).map((g) => `<a class="tk-go small" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(g.q)}&travelmode=driving" target="_blank" rel="noopener">🚗 ${E(g.name)}${g.min ? ` · ${g.min} min now` : ''} · Directions ›</a>`).join('')}${x.to === 'health' ? '<button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button>' : '<button type="button" class="linkish small" data-talk="calopen">Open Calendar ›</button>'}</div>`;
   if (x.type === 'suggest') { const d = new Date(`${x.s.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' }); return `<div class="tk-card"><b>🗓 ${E(x.s.title)} · ${E(d)} ${E(time12(x.s.start))}–${E(time12(x.s.end))}</b>${x.s.why ? `<small class="muted">${E(x.s.why)}</small>` : ''}${btn('Add to my calendar', true)}</div>`; }
+  if (x.type === 'weight') return `<div class="tk-card"><b>⚖️ Today's weight · ${E(x.lb.toFixed(1))} lb</b><small class="muted">Saved to Health, Meals and Weight${x.done ? '' : " — replaces today's weigh-in if you already logged one"}</small>${btn('Log it')}</div>`;
   if (x.type === 'care') return `<div class="tk-card"><b>${E(x.care.icon)} ${E(x.care.label)}</b><small class="muted">Today · logged for you</small>${btn('Log it')}</div>`;
   if (x.type === 'pickcare') return `<div class="tk-card"><b>Which one?</b><small class="muted">I don't know "${E(x.chore)}" — pick it:</small><div class="tk-ex">${x.kinds.map((k) => `<button type="button" data-talkcare="${i}:${E(k.kind)}">${E(k.icon)} ${E(k.label)}</button>`).join('')}</div></div>`;
   const s = x.step;
@@ -239,6 +242,9 @@ async function go(i) {
     } else if (x.type === 'readstate') {
       const R = await c.read(), before = await R.talkSetState(x.book.id, x.state);
       x.done = READ[x.state]; x.undo = () => R.talkSetState(x.book.id, before || 'want'); x.said = `📚 ${x.book.title} → ${READ[x.state]}`;
+    } else if (x.type === 'weight') {
+      const r = await c.weighLog(x.lb);
+      x.done = 'Logged'; x.undo = () => c.weighUndo(r.prev); x.said = `⚖️ ${x.lb.toFixed(1)} lb logged${r.line ? ` · ${r.line}` : ''}`;
     } else if (x.type === 'care') {
       const id = await c.careLog(x.care.kind);
       x.done = 'Logged'; x.undo = () => c.careUndo(id); x.said = `${x.care.icon} ${x.care.label} logged`;
@@ -272,7 +278,7 @@ export async function onClick(t) {
   if (d.talk === 'type') return stopListening(true);
   if (d.talk === 'voiceoff') { try { c.LS.set('fam.talk.voice', voiceOff() ? '' : 'off'); } catch { /* private mode */ } c.toast(voiceOff() ? 'Talk opens ready to type' : 'Talk starts listening when you open it'); return draw(); }
   if (d.talk === 'dayok') { try { c.LS.set(DAYOK(), '1'); } catch { /* private mode */ } const q = tk.consent?.text || tk.text; tk.consent = null; return send(q); }
-  if (d.talk === 'dayno') { tk.consent = null; tk.say = "OK — I won't look at your calendar. I can still add shows, movies and books, and log meals, workouts and chores."; return draw(); }
+  if (d.talk === 'dayno') { tk.consent = null; tk.say = "OK — I won't look at your calendar. I can still add shows, movies and books, and log meals, your weight, workouts and chores."; return draw(); }
   if (d.talk === 'speakoff') { try { c.LS.set('fam.talk.speak', speakOn() ? '' : 'on'); } catch { /* private mode */ } if (!speakOn()) hush(); c.toast(speakOn() ? 'Answers to spoken questions are read aloud' : 'Answers stay on screen'); return draw(); }
   if (d.talk === 'speak') { const a = tk.cards?.find((x) => x.type === 'answer'); return speak(a?.text, { always: true }); }
   if (d.talk === 'calopen') { c.closeSheet(); return c.show('calendar'); }
