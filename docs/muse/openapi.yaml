@@ -1,0 +1,103 @@
+# PROPOSED (M0, design only — not served, not implemented). Muse Action Bridge, v1.
+# Two audiences: Muse (integration bearer, /v2/agent/muse/*) and family members (Pawmily session,
+# /v2/agent/requests*). The same AgentRequestService backs both; any future MCP adapter uses it too.
+openapi: 3.1.0
+info:
+  title: OurPawmily Household Agent bridge (proposed)
+  version: 0.1.0-m0
+  description: >
+    Muse polls for tasks the household explicitly delegated. It never reads family data.
+    Errors are { "error": { "code", "message" } } with no secrets or internals.
+servers:
+  - url: https://<connector-host>/v2
+security: []
+components:
+  securitySchemes:
+    museBearer: { type: http, scheme: bearer, description: "Integration credential pmk_… (shown once; scoped; revocable)" }
+    memberSession: { type: http, scheme: bearer, description: "OurPawmily member session token" }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [REQUEST_NOT_CLAIMABLE, NOT_LEASE_HOLDER, VERSION_CONFLICT, INVALID_TRANSITION, INTEGRATION_DISABLED, INSUFFICIENT_SCOPE, APPROVAL_REQUIRED, CONSTRAINT_VIOLATION] }
+            message: { type: string }
+    RequestType: { type: string, enum: [dinner_reservation, coffee_order, external_research, shopping_purchase, general_external_action] }
+    Status: { type: string, enum: [queued, claimed, in_progress, needs_approval, completed, failed, cancelled, expired, reconciliation_required] }
+    Phase: { type: string, enum: [not_started, prepared, commit_started, outcome_unknown, committed, verified_not_committed] }
+    MuseTask:
+      description: What Muse receives — the bounded task only.
+      type: object
+      properties:
+        id: { type: string }
+        schemaVersion: { type: integer }
+        requestType: { $ref: '#/components/schemas/RequestType' }
+        instruction: { type: string, maxLength: 500 }
+        parameters: { type: object }
+        constraints: { type: object }
+        approvalPolicy: { type: string, enum: [report_only, ask_before_commit, preauthorized_within_constraints] }
+        approval: { type: [object, 'null'], properties: { proposalHash: { type: string }, proposalVersion: { type: integer } } }
+        mode: { type: string, enum: [work, reconcile], description: "reconcile = check whether the earlier commit happened; do NOT commit again" }
+        status: { $ref: '#/components/schemas/Status' }
+        executionPhase: { $ref: '#/components/schemas/Phase' }
+        leaseToken: { type: string }
+        leaseExpiresAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        version: { type: integer }
+    Proposal:
+      type: object
+      required: [proposalVersion, proposalData, approvalQuestion]
+      properties:
+        proposalVersion: { type: integer }
+        proposalData: { type: object, description: "Material details: place, date, time, party, items, total, pickup, cancellation terms" }
+        approvalQuestion: { type: string, maxLength: 200 }
+    Result:
+      type: object
+      properties:
+        resultSummary: { type: string, maxLength: 240 }
+        resultData: { type: object, description: "Minimal: e.g. restaurant, date, time, party, confirmation, cancellation; or store, items, pickup, total, order ref. Never card data." }
+        externalReference: { type: string, maxLength: 80 }
+paths:
+  # ---------------- Muse (integration bearer) ----------------
+  /agent/muse/requests/claim-next:
+    post:
+      security: [{ museBearer: [] }]
+      summary: Atomically claim the next eligible request (approved work and reconciliations first)
+      responses:
+        '200': { description: Claimed, content: { application/json: { schema: { $ref: '#/components/schemas/MuseTask' } } } }
+        '204': { description: No work }
+        '403': { description: Disabled / revoked / insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /agent/muse/requests/{id}/heartbeat:
+    post: { security: [{ museBearer: [] }], summary: Extend the lease (capped by expiry, cancel, revoke), requestBody: { content: { application/json: { schema: { type: object, required: [leaseToken, version], properties: { leaseToken: { type: string }, version: { type: integer } } } } } }, responses: { '200': { description: Extended }, '403': { description: NOT_LEASE_HOLDER }, '409': { description: VERSION_CONFLICT or INVALID_TRANSITION } } }
+  /agent/muse/requests/{id}/status:
+    patch: { security: [{ museBearer: [] }], summary: "in_progress / prepared, or needs_approval with a Proposal", requestBody: { content: { application/json: { schema: { type: object, required: [leaseToken, version, status], properties: { leaseToken: { type: string }, version: { type: integer }, status: { type: string, enum: [in_progress, needs_approval] }, phase: { type: string, enum: [prepared] }, proposal: { $ref: '#/components/schemas/Proposal' }, note: { type: string, maxLength: 200 } } } } } }, responses: { '200': { description: Updated }, '409': { description: INVALID_TRANSITION / VERSION_CONFLICT } } }
+  /agent/muse/requests/{id}/commit-intent:
+    post: { security: [{ museBearer: [] }], summary: "Record commit_started BEFORE any irreversible step; requires approval for this proposalHash or passing constraints", requestBody: { content: { application/json: { schema: { type: object, required: [leaseToken, version, proposalHash], properties: { leaseToken: { type: string }, version: { type: integer }, proposalHash: { type: string } } } } } }, responses: { '200': { description: "Go ahead: phase = commit_started" }, '403': { description: APPROVAL_REQUIRED / CONSTRAINT_VIOLATION / NOT_LEASE_HOLDER }, '409': { description: INVALID_TRANSITION } } }
+  /agent/muse/requests/{id}/complete:
+    post: { security: [{ museBearer: [] }], requestBody: { content: { application/json: { schema: { allOf: [{ $ref: '#/components/schemas/Result' }, { type: object, required: [leaseToken, version] }] } } } }, responses: { '200': { description: completed } } }
+  /agent/muse/requests/{id}/fail:
+    post: { security: [{ museBearer: [] }], summary: "Fail; if phase=commit_started, outcome must be stated (outcome_unknown → reconciliation_required)", requestBody: { content: { application/json: { schema: { type: object, required: [leaseToken, version, errorCode], properties: { leaseToken: { type: string }, version: { type: integer }, errorCode: { type: string }, errorMessage: { type: string, maxLength: 200 }, outcome: { type: string, enum: [not_committed, unknown] } } } } } }, responses: { '200': { description: failed or reconciliation_required } } }
+  /agent/muse/requests/{id}/reconcile:
+    post: { security: [{ museBearer: [] }], requestBody: { content: { application/json: { schema: { type: object, required: [leaseToken, version, finding], properties: { leaseToken: { type: string }, version: { type: integer }, finding: { type: string, enum: [confirmed, verified_not_committed, unverifiable] }, externalReference: { type: string } } } } } }, responses: { '200': { description: "completed / queued (retry allowed) / still reconciliation_required" } } }
+  # ---------------- Members (Pawmily session) ----------------
+  /agent/requests:
+    post: { security: [{ memberSession: [] }], summary: Create (validated, minimised, policy-checked, idempotent), responses: { '201': { description: Created }, '200': { description: Existing (same idempotencyKey) }, '403': { description: Not an allowed requester } } }
+    get: { security: [{ memberSession: [] }], summary: Requests visible to me (mine, shared with me, owner-light), responses: { '200': { description: List } } }
+  /agent/requests/{id}:
+    get: { security: [{ memberSession: [] }], responses: { '200': { description: Request (visibility-filtered) } } }
+  /agent/requests/{id}/approve:
+    post: { security: [{ memberSession: [] }], summary: "Approve the exact proposal (proposalHash + proposalVersion); requester and/or owner approval per policy", responses: { '200': { description: Approved }, '403': { description: Not entitled }, '409': { description: Proposal changed } } }
+  /agent/requests/{id}/reject:
+    post: { security: [{ memberSession: [] }], responses: { '200': { description: Cancelled } } }
+  /agent/requests/{id}/cancel:
+    post: { security: [{ memberSession: [] }], summary: "Before commit_started: cancelled. After: cancellation request for Muse (merchant-side)", responses: { '200': { description: Cancelled or cancellation requested } } }
+  /agent/integration:
+    get: { security: [{ memberSession: [] }], summary: "Household Agent: name, status, my permissions (owner sees all)" }
+    put: { security: [{ memberSession: [] }], summary: "Owner: enable/disable, requesters, policy" }
+  /agent/integration/credential:
+    post: { security: [{ memberSession: [] }], summary: "Owner: generate or rotate — full value returned ONCE" }
+    delete: { security: [{ memberSession: [] }], summary: "Owner: revoke now" }
