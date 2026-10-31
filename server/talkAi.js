@@ -12,6 +12,7 @@ const STEP = {
     title: { type: 'string' }, kind: { type: 'string', enum: ['movie', 'show', ''] }, status: { type: 'string', enum: ['want', 'watching', 'finished'] },
     author: { type: 'string' }, state: { type: 'string', enum: ['want', 'reading', 'finished'] }, recBy: { type: 'string', enum: ['partner', ''] },
     meal: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'extra'] }, text: { type: 'string' }, plan: { type: 'boolean' }, chore: { type: 'string' },
+    lb: { type: 'number' },
   },
 };
 export const TALK_SCHEMA = { type: 'object', additionalProperties: false, required: ['steps', 'say'], properties: { steps: { type: 'array', items: STEP }, say: { type: 'string' } } };
@@ -26,11 +27,12 @@ Steps you may use (at most 4):
 - fitness.describe: a workout they describe (exercises, sets, reps). text = their words.
 - fitness.lighter: make today's planned workout lighter.
 - ask.day: a question about their day or the next one — what's on, what [partner] or someone is up to, when they're free, the best time to fit something in, the weather, traffic or how long a drive takes, a place's opening hours — however it's phrased. Use it alone; the app then asks you again with their calendar, the forecast and drive times.
+- weight.log: their body weight today ("log my weight 160.6", "I weighed 72 kg"). lb = the number they said, in pounds (kg × 2.20462, one decimal). Only when they said a number.
 - care.log: a dog or household chore they did. chore = a short name ("walk", "dog park", "breakfast", "dinner", "treat", "meds", or the chore's name).
 Rules:
 - People appear as [partner] or [member:N]. Keep those tokens exactly; never guess names.
 - Never invent titles, foods, amounts or chores they didn't say.
-- If the request needs anything else — adding to the calendar, plans or messages involving other people, booking, buying, advice — return no steps and put one short friendly sentence in say about what you can do instead (adding shows, movies and books, logging meals, workouts and chores).
+- If the request needs anything else — adding to the calendar, plans or messages involving other people, booking, buying, advice — return no steps and put one short friendly sentence in say about what you can do instead (adding shows, movies and books, logging meals, your weight, workouts and chores).
 - Otherwise say is "".`;
 
 async function ask(client, content, model) {

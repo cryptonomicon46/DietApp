@@ -39,7 +39,7 @@ test('whatever the source, only the steps the app knows, cleaned, at most 4', ()
   assert.deepEqual(t, [{ do: 'watch.add', title: 'Dune', kind: '', status: 'want' }, { do: 'diet.log', meal: 'extra', text: 'an apple' }, { do: 'care.log', chore: 'walk' }, { do: 'fitness.lighter' }]);
   assert.deepEqual(tidySteps('nonsense'), []);
   // Every step maps to an action in the T0 registry (none of them involves anyone else).
-  const map = { 'watch.add': 'watch.add', 'watch.status': 'watch.setStatus', 'read.add': 'read.add', 'read.state': 'read.setState', 'diet.log': 'diet.log', 'fitness.describe': 'fitness.describe', 'fitness.lighter': 'fitness.variant', 'care.log': 'care.log', 'ask.day': 'calendar.freeBusy' };
+  const map = { 'watch.add': 'watch.add', 'watch.status': 'watch.setStatus', 'read.add': 'read.add', 'read.state': 'read.setState', 'diet.log': 'diet.log', 'fitness.describe': 'fitness.describe', 'fitness.lighter': 'fitness.variant', 'care.log': 'care.log', 'weight.log': 'weight.log', 'ask.day': 'calendar.freeBusy' };
   for (const d of DOS) { assert.ok(ACTIONS[map[d]], d); assert.notEqual(ACTIONS[map[d]].affects, 'shared', d); }
   assert.deepEqual(TALK_SCHEMA.properties.steps.items.properties.do.enum, DOS);
   assert.match(TALK_INSTRUCTIONS, /Never invent/); assert.match(TALK_INSTRUCTIONS, /\[partner\]/);
@@ -81,4 +81,19 @@ test('a book can say who recommended it (a member id, structured — not a note)
   assert.equal(normalizeBook({ title: 'Project Hail Mary', recBy: 'm2pat' }).recBy, 'm2pat');
   assert.equal(normalizeBook({ title: 'X', recBy: 'Pat said so!' }).recBy, undefined);
   assert.equal(normalizeBook({ title: 'X' }).recBy, undefined);
+});
+
+test("today's weight, said any common way (lb or kg) → one weight.log step; nonsense numbers aren't weights", async () => {
+  const lb = (t) => parseTalk(t)?.steps?.[0];
+  for (const [said, want] of [['Log my weight for today 160.6 pounds', 160.6], ['log weight 160.6', 160.6], ['Record my weigh-in as 160.6 lb', 160.6], ['log my weight: 160.6', 160.6],
+    ['I weigh 72.5 kg', 159.8], ['Weighed in at 160.6 this morning', 160.6], ['my weight today is 161', 161], ['weight 160.6', 160.6], ['I weigh 160.6 lbs today', 160.6]]) {
+    assert.deepEqual(lb(said), { do: 'weight.log', lb: want }, said);
+  }
+  for (const no of ['Log weight 12', 'log my weight 9999', 'I weigh a lot', 'weight loss tips']) assert.equal(lb(no)?.do === 'weight.log', false, no);
+  // Claude's steps are cleaned the same way; kg come only through the phone's reader.
+  assert.deepEqual(tidySteps([{ do: 'weight.log', lb: 160.64 }, { do: 'weight.log', lb: 20 }, { do: 'weight.log', lb: 'x' }]), [{ do: 'weight.log', lb: 160.6 }]);
+  const { validate } = await import('../js/talkActions.js');
+  assert.equal(validate({ action: 'weight.log', args: { lb: 160.6 } }).ok, true);
+  assert.equal(validate({ action: 'weight.log', args: { lb: 1000 } }).ok, false);
+  assert.equal(validate({ action: 'weight.log', args: {} }).ok, false);
 });

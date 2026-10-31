@@ -502,10 +502,13 @@ function talk() {
       watchDelete: async (id) => { if (id) await api.del(`/families/${state.fid}/watch/shows/${id}`); (await WM()).watchSaved().catch(() => {}); },
       read: () => RM(),
       careKinds: () => {
-        const kinds = [...Object.keys(CARE).filter((k) => (fam()?.modules || []).includes('dogs') || !['breakfast', 'dinner', 'walk', 'park', 'treat', 'meds'].includes(k)), ...ownChores().map((x) => `x_${x.id}`)];
+        // Only the chores on the buttons now (not removed or replaced ones).
+        const kinds = [...Object.keys(CARE).filter((k) => !hiddenChores().includes(k) && ((fam()?.modules || []).includes('dogs') || !['breakfast', 'dinner', 'walk', 'park', 'treat', 'meds'].includes(k))), ...ownChores().filter((x) => !x.gone).map((x) => `x_${x.id}`)];
         return kinds.map((k) => { const [icon, label] = careMeta(k); return { kind: k, icon, label }; });
       },
       careLog: async (kind) => { const r = await api.post(`/families/${state.fid}/care`, { kind, date: isoLocal(), by: 'me' }); if (state.view === 'home') { renderCare(); renderRace(); } return r.entry?.id; },
+      weighLog: (lb) => saveWeight(lb),
+      weighUndo: (prev) => undoWeight(prev),
       careUndo: async (id) => { if (id) await api.del(`/families/${state.fid}/care/${isoLocal()}/${id}`); if (state.view === 'home') { renderCare(); renderRace(); } },
       dietTell: async (meal, text, opts = {}) => {
         if (!health.data) { const d = await openData(await memberData().catch(() => null)); if (d?.locked) throw new Error('🔒 This device needs the family key first — Me › 🔐 Encryption'); health.data = d; }
@@ -667,27 +670,39 @@ function meals() {
 }
 // ⚖️ Today's weight from Health: saved into your trackers (so Meals and Weight show it too) and
 // it ticks off the morning reminder.
+// The one weigh-in write (Health's form and Talk): today's weight in your own trackers, plus the
+// mornings in a row and confetti (js/habit.js, js/confetti.js). Returns the weight it replaced.
+async function saveWeight(lb, { from = null } = {}) {
+  const today = isoLocal();
+  let streak = 0, day = null, prev = null;
+  const [H, CF] = await Promise.all([import(`../js/habit.js?v=${VERSION}`), import(`../js/confetti.js?v=${VERSION}`)]);
+  await editMine((s) => {
+    const all = s.get('weights', []) || [];
+    prev = all.find((x) => x.date === today)?.weight ?? null;
+    const weights = [...all.filter((x) => x.date !== today), { date: today, weight: lb }].sort((a, b) => a.date.localeCompare(b.date));
+    s.set('weights', weights);
+    streak = H.weighStreak(weights, today);
+    day = H.healthDay({ weights, eaten: s.get('eaten', {}) || {}, mealLog: s.get('mealLog', {}) || {} }, today);
+  });
+  if (callNudge.all?.weighin) api.post(`/account/nudges/weighin/done?today=${today}`, { date: today }).then(setNudges).catch(() => {});
+  const cheer = H.logCheer(day, today, { weighStreak: streak });
+  CF.confetti({ ...CF.fromEl(from), big: cheer.big });
+  if (state.view === 'health') healthView();
+  return { prev, line: cheer.line };
+}
+// Undo a weigh-in from Talk: back to the weight it replaced (or none).
+async function undoWeight(prev) {
+  const today = isoLocal();
+  await editMine((s) => s.set('weights', [...(s.get('weights', []) || []).filter((x) => x.date !== today), ...(prev != null ? [{ date: today, weight: prev }] : [])].sort((a, b) => a.date.localeCompare(b.date))));
+  if (state.view === 'health') healthView();
+}
 async function saveWeighIn(f) {
   const lb = Math.round(parseFloat(f.lb.value) * 10) / 10;
   if (!(lb >= 60 && lb <= 700)) return toast('Type your weight in pounds (60–700)');
   const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Saving…';
-  const today = isoLocal();
-  let streak = 0, day = null;
-  const [H, CF] = await Promise.all([import(`../js/habit.js?v=${VERSION}`), import(`../js/confetti.js?v=${VERSION}`)]);
-  try {
-    await editMine((s) => {
-      const weights = [...(s.get('weights', []) || []).filter((x) => x.date !== today), { date: today, weight: lb }].sort((a, b) => a.date.localeCompare(b.date));
-      s.set('weights', weights);
-      streak = H.weighStreak(weights, today);
-      day = H.healthDay({ weights, eaten: s.get('eaten', {}) || {}, mealLog: s.get('mealLog', {}) || {} }, today);
-    });
-  } catch (e) { btn.disabled = false; btn.textContent = 'Save'; return toast(e.message); }
-  if (callNudge.all?.weighin) api.post(`/account/nudges/weighin/done?today=${today}`, { date: today }).then(setNudges).catch(() => {});
-  // 🎉 Confetti and the mornings in a row (js/cheer.js, js/confetti.js).
-  const cheer = H.logCheer(day, today, { weighStreak: streak });
-  toast(`⚖️ ${lb.toFixed(1)} lb saved · ${cheer.line}`);
-  CF.confetti({ ...CF.fromEl(btn), big: cheer.big });
-  if (state.view === 'health') healthView();
+  let r;
+  try { r = await saveWeight(lb, { from: btn }); } catch (e) { btn.disabled = false; btn.textContent = 'Save'; return toast(e.message); }
+  toast(`⚖️ ${lb.toFixed(1)} lb saved · ${r.line}`);
 }
 // ⌚ Devices (Health › Devices): family/deviceScreen.js, loaded when you open Devices or come back
 // from connecting WHOOP.
@@ -832,6 +847,7 @@ async function homeView() {
     ${homeLook()}
     <section class="card attn" id="attn" aria-labelledby="attnH" style="${homeH('attn')}"><div class="skeleton line"></div></section>
     <section class="card groc" id="groc" aria-labelledby="grocH" style="${homeH('groc')}"><div class="skeleton line"></div></section>
+    ${homeClasses()}
     <div id="goldNews"></div><section class="card movies" id="moviesCard" hidden></section>`;
   const pins = '<section class="card pins" id="pins" hidden></section>';
   // 🖥 Wide: what needs doing on one side, the house and the dogs on the other.
@@ -852,6 +868,42 @@ async function homeView() {
   await dogsDone;
 }
 
+// 🧗 Fitness class schedules on Home (they lived in the old feed's "Your day" card until the five-tab
+// redesign hid it): Movement's live calendars — the same links as js/brief.js GYMS / gymSchedule —
+// and Hot 8 Yoga at Santana Row. Each person chooses (owner, 2026-10-31: "ask if interested"): the
+// card first asks which studios you go to; "Not interested" keeps it off your Home (Me › ✨ Next up
+// & reminders › 🧗 Fitness classes brings it back). Kept on this phone, per family and person.
+// Plain links, nothing loaded; they open the studios' own pages.
+const movementCal = (slug, activity = '') => `https://movementgyms.com/${slug}/calendar/#${activity ? `activity=${activity}&` : ''}location=${slug}`;
+const STUDIOS = [
+  { id: 'sunnyvale', name: 'Movement Sunnyvale', links: [[movementCal('sunnyvale', 'yoga'), '🧘 Yoga'], [movementCal('sunnyvale', 'fitness'), '🏋️ Fitness'], [movementCal('sunnyvale'), '📅 Calendar']] },
+  { id: 'santa-clara', name: 'Movement Santa Clara', links: [[movementCal('santa-clara', 'yoga'), '🧘 Yoga'], [movementCal('santa-clara', 'fitness'), '🏋️ Fitness'], [movementCal('santa-clara'), '📅 Calendar']] },
+  { id: 'hot8', name: 'Hot 8 Yoga Santana Row', links: [['https://hot8yoga.com/studio/santana-row', '🔥 Classes &amp; booking']] },
+];
+const classKey = () => `fam.classes.${state.fid}.${fam()?.me || ''}`;
+// null = not asked yet · [] = not interested · ['sunnyvale', …] = the studios you go to
+function classPicks() { try { const v = JSON.parse(LS.get(classKey()) || 'null'); return Array.isArray(v?.on) ? v.on.filter((id) => STUDIOS.some((s) => s.id === id)) : null; } catch { return null; } }
+function classForm(picked = []) {
+  return `<form id="classForm" class="stack class-form">${STUDIOS.map((s) => `<label class="class-pick"><input type="checkbox" name="studio" value="${s.id}" ${picked.includes(s.id) ? 'checked' : ''}><span>${esc(s.name)}</span></label>`).join('')}
+    <div class="row"><button class="grow">Show on my Home</button><button type="button" class="ghost grow" data-act="classnone">Not interested</button></div></form>`;
+}
+function homeClasses() {
+  const picks = classPicks();
+  if (picks && !picks.length) return '';
+  if (!picks) return `<section class="card classlinks" id="classes" aria-labelledby="classH"><h3 id="classH" class="card-h">🧗 Fitness classes</h3>
+    <p class="small">Interested in any of these? Tick the ones you go to and their schedules stay on your Home — or tap Not interested.</p>${classForm()}</section>`;
+  const a = (href, label) => `<a href="${href}" target="_blank" rel="noopener">${label}</a>`;
+  return `<section class="card classlinks" id="classes" aria-labelledby="classH"><div class="row between"><h3 id="classH" class="card-h">🧗 Classes</h3><button type="button" class="linkish small" data-act="classpick">✎ Change</button></div>
+    ${STUDIOS.filter((s) => picks.includes(s.id)).map((s) => `<p class="small"><b>${esc(s.name)}</b><span>${s.links.map(([h, l]) => a(h, l)).join(' · ')}</span></p>`).join('')}</section>`;
+}
+function saveClassPicks(on) {
+  try { LS.set(classKey(), JSON.stringify({ on })); } catch { /* private mode */ }
+  closeSheet();
+  const el = $('#classes');
+  if (el) el.outerHTML = homeClasses() || '';
+  toast(on.length ? `🧗 On your Home: ${STUDIOS.filter((s) => on.includes(s.id)).map((s) => s.name).join(', ')}` : '🧗 Fitness classes hidden — bring them back in Me › ✨ Next up & reminders');
+}
+const classSheet = () => openSheet(`<h2>🧗 Fitness classes on your Home</h2><p class="small muted">Tick the studios you go to; only you see your choice (on this phone).</p>${classForm(classPicks() || [])}`);
 // 👔 Today's Look on Home — only when Look has something for today, from what Look left on this
 // phone (no request, no pictures at start-up).
 function homeLook() {
@@ -1767,7 +1819,7 @@ function meView() {
     <section class="card stack"><div class="seg theme-seg">${[['auto', '📱 Automatic'], ['light', '☀️ Light'], ['dark', '🌙 Dark']].map(([k, l]) => `<label class="segopt"><input type="radio" name="theme" value="${k}" ${(LS.get('pawmily.theme') || 'auto') === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
       <p class="tiny muted">Automatic follows your phone — on iPhone, Settings › Display &amp; Brightness › Automatic switches to dark at sunset. Applies to OurPawmily and your trackers on this device.</p></section>
     <h3>✨ Next up &amp; reminders</h3>
-    <section class="card stack"><button type="button" class="ghost wide" data-act="nuknows">✨ Next up: what it knows, show or hide it</button><button type="button" class="ghost wide" data-act="habits">🔁 Run, ride and hot yoga reminders</button></section>
+    <section class="card stack"><button type="button" class="ghost wide" data-act="nuknows">✨ Next up: what it knows, show or hide it</button><button type="button" class="ghost wide" data-act="habits">🔁 Run, ride and hot yoga reminders</button><button type="button" class="ghost wide" data-act="classpick">🧗 Fitness classes on my Home</button></section>
     <h3>🎬 Movies</h3>
     <section class="card stack" id="moviePrefs"><label class="switch-row"><span>🎬 Movie releases &amp; reviews<small class="muted">A card on 🏠 Home: what's in theaters with critic and audience scores, what's coming, where it's streaming, and 🔔 alerts for the ones you're waiting for. Just for you.</small></span><input type="checkbox" data-moviesonoff="1" ${mv.prefs?.on ? 'checked' : ''}><i class="switch"></i></label></section>
     <h3>🔔 Notifications</h3>
@@ -4192,15 +4244,33 @@ if (pushOk()) navigator.serviceWorker.addEventListener('message', (e) => {
   if (e.data?.pushed && state.family) loadThreads().then(() => { if (state.view === 'threads' && state.famTab === 'threads') threadsView(); }).catch(() => {});
 });
 
-// ✎ Edit chores: remove any chore (built-in or your own) from the buttons, bring one back, or
-// add your own to the dogs or the house. What's already logged always keeps its points.
+// ✎ Edit chores: change any chore's points, remove any chore (built-in or your own) from the
+// buttons, bring one back, or add your own to the dogs or the house. What's already logged always
+// keeps its points.
+// New points (owner, 2026-10-31): the chore is replaced by the same chore with the new points — a
+// built-in one is put away and an identical one of your own takes its place; one of your own gets a
+// fresh copy in the same spot. So what's already logged keeps the points it earned, and only new
+// entries count the new value.
+async function setChorePoints(k, pts) {
+  if (!(pts >= 0 && pts <= 5) || pts === ptsOf(k)) return;
+  const own = ownChores().filter((c) => !c.gone), [icon, label] = careMeta(k);
+  if (k.startsWith('x_')) {
+    const i = own.findIndex((c) => `x_${c.id}` === k);
+    if (i < 0) return;
+    const next = [...own];
+    next.splice(i, 1, { icon: own[i].icon, label: own[i].label, pts, section: own[i].section });
+    await saveChores(next);
+  } else await saveChores([...own, { icon, label, pts, section: DOG_KINDS.includes(k) ? 'dogs' : 'house' }], [...hiddenChores(), k]);
+}
 function choresSheet() {
   const mods = fam().modules || [];
   const SECT = { ...(mods.includes('dogs') ? { dogs: ['🐾 The dogs', DOG_KINDS] } : {}), ...(mods.includes('chores') ? { house: ['🏠 The house', HOUSE_KINDS] } : {}) };
-  const row = (k, on) => { const [ico, label] = careMeta(k); return `<li class="row between"><span>${esc(ico)} <b>${esc(label)}</b> <small class="muted">${ptsOf(k) ? `+${ptsOf(k)}` : '♡'}</small></span>${on ? `<button type="button" class="linkish small danger" data-act="chorehide" data-chorekind="${k}">Remove</button>` : `<button type="button" class="linkish small" data-act="choreshow" data-chorekind="${k}">＋ Bring back</button>`}</li>`; };
+  const ptsPick = (k) => `<label class="chore-pts"><span class="visually-hidden">Points for ${esc(careMeta(k)[1])}</span><select data-chorepts="${k}">${[0, 1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === ptsOf(k) ? 'selected' : ''}>${n ? `+${n}` : '♡'}</option>`).join('')}</select></label>`;
+  const row = (k, on) => { const [ico, label] = careMeta(k); return `<li class="row between chore-row"><span class="grow">${esc(ico)} <b>${esc(label)}</b>${on ? '' : ` <small class="muted">${ptsOf(k) ? `+${ptsOf(k)}` : '♡'}</small>`}</span><span class="row chore-acts">${on ? `${ptsPick(k)}<button type="button" class="linkish small danger" data-act="chorehide" data-chorekind="${k}">Remove</button>` : `<button type="button" class="linkish small" data-act="choreshow" data-chorekind="${k}">＋ Bring back</button>`}</span></li>`; };
   openSheet(`<h2>✎ Edit chores</h2>
     ${Object.entries(SECT).map(([sec, [title, base]]) => {
-      const off = base.filter((k) => hiddenChores().includes(k));
+      const own = ownChores().filter((c) => !c.gone);
+      const off = base.filter((k) => hiddenChores().includes(k) && !own.some((c) => c.label === careMeta(k)[1] && c.icon === careMeta(k)[0]));
       return `<h3>${title}</h3><ul class="list">${kindsIn(sec, base).map((k) => row(k, true)).join('')}</ul>${off.length ? `<details class="small"><summary class="muted">Removed (${off.length})</summary><ul class="list">${off.map((k) => row(k, false)).join('')}</ul></details>` : ''}`;
     }).join('')}
     <h3>＋ Add a chore</h3>
@@ -4208,7 +4278,7 @@ function choresSheet() {
       <div class="row"><label style="flex:0 0 74px">Emoji<input name="icon" maxlength="4" value="✅" autocomplete="off"></label><label class="grow">Chore<input name="label" maxlength="24" required placeholder="e.g. Water the plants"></label></div>
       <div class="seg">${Object.entries(SECT).map(([k, [l]], i) => `<label class="segopt"><input type="radio" name="section" value="${k}" ${(k === 'house' || Object.keys(SECT).length === 1) && i >= 0 ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
       <label>Points <select name="pts">${[0, 1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === 2 ? 'selected' : ''}>${n ? `+${n}` : '♡ just for love'}</option>`).join('')}</select></label>
-      <p class="tiny muted">Points by effort: dishes +1, walks +2, cooking dinner +3, cleaning +4. Removing a chore keeps what's already logged.</p>
+      <p class="tiny muted">Points by effort: dishes +1, walks +2, cooking dinner +3, cleaning +4. Change a chore's points with its +N above — what's already logged keeps the points it earned. Removing a chore keeps what's already logged.</p>
       <div class="row end"><button type="button" class="ghost" data-act="close">Done</button><button>＋ Add</button></div>
     </form>`);
 }
@@ -4749,6 +4819,8 @@ document.addEventListener('click', (e) => {
     case 'games': bingo.game = null; bingo.season = null; return show('bingo');
     case 'watchadd': return watchAddSheet();
     case 'chores': return choresSheet();
+    case 'classpick': return classSheet();
+    case 'classnone': return saveClassPicks([]);
     case 'chorehide': case 'choreshow': {
       const k = t.dataset.chorekind, show = d.act === 'choreshow';
       const own = ownChores().filter((c) => !c.gone);
@@ -4899,6 +4971,12 @@ function redrawThreadKeepingReply() {
   renderThread();
   const ta = $('#thReplyForm textarea'); if (ta) { ta.value = keep; ta.focus(); }
 }
+document.addEventListener('change', (e) => {
+  const k = e.target.dataset?.chorepts;
+  if (!k) return;
+  const pts = +e.target.value, [ico, label] = careMeta(k);
+  act(async () => { await setChorePoints(k, pts); choresSheet(); renderCare(); toast(`${ico} ${label} is now ${pts ? `+${pts}` : '♡'} — what's already logged keeps its points`); });
+});
 document.addEventListener('change', async (e) => {
   const t = e.target;
   if (t.dataset.rshots != null && t.files?.length) {
@@ -5139,6 +5217,10 @@ document.addEventListener('submit', (e) => {
       closeSheet(); toast(id ? 'Saved ❤️' : '❤️ Logged');
       if (state.view === 'calendar') { calm.day = date; calm.month = date.slice(0, 7); rhythmLine(); renderCal(); }
     });
+  }
+  if (f.id === 'classForm') {
+    e.preventDefault();
+    return saveClassPicks([...f.querySelectorAll('input[name=studio]:checked')].map((x) => x.value));
   }
   if (f.id === 'choreForm') {
     e.preventDefault();

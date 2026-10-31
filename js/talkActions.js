@@ -24,6 +24,7 @@ export const MEALS = ['breakfast', 'lunch', 'dinner', 'snack'];
 const str = (max, o = {}) => ({ type: 'string', max, ...o });
 const one = (values, o = {}) => ({ type: 'string', enum: values, ...o });
 const int = (min, max, o = {}) => ({ type: 'integer', min, max, ...o });
+const num = (min, max, o = {}) => ({ type: 'number', min, max, ...o });
 const DATE = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' }, TIME = { type: 'string', pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' };
 const ID = { type: 'string', pattern: '^[A-Za-z0-9:_-]{1,64}$' };
 const req = (t) => ({ ...t, required: true });
@@ -50,6 +51,7 @@ export const ACTIONS = {
   'fitness.useWorkout': { domain: 'Fitness', kind: 'capture', affects: 'self', args: { templateId: req(ID) }, undo: 'remove from today', via: 'family/fitness.js startWith' },
   'fitness.variant': { domain: 'Fitness', kind: 'capture', affects: 'self', args: { intent: req(one(['lighter', 'shorter'])) }, undo: 'undo variant', via: 'W.proposeVariant → preview → Apply' },
   'fitness.describe': { domain: 'Fitness', kind: 'capture', affects: 'self', args: { text: req(str(1500)) }, undo: 'remove from today', via: '/ai/workout (workout.text) → review → Today\'s Workout' },
+  'weight.log': { domain: 'Diet', kind: 'capture', affects: 'self', args: { lb: req(num(60, 700)) }, undo: 'previous weight', via: "family/app.js saveWeight: today's weigh-in in your own trackers (editMine), like Health's weigh-in" },
   'diet.log': { domain: 'Diet', kind: 'capture', affects: 'self', args: { meal: req(one(MEALS)), text: req(str(600)) }, undo: 'unlog', via: 'family/meals.js: parseMeal on the phone, diet.text for the rest → preview → Log' },
   'threads.draft': { domain: 'Threads', kind: 'coordinate', affects: 'household', args: { title: req(str(120)), body: str(2000) }, undo: 'discard', via: 'opens the Threads composer filled in — never posts' },
   'look.today': { domain: 'Look', kind: 'read', affects: 'self', args: {}, via: 'family/look.js Top 3 on the phone' },
@@ -65,6 +67,10 @@ function check(t, v, path, errs) {
     if (t.enum && !t.enum.includes(s)) errs.push(`${path} isn't one of ${t.enum.join(', ')}`);
     if (t.pattern && !new RegExp(t.pattern).test(s)) errs.push(`${path} isn't valid`);
     return s;
+  }
+  if (t.type === 'number') {
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < t.min || v > t.max) { errs.push(`${path} should be a number ${t.min}–${t.max}`); return undefined; }
+    return v;
   }
   if (t.type === 'integer') {
     if (!Number.isInteger(v) || v < t.min || v > t.max) { errs.push(`${path} should be a whole number ${t.min}–${t.max}`); return undefined; }
@@ -186,6 +192,7 @@ function schemaOf(t) {
   if (t.type === 'object') return { type: 'object', properties: Object.fromEntries(Object.entries(t.fields).map(([k, v]) => [k, schemaOf(v)])), required: Object.entries(t.fields).filter(([, v]) => v.required).map(([k]) => k), additionalProperties: false };
   if (t.type === 'array') return { type: 'array', items: schemaOf(t.items), maxItems: t.max };
   if (t.type === 'integer') return { type: 'integer', minimum: t.min, maximum: t.max };
+  if (t.type === 'number') return { type: 'number', minimum: t.min, maximum: t.max };
   return { type: 'string', ...(t.max ? { maxLength: t.max } : {}), ...(t.enum ? { enum: t.enum } : {}), ...(t.pattern ? { pattern: t.pattern } : {}) };
 }
 export const jsonSchema = (action) => schemaOf({ type: 'object', fields: ACTIONS[action].args });
