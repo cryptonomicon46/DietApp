@@ -4,6 +4,13 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
 
 ## Current phase and task
 
+### 🧗 Class links back on Home + a clearer "microphone blocked" (2026-10-31, `v2/home-classes` from `main` `2e8daf9`; merge authorized when no `pawdeploy` is needed)
+- **Owner's report:** the Movement Sunnyvale / Santa Clara links (fitness, calendar) were gone from Home; add Hot 8 Yoga at Santana Row. Amani tapped Don't Allow once and Talk no longer hears her, even after re-adding the Home Screen icon.
+- **Cause (links):** they were in the old feed's 🏃 Your day card (`renderYourDay`), which the five-tab redesign took out of navigation.
+- **Built:** `family/app.js` `homeClasses()` — a 🧗 Classes card on Home after Groceries: Movement Sunnyvale and Santa Clara (🧘 Yoga, 🏋️ Fitness, 📅 Calendar — the movementgyms.com calendar links, as `js/brief.js` `gymSchedule`) and Hot 8 Yoga Santana Row (`https://hot8yoga.com/studio/santana-row`, the studio's own page with classes and booking; not opened from this session — its host isn't reachable here). Plain links: no request, nothing loaded at start-up.
+- **Mic:** iOS remembers a denied microphone / speech-recognition permission per site; Talk's `not-allowed` message now names the iPhone settings (Privacy & Security › Speech Recognition / Microphone; Safari › Microphone) and says to close and reopen the app.
+- **Tests:** `npm test` 500 pass. **Browser check** (390 px; 320 px dark): the card's seven links have the right targets; no overflow, no errors. Not verified: the permission fix on a real iPhone.
+
 ### ⚖️ Talk logs today's weight (2026-10-31, `v2/talk-weight` from `main` `a9fc0bc`; owner: "I would like it to log my weight as well by talking to the app"; merge authorized when no `pawdeploy` is needed)
 - **Owner's try:** "Log my weight for today 160.6 pounds" → Claude answered "I can't log weight".
 - **Built:**

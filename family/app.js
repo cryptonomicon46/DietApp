@@ -805,6 +805,7 @@ async function homeView() {
     ${homeLook()}
     <section class="card attn" id="attn" aria-labelledby="attnH" style="${homeH('attn')}"><div class="skeleton line"></div></section>
     <section class="card groc" id="groc" aria-labelledby="grocH" style="${homeH('groc')}"><div class="skeleton line"></div></section>
+    ${homeClasses()}
     <div id="goldNews"></div><section class="card movies" id="moviesCard" hidden></section>`;
   const pins = '<section class="card pins" id="pins" hidden></section>';
   // 🖥 Wide: what needs doing on one side, the house and the dogs on the other.
@@ -825,6 +826,17 @@ async function homeView() {
   await dogsDone;
 }
 
+// 🧗 Class schedules on Home (they lived in the old feed's "Your day" card until the five-tab
+// redesign hid it): Movement's live calendars — the same links as js/brief.js GYMS / gymSchedule —
+// and Hot 8 Yoga at Santana Row. Plain links, nothing loaded; they open the studios' own pages.
+const MOVEMENT = [['sunnyvale', 'Sunnyvale'], ['santa-clara', 'Santa Clara']];
+const movementCal = (slug, activity = '') => `https://movementgyms.com/${slug}/calendar/#${activity ? `activity=${activity}&` : ''}location=${slug}`;
+function homeClasses() {
+  const a = (href, label) => `<a href="${href}" target="_blank" rel="noopener">${label}</a>`;
+  return `<section class="card classlinks" aria-labelledby="classH"><h3 id="classH" class="card-h">🧗 Classes</h3>
+    ${MOVEMENT.map(([slug, name]) => `<p class="small"><b>Movement ${name}</b><span>${a(movementCal(slug, 'yoga'), '🧘 Yoga')} · ${a(movementCal(slug, 'fitness'), '🏋️ Fitness')} · ${a(movementCal(slug), '📅 Calendar')}</span></p>`).join('')}
+    <p class="small"><b>Hot 8 Yoga Santana Row</b><span>${a('https://hot8yoga.com/studio/santana-row', '🔥 Classes &amp; booking')}</span></p></section>`;
+}
 // 👔 Today's Look on Home — only when Look has something for today, from what Look left on this
 // phone (no request, no pictures at start-up).
 function homeLook() {
