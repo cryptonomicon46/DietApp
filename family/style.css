@@ -532,6 +532,8 @@ button:disabled { opacity: .7; cursor: default; }
 .planrow .planacts { width: 100%; }
 .tag { font-size: .72rem; border-radius: 999px; padding: 2px 9px; font-weight: 700; background: var(--bg); color: var(--muted); white-space: nowrap; }
 .tag.tg { background: var(--brand-soft); color: var(--brand); } .tag.tw { background: #fff1d6; color: #9a6200; }
+/* An outing stop's note ("Walk-in, free. Bring a jacket…") is a sentence: it wraps instead of running off the card. */
+.pick .tag.tw { white-space: normal; display: inline-block; max-width: 100%; border-radius: 10px; line-height: 1.35; }
 .rchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; } .rchip { background: var(--bg); border-radius: 999px; padding: 4px 10px; font-size: .8rem; }
 .rchip.due { background: #fff1d6; color: #9a6200; font-weight: 700; }
 .tonightc { display: flex; align-items: center; gap: 10px; } .tonightc .big { font-size: 1.7rem; } .tonightc .grow { flex: 1; font-size: .9rem; }

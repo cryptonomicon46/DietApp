@@ -106,6 +106,10 @@ const member = (id) => fam()?.members.find((m) => m.id === id);
 // undo: optional — the toast gets an Undo button and stays a little longer.
 function toast(text, undo) {
   const t = $('#toast');
+  // An open sheet is a modal <dialog> (the top layer): a toast behind it can't be seen, so while a
+  // sheet is open the toast is shown inside it (errors from a sheet's buttons used to vanish).
+  const host = $('#sheet')?.open ? $('#sheet') : document.body;
+  if (t.parentNode !== host) host.append(t);
   t.textContent = text; t.hidden = false;
   if (typeof undo === 'function') {
     const b = document.createElement('button');
@@ -2415,13 +2419,22 @@ function outingSwap(ref) {
 }
 async function outingSend() {
   const o = outing.cur;
-  // What goes to your partner (locked): the plan without the extra options, to keep it small.
-  const lean = { ...o, options: { eat: o.options.eat.slice(0, 3), do: o.options.do.slice(0, 2) } };
-  const first = o.getting.find((g) => g.depart)?.depart || o.stops[0]?.time || '';
-  const body = await lock({ kind: 'outing', what: o.title, where: o.area, when: 'date', time: first, note: '', outing: lean });
-  await api.post(`/families/${state.fid}/us/plans`, { body, day: o.day, audience: 'couple' });
+  if (!o) return;
+  const btn = open$('[data-act="outsend"]');
+  if (btn?.disabled) return; // already sending: a second tap does nothing
+  // What goes to your partner (locked): the fullest version of the plan that the connector will
+  // keep (js/outingShare.js) — a long plan used to be refused, and the error hid behind this sheet.
+  const S = await import(`../js/outingShare.js?v=${VERSION}`);
+  const first = (o.getting || []).find((g) => g.depart)?.depart || o.stops?.[0]?.time || '';
+  const fit = S.shareable(o, (lean) => ({ kind: 'outing', what: o.title, where: o.area, when: 'date', time: first, note: '', outing: lean }));
+  if (!fit) return toast('This plan is too long to send in one go — swap out a stop or two and try again');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    const body = await lock(fit.value);
+    await api.post(`/families/${state.fid}/us/plans`, { body, day: o.day, audience: 'couple' });
+  } catch (e) { if (btn) { btn.disabled = false; btn.textContent = `💞 Send to ${partnerName()}`; } throw e; }
   closeSheet(); await usChanged();
-  toast(`💞 Sent — ${partnerName()} can say 🙌 I'm in`);
+  toast(`💞 Sent — ${partnerName()} can say 🙌 I'm in${fit.level >= 2 ? ' (descriptions shortened to fit)' : ''}`);
 }
 // 🍽 Something else: pick a cuisine for one stop and get 2-3 places nearby for the same time.
 function cuisineSheet(i) {
