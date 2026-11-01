@@ -1597,3 +1597,25 @@ button.ml-opt.on > span:last-child { color: var(--brand); font-weight: 800; }
 .wl-meta { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: .92rem; margin: 4px 0; }
 .wl-meta dt { color: var(--muted); } .wl-meta dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 .wl-acts { display: grid; gap: 8px; } .wl-acts button { min-height: 46px; }
+/* 🎤 Patient listening: "Still listening…" with a bar running down to the finish; held → Tap to keep talking. */
+.tk-wait { margin: 0; display: grid; gap: 6px; justify-items: center; }
+.tk-bar { display: block; width: 140px; height: 4px; border-radius: 2px; background: var(--brand); transform-origin: left; animation: tk-down 1.5s linear forwards; }
+@keyframes tk-down { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .tk-bar { animation: none; opacity: .6; } }
+.tk-listen.held .tk-pulse { animation: none; opacity: .5; }
+/* ✅ Review before saving */
+.tk-review { gap: 8px; }
+.tk-eyebrow { margin: 0; font-size: .78rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+.tk-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.tk-rows li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 8px; border-radius: 10px; }
+.tk-rows li > span:first-child { display: grid; min-width: 0; }
+.tk-rows li > span:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tk-rows li.tk-hot { background: var(--brand-soft); }
+.tk-tot { margin: 0; font-variant-numeric: tabular-nums; }
+.tk-msg { margin: 0; font-weight: 600; }
+.tk-acts { display: grid; gap: 8px; }
+.tk-acts > button { min-height: 48px; }
+.tk-acts > .linkish { justify-self: center; min-height: 44px; }
+.tk-fix { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.tk-fix input { min-height: 44px; font-size: 16px; }
+.tk-fix button { min-width: 48px; min-height: 44px; }

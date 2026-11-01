@@ -456,6 +456,16 @@ export function begin() {
   if (fx.today.status === 'planned') { fx.today = { ...fx.today, status: 'active', startedAt: Date.now() }; saveToday(); }
   fx.view = 'train';
 }
+// ✅ From Talk's review card: ✓ Create workout saves it as Today's Workout through the same save
+// as everywhere else (with Undo, which puts back what was there); Edit opens the editor with it.
+export async function talkCreate(w) {
+  const before = fx.today, beforeOriginal = fx.original;
+  await startWith(w, 'text');
+  if (!fx.today || fx.today === before) return null; // you kept the workout already under way
+  const made = fx.today.id;
+  return async () => { if (fx.today?.id !== made) return; fx.today = before; fx.original = beforeOriginal; await saveToday(true); fx.view = 'main'; render(); };
+}
+export function talkEdit(w) { fx.said = null; fx.unread = []; return edit(w); }
 export function edit(w, from = 'new') { fx.draft = W.normalize(w); fx.draftFrom = from; fx.view = 'edit'; render(); }
 const blank = (n) => ({ items: Array.from({ length: n }, () => ({ name: '', sets: [{}, {}, {}] })), rounds: 3 });
 // One finished workout: what you planned and did, its name (yours to change), do it again, save it.

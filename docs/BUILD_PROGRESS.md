@@ -4,6 +4,73 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🎤✅ Release 1 parts D + E: Talk listens patiently, and checks before it saves (2026-11-01, `v2/talk-listen-review` from `main` `823dcfa`; front end only, no `pawdeploy`; owner: "Proceed with D and E as they're critical improvements")
+
+**D: listening.**
+- `js/listen.js` `makeListener` is pure and runs with a fake recogniser in tests. `family/app.js` `listenNow` now uses `continuous = true`.
+- Behaviour:
+  - finals are kept once, with an overlap guard;
+  - about 2 s of quiet shows "Still listening…" with a bar;
+  - 3.5 s of quiet finishes (tunable through `fam.talk.pauseMs`, 1.5–6 s);
+  - no words for 9 s gives "I didn't hear anything";
+  - 90 s is the maximum;
+  - the browser ending on its own triggers a restart, with every word kept;
+  - a refused restart, or 3 within 5 s, holds with "🎤 Tap to keep talking" (which resumes inside the tap) and Done;
+  - Done finishes at once and keeps the interim words;
+  - closing Talk aborts listening, so the microphone goes off.
+- `js/listen.js` loads 6.5 s after start-up, or as soon as a finger touches a Talk button.
+
+**E: review before saving.**
+- `js/proposal.js`:
+  - the proposal is held in memory only and expires after 10 minutes;
+  - `commitOnce`: the button and the voice share one commit; stale, expired and cancelled drafts never write;
+  - `replyKind`: only a standalone yes confirms; "okay"/"sure" are unclear; "yes, but …" is a correction;
+  - `amendMeal` handles remove, add, amount, half/double for one food or all, and "it was dinner";
+  - `amendWorkout` handles sets, reps, weight, rounds, add, remove and supersetting two exercises;
+  - corrections always apply to the current draft. When the phone can't place one, the draft plus the correction goes to the existing `/ai/diet/text` or `/ai/workout`, so there is no Worker change.
+- `family/talk.js`:
+  - the card reads "Review meal · not logged yet" or "Review workout · not saved yet", and changed rows are highlighted;
+  - buttons are ✓ Log meal / ✓ Create workout, ✏️ Edit, 🎤 Change by voice, a typed change, and Cancel;
+  - a stray "yes" gets "There's nothing waiting to confirm."
+- Saves go through the existing paths, with Undo:
+  - meals: `family/meals.js` `talkLog`, with `js/dayPlan.js` `mealSnapshot` / `restoreMeal`;
+  - workouts: `family/fitness.js` `talkCreate`, which restores the previous Today's Workout on Undo.
+- Edit opens the meal estimate sheet or the workout editor.
+- `js/talkParse.js` now reads workouts on the phone: "Log a workout: …", "Workout: …", and "I did …" when it contains sets, reps or rounds.
+- Packaged meals and "make it lighter" behave as before.
+
+**Tests:** `npm test` passes 550/550. New: `tests/listen.test.js` (9), `tests/proposal.test.js` (9), and 1 in `tests/talkparse.test.js`.
+
+**Browser check** (local pages and `wrangler dev` DEMO, seeded family, fake `SpeechRecognition`, 390 px light and 320 px dark):
+- Listening:
+  - "Still listening…" appeared at 2.3 s;
+  - a restart kept "log breakfast two eggs" and added "and a slice of sourdough";
+  - the meal card then appeared on its own.
+- Meal card:
+  - "remove the sourdough and add a coffee" highlighted the coffee row;
+  - "okay" gave "Say 'log it'…";
+  - "yes log it" gave "✓ Breakfast logged · 148 kcal", and Health shows ✓ Breakfast 148 kcal;
+  - Lunch logged and then undone came back as "Lunch is next".
+- Workout card:
+  - "make the bench 145 for 8 reps" changed only Bench;
+  - ✓ Create workout made it Today's Workout in Fitness;
+  - "superset the curls and dips" gave one superset of 3 rounds;
+  - Undo restored the previous Today's Workout.
+- Held listening: still held after 5 s; Tap to keep talking plus "dinner" gave the "🍲 Dinner" chore card.
+- Edit opens the meal estimate sheet.
+- Closing Talk while listening aborts the recogniser, and the sheet doesn't reopen.
+
+**Performance** (`scripts/perf/budget.mjs`, same machine; `main` `823dcfa` served from a worktree, then this branch):
+
+| | requests | CLS | cold first paint | script |
+|---|---|---|---|---|
+| `main` | 15 | 0.015 | 1364 ms | 190 KB |
+| this branch | 15 | 0.015 | 1336 ms | 193 KB |
+
+Warm runs gave 1076 ms on `main` and 1024 ms here. Everything is within budget.
+
+**Not verified:** a real iPhone or Android recogniser (the pause timings are the starting values; tune `fam.talk.pauseMs` on the owner's iPhone), and the AI-fallback correction (no Claude key locally).
+
 ### 🎁 Wishlist in 💞 Us (2026-11-01, `v2/us-wishlist` from `main` `52b829c`; front end only — no `pawdeploy`; owner: "if no redeploy needed for the wishlist card, proceed with merging that as well"; mockups in `docs/mockups/wishlist/` on `v2/us-wishlist-mockups`)
 
 - **Done:** a 🎁 Wishlist card in Us under ✨ Ideas for Us, with Mine and the partner's tabs. You add an item with 🔗 Link it (name, detail, price, https link) or 📷 Screenshot + caption (canvas-shrunk JPEG ≤ 160 000 chars), plus ❤️ / 🙂 / 💭. An item opens a sheet with ✎ Edit, 🎉 I got it and Remove. On the partner's list, 🎁 I'm getting this is secret.

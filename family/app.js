@@ -430,21 +430,25 @@ function hereNow() {
   });
 }
 // 🎙️ The browser VoiceInputProvider (family/voice.js describes the boundary): it must start inside
-// the tap, so it lives here; Talk only gets the session { text, ended, error, listener, stop, abort }.
+// the tap, so it lives here; js/listen.js keeps it going through pauses and restarts, and Talk gets
+// the session { state, text, ended, reason, error, listener, stop, abort, resume }.
 // `asked`: the 🎤 button itself — it listens even when "Don't listen when I open Talk" is on.
+// Loaded after start-up (or as a finger touches a Talk button), so a tap can start listening at once.
+let listenMod = null, listenLoading = null;
+const loadListen = () => (listenLoading ||= import(`../js/listen.js?v=${VERSION}`).then((m) => { listenMod = m; }).catch(() => { listenLoading = null; }));
+setTimeout(loadListen, 6500);
+document.addEventListener('pointerdown', (e) => { if (!listenMod && e.target.closest?.('.talk-bar, .talk-fab, [data-talk="mic"], [data-talk="change"], [data-talkmeal]')) loadListen(); }, { passive: true, capture: true });
+let talkVoice = null;
 function listenNow(asked = false) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR || (!asked && LS.get('fam.talk.voice') === 'off')) return null;
+  if (!SR || !listenMod || (!asked && LS.get('fam.talk.voice') === 'off')) return null;
   try {
-    const r = new SR(), buf = { text: '', ended: false, error: '', listener: null, stop: () => r.stop(), abort: () => r.abort() };
-    r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
-    r.onresult = (e) => { buf.text = [...e.results].map((x) => x[0]?.transcript || '').join(' ').replace(/\s+/g, ' ').trim(); buf.listener?.(); };
-    r.onerror = (e) => { buf.error = e.error || 'error'; };
-    r.onend = () => { buf.ended = true; buf.listener?.(); };
-    r.start();
+    const create = () => { const r = new SR(); r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1; return r; };
+    talkVoice?.abort();
+    talkVoice = listenMod.makeListener({ create, finishMs: LS.get('fam.talk.pauseMs') });
     // iOS only lets a page speak after a tap has started speech once: a silent word now, in the tap.
     try { if (window.speechSynthesis && LS.get('fam.talk.speak') === 'on') { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch { /* no speech here */ }
-    return buf;
+    return talkVoice.ended && talkVoice.error === 'error' ? null : talkVoice;
   } catch { return null; }
 }
 let talkMod = null;
@@ -476,10 +480,12 @@ function talk() {
       weighLog: (lb) => saveWeight(lb),
       weighUndo: (prev) => undoWeight(prev),
       careUndo: async (id) => { if (id) await api.del(`/families/${state.fid}/care/${isoLocal()}/${id}`); if (state.view === 'home') { renderCare(); renderRace(); } },
-      dietTell: async (meal, text, opts = {}) => {
-        if (!health.data) { const d = await openData(await memberData().catch(() => null)); if (d?.locked) throw new Error('🔒 This device needs the family key first — Me › 🔐 Encryption'); health.data = d; }
-        const M = await meals(); M.setData(health.data); return M.tellWith(meal, text, opts);
-      },
+      dietTell: async (meal, text, opts = {}) => { const M = await dietReady(); return M.tellWith(meal, text, opts); },
+      // ✅ Review before saving: Talk reads a meal or a workout into a draft card; these save it
+      // through that area's own save (with Undo) or open its own editor with the draft.
+      dietMod: () => dietReady(),
+      workoutCreate: async (w) => (await fit()).talkCreate(w),
+      workoutEdit: async (w) => { const F = await fit(); if (state.view !== 'fitness') show('fitness'); return F.talkEdit(w); },
       fitDescribe: async (text) => { const F = await fit(); if (state.view !== 'fitness') show('fitness'); return F.describeWith(text); },
       who: () => `${state.fid}.${fam().me}`,
       // "Ask about my day": what the Calendar tab shows for today and tomorrow, put together here.
@@ -679,6 +685,11 @@ const wish = () => (wishMod ||= import(`./wishlist.js?v=${VERSION}`).then((m) =>
   });
   return m;
 }).catch((e) => { wishMod = null; throw e; }));
+// Meals with your trackers loaded (for Talk): refuses on a phone without the family key.
+async function dietReady() {
+  if (!health.data) { const d = await openData(await memberData().catch(() => null)); if (d?.locked) throw new Error('🔒 This device needs the family key first — Me › 🔐 Encryption'); health.data = d; }
+  const M = await meals(); M.setData(health.data); return M;
+}
 function meals() {
   mealMod ||= (async () => {
     const M = await import(`./meals.js?v=${VERSION}`);
@@ -4533,6 +4544,10 @@ document.addEventListener('click', (e) => {
   if (d.pact) return postAction(d.pact, t.closest('.menu').dataset);
   if (d.act === 'talk') { const voice = d.talkmic != null || d.talkmeal != null || t.closest('.talk-bar, .talk-fab') ? listenNow() : null; return act(async () => (await talk()).open(state.view, { voice, meal: d.talkmeal || null })); }
   if (d.talk === 'mic') { const voice = listenNow(true); return act(async () => (await talk()).listen(voice)); }
+  // Tap to keep talking: the phone wants this tap to start listening again (it adds to the words).
+  if (d.talk === 'more') { talkVoice?.resume(); return null; }
+  // 🎤 Change by voice on a review card: listening starts in this tap, for that card only.
+  if (d.talk === 'change') { const voice = listenNow(true); return act(async () => (await talk()).change(voice)); }
   if (d.wl) return act(async () => (await wish()).onClick(t));
   if (d.talk || d.talkex != null || d.talkgo != null || d.talkundo != null || d.talkset || d.talkpick || d.talkpickshow || d.talkcare) return act(async () => (await talk()).onClick(t));
   if (d.care) {
@@ -5145,6 +5160,7 @@ document.addEventListener('submit', (e) => {
   const f = e.target;
   if (f.dataset.weigh != null) { e.preventDefault(); return saveWeighIn(f); }
   if (f.dataset.talkform != null) { e.preventDefault(); return act(async () => (await talk()).onSubmit(f)); }
+  if (f.dataset.talkfix != null) { e.preventDefault(); return act(async () => (await talk()).onFix(f)); }
   if (['rdManual', 'rdProg', 'rdEdit'].includes(f.id)) { e.preventDefault(); return act(async () => { const R = await RM(); if (!R.onSubmit(f)) await R.onSubmitAsync(f); }); }
   const v = Object.fromEntries(new FormData(f));
   if (f.id === 'chatForm') {
