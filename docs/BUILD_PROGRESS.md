@@ -4,6 +4,44 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### ⌚ Release 1 part C — WHOOP card on Home + ⟳ SYNC WHOOP (2026-11-01, `v2/daily-health-talk-ux`; front end only — no `pawdeploy`; owner: "deploy the whoop… merge into main when done" if no redeploy is needed)
+- **Built:**
+  - `family/whoopCard.js` is the one WHOOP card, its sheets, the SYNC WHOOP control and the stale line. Health re-exports it.
+  - Home renders it under Talk, only on a phone where WHOOP is connected. The first paint shows the last card drawn on this phone, so nothing jumps; it then refreshes from the phone's data, with no network wait.
+  - `family/whoopSync.js` is the one sync controller for Home, Health's auto/tick and Devices › Sync now:
+    - one sync in flight at a time;
+    - results are updated / no newer scores / synced a moment ago / couldn't refresh / WHOOP busy (429, 2-minute wait) / reconnect;
+    - "updated" means the card's model changed.
+  - `js/devices.js` errors carry the HTTP status.
+  - `dayContextForPlanning` moved to `js/whoopPlan.js`, so Home doesn't load `js/workout.js`.
+  - The 🪶 lighter offer appears on Home only when the card would offer it.
+- **Not in this part:**
+  - Conditional "urgent needs-attention above WHOOP": deferred, because moving it after its data loads would shift the page.
+  - WHOOP battery: not in WHOOP's public API.
+  - "Recovery scored at": WHOOP's `updated_at` isn't kept.
+- **Tests:** `tests/whoopsync.test.js` (9) and `tests/whoopcard.test.js` (3). `npm test` 519 pass.
+- **Browser check** (local Pages + `wrangler dev`, synthetic family with seeded WHOOP data and WHOOP's API stubbed; 390 px, plus 320 px dark):
+  - The card sits under Talk.
+  - Sync makes 4 WHOOP requests; Strain 6.4 → 11.2 in place, with "✓ WHOOP updated" and "✓ WHOOP SYNCED".
+  - A second tap within a minute makes 2 requests and says "Up to date — synced a moment ago."
+  - Health shows the same 11.2.
+  - A 503 gives "Couldn't refresh WHOOP. Showing your last synced data." with the card kept.
+  - Stale data with WHOOP down gives "WHOOP data may be out of date · Last synced …".
+  - With no WHOOP connected, there's no section.
+- **Performance** (`scripts/perf/budget.mjs`, the demo family has no WHOOP, same machine; `main` served from a worktree vs this branch):
+
+  | | Before (`main`, 3 runs) | After (this branch, 4 runs) |
+  | --- | --- | --- |
+  | Requests | 15 | 15 |
+  | Duplicates | 0 | 0 |
+  | Layout shift | 0.024 | 0.024 |
+  | Script | 188 KB | 189 KB |
+  | Cold first paint | 1332–1424 ms | 1356–1652 ms (the 1652 was a single outlier run) |
+  | Long tasks | 411–551 ms | 499–828 ms |
+
+  The ranges overlap: run-to-run noise. Everything is within budget.
+
+
 ### 🌅 Daily Health + Talk UX — Phase 0/1 checkpoint (2026-11-01, `v2/daily-health-talk-ux` from `main` `9e6cb18`; STOPPED for review, not merged, not deployed)
 - **Priority change (owner):** Agent Hub / MCP / Muse paused. That work is committed and pushed, untouched: `v2/muse-m0` `ed22fcd`, `v2/agent-hub-m0` `6071ce0`, `v2/household-agent-m1` `5f8de15` (no stash needed — the tree was clean).
 - **Scope:** the WHOOP card on Home (the same component as Health) + a prominent SYNC WHOOP; listening that tolerates pauses; review-before-write for meals/workouts with spoken corrections; deterministic HealthInsights for Talk questions.

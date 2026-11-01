@@ -61,16 +61,16 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-12e',
-  title: 'New: 🗣️ Talk to Pawmily',
-  text: 'One tap and speak — add a show or a book, log a meal or a chore, ask what’s on today. You check a card first; nothing changes until you tap.',
+  id: '2026-11w',
+  title: 'New: ⌚ WHOOP on Home',
+  text: 'Your WHOOP card is now on Home too, with a big Sync WHOOP button for when the WHOOP app is ahead. And date plans: 🧵 Save to a thread, and 💞 Send works for long plans.',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '🗣️ Talk to Pawmily', cards: [
-  ['🟡', 'One tap, then speak', 'The golden bar on Home (or the gold circle on other tabs) starts listening at once. Or type.'],
-  ['📺', 'Shows, movies and books', '“Add Dune to our watchlist”, “We’re watching Severance now”, “Pat recommended Project Hail Mary”.'],
-  ['🍽', 'Meals, workouts, chores', '“Log lunch: chicken bowl”, “Make today’s workout lighter”, “Walked the dog”.'],
-  ['🔒', 'You approve, it’s private', 'A card first, then Undo. Your phone reads it; only what it can’t goes to Claude, with names swapped for roles.'],
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '⌚ WHOOP on Home', cards: [
+  ['⌚', 'Your WHOOP card on Home', 'The same Sleep, Recovery and Strain card as in Health, right under Talk — only on a phone where WHOOP is connected.'],
+  ['⟳', 'Sync WHOOP', 'WHOOP has newer numbers? Tap it. It says when something new came in, when there’s nothing newer yet, or when WHOOP needs reconnecting.'],
+  ['🧵', 'Save a date plan to a thread', 'Opens Write it up with the whole timeline (💞 Just us, 🥂 Date plans) for last edits before you post.'],
+  ['💞', 'Send long plans', 'A long date plan now sends to your partner (the extra options are left out so it fits).'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);

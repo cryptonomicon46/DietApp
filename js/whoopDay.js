@@ -19,7 +19,6 @@
 // flight doesn't move yesterday's Recovery onto today, and a night across midnight or a clock
 // change belongs to the morning you woke up. Today's entry is read for today and nothing else: if
 // it isn't there yet, it's "not scored yet" — never yesterday's.
-import { durationFor } from './workout.js';
 import { offsetMin, localDate } from './workoutMatch.js';
 
 export const MIN_DAYS = 14; // scored, non-calibrating days before "your usual" means anything
@@ -223,17 +222,3 @@ export function strainDetail(daily = {}, today, workouts = []) {
   };
 }
 
-// 🧭 The one read-only interface a future planner gets (docs/TALK_TO_PAWMILY.md): structured
-// facts only — no prose, no names, notes, history, raw stages, calendar, family, Threads, meals or
-// location. Not sent anywhere in Health 2 Phase B.
-export function dayContextForPlanning({ daily = {}, today, workout = null, history = [] } = {}) {
-  const c = recoveryContext(daily, today);
-  const dur = workout ? durationFor(workout, history) : null;
-  return {
-    date: today,
-    recovery: { state: c.recovery.state, scoreBand: c.recovery.band, relativeToUsual: c.recovery.relative },
-    sleep: { hours: c.sleep.hours ?? null, neededHours: c.sleep.neededHours ?? null, deficitMinutes: c.sleep.deficitMinutes ?? null },
-    strain: { yesterday: c.strain.yesterday, today: c.strain.today },
-    plannedWorkout: workout ? { id: workout.id, name: workout.title, estimatedMinutes: dur?.minutes ?? null, status: workout.status } : null,
-  };
-}
