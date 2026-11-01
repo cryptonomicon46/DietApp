@@ -4,6 +4,19 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🎁 Wishlist in 💞 Us (2026-11-01, `v2/us-wishlist` from `main` `52b829c`; front end only — no `pawdeploy`; owner: "if no redeploy needed for the wishlist card, proceed with merging that as well"; mockups in `docs/mockups/wishlist/` on `v2/us-wishlist-mockups`)
+
+- **Done:** a 🎁 Wishlist card in Us under ✨ Ideas for Us, with Mine and the partner's tabs. You add an item with 🔗 Link it (name, detail, price, https link) or 📷 Screenshot + caption (canvas-shrunk JPEG ≤ 160 000 chars), plus ❤️ / 🙂 / 💭. An item opens a sheet with ✎ Edit, 🎉 I got it and Remove. On the partner's list, 🎁 I'm getting this is secret.
+- **Storage and privacy:** there's no new server route or key, so the Worker is unchanged. `wishlist` sits in the **us** health part (`js/healthParts.js`), which only the partner can read. `wishClaims` is in no part, so the partner never sees a claim. Links are https only and pictures must be `data:image/…`. Nothing goes to AI, and the shop links are never fetched.
+- **Files:** `js/wishlist.js`, `family/wishlist.js`, `family/app.js` (the Us section, loader and listeners), `family/style.css`, `js/healthParts.js`, `tests/wishlist.test.js`.
+- **Docs:** README, `server/helpGuide.js` (new `wishlist` entry), `family/tour.js` (WHATS_NEW `2026-11w`; the Us slide's Notes card is now "Wishlist & notes"), `family/privacy.html` (new 🎁 Wishlist line, Last updated November 1), ARCHITECTURE.
+- **Tests:** `npm test` gives 531/531 (5 new in `tests/wishlist.test.js`: cleaning, https-only links, screenshot items and junk pictures, ordering/edit/remove, claims in no part).
+- **Browser check (local pages :8098 + `wrangler dev` DEMO, seeded family, two phones):**
+  - Sam added "Rolex Submariner · 41 mm, black dial · $10,250 · ❤️ Really want".
+  - Pat saw "Sam's · 1" and claimed it, getting the toast "🎁 Noted — Sam won't see it".
+  - Sam's view after the claim showed no claim text.
+- **Not run:** a perf before/after (Us isn't part of start-up and the card loads lazily with Us).
+
 ### 🍽 Meal sheet redesign (2026-11-01, `v2/meal-sheet` from `main` `ba46c8a`; front end only — no `pawdeploy`; owner: "deploy… the meal tracker… merge into main when done")
 - **Owner's asks:**
   - "planned" becomes a dropdown of planned + saved combos;

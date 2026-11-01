@@ -8,7 +8,7 @@
 export const PARTS = {
   diet: ['profile', 'weights', 'weighModes', 'days', 'eaten', 'mealLog', 'dailyMeals', 'planned', 'combos', 'custom', 'customGrocery', 'scannedFoods', 'preparedMeals', 'myFoods', 'mealFit', 'macroAdjust', 'adjust', 'adjustAppliedOn', 'checkins', 'checkinSnooze', 'checked', 'prefs', 'dexa'],
   fitness: ['workouts', 'workoutHistory', 'lift', 'activities', 'whoopTotal', 'deviceTotal', 'gymClasses', 'training'],
-  us: ['rhythm', 'taste', 'plans', 'planReplies', 'notes', 'noteHearts', 'noteDays', 'shows', 'showStatus', 'showRatings', 'showNights', 'dogTreats', 'dogFed', 'dogProfiles', 'dogWalked', 'dogToys', 'dogPark', 'adoptDogs'],
+  us: ['wishlist', 'rhythm', 'taste', 'plans', 'planReplies', 'notes', 'noteHearts', 'noteDays', 'shows', 'showStatus', 'showRatings', 'showNights', 'dogTreats', 'dogFed', 'dogProfiles', 'dogWalked', 'dogToys', 'dogPark', 'adoptDogs'],
 };
 export const PART_NAMES = Object.keys(PARTS);
 const partOf = Object.fromEntries(Object.entries(PARTS).flatMap(([p, keys]) => keys.map((k) => [k, p])));

@@ -35,7 +35,7 @@ export const SLIDES = [
     ['📚', 'Read', 'What each of you is reading or listening to. ＋ Book, pick it, 📖 Reading or 🎧 Listening — done.'],
     ['❤️', 'Dates', 'Plans you answer 🙌 / 🤔 / ⏰, 🧭 Plan an outing, and the 2-2-2-2 rhythm.'],
     ['✨', 'Ideas for Us', 'A few movies, new restaurants and events. 💗 privately, 💬 discuss, and a match becomes a plan.'],
-    ['💌', 'Notes', 'Little notes just for the two of you.'],
+    ['🎁', 'Wishlist & notes', 'Each of you keeps a wishlist (a link or a screenshot) only the other sees, plus little notes just for you two.'],
   ] },
   { id: 'calendar', eyebrow: '📅 Calendar', title: 'When it’s happening', go: 'calendar', cards: [
     ['📅', 'One family calendar', 'Everyone’s events, ⭐ golden days, ❤️ dates, 🐾 appointments, linked phone calendars.'],
@@ -61,15 +61,15 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-11m',
-  title: 'New: 🍽 a better meal sheet, and ⌚ WHOOP on Home',
-  text: 'Tap a meal to pick another breakfast, a smoothie, a combo or a bar, and ⚖️ Fit it to your calories. 📦 Packaged and 🍴 Ate out (photo, describe it, drinks) are right there. And your WHOOP card is on Home with Sync WHOOP.',
+  id: '2026-11w',
+  title: 'New: 🎁 a wishlist in Us, 🍽 a better meal sheet, ⌚ WHOOP on Home',
+  text: 'Keep a 🎁 Wishlist in 💞 Us (a link, or a screenshot and a caption) — only your partner sees it, and "I’m getting this" stays secret. Tap a meal to pick another breakfast, a smoothie, a combo or a bar, and ⚖️ Fit it to your calories. Your WHOOP card is on Home with Sync WHOOP.',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '🍽 Meals, ⌚ WHOOP', cards: [
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '🎁 Wishlist, 🍽 Meals, ⌚ WHOOP', cards: [
+  ['🎁', 'A wishlist for each of you', 'In 💞 Us: paste a link or add a screenshot with a caption. Your partner can mark 🎁 I’m getting this — you never see that.'],
   ['🍽', 'Pick what the meal is', 'Tap a meal, then the button under its name: today’s plan, another breakfast, a 🥤 smoothie, your combos (and your partner’s, if shared), a bar or shake.'],
   ['⚖️', 'Fit to your calories', 'Type 300, 400… or tap − / ＋. Protein stays; carbs and fat change. It remembers yours for each meal.'],
-  ['🍴', 'Ate out, in one place', 'A photo of the dish, describe it, or pick the closest plate — and add drinks on the same screen. 📦 Packaged shows your saved ones first.'],
   ['⌚', 'WHOOP on Home', 'The same card as Health, right under Talk, with a big Sync WHOOP for when the WHOOP app is ahead.'],
 ] });
 
