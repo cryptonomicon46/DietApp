@@ -6,7 +6,8 @@
 // it goes back up, sealed with the family key. Estimates (photo, Tell me) are always shown to
 // you to check first; nothing is logged until you tap Log. Photos are never kept.
 import * as D from '../js/dayPlan.js';
-import { FOODS } from '../js/foods.js';
+import { FOODS, BREAKFASTS } from '../js/foods.js';
+import { fitPortions } from '../js/mealFit.js';
 import { EAT_OUT, EAT_OUT_SIZE, DRINKS, labelKcal } from '../js/plan.js';
 import { parseMeal, totalOf } from '../js/foodText.js';
 import { leftText } from './health.js';
@@ -26,8 +27,26 @@ const r0 = (n) => Math.round(n || 0);
 const NAME = D.MEAL_NAMES;
 // A copy to preview changes on (grams you're nudging, before they're saved).
 function mem() { const d = clone(ms.data) || {}; return { d, get: (k, f) => (k in d ? d[k] : f), set: (k, v) => { d[k] = v; } }; }
+const dataOf = (s) => new Proxy({}, { get: (_, k) => s.get(k, undefined) });
 const OPS = {
   grams: (s, [meal, slot, g]) => D.setGrams(s, today(), meal, slot, g),
+  // A different source for the meal (the plan, another breakfast, a combo, a bar or shake…).
+  use: (s, [meal, c]) => D.planAs(s, today(), meal, clone(c)),
+  // ⚖️ Fit to N kcal: protein foods keep their grams, carbs and fats make up the difference.
+  fit: (s, [meal, kcal]) => {
+    const m = D.planOf(dataOf(s), today())[meal];
+    if (!m) return;
+    // A food you've set shows 🔒 in the sheet; a new Fit may still re-fit it (that's what Fit is for).
+    const r = fitPortions((m.portions || []).map((x) => ({ ...x, locked: false })), kcal, FOODS);
+    // Every food's grams are pinned (not just the ones that changed): otherwise the plan's
+    // auto-sizing would add protein back to make up for what the carbs and fat lost.
+    for (const x of (m.portions || []).filter((y) => FOODS[y.food])) D.setGrams(s, today(), meal, x.slot, r.grams[x.slot] ?? x.grams);
+    const cu = s.get('custom');
+    cu.meals[meal] = { ...cu.meals[meal], fitKcal: kcal };
+    s.set('custom', cu);
+  },
+  // The Fit-to number you chose, remembered per meal while the plan's own target stays the same.
+  fitpref: (s, [meal, kcal, base]) => s.set('mealFit', { ...(s.get('mealFit', {}) || {}), [meal]: { kcal, base } }),
   lowcarb: (s, [meal, on]) => { D.rollDay(s, today()); const c = s.get('custom'); c.meals[meal] = { ...(c.meals[meal] || {}), lowCarb: on || undefined }; if (!on) delete c.meals[meal].lowCarb; s.set('custom', c); D.record(s, today()); },
 };
 function preview() { const s = mem(); for (const [k, ...a] of ms.ops) OPS[k](s, a); return s; }
@@ -65,31 +84,105 @@ const leftLine = (s = preview()) => { try { return leftText(D.dayEntry(s.d, toda
 function open(html) { ms.c.openSheet(`<div class="ml-sheet">${html}</div>`); }
 
 // ---------- the meal sheet ----------
+// The meal as it stands, with a picker for where it comes from (today's plan, another breakfast, a
+// 🥤 smoothie, your combos and your partner's, a bar or shake, same as yesterday), ⚖️ Fit to N
+// kcal, every food's grams on a slider, then ✓ Log. 📦 Packaged and 🍴 Ate out are the other two
+// ways in. Nothing is saved until you log (or, for a meal already logged, Update it).
+const comboKcal = (c) => (c.manual?.kcal ? +c.manual.kcal : (c.items || []).reduce((a, x) => a + ((FOODS[x.food]?.kcal || 0) * x.grams) / 100, 0));
+const comboP = (c) => (c.manual?.p != null && c.manual.p !== '' ? +c.manual.p : (c.items || []).reduce((a, x) => a + ((FOODS[x.food]?.p || 0) * x.grams) / 100, 0));
+const comboMeal = (c) => c.meal || (c.kind === 'breakfast' || c.kind === 'snack' ? c.kind : 'lunch');
+const QUICK = () => Object.keys(FOODS).filter((k) => FOODS[k].quick);
+// What the picker shows as the meal's source now.
+function sourceLabel(c, m) {
+  if (c.eatout || m.eatout) return 'ate out';
+  if (c.prepared) return c.prepared.icon === '🔁' ? 'same as yesterday' : c.prepared.icon === '📦' || !c.prepared.icon ? 'packaged' : 'logged';
+  if (c.combo) return 'combo';
+  if (c.items && c.items.length === 1 && FOODS[c.items[0].food]?.quick) return 'bar or shake';
+  if (c.items) return 'your own';
+  if (c.picked) return 'picked';
+  return 'planned';
+}
+const fitDefault = (meal, m) => { const pf = ms.data?.mealFit?.[meal]; return pf && pf.base === m.target?.kcal ? pf.kcal : r0(m.target?.kcal); };
 function mealSheet(meal) {
-  ms.sheet = { kind: 'meal', meal };
-  const s = preview(), plan = planNow(s), m = plan?.[meal];
+  const was = ms.sheet?.kind === 'meal' && ms.sheet.meal === meal ? ms.sheet : {};
+  ms.sheet = { kind: 'meal', meal, pick: !!was.pick, fit: was.fit, fitNote: was.fitNote || '', partner: was.partner };
+  const sh = ms.sheet, s = preview(), plan = planNow(s), m = plan?.[meal];
   const logged = D.logOf(s.d, today()).meals?.[meal];
   if (!m) return open(`${head(NAME[meal])}<p class="small">Your phone can't work this meal out yet — open Today's plan once, then try again.</p><a class="btn wide" href="../#today">Today's plan ›</a>`);
+  const c = customOf(s, meal);
   const rows = (m.portions || []).filter((x) => FOODS[x.food]).map((x) => {
     const step = x.range?.[2] || 5;
     return `<div class="ml-food"><span><b>${E(FOODS[x.food].name)}</b>${x.locked ? ' <small class="muted">🔒</small>' : ''}</span>
       <span class="ml-step"><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${-step}" aria-label="Less ${E(FOODS[x.food].name)}">−</button><input inputmode="decimal" data-mle="g:${meal}:${x.slot}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams"><span class="small muted">g</span><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${step}" aria-label="More ${E(FOODS[x.food].name)}">＋</button></span>
       <input type="range" class="ml-slide" data-mle="gs:${meal}:${x.slot}" min="0" max="${Math.max(x.range?.[1] || 400, r0(x.grams) * 2)}" step="${step}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams" aria-valuetext="${r0(x.grams)} grams${unitHint(x)}"><small class="muted ml-unit" id="mlU-${x.slot}">${E(unitHint(x).replace(/^, /, ''))}</small></div>`;
   }).join('');
-  const yest = yesterdays(meal);
-  open(`${head(NAME[meal], logged ? `✓ logged ${E(logged.at || '')}` : 'planned')}
-    <p class="small ml-title">${E(m.title)}</p><div id="mlMealTot">${totals(m.totals)}<p class="tiny muted">${leftLine(s)}</p></div>
-    ${rows ? `<div class="ml-foods">${rows}</div><p class="tiny muted">Changes save when you log${logged ? ' or close' : ''}. ${m.balanced ? 'Sized to balance the rest of your day.' : ''}</p>` : ''}
-    <div class="ml-primary">${logged ? `<button type="button" data-ml="save:${meal}" ${ms.ops.length ? '' : 'disabled'}>Save changes</button>` : `<button type="button" data-ml="plan:${meal}">✓ Log as planned</button>`}
-      <button type="button" class="ghost" data-ml="other:${meal}">＋ Something else</button></div>
-    <details class="ml-more"><summary>More</summary><div class="ml-grid">
-      ${yest ? `<button type="button" class="ghost" data-ml="again:${meal}">🔁 Same as yesterday<small>${E(yest.title)} · ${r0(yest.kcal)} kcal</small></button>` : ''}
-      <button type="button" class="ghost" data-ml="quick:${meal}">✏️ Quick macros<small>Just protein, carbs, fat</small></button>
-      <button type="button" class="ghost" data-ml="pack:${meal}">📦 Packaged<small>Type or snap the label</small></button>
-      <button type="button" class="ghost" data-ml="drinks:${meal}">🍷 Drinks<small>Wine, beer, cocktails</small></button>
-      ${meal !== 'snack' && !m.eatout && !m.prepared ? `<button type="button" class="ghost" data-ml="lowcarb:${meal}">🥑 Low-carb ${customOf(s, meal).lowCarb ? 'off' : 'today'}<small>${customOf(s, meal).lowCarb ? 'Back to the usual carbs' : 'Rest-day carbs'}</small></button>` : ''}
-      ${logged ? `<button type="button" class="ghost" data-ml="unlog:${meal}">↩︎ Unlog<small>Logged by mistake</small></button>` : ''}
-    </div><a class="ml-link" href="../#today">Swap foods, combos and more in Today's plan ›</a></details>`);
+  const canFit = rows && !m.prepared && !m.eatout && !m.manual;
+  const fitVal = sh.fit ?? fitDefault(meal, m);
+  const fit = canFit ? `<div class="ml-fit"><label for="mlFit" class="small"><b>Fit to</b></label><span class="ml-step"><button type="button" class="ghost" data-ml="fitstep:${meal}:-25" aria-label="25 kcal less">−</button><input id="mlFit" inputmode="numeric" data-mle="fit:${meal}" value="${fitVal}" aria-label="Fit this meal to how many calories"><span class="small muted">kcal</span><button type="button" class="ghost" data-ml="fitstep:${meal}:25" aria-label="25 kcal more">＋</button></span><button type="button" class="ghost small" data-ml="fitgo:${meal}">⚖️ Fit</button></div>
+    <p class="tiny muted ml-fitnote" role="status">${sh.fitNote ? E(sh.fitNote) : `Planned ${r0(m.target?.kcal)} kcal · keeps the protein, adjusts carbs and fat`}</p>` : '';
+  const lowcarb = meal !== 'snack' && !m.eatout && !m.prepared && !c.items ? `<button type="button" class="ghost" data-ml="lowcarb:${meal}">🥑 Low-carb ${c.lowCarb ? 'off' : 'today'}</button>` : '';
+  const save = rows && !m.prepared && !m.eatout ? `<button type="button" class="ghost" data-ml="savecombo:${meal}">☆ Save as combo</button>` : '';
+  open(`${head(NAME[meal], logged ? `✓ logged ${E(logged.at || '')}` : '')}
+    <button type="button" class="ml-src" data-ml="srcopen:${meal}" aria-expanded="${sh.pick}"><span><b>${E(m.title)}</b><small>${E(sourceLabel(c, m))} · tap to change</small></span><span aria-hidden="true">${sh.pick ? '▴' : '▾'}</span></button>
+    ${sh.pick ? pickerHtml(meal, s, m, c) : ''}
+    <div id="mlMealTot">${totals(m.totals)}<p class="tiny muted">${leftLine(s)}</p></div>
+    ${fit}
+    ${rows ? `<div class="ml-foods">${rows}</div><p class="tiny muted">${logged ? 'Changes save when you tap Update meal.' : 'Nothing is saved until you log.'} ${m.balanced ? 'Sized to balance the rest of your day.' : ''}</p>` : ''}
+    <div class="ml-primary">${logged ? `<button type="button" data-ml="relog:${meal}" ${ms.ops.length ? '' : 'disabled'}>✓ Update meal · ${r0(m.totals.kcal)} kcal</button>` : `<button type="button" data-ml="plan:${meal}">✓ Log ${NAME[meal].toLowerCase()} · ${r0(m.totals.kcal)} kcal</button>`}</div>
+    <div class="ml-two ml-big"><button type="button" class="ghost" data-ml="pack:${meal}">📦 Packaged</button><button type="button" class="ghost" data-ml="out:${meal}">🍴 Ate out</button></div>
+    ${lowcarb || save || logged ? `<div class="ml-minis">${lowcarb}${save}${logged ? `<button type="button" class="ghost" data-ml="unlog:${meal}">↩︎ Unlog</button>` : ''}</div>` : ''}`);
+  if (sh.pick && sh.partner === undefined && ms.c.partnerCombos) { sh.partner = null; ms.c.partnerCombos().then((p) => { if (ms.sheet === sh) { sh.partner = p || false; mealSheet(meal); } }).catch(() => { sh.partner = false; }); }
+}
+// The picker: where this meal comes from. Picking only changes the sheet; ✓ Log saves it.
+function pickerHtml(meal, s, m, c) {
+  const kc = (k, p) => `${r0(k)} kcal · ${r0(p)} g protein`;
+  const row = (src, name, sub, on = false) => `<button type="button" class="ml-opt${on ? ' on' : ''}" data-ml="src:${meal}:${src}" ${on ? 'aria-current="true"' : ''}><span>${E(name)}<small>${E(sub)}</small></span>${on ? '<span aria-hidden="true">✓</span>' : ''}</button>`;
+  const group = (title, body) => (body ? `<div class="ml-optg"><div class="ml-label small">${title}</div>${body}</div>` : '');
+  const label = sourceLabel(c, m);
+  // Today's plan: the planned meal, and for breakfast every breakfast (sized to this meal's target).
+  let planRows = '';
+  if (meal === 'breakfast') {
+    const rotation = D.planOf(Object.assign(clone(s.d), { custom: { date: today(), meals: {} } }), today()).breakfast?.template;
+    for (const k of Object.keys(BREAKFASTS)) {
+      const t = previewWith(meal, k === rotation ? {} : { template: k, picked: true })?.[meal];
+      if (!t) continue;
+      const on = (k === m.template && (label === 'planned' || label === 'picked'));
+      planRows += row(k === rotation ? 'plan' : `t_${k}`, `${k === rotation ? '🗓 ' : k === 'smoothie' ? '🥤 ' : ''}${t.title}${k === rotation ? ' (planned)' : ''}`, kc(t.totals.kcal, t.totals.p), on);
+    }
+  } else {
+    const t = previewWith(meal, {})?.[meal];
+    if (t) planRows = row('plan', `🗓 ${t.title} (planned)`, kc(t.totals.kcal, t.totals.p), label === 'planned');
+  }
+  const mine = [...(ms.data?.combos || [])].sort((a, b) => (comboMeal(b) === meal) - (comboMeal(a) === meal));
+  const mineRows = mine.map((x) => row(`c_${x.id}`, `⭐ ${x.name}`, `${kc(comboKcal(x), comboP(x))}${comboMeal(x) !== meal ? ` · ${NAME[comboMeal(x)]?.toLowerCase() || ''} combo` : ''}`, c.combo === x.id)).join('');
+  const partner = s && ms.sheet.partner;
+  const theirRows = partner?.combos?.length ? partner.combos.map((x) => row(`p_${x.id}`, `⭐ ${x.name}`, kc(comboKcal(x), comboP(x)), c.combo === `p:${x.id}`)).join('') : '';
+  const bars = QUICK().map((k) => { const f = FOODS[k], g = f.unit?.grams || 100; return row(`b_${k}`, f.name, `1 ${f.unit?.label || '100 g'} · ${kc((f.kcal * g) / 100, (f.p * g) / 100)}`, c.items?.length === 1 && c.items[0].food === k); }).join('');
+  const y = yesterdays(meal);
+  return `<div class="ml-picker" role="group" aria-label="Where this ${NAME[meal].toLowerCase()} comes from">
+    ${group("Today's plan", planRows)}
+    ${group('Your combos', mineRows || '<p class="tiny muted">None yet — ☆ Save as combo keeps a meal you like.</p>')}
+    ${partner === null ? '<p class="tiny muted">Looking for shared combos…</p>' : group(`${E(partner?.name || '')}'s combos`, theirRows)}
+    ${group('Bars &amp; shakes', bars)}
+    ${y ? group('Again', row('again', `🔁 Same as yesterday · ${strip(y.title)}`, kc(y.kcal, y.p))) : ''}
+  </div>`;
+}
+// The plan with one meal swapped to `c`, on a copy (to show each choice's calories).
+function previewWith(meal, c) { try { const p = preview(); OPS.use(p, [meal, c]); return D.planOf(p.d, today()); } catch { return null; } }
+// The choice → the meal's new source.
+function sourceFor(meal, src) {
+  const [kind, ...rest] = src.split('_'), id = rest.join('_');
+  if (src === 'plan') return {};
+  if (kind === 't' && BREAKFASTS[id]) return { template: id, picked: true };
+  if (kind === 'c' || kind === 'p') {
+    const list = kind === 'c' ? ms.data?.combos || [] : ms.sheet.partner?.combos || [];
+    const x = list.find((y) => y.id === id);
+    if (!x) return null;
+    return { items: (x.items || []).map((i) => ({ food: i.food, grams: i.grams })), title: x.name, combo: kind === 'c' ? x.id : `p:${x.id}`, ...(x.manual ? { manual: { ...x.manual } } : {}) };
+  }
+  if (kind === 'b' && FOODS[id]) return { items: [{ food: id, grams: FOODS[id].unit?.grams || 100 }], title: FOODS[id].name };
+  if (src === 'again') { const y = yesterdays(meal); return y ? { prepared: { name: strip(y.title), kcal: y.kcal, p: y.p, c: y.c, f: y.f, servings: 1, icon: '🔁' } } : null; }
+  return null;
 }
 // "2 eggs", "½ avocado": the food's own unit next to its grams, when it has one.
 function unitHint(x) { const f = FOODS[x.food]; if (!f?.unit?.grams) return ''; const a = amountOf({ food: x.food, grams: x.grams }, FOODS); return `, ${a.text}`; }
@@ -124,13 +217,18 @@ function packSheet(meal, pre = null) {
   ms.sheet = { kind: 'pack', meal, k: pre || { name: '', p: '', c: '', f: '', kcal: '', servings: 1, save: true } };
   drawPack();
 }
+const savedPacks = () => [...(ms.data?.preparedMeals || [])].reverse(); // newest first
 function drawPack() {
   const { k, meal } = ms.sheet;
   const t = { kcal: (+k.kcal > 0 ? +k.kcal : labelKcal(k.p, k.c, k.f)) * k.servings, p: (+k.p || 0) * k.servings, c: (+k.c || 0) * k.servings, f: (+k.f || 0) * k.servings };
-  const saved = (ms.data?.preparedMeals || []).slice(-6).reverse();
+  // Your saved packaged foods first (the ones you use most are one tap), then the label, then typing.
+  const all = savedPacks(), shown = ms.sheet.all ? all : all.slice(0, 6);
+  const picked = k.name && all.some((x) => x.name === k.name);
   open(`${head('📦 Packaged meal', NAME[meal])}
+    ${all.length && !k.serving ? `<div class="ml-label small">Yours</div><div class="ml-packs">${shown.map((x, i) => `<button type="button" class="ml-opt${picked && x.name === k.name ? ' on' : ''}" data-ml="packuse:${i}"><span>${E(x.name)}<small>${r0(x.kcal || labelKcal(x.p, x.c, x.f))} kcal · ${r0(x.p)} g protein</small></span>${picked && x.name === k.name ? '<span aria-hidden="true">✓</span>' : ''}</button>`).join('')}</div>
+      ${all.length > shown.length ? `<button type="button" class="linkish small" data-ml="packall">All ${all.length} saved ›</button>` : ''}` : ''}
     ${k.serving ? `<p class="ml-note">Read from the label · per serving: <b>${E(k.serving)}</b> — check the numbers.</p>` : `<button type="button" class="wide ghost" data-ml="photo:${meal}:label">📷 Snap the label</button>`}
-    ${saved.length && !k.serving ? `<p class="small muted">Yours: ${saved.map((x, i) => `<button type="button" class="linkish small" data-ml="packuse:${i}">${E(x.name)}</button>`).join(' · ')}</p>` : ''}
+    <div class="ml-label small">${picked ? 'Check it' : 'Or type it in'}</div>
     <label class="ml-field small">Name <input data-mle="k:name" value="${E(k.name)}" maxlength="60" placeholder="e.g. Chicken burrito bowl"></label>
     <div class="ml-4">${[['p', 'Protein g'], ['c', 'Carbs g'], ['f', 'Fat g'], ['kcal', 'Calories']].map(([f, l]) => `<label class="small">${l}<input inputmode="decimal" data-mle="k:${f}" value="${k[f]}"></label>`).join('')}</div>
     <div class="ml-label small">Servings</div><div class="seg">${[0.5, 1, 1.5, 2].map((n) => `<button type="button" class="${k.servings === n ? 'on' : ''}" data-ml="kserv:${n}">${{ 0.5: '½', 1: '1', 1.5: '1½', 2: '2' }[n]}</button>`).join('')}</div>
@@ -140,24 +238,44 @@ function drawPack() {
 
 // ---------- 🍴 Ate out ----------
 function outSheet(meal) {
-  ms.sheet = { kind: 'out', meal, o: { place: '', dish: 'grilled', size: 'regular', ate: 1, menu: null } };
+  ms.sheet = { kind: 'out', meal, o: { place: '', how: null, dish: 'grilled', size: 'regular', ate: 1, menu: null, drinks: {}, cocktail: 'margarita' } };
   drawOut();
 }
 const outTotals = (o) => { const d = EAT_OUT[o.dish] || EAT_OUT.plate, x = (EAT_OUT_SIZE[o.size] || EAT_OUT_SIZE.regular).x * o.ate; return { kcal: d.kcal * x, p: d.p * x, c: d.c * x, f: d.f * x }; };
+// 🍷 Drinks with the meal (one standard serving each; alcohol counts in calories, not P/C/F).
+const outDrinks = (o) => Object.entries(o.drinks || {}).filter(([, n]) => n > 0).map(([k, n]) => D.drinkEntry(k, n, 5)).filter(Boolean);
+const drinksBlock = (o) => {
+  const list = outDrinks(o), n = list.length ? list.reduce((a, x) => a + (+x.title.match(/(\d+(?:\.\d+)?) ×/)?.[1] || 0), 0) : 0;
+  const row = (k) => { const d = DRINKS[k], c = o.drinks[k] || 0; return `<div class="ml-drink"><span><b>${d.icon} ${E(d.label)}</b><small class="muted">${d.kcal} kcal · ${E(d.serving)}</small></span><span class="ml-step"><button type="button" class="ghost" data-ml="odr:${k}:-1" aria-label="One less ${E(d.label)}">−</button><output aria-live="polite">${c}</output><button type="button" class="ghost" data-ml="odr:${k}:1" aria-label="One more ${E(d.label)}">＋</button></span></div>`; };
+  return `<details class="ml-more ml-outdrinks" ${n ? 'open' : ''}><summary>🍷 Drinks${n ? ` · ${n} · ${r0(list.reduce((a, x) => a + x.kcal, 0))} kcal` : ''}</summary>
+    ${DRINK_ROWS.map(row).join('')}${row(o.cocktail)}
+    <label class="ml-field small">Cocktail <select data-mle="ocock">${COCKTAILS.map((k) => `<option value="${k}" ${k === o.cocktail ? 'selected' : ''}>${E(DRINKS[k].label)} · ${DRINKS[k].kcal} kcal</option>`).join('')}</select></label>
+    <p class="tiny muted">Alcohol counts in your calories, apart from protein, carbs and fat.</p></details>`;
+};
 function drawOut() {
   const { o, meal } = ms.sheet;
   const menu = o.menu;
-  const t = menu ? { kcal: +menu.kcal || 0, p: menu.p !== '' ? +menu.p : (+menu.kcal || 0) * 0.25 / 4, c: menu.c !== '' ? +menu.c : (+menu.kcal || 0) * 0.35 / 4, f: menu.f !== '' ? +menu.f : (+menu.kcal || 0) * 0.4 / 9 } : outTotals(o);
+  const way = (attrs, ic, t, sub, on = false) => `<button type="button" class="ml-way${on ? ' on' : ''}" ${attrs}><span class="ic" aria-hidden="true">${ic}</span><span>${t}<small>${sub}</small></span><span aria-hidden="true">${on ? '✓' : '›'}</span></button>`;
+  const food = !o.how ? null : menu ? { kcal: +menu.kcal || 0, p: menu.p !== '' ? +menu.p : (+menu.kcal || 0) * 0.25 / 4, c: menu.c !== '' ? +menu.c : (+menu.kcal || 0) * 0.35 / 4, f: menu.f !== '' ? +menu.f : (+menu.kcal || 0) * 0.4 / 9 } : outTotals(o);
+  const dr = outDrinks(o), dt = totalOf(dr);
+  const t = food ? { kcal: food.kcal + dt.kcal, p: food.p, c: food.c + dt.c, f: food.f, alc: dr.reduce((a, x) => a + x.alc, 0) } : null;
   open(`${head('🍴 Ate out', NAME[meal])}
-    <label class="ml-field small">Where <input data-mle="o:place" value="${E(o.place)}" maxlength="40" placeholder="optional"></label>
-    ${menu ? `<div class="ml-label small">From the menu</div><label class="ml-field small">Dish <input data-mle="m:name" value="${E(menu.name || '')}" maxlength="60"></label><div class="ml-4">${[['kcal', 'Calories'], ['p', 'Protein g'], ['c', 'Carbs g'], ['f', 'Fat g']].map(([f, l]) => `<label class="small">${l}<input inputmode="decimal" data-mle="m:${f}" value="${menu[f]}"></label>`).join('')}</div>
+    <div class="ml-label small">What did you have?</div>
+    <div class="ml-ways">
+      ${way(`data-ml="photo:${meal}:restaurant"`, '📷', 'Photo of the dish', 'Take one or pick from Photos — it estimates the dish')}
+      ${way(`data-ml="odesc:${meal}"`, '🎙️', 'Describe it', '“Salmon, rice and a side salad” — type or use the keyboard mic')}
+      ${way('data-ml="ohow:pick"', '🍽', 'Pick the closest', 'A typical restaurant plate, then the size', o.how === 'pick' && !menu)}
+    </div>
+    ${o.how ? (menu ? `<div class="ml-label small">From the menu</div><label class="ml-field small">Dish <input data-mle="m:name" value="${E(menu.name || '')}" maxlength="60"></label><div class="ml-4">${[['kcal', 'Calories'], ['p', 'Protein g'], ['c', 'Carbs g'], ['f', 'Fat g']].map(([f, l]) => `<label class="small">${l}<input inputmode="decimal" data-mle="m:${f}" value="${E(menu[f])}"></label>`).join('')}</div>
       <p class="tiny muted">Only calories? Protein, carbs and fat are filled in with a typical restaurant split.</p>`
-    : `<div class="ml-label small">Or pick what's closest</div><div class="chips">${Object.entries(EAT_OUT).map(([k, d]) => `<button type="button" class="chip ${o.dish === k ? 'on' : ''}" data-ml="odish:${k}">${E(d.label)}</button>`).join('')}</div>
+      : `<div class="chips">${Object.entries(EAT_OUT).map(([k, d]) => `<button type="button" class="chip ${o.dish === k ? 'on' : ''}" data-ml="odish:${k}">${E(d.label)}</button>`).join('')}</div>
       <div class="ml-label small">Portion</div><div class="seg">${Object.entries(EAT_OUT_SIZE).map(([k, v]) => `<button type="button" class="${o.size === k ? 'on' : ''}" data-ml="osize:${k}">${v.label}</button>`).join('')}</div>
-      <div class="ml-label small">How much you ate</div><div class="seg">${[[1, 'All'], [0.75, 'Most'], [0.5, 'Half']].map(([v, l]) => `<button type="button" class="${o.ate === v ? 'on' : ''}" data-ml="oate:${v}">${l}</button>`).join('')}</div>`}
-    ${totals(t)}
-    <div class="ml-primary"><button type="button" data-ml="olog" ${t.kcal > 0 ? '' : 'disabled'}>✓ Log it</button></div>
-    <div class="ml-minis center"><button type="button" class="ghost" data-ml="photo:${meal}:restaurant">📷 Have a photo?</button><button type="button" class="ghost" data-ml="omenu">${menu ? '🍴 Pick a dish instead' : '🧾 Menu shows calories'}</button><button type="button" class="ghost" data-ml="drinks:${meal}">🍷 Drinks</button></div>`);
+      <div class="ml-label small">How much you ate</div><div class="seg">${[[1, 'All'], [0.75, 'Most'], [0.5, 'Half']].map(([v, l]) => `<button type="button" class="${o.ate === v ? 'on' : ''}" data-ml="oate:${v}">${l}</button>`).join('')}</div>`) : ''}
+    <button type="button" class="linkish small" data-ml="omenu">${menu ? '🍽 Pick a dish instead' : '🧾 The menu shows calories?'}</button>
+    ${drinksBlock(o)}
+    <label class="ml-field small ml-where">Where <span class="muted">(optional)</span> <input data-mle="o:place" value="${E(o.place)}" maxlength="40" placeholder="e.g. the Thai place on Castro"></label>
+    ${t ? totals(t) : ''}
+    <div class="ml-primary"><button type="button" data-ml="olog" ${t && t.kcal > 0 ? '' : 'disabled'}>${t ? `✓ Log ${NAME[meal].toLowerCase()} · ${r0(t.kcal)} kcal` : 'Choose how above'}</button></div>`);
 }
 
 // ---------- 🍷 Drinks ----------
@@ -187,20 +305,6 @@ function drawDrinks() {
       : '<button type="button" class="linkish small" data-ml="dcustom">＋ Something else (name + calories)</button>'}
     ${list.length ? `<p class="ml-note"><b>${r0(t.kcal)} kcal</b> · <span class="ml-a">alcohol ~${r0(alc)} kcal</span> · carbs ${r0(t.c)} g — alcohol is counted apart from protein, carbs and fat.</p>` : ''}
     <div class="ml-primary"><button type="button" data-ml="dlog" ${list.length ? '' : 'disabled'}>Add ${count || ''} drink${count === 1 ? '' : 's'}</button></div>`);
-}
-
-// ---------- ＋ Something else: every other way to log a meal, Talk first ----------
-// (Saying it goes to 🗣️ Talk — the one place to say or type a meal; app.js starts listening in the tap.)
-function otherSheet(meal) {
-  ms.sheet = { kind: 'other', meal };
-  const s = preview(), m = planNow(s)?.[meal], yest = yesterdays(meal), name = NAME[meal].toLowerCase();
-  const way = (attrs, ic, t, sub, cls = '') => `<button type="button" class="ml-way ${cls}" ${attrs}><span class="ic" aria-hidden="true">${ic}</span><span>${t}<small>${sub}</small></span><span aria-hidden="true">›</span></button>`;
-  open(`${head(`Log ${name}`, NAME[meal])}<div class="ml-ways">
-    ${way(`data-act="talk" data-talkmeal="${meal}"`, '🎙️', 'Say what you had', '“Two eggs and a slice of sourdough” — Talk to Pawmily', 'talk')}
-    ${way(`data-ml="photo:${meal}"`, '📷', 'From a photo', 'Choose one from Photos, or take one now')}
-    ${way(`data-ml="out:${meal}"`, '🍴', 'Ate out', 'Pick the closest dish and how much')}
-    ${way(`data-ml="pack:${meal}"`, '📦', 'Packaged', 'The numbers from the label')}</div>
-    <div class="ml-minis">${yest ? `<button type="button" class="ghost" data-ml="again:${meal}">🔁 Same as yesterday</button>` : ''}<button type="button" class="ghost" data-ml="drinks:${meal}">🍷 Drinks</button>${meal !== 'snack' && m && !m.eatout && !m.prepared ? `<button type="button" class="ghost" data-ml="lowcarb:${meal}">🥑 Low-carb ${customOf(s, meal).lowCarb ? 'off' : 'today'}</button>` : ''}</div>`);
 }
 
 // ---------- 📷 Photo (plate, restaurant dish, label, menu) ----------
@@ -273,14 +377,14 @@ export function tellWith(target, text, { plan = false } = {}) {
   if (pk) return packSheet(target, { name: pk.name, p: pk.p, c: pk.c, f: pk.f, kcal: pk.kcal, servings: 1, save: true });
   ms.sheet = { kind: 'tell', target, text, est: null, error: '', plan }; drawTell(); return readTell();
 }
-function tellSheet(target) {
-  ms.sheet = { kind: 'tell', target, text: '', est: null, error: '' };
+function tellSheet(target, { out = false } = {}) {
+  ms.sheet = { kind: 'tell', target, text: '', est: null, error: '', out };
   drawTell();
   setTimeout(() => document.getElementById('mlTell')?.focus(), 50);
 }
 function drawTell() {
-  const { target, text, error } = ms.sheet;
-  open(`${head('🎙️ Tell me', target === 'extra' ? 'a snack or extra' : NAME[target])}
+  const { target, text, error, out } = ms.sheet;
+  open(`${head(out ? '🍴 Describe it' : '🎙️ Tell me', target === 'extra' ? 'a snack or extra' : out ? `${NAME[target]}, eaten out` : NAME[target])}
     <label for="mlTell" class="visually-hidden">What did you have?</label>
     <textarea id="mlTell" class="ml-tell" rows="3" maxlength="600" data-mle="tell" placeholder="Two eggs, two slices of sourdough, half an avocado and coffee">${E(text)}</textarea>
     <p class="tiny muted">Type, or tap the 🎤 on your keyboard to speak. OurPawmily only gets the text, never audio.</p>
@@ -313,7 +417,9 @@ async function readTell() {
 // ---------- the estimate: check it, then log ----------
 function estimateSheet(target, est) {
   // Foods the phone knows stay foods (resized by weight or unit); the rest are resized in servings.
-  ms.sheet = { kind: 'est', target, est: { size: 1, ate: 1, editing: false, ...est, items: placeItems(est.items.map((x) => ({ ...x })), FOODS, parseMeal) } };
+  // 🍴 From Ate out (Describe it): a restaurant meal, logged as eaten out.
+  const out = ms.sheet?.kind === 'tell' && ms.sheet.out;
+  ms.sheet = { kind: 'est', target, est: { size: 1, ate: 1, editing: false, ...est, restaurant: !!(est.restaurant || out), items: placeItems(est.items.map((x) => ({ ...x })), FOODS, parseMeal) } };
   drawEst();
 }
 function estTotals(e) { const t = totalOf(e.items), x = e.size * e.ate; return { kcal: t.kcal * x, p: t.p * x, c: t.c * x, f: t.f * x }; }
@@ -357,14 +463,18 @@ function estMeal() {
   const name = (e.name || e.items.map((x) => x.name.replace(/\s*\(.*?\)/g, '')).slice(0, 3).join(', ')).slice(0, 60) || 'Meal';
   const icon = e.from === 'photo' ? '📷' : '🎙️';
   const items = !e.restaurant && asMealItems(e.items, e.size * e.ate);
-  const c = items ? { items } : e.restaurant ? { eatout: { mode: 'menu', dishName: name, menu: { kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) } } }
+  const how = e.from === 'photo' ? 'photo' : 'said';
+  const c = items ? { items, how } : e.restaurant ? { eatout: { mode: 'menu', place: (ms.carry?.place || '').trim().slice(0, 40), dishName: name, menu: { kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) } }, how, ctx: 'eatout' }
     : { prepared: { name, kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f), servings: 1, icon } };
   return { c, t, name, icon };
 }
 function logEstimate() {
-  const { target } = ms.sheet, { c, t, name, icon } = estMeal();
+  const { target, est } = ms.sheet, { c, t, name, icon } = estMeal();
   if (target === 'extra') return commit((s) => D.addExtras(s, today(), [{ title: `${icon} ${name}`, kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) }]), `✓ ${name} logged · ${r0(t.kcal)} kcal`);
-  return commit((s) => D.logAs(s, today(), target, c), `✓ ${NAME[target]} planned and logged · ${r0(t.kcal)} kcal — tap it on Health to change amounts`);
+  // Drinks chosen on 🍴 Ate out before the photo or the description come along with the meal.
+  const drinks = est.restaurant ? (ms.carry?.drinks || []).map((x) => ({ ...x, title: `${x.title} · with ${NAME[target].toLowerCase()}` })) : [];
+  ms.carry = null;
+  return commit((s) => { const x = D.logAs(s, today(), target, c); if (drinks.length) D.addExtras(s, today(), drinks); return x; }, `✓ ${NAME[target]} ${est.restaurant ? 'logged' : 'planned and logged'} · ${r0(t.kcal)} kcal${drinks.length ? ` + ${r0(drinks.reduce((a, d) => a + d.kcal, 0))} kcal of drinks` : ''}${est.restaurant ? '' : ' — tap it on Health to change amounts'}`);
 }
 function planEstimate() {
   const { target } = ms.sheet, { c, t } = estMeal();
@@ -400,13 +510,57 @@ function useFit(i) {
 }
 
 // ---------- clicks and typing ----------
+// ⚖️ Fit the meal to sh.fit kcal (on top of the source you picked; the grams you'd nudged go).
+function applyFit(meal) {
+  const sh = ms.sheet, m = planNow()?.[meal];
+  if (!m) return null;
+  ms.ops = ms.ops.filter((o) => !(['grams', 'fit', 'fitpref'].includes(o[0]) && o[1] === meal));
+  const before = preview(), m0 = D.planOf(before.d, today())[meal];
+  const r = fitPortions((m0.portions || []).map((x) => ({ ...x, locked: false })), sh.fit, FOODS);
+  ms.ops.push(['fit', meal, sh.fit], ['fitpref', meal, sh.fit, r0(m.target?.kcal)]);
+  // What it really comes to (the plan's own totals), so the note never says more than is true.
+  const got = r0(planNow()?.[meal]?.totals?.kcal ?? r.kcal), near = Math.abs(got - sh.fit) <= Math.max(25, sh.fit * 0.05);
+  sh.fitNote = near ? `Fitted to ${sh.fit} kcal (${got})${r.proteinCut ? ' — protein had to come down too' : ' · protein kept'}`
+    : `Closest: ${got} kcal${r.proteinCut ? ' (protein came down too)' : ' with the protein kept'} — the foods' smallest and largest amounts limit it`;
+  return mealSheet(meal);
+}
+// ☆ Save as combo: this meal's foods and grams, to load into any meal later (yours only).
+async function saveCombo(meal) {
+  const m = planNow()?.[meal];
+  const items = (m?.portions || []).filter((x) => x.grams > 0 && FOODS[x.food]).map((x) => ({ food: x.food, grams: r0(x.grams) }));
+  if (!items.length) return ms.c.toast('Add some foods to this meal first');
+  const name = (globalThis.prompt?.(`Name this ${NAME[meal].toLowerCase()} combo`, m.title) || '').trim().slice(0, 60);
+  if (!name) return null;
+  const kind = meal === 'breakfast' || meal === 'snack' ? meal : 'main';
+  return commit((s) => {
+    const list = s.get('combos', []) || [];
+    const same = list.find((x) => comboMeal(x) === meal && x.name.toLowerCase() === name.toLowerCase());
+    const combo = { id: same?.id || `c${Date.now().toString(36)}`, name, kind, meal, items };
+    s.set('combos', [...list.filter((x) => x.id !== combo.id), combo]);
+  }, `☆ Saved “${name}” — pick it from the meal's list any time`);
+}
 export async function onClick(t) {
   const [a, ...r] = t.dataset.ml.split(':');
   const sh = ms.sheet;
   switch (a) {
-    case 'close': dropPic(); if (sh?.kind === 'meal' && ms.ops.length && D.logOf(ms.data, today()).meals?.[sh.meal]) return commit(null, 'Saved'); ms.ops = []; ms.sheet = null; return ms.c.closeSheet();
+    // Closing never saves: a logged meal changes only with ✓ Update meal (it used to save on close).
+    case 'close': dropPic(); ms.ops = []; ms.sheet = null; return ms.c.closeSheet();
     case 'plan': return commit((s) => D.logPlanned(s, today(), r[0]), (e) => (e ? `✓ ${NAME[r[0]]} logged · ${e.kcal} kcal` : 'Logged'));
     case 'save': return commit(null, 'Saved');
+    case 'srcopen': sh.pick = !sh.pick; return mealSheet(r[0]);
+    case 'src': {
+      const [meal, ...rest] = r, c = sourceFor(meal, rest.join(':'));
+      if (!c) return null;
+      // A new source replaces what you'd changed on the old one.
+      ms.ops = ms.ops.filter((o) => !(['grams', 'use', 'fit', 'fitpref'].includes(o[0]) && o[1] === meal));
+      ms.ops.push(['use', meal, c]);
+      sh.pick = false; sh.fit = undefined; sh.fitNote = '';
+      return mealSheet(meal);
+    }
+    case 'fitstep': { const [meal, d] = r, m = planNow()?.[meal]; if (!m) return null; sh.fit = Math.max(50, (sh.fit ?? fitDefault(meal, m)) + +d); return applyFit(meal); }
+    case 'fitgo': { const m = planNow()?.[r[0]]; if (!m) return null; sh.fit = sh.fit ?? fitDefault(r[0], m); return applyFit(r[0]); }
+    case 'relog': { const meal = r[0], at = D.logOf(ms.data, today()).meals?.[meal]?.at; return commit((x) => D.logPlanned(x, today(), meal, at), (e) => (e ? `✓ ${NAME[meal]} updated · ${e.kcal} kcal` : 'Updated')); }
+    case 'savecombo': return saveCombo(r[0]);
     case 'open': ms.ops = []; return mealSheet(r[0]);
     case 'g': { const [meal, slot, step] = r; const m = planNow()?.[meal]; const x = m?.portions.find((p) => p.slot === slot); if (!x) return null; ms.ops.push(['grams', meal, slot, Math.max(0, r0(x.grams + +step))]); return mealSheet(meal); }
     case 'lowcarb': { const on = !customOf(preview(), r[0]).lowCarb; ms.ops.push(['lowcarb', r[0], on]); return mealSheet(r[0]); }
@@ -421,7 +575,8 @@ export async function onClick(t) {
       return commit((s) => D.logAs(s, today(), sh.target, { prepared: { name, kcal: r0(kcal), p: +q.p || 0, c: +q.c || 0, f: +q.f || 0, servings: 1, icon: '✏️' } }), `✓ ${NAME[sh.target]} logged · ${r0(kcal)} kcal`);
     }
     case 'pack': return packSheet(r[0]);
-    case 'packuse': { const x = (ms.data?.preparedMeals || []).slice(-6).reverse()[+r[0]]; if (!x) return null; sh.k = { name: x.name, p: x.p, c: x.c, f: x.f, kcal: x.kcal || '', servings: 1, save: false }; return drawPack(); }
+    case 'packuse': { const x = savedPacks()[+r[0]]; if (!x) return null; sh.k = { name: x.name, p: x.p, c: x.c, f: x.f, kcal: x.kcal || '', servings: 1, save: false }; return drawPack(); }
+    case 'packall': sh.all = true; return drawPack();
     case 'kserv': sh.k.servings = +r[0]; return drawPack();
     case 'klog': {
       const k = sh.k, n = k.servings, kc = +k.kcal > 0 ? +k.kcal : labelKcal(k.p, k.c, k.f);
@@ -435,11 +590,15 @@ export async function onClick(t) {
     case 'odish': sh.o.dish = r[0]; return drawOut();
     case 'osize': sh.o.size = r[0]; return drawOut();
     case 'oate': sh.o.ate = +r[0]; return drawOut();
-    case 'omenu': sh.o.menu = sh.o.menu ? null : { name: '', kcal: '', p: '', c: '', f: '' }; return drawOut();
+    case 'omenu': sh.o.menu = sh.o.menu ? null : { name: '', kcal: '', p: '', c: '', f: '' }; sh.o.how = 'pick'; return drawOut();
+    case 'ohow': sh.o.how = r[0]; return drawOut();
+    case 'odr': { const [k, d] = r; sh.o.drinks[k] = Math.max(0, (sh.o.drinks[k] || 0) + +d); return drawOut(); }
+    case 'odesc': ms.carry = { drinks: outDrinks(sh.o), place: sh.o.place }; return tellSheet(r[0], { out: true });
     case 'olog': {
       const o = sh.o, place = o.place.trim().slice(0, 40);
       const e = o.menu ? { place, mode: 'menu', dishName: o.menu.name.trim() || '', menu: { kcal: +o.menu.kcal || 0, p: o.menu.p, c: o.menu.c, f: o.menu.f } } : { place, mode: 'estimate', dish: o.dish, size: o.size, ate: o.ate };
-      return commit((s) => D.logAs(s, today(), sh.meal, { eatout: e }), (x) => `✓ ${NAME[sh.meal]} logged · ${x?.kcal ?? ''} kcal`);
+      const drinks = outDrinks(o).map((x) => ({ ...x, title: `${x.title} · with ${NAME[sh.meal].toLowerCase()}` }));
+      return commit((s) => { const x = D.logAs(s, today(), sh.meal, { eatout: e }); if (drinks.length) D.addExtras(s, today(), drinks); return x; }, (x) => `✓ ${NAME[sh.meal]} logged · ${x?.kcal ?? ''} kcal${drinks.length ? ` + ${r0(drinks.reduce((a, d) => a + d.kcal, 0))} kcal of drinks` : ''}`);
     }
     case 'drinks': return drinksSheet(r[0]);
     case 'dn': { const [k, d] = r; sh.n[k] = Math.max(0, (sh.n[k] || 0) + +d); return drawDrinks(); }
@@ -450,10 +609,9 @@ export async function onClick(t) {
       const k = list.reduce((a, x) => a + x.kcal, 0);
       return commit((s) => D.addExtras(s, today(), list), `🍷 Added · ${r0(k)} kcal`);
     }
-    case 'photo': dropPic(); return photoSheet(r[0], r[1] || '');
+    case 'photo': dropPic(); if (sh?.kind === 'out') ms.carry = { drinks: outDrinks(sh.o), place: sh.o.place }; else ms.carry = null; return photoSheet(r[0], r[1] || '');
     case 'pick': return document.getElementById(r[0] === 'cam' ? 'mlCam' : 'mlLib')?.click();
     case 'pmeal': sh.meal = r[0]; return drawPhoto();
-    case 'other': return otherSheet(r[0]);
     case 'pread': return readPhoto();
     case 'tell': return tellSheet(r[0]);
     case 'tread': return readTell();
@@ -492,6 +650,15 @@ export function onInput(t) {
     if (b) { b.disabled = !(kc > 0); b.textContent = `✓ Log ${r0(kc)} kcal`; }
     return;
   }
+  if (a === 'fit' && sh.kind === 'meal') {
+    const v = Math.round(+t.value);
+    if (!(v >= 50 && v <= 3000)) return;
+    sh.fit = v;
+    clearTimeout(onInput.fitT);
+    onInput.fitT = setTimeout(() => { if (ms.sheet === sh) { applyFit(k); setTimeout(() => { const el = document.getElementById('mlFit'); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 0); } }, 700);
+    return;
+  }
+  if (a === 'ocock') { const prev = sh.o.cocktail; sh.o.cocktail = t.value; if (sh.o.drinks[prev]) { sh.o.drinks[t.value] = sh.o.drinks[prev]; delete sh.o.drinks[prev]; } return drawOut(); }
   if (a === 'o') { sh.o[k] = t.value; return; }
   if (a === 'm') { sh.o.menu[k] = t.value; return; }
   if (a === 'dc') { sh.custom[k] = t.value; const b = document.querySelector('[data-ml="dlog"]'); if (b) b.disabled = !drinkList().length; return; }

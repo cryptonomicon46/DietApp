@@ -4,6 +4,42 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🍽 Meal sheet redesign (2026-11-01, `v2/meal-sheet` from `main` `ba46c8a`; front end only — no `pawdeploy`; owner: "deploy… the meal tracker… merge into main when done")
+- **Owner's asks:**
+  - "planned" becomes a dropdown of planned + saved combos;
+  - adjust foods after picking;
+  - "Fit to XX calories" with up/down, different per person;
+  - switch to a protein bar or a smoothie;
+  - Packaged prominent;
+  - "Something else" becomes Ate out, with a photo, alcohol and a spoken description.
+- **The independent review's changes are adopted:**
+  - no duplicated Photo/Say/Drinks on the base sheet;
+  - two-field source metadata;
+  - the Fit default is the plan's target, remembered per person and meal while that target is unchanged.
+- **Built:**
+  - **Source picker** (`family/meals.js` `pickerHtml`/`sourceFor`):
+    - today's plan, plus for breakfast every breakfast, including the new 🥤 Protein smoothie (`js/foods.js`);
+    - `BREAKFAST_ROTATION` keeps the daily rotation exactly eggs/oatmeal;
+    - your combos, and your partner's combos only when they share Diet;
+    - bars & shakes;
+    - same as yesterday.
+  - **⚖️ Fit to N kcal** (`js/mealFit.js`): protein foods keep their grams; every gram is pinned so the template can't add protein back; the honest note shows the real total ("Fitted to 300 kcal (306)" / "Closest: …"); remembered in `mealFit` (Diet part).
+  - **Saving:** ✓ Log / ✓ Update meal; closing never saves (it used to save a logged meal on close).
+  - **Buttons:** 📦 Packaged and 🍴 Ate out are big; 🥑 Low-carb, ☆ Save as combo and ↩︎ Unlog are in a small row.
+  - **Health's row** is ✓ As planned + 🍴 Ate out.
+  - **🍴 Ate out:** photo of the dish / describe it / pick the closest, inline 🍷 drinks logged as extras with the meal, optional where.
+  - **📦 Packaged:** your saved ones first (big rows), then the label, then typing.
+  - **Source metadata:** `dayPlan.sourceOf` stamps logged meals with `sourceContext` and `captureMethod` (+ `fitKcal`). Older meals stay valid.
+- **Tests:** `tests/mealsheet.test.js` (7: fit keeps protein / grows within ranges / cuts protein only when it must / locks; smoothie sized, never rotated; source mapping; a logged meal records its source). `tests/health.test.js` was updated for the ✓ As planned + 🍴 Ate out row. `npm test` 526 pass.
+- **Browser check** (local Pages + `wrangler dev`, synthetic family; 390 px, 320 px dark):
+  - The picker lists the 3 breakfasts (planned ✓), combos, bars & shakes.
+  - Smoothie → 417 kcal; Fit 300 → 306 kcal, protein kept.
+  - ☆ Save as combo → it's in the list → pick it → ✓ Log → "✓ Breakfast logged · 326 kcal".
+  - Dinner re-fit 400 → 398 (protein had to come down) → 700 → 694 → 520 → 514.
+  - Ate out → Pick the closest + 2 red wines → "✓ Lunch logged · 650 kcal + 250 kcal of drinks".
+  - No overflow at 320 px.
+
+
 ### ⌚ Release 1 part C — WHOOP card on Home + ⟳ SYNC WHOOP (2026-11-01, `v2/daily-health-talk-ux`; front end only — no `pawdeploy`; owner: "deploy the whoop… merge into main when done" if no redeploy is needed)
 - **Built:**
   - `family/whoopCard.js` is the one WHOOP card, its sheets, the SYNC WHOOP control and the stale line. Health re-exports it.

@@ -1,4 +1,4 @@
-import { FOODS, BREAKFASTS, PROTEINS, MAIN_MEAL } from './foods.js';
+import { FOODS, BREAKFASTS, BREAKFAST_ROTATION, PROTEINS, MAIN_MEAL } from './foods.js';
 
 export const LB_PER_KG = 2.20462;
 const KCAL_PER_LB_FAT = 3500;
@@ -346,7 +346,7 @@ export function dayIndex(date) {
 export function planForDay(dayTargets, date, custom = {}, prefs = {}, opts = {}) {
   const meals = mealTargets(dayTargets);
   const n = dayIndex(date);
-  const bKeys = Object.keys(BREAKFASTS);
+  const bKeys = BREAKFAST_ROTATION;
   // A low-carb breakfast is eggs (oatmeal can't go low-carb).
   const bKey = BREAKFASTS[custom.breakfast?.template] ? custom.breakfast.template : custom.breakfast?.lowCarb ? 'eggs' : bKeys[n % bKeys.length];
   const merge = (prefKey, c = {}, extra = {}) => ({ picks: { ...extra, ...prefs[prefKey], ...c.picks }, grams: c.grams });

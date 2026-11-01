@@ -195,12 +195,24 @@ const dataOf = (s) => new Proxy({}, { get: (_, k) => s.get(k, undefined) });
 // Keep today's summary in step after a change.
 export function record(s, today) { s.set('days', { ...(s.get('days', {}) || {}), [today]: dayEntry(dataOf(s), today) }); }
 function editLog(s, today, fn) { rollDay(s, today); const log = s.get('eaten'); fn(log); s.set('eaten', log); record(s, today); return log; }
-// ✓ As planned.
+// Where a logged meal came from and how it was entered (two separate things: a restaurant dish
+// can be logged from a photo). sourceContext: plan · home · packaged · eatout. captureMethod:
+// template · combo · manual · said · photo · again · quick. Meals logged before this have neither.
+const ICON_HOW = { '📷': 'photo', '🎙️': 'said', '🔁': 'again', '✏️': 'quick', '📦': 'manual' };
+export function sourceOf(c = {}) {
+  const icon = c.prepared?.icon;
+  const planish = !c.items && !c.prepared && !c.eatout;
+  const captureMethod = c.how || (c.prepared ? ICON_HOW[icon] || 'manual' : c.eatout ? (c.eatout.mode === 'menu' ? 'manual' : 'template') : c.combo ? 'combo' : c.items ? 'manual' : 'template');
+  const sourceContext = c.ctx || (c.eatout ? 'eatout' : c.prepared && (!icon || icon === '📦') ? 'packaged' : planish && !c.template ? 'plan' : planish ? (c.picked ? 'home' : 'plan') : 'home');
+  return { sourceContext, captureMethod };
+}
+// ✓ As planned (or whatever the meal is now: a combo, a bar, a packaged meal…).
 export function logPlanned(s, today, meal, at = atNow()) {
   rollDay(s, today);
   const m = planOf(dataOf(s), today)[meal];
   if (!m) return null;
-  return editLog(s, today, (log) => { log.meals[meal] = snapshotOf(m, at); }).meals[meal];
+  const c = customOf(dataOf(s), today)[meal] || {};
+  return editLog(s, today, (log) => { log.meals[meal] = { ...snapshotOf(m, at), ...sourceOf(c), ...(c.fitKcal ? { fitKcal: c.fitKcal } : {}) }; }).meals[meal];
 }
 // A meal that wasn't the plan (photo, Tell me, quick macros, packaged, ate out, same as
 // yesterday): it becomes today's version of that meal — so the trackers show it and the meals

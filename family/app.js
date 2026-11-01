@@ -674,6 +674,8 @@ function meals() {
       api, esc, toast, openSheet, closeSheet, editMine, iso: () => isoLocal(), confirm: (q) => confirm(q),
       refresh: () => (state.view === 'health' ? healthView() : null),
       aiReady: async () => { const cfg = await api.liveConfig(); return cfg.missing || cfg.offline ? null : !!cfg.ai; },
+      // Your partner's saved meal combos, only when they share their Diet with you.
+      partnerCombos: async () => { const p = partnerMember(); if (!p) return null; const r = await theirParts(p.id, ['diet']).catch(() => null); return r?.data && !r.data.locked ? { name: p.name.split(/\s+/)[0], combos: r.data.combos || [] } : null; },
     });
     return M;
   })().catch((e) => { mealMod = null; throw e; });
