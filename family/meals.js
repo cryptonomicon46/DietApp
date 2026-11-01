@@ -9,7 +9,7 @@ import * as D from '../js/dayPlan.js';
 import { FOODS, BREAKFASTS } from '../js/foods.js';
 import { fitPortions } from '../js/mealFit.js';
 import { EAT_OUT, EAT_OUT_SIZE, DRINKS, labelKcal } from '../js/plan.js';
-import { parseMeal, totalOf } from '../js/foodText.js';
+import { parseMeal, parsePart, totalOf } from '../js/foodText.js';
 import { leftText } from './health.js';
 import { healthDay, logCheer } from '../js/habit.js';
 import { confetti } from '../js/confetti.js';
@@ -52,7 +52,7 @@ const OPS = {
 function preview() { const s = mem(); for (const [k, ...a] of ms.ops) OPS[k](s, a); return s; }
 function planNow(s = preview()) { try { return D.planOf(s.d, today()); } catch { return null; } }
 // Save: what you changed in the sheet, then the action — on a fresh copy of your trackers.
-async function commit(action, msg) {
+async function commit(action, msg, undo = null) {
   if (ms.busy) return null;
   ms.busy = true;
   const ops = ms.ops.slice();
@@ -72,7 +72,7 @@ async function commit(action, msg) {
     ms.c.closeSheet();
     const cheer = day ? logCheer(day, today(), { meal: added[added.length - 1] }) : null;
     const text = msg ? (typeof msg === 'function' ? msg(out) : msg) : '';
-    if (text || cheer) ms.c.toast([text, cheer?.line].filter(Boolean).join(' · '));
+    if (text || cheer) ms.c.toast([text, cheer?.line].filter(Boolean).join(' · '), undo || undefined);
     if (cheer) confetti({ big: cheer.big });
     await ms.c.refresh();
     return out;
@@ -367,6 +367,43 @@ async function readPhoto() {
     if (e.status === 501) ms.ai = false;
     if (ms.sheet === sh) { sh.error = e.status === 501 ? '' : e.status === 429 ? e.message : !navigator.onLine ? "You're offline — try again when you're connected." : e.message || "Couldn't read that photo — try a clearer one."; drawPhoto(); }
   }
+}
+
+// ---------- ✅ From Talk: read it, then log, plan or edit it (Talk shows the review card) ----------
+// The same reading as Tell me (the phone first, Claude only for what it can't place), but nothing
+// opens and nothing is saved: Talk holds the draft until you say yes or tap ✓ Log meal.
+export const talkTools = { parseMeal, parsePart, resize, FOODS };
+export const talkTotals = (items) => totalOf(items);
+export const talkPackaged = (target, text) => (target !== 'extra' ? packagedAsk(text) : null);
+export async function talkRead(text) {
+  const local = parseMeal(text, FOODS);
+  if (!local.unread.length && local.items.length) return { items: local.items, unread: [], by: 'phone' };
+  if ((await aiCheck()) === false) return { items: local.items, unread: local.unread, by: 'phone' };
+  try {
+    const r = await ms.c.api.post('/ai/diet/text', { text });
+    if (!r.items?.length) return { items: local.items, unread: local.unread, by: 'phone', note: "Couldn't make out the food in that — try naming each thing." };
+    return { items: placeItems(r.items.map((x) => ({ ...x })), FOODS, parseMeal), unread: [], by: 'claude' };
+  } catch (e) {
+    if (e.status === 501) ms.ai = false;
+    return { items: local.items, unread: local.unread, by: 'phone', note: e.status === 429 ? e.message : "Claude couldn't read it just now — here's what your phone could." };
+  }
+}
+// ✓ Log meal (or Plan it), through the meal's own save — with Undo, which puts the meal back as it was.
+export function talkLog(target, items, { plan = false } = {}) {
+  ms.sheet = { kind: 'est', target, est: { size: 1, ate: 1, from: 'tell', name: '', items, plan } };
+  const { c, t, name, icon } = estMeal(), kc = `${r0(t.kcal)} kcal`;
+  let snap = null;
+  if (target === 'extra') {
+    const undo = () => commit((s) => D.removeExtra(s, today(), snap.extras), 'Undone');
+    return commit((s) => { snap = D.mealSnapshot(s, today(), 'snack'); return D.addExtras(s, today(), [{ title: `${icon} ${name}`, kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) }]); }, `✓ ${name} logged · ${kc}`, undo);
+  }
+  const undo = () => commit((s) => D.restoreMeal(s, today(), target, snap), `Undone — ${NAME[target].toLowerCase()} is back as it was`);
+  return commit((s) => { snap = D.mealSnapshot(s, today(), target); return plan ? D.planAs(s, today(), target, c) : D.logAs(s, today(), target, c); }, `✓ ${NAME[target]} ${plan ? 'planned' : 'logged'} · ${kc}`, undo);
+}
+// ✏️ Edit: the meal's own estimate sheet with the draft (its amounts, ✓ Plan & log, Plan it).
+export function talkEdit(target, items, { plan = false, text = '' } = {}) {
+  ms.sheet = null;
+  return estimateSheet(target, { from: 'tell', name: '', items, plan, text });
 }
 
 // ---------- 🎙️ Tell me ----------

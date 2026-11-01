@@ -231,6 +231,20 @@ export function planAs(s, today, meal, c) {
   record(s, today);
   return planOf(dataOf(s), today)[meal];
 }
+// ✅ Talk's Undo: a meal's plan and log as they were before, and putting them back exactly.
+export function mealSnapshot(s, today, meal) {
+  rollDay(s, today);
+  const custom = s.get('custom'), log = s.get('eaten');
+  return JSON.parse(JSON.stringify({ custom: custom.meals?.[meal] ?? null, logged: log.meals?.[meal] ?? null, extras: (log.extras || []).length }));
+}
+export function restoreMeal(s, today, meal, snap) {
+  rollDay(s, today);
+  const custom = s.get('custom');
+  custom.meals = { ...custom.meals };
+  if (snap?.custom) custom.meals[meal] = snap.custom; else delete custom.meals[meal];
+  s.set('custom', custom);
+  return editLog(s, today, (log) => { log.meals ||= {}; if (snap?.logged) log.meals[meal] = snap.logged; else delete log.meals[meal]; });
+}
 export function unlog(s, today, meal) { return editLog(s, today, (log) => { delete log.meals[meal]; }); }
 export function addExtras(s, today, items) { return editLog(s, today, (log) => { log.extras = [...(log.extras || []), ...items.filter(Boolean)]; }); }
 export function removeExtra(s, today, i) { return editLog(s, today, (log) => { log.extras = (log.extras || []).filter((_, j) => j !== i); }); }

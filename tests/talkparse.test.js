@@ -97,3 +97,11 @@ test("today's weight, said any common way (lb or kg) → one weight.log step; no
   assert.equal(validate({ action: 'weight.log', args: { lb: 1000 } }).ok, false);
   assert.equal(validate({ action: 'weight.log', args: {} }).ok, false);
 });
+
+test('a workout in words is read on the phone (for its review card); "I did the dishes" is not a workout', () => {
+  assert.deepEqual(parseTalk('Log a workout: squats 3x8 at 185; bench 3x10 at 135')?.steps, [{ do: 'fitness.describe', text: 'squats 3x8 at 185; bench 3x10 at 135' }]);
+  assert.deepEqual(parseTalk('I did 3x10 squats at 135')?.steps, [{ do: 'fitness.describe', text: '3x10 squats at 135' }]);
+  assert.deepEqual(parseTalk('Workout: curls 3x12 at 25, dips 3x10')?.steps, [{ do: 'fitness.describe', text: 'curls 3x12 at 25, dips 3x10' }]);
+  assert.equal(parseTalk('I did the dishes'), null);
+  assert.equal(parseTalk('I finished reading Piranesi')?.steps[0].do, 'read.state');
+});

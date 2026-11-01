@@ -11,10 +11,13 @@ import { parseTalk } from '../js/talkParse.js';
 import { toTokens, fromTokens } from '../js/talkActions.js';
 import { isDayQuestion, checkSuggestions } from '../js/talkDay.js';
 import { browserVoiceOutput } from './voice.js';
+import * as P from '../js/proposal.js';
 
 let c = null;
-export function init(ctx) { document.getElementById('sheet')?.addEventListener('close', hush); c = ctx; }
-const tk = { tab: 'home', text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null };
+// Closing Talk stops listening (the microphone goes off) and forgets any card not yet saved.
+function closed() { hush(); const v = tk.voice; tk.voice = null; v?.abort(); if (tk.prop?.state === 'draft') tk.prop.state = 'cancelled'; tk.prop = null; }
+export function init(ctx) { document.getElementById('sheet')?.addEventListener('close', closed); c = ctx; }
+const tk = { tab: 'home', text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null, prop: null, propMsg: '' };
 // v4: food (v2), drive times from where you are (v3), and any day you ask about, not just today and
 // tomorrow (v4) — each widened what's sent, so it's asked again.
 const DAYOK = () => `fam.talk.dayok4.${c.who()}`;
@@ -49,7 +52,7 @@ const norm = (t) => String(t || '').toLowerCase().replace(/^(the|a|an)\s+/, '').
 // `meal`: opened from a meal's "Say what you had" — what you say is logged for that meal unless you name one.
 export function open(tab = 'home', { voice = null, meal = null } = {}) {
   tk.tab = EXAMPLES[tab] ? tab : tab === 'watch' || tab === 'read' ? 'us' : tab === 'fitness' ? 'health' : 'home';
-  Object.assign(tk, { text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null, meal: ['breakfast', 'lunch', 'snack', 'dinner', 'extra'].includes(meal) ? meal : null });
+  Object.assign(tk, { text: '', busy: false, cards: null, say: '', error: '', consent: null, voice: null, prop: null, propMsg: '', meal: ['breakfast', 'lunch', 'snack', 'dinner', 'extra'].includes(meal) ? meal : null });
   if (voice) return listen(voice);
   draw();
   setTimeout(() => document.getElementById('tkText')?.focus(), 60);
@@ -63,21 +66,30 @@ const BLOCKED = /iPhone|iPad|iPod/.test(globalThis.navigator?.userAgent || '')
   ? "The microphone or speech recognition is blocked for Pawmily. On iPhone: Settings › Privacy & Security › Speech Recognition and › Microphone — turn on Safari (or OurPawmily); and Settings › Apps › Safari › Microphone › Ask. Then close Pawmily fully and open it again. Or type."
   : "The microphone is blocked for this app — allow it in your browser's or phone's settings, then open the app again. Or type.";
 const SPEECH_ERR = { 'not-allowed': BLOCKED, 'service-not-allowed': BLOCKED, 'no-speech': "I didn't hear anything — tap 🎤 to try again, or type.", 'audio-capture': "The microphone isn't available — type instead.", network: "Speech recognition needs a connection — type instead." };
-export function listen(voice) {
+export function listen(voice, { onWords = null } = {}) {
   hush();
-  if (!voice) { tk.error = "Listening isn't available here — type, or tap 🎤 on your keyboard."; return draw(); }
-  tk.voice = voice; tk.cards = null; tk.say = ''; tk.error = ''; tk.text = '';
+  if (!voice) { tk.error = "Listening isn't available here — type, or tap 🎤 on your keyboard."; return onWords ? onWords(null) : draw(); }
+  tk.voice = voice; tk.say = ''; tk.error = '';
+  if (!onWords) { tk.cards = null; tk.text = ''; }
+  let shown = voice.state;
   draw();
   voice.listener = () => {
     if (tk.voice !== voice) return;
-    const live = document.getElementById('tkLive');
-    if (live) live.textContent = voice.text || 'Listening…';
-    if (!voice.ended) return;
+    if (!voice.ended) {
+      // Words in place while you talk; the hint or the held buttons when that changes.
+      if (voice.state !== shown) { shown = voice.state; return redrawListen(); }
+      const live = document.getElementById('tkLive');
+      if (live) live.textContent = voice.text || 'Listening…';
+      return null;
+    }
     tk.voice = null;
-    if (voice.text) { heard = true; return send(voice.text); }
-    tk.error = voice.error === 'aborted' ? '' : SPEECH_ERR[voice.error] || (voice.error ? "I couldn't catch that — tap 🎤 to try again, or type." : "I didn't hear anything — tap 🎤 to try again, or type.");
+    if (voice.reason === 'cancel') return onWords ? onWords(null) : draw();
+    if (voice.text) { heard = true; return onWords ? onWords(voice.text) : send(voice.text); }
+    tk.error = SPEECH_ERR[voice.error] || (voice.error && voice.error !== 'no-speech' ? "I couldn't catch that — tap 🎤 to try again, or type." : "I didn't hear anything — tap 🎤 to try again, or type.");
+    if (onWords) return onWords(null);
     draw();
     setTimeout(() => document.getElementById('tkText')?.focus(), 60);
+    return null;
   };
   if (voice.ended || voice.text) voice.listener();
   return null;
@@ -85,24 +97,34 @@ export function listen(voice) {
 function stopListening(typeInstead = false) {
   const v = tk.voice;
   if (!v) return;
-  if (typeInstead) { tk.voice = null; try { v.abort(); } catch { /* already stopped */ } draw(); setTimeout(() => document.getElementById('tkText')?.focus(), 60); return; }
-  try { v.stop(); } catch { /* already stopped */ }
+  if (typeInstead) { v.abort(); tk.voice = null; draw(); setTimeout(() => document.getElementById('tkText')?.focus(), 60); return; }
+  v.stop();
 }
+// The listening panel: your words as you say them, "Still listening…" in a pause, and when the
+// phone stopped on its own and wants a tap, Tap to keep talking.
+function listenHtml() {
+  const v = tk.voice, held = v.state === 'held', pausing = v.state === 'pausing';
+  return `<div class="tk-listen${held ? ' held' : ''}" role="status" id="tkListen"><span class="tk-pulse" aria-hidden="true">🎤</span><p id="tkLive" class="tk-live">${E(v.text || 'Listening…')}</p>
+    ${held ? '<p class="small tk-wait">Paused — tap to keep talking, or Done.</p>' : pausing ? '<p class="small tk-wait">Still listening… keep talking to add more<span class="tk-bar" aria-hidden="true" style="animation-duration:${Math.max(0.3, ((v.finishMs || 3500) - (v.hintMs || 2000)) / 1000)}s"></span></p>' : '<p class="small tk-wait muted">Listening — take your time.</p>'}
+    <div class="tk-two">${held ? '<button type="button" class="ghost" data-talk="more">🎤 Tap to keep talking</button>' : ''}<button type="button" data-talk="stop">Done</button>${held ? '' : '<button type="button" class="ghost" data-talk="type">Type instead</button>'}</div>
+    <p class="tiny muted">Your phone's speech service turns your voice into text (Apple's on iPhone, Google's on Android); Pawmily only gets the words.</p></div>`;
+}
+function redrawListen() { const el = document.getElementById('tkListen'); if (el && tk.voice) el.outerHTML = listenHtml(); else draw(); }
 function draw() {
   let first = false;
   try { first = !c.LS.get(SEEN); } catch { /* private mode */ }
   c.openSheet(`<div class="tk-sheet"><div class="row between tk-top"><h2>${ICON}Talk to Pawmily</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     ${tk.meal ? `<p class="tk-meal small">🍽 Logging <b>${E(MEAL[tk.meal].toLowerCase())}</b> — say what you had.</p>` : ''}
     ${first ? `<p class="tk-first">Say what you'd like done — add a show or a book, log a meal, a workout or a chore. Your phone reads it first; only what it can't read goes to Claude, with people's names swapped for roles. Nothing changes until you tap. <button type="button" class="linkish small" data-talk="seen">Got it</button></p>` : ''}
-    ${tk.voice ? `<div class="tk-listen" role="status"><span class="tk-pulse" aria-hidden="true">🎤</span><p id="tkLive" class="tk-live">${E(tk.voice.text || 'Listening…')}</p>
-      <div class="tk-two"><button type="button" data-talk="stop">Done</button><button type="button" class="ghost" data-talk="type">Type instead</button></div>
-      <p class="tiny muted">Your phone's speech service turns your voice into text (Apple's on iPhone, Google's on Android); Pawmily only gets the words.</p></div>`
+    ${tk.voice ? listenHtml()
+    : tk.prop ? ''
     : `<form class="tk-form" data-talkform><label for="tkText" class="visually-hidden">What would you like?</label><textarea id="tkText" rows="2" maxlength="500" placeholder="Ask or tell Pawmily…" enterkeyhint="send">${E(tk.text)}</textarea>${MIC_OK() ? '<button type="button" class="ghost tk-mic" data-talk="mic" aria-label="Speak">🎤</button>' : ''}<button ${tk.busy ? 'disabled' : ''} aria-label="Send">${tk.busy ? '…' : '↑'}</button></form>
     <p class="tiny muted tk-hint">${MIC_OK() ? '🎤 Tap to speak, or type.' : '🎤 Tap the microphone on your keyboard to speak — only the words reach Pawmily.'}${MIC_OK() ? ` <button type="button" class="linkish tiny" data-talk="voiceoff">${voiceOff() ? 'Listen when I open Talk' : "Don't listen when I open Talk"}</button>` : ''}${MIC_OK() && SPEAK_OK() ? ` · <button type="button" class="linkish tiny" data-talk="speakoff">${speakOn() ? '🔇 Don\'t read answers aloud' : '🔊 Read answers aloud'}</button>` : ''}</p>`}
     <div id="tkOut" role="status">${out()}</div></div>`);
 }
 function out() {
-  if (tk.voice) return '';
+  if (tk.voice) return tk.prop ? propHtml() : '';
+  if (tk.prop) return propHtml();
   if (tk.busy) return '<p class="small muted">Reading…</p>';
   if (tk.error) return `<p class="small">${E(tk.error)}</p>`;
   if (tk.consent) return `<div class="tk-card"><b>📅 Answer questions about your day?</b><small>To answer, Pawmily sends Claude the calendar from this app for the days you ask about (today and tomorrow unless you name others, up to about a week) — times, titles, places and whose (names swapped for roles) — your free time, the forecast for your area, and, when you have them, your own WHOOP numbers and your own food today (your meal plan, what you've logged and what's left). Never your weight or notes. When you ask about going somewhere, your location (to about 100 m) and the place go to Google Maps for drive times with traffic and opening hours. Nothing is kept, and nothing changes unless you tap.</small><div class="tk-two"><button type="button" data-talk="dayok">Allow and ask</button><button type="button" class="ghost" data-talk="dayno">Not now</button></div></div>`;
@@ -118,6 +140,8 @@ export async function send(text) {
   text = String(text || '').trim();
   if (!text) return;
   tk.text = text; tk.error = ''; tk.say = ''; tk.cards = null; tk.consent = null;
+  // A "yes" with no card on screen confirms nothing.
+  if (P.replyKind(text) === 'confirm') { tk.say = "There's nothing waiting to confirm."; speak(tk.say); return draw(); }
   // From a meal's "Say what you had": "two eggs and toast" → "Log lunch: two eggs and toast".
   const mealSaid = /\b(breakfast|lunch|dinner|snack)\b/i.test(text), forMeal = tk.meal && !mealSaid && !isDayQuestion(text);
   if (forMeal) text = `Log ${tk.meal === 'extra' || tk.meal === 'snack' ? 'a snack' : tk.meal}: ${text}`;
@@ -142,10 +166,178 @@ export async function send(text) {
   // Roles back to names, in anything shown to you.
   steps = steps.map((s) => Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === 'string' && k !== 'do' ? fromTokens(v, t.map, people) : v])));
   // A meal, a described workout or "make it lighter" on its own: straight to that area's own preview.
-  if (steps.length === 1 && ['diet.log', 'fitness.describe', 'fitness.lighter'].includes(steps[0].do)) { c.closeSheet(); return handOff(steps[0]); }
+  // A meal or a described workout on its own: a review card here (nothing saved until you say so).
+  if (steps.length === 1 && steps[0].do === 'diet.log') return proposeMeal(steps[0]);
+  if (steps.length === 1 && steps[0].do === 'fitness.describe') return proposeWorkout(steps[0]);
+  if (steps.length === 1 && steps[0].do === 'fitness.lighter') { c.closeSheet(); return handOff(steps[0]); }
   tk.cards = await Promise.all(steps.map(resolve));
   speak(tk.cards.length > 1 ? `Here are ${tk.cards.length} things — check them and tap to confirm.` : 'Here it is — check it and tap to confirm.');
   draw();
+}
+
+// ---------- ✅ Review before saving (meals and workouts) ----------
+// The draft lives only here, in memory: closing Talk forgets it, and nothing is written until ✓ Log
+// meal / ✓ Create workout, or "yes" said to 🎤 Change by voice on this card (js/proposal.js).
+const MEALNAME = { breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Snack', dinner: 'Dinner', extra: 'Snack or extra' };
+const r0 = (n) => Math.round(n || 0);
+async function proposeMeal(s) {
+  tk.busy = true; draw();
+  try {
+    const M = await c.dietMod();
+    // "Log a packaged meal": the label form, as before.
+    if (M.talkPackaged(s.meal, s.text)) { tk.busy = false; c.closeSheet(); return handOff(s); }
+    const r = await M.talkRead(s.text);
+    tk.busy = false;
+    if (!r.items.length) { tk.say = r.note || "I couldn't make out the food in that — try naming each thing, like “2 eggs and a slice of toast”."; speak(tk.say); return draw(); }
+    tk.prop = P.makeProposal('meal', { meal: s.meal, items: r.items, unread: r.unread || [], plan: !!s.plan, text: s.text, by: r.by });
+    tk.propMsg = r.note || '';
+    speak('Here’s what I heard. Does this look right?');
+  } catch (e) { tk.busy = false; tk.error = e.message || "Couldn't read that just now."; }
+  return draw();
+}
+async function readWorkout(text) {
+  const T = await import('../js/workoutText.js'), local = T.parseWorkout(text, { today: c.iso() });
+  if (!T.needsHelp(local)) return { workout: local.workout, unread: [], by: 'phone' };
+  const ai = await c.aiReady().catch(() => null);
+  if (ai) {
+    try { const r = await c.api.post('/ai/workout', { text, unit: 'lb', today: c.iso() }); if (r.workout?.blocks?.length) return { workout: r.workout, unread: r.unread || [], by: 'claude' }; }
+    catch (e) { if (e.status === 429) return { ...local, by: 'phone', note: e.message }; }
+  }
+  return { ...local, by: 'phone' };
+}
+async function proposeWorkout(s) {
+  tk.busy = true; draw();
+  try {
+    const [r, W] = await Promise.all([readWorkout(s.text), import('../js/workout.js')]);
+    tk.busy = false;
+    if (!r.workout?.blocks?.length) { tk.say = "I couldn't find a workout in that — try “Squats 3x8 at 185, then bench 3x10 at 135”."; speak(tk.say); return draw(); }
+    const w = W.normalize({ ...r.workout, date: c.iso(), source: 'text' });
+    if (W.untitled(w.title)) w.title = W.suggestName(w);
+    tk.prop = P.makeProposal('workout', { workout: w, unread: r.unread || [], by: r.by });
+    tk.propMsg = r.note || '';
+    speak('Here’s the workout. Does this look right?');
+  } catch (e) { tk.busy = false; tk.error = e.message || "Couldn't read that just now."; }
+  return draw();
+}
+let W$ = null; // js/workout.js, once a workout card has been shown
+import('../js/workout.js').then((m) => { W$ = m; }).catch(() => {});
+const setText = (st) => [st.reps != null ? String(st.reps) : st.time ? `${st.time}s` : st.distance ? `${st.distance} ${st.distUnit}` : '?', st.weight != null ? `@ ${st.weight} ${st.unit}` : st.bw ? 'bodyweight' : ''].filter(Boolean).join(' ');
+function exLine(it, rounds) {
+  const same = it.sets.every((x) => setText(x) === setText(it.sets[0] || {}));
+  return same ? `${rounds ? '' : `${it.sets.length} × `}${setText(it.sets[0] || {})}` : it.sets.map(setText).join(' · ');
+}
+function propHtml() {
+  const p = tk.prop, live = P.isLive(p), hot = new Set(p.changed);
+  const acts = (main) => (tk.voice ? '' : `<div class="tk-acts"><button type="button" data-talk="pyes" ${live && !p.pending ? '' : 'disabled'}>${main}</button>
+    <div class="tk-two"><button type="button" class="ghost" data-talk="pedit">✏️ Edit</button>${MIC_OK() ? '<button type="button" class="ghost" data-talk="change">🎤 Change by voice</button>' : ''}</div>
+    <form class="tk-fix" data-talkfix><label for="tkFix" class="visually-hidden">Type a change</label><input id="tkFix" maxlength="300" placeholder="Or type a change — “remove the salsa”" enterkeyhint="send"><button class="ghost" aria-label="Change">↵</button></form>
+    <button type="button" class="linkish small" data-talk="pno">Cancel</button></div>`);
+  const msg = tk.propMsg ? `<p class="small tk-msg" role="status">${E(tk.propMsg)}</p>` : '';
+  if (p.kind === 'meal') {
+    const d = p.payload, t = totalsOf(d.items);
+    const rows = d.items.map((x, i) => `<li class="${hot.has(i) ? 'tk-hot' : ''}"><span><b>${E(x.name)}</b><small class="muted">${E(x.amount || '')}${x.guess ? ' · typical portion — check' : ''}</small></span><span>${r0(x.kcal)} kcal</span></li>`).join('');
+    return `<div class="tk-card tk-review"><p class="tk-eyebrow">${d.plan ? 'Review plan · not saved yet' : 'Review meal · not logged yet'}</p><b>🍽 ${E(MEALNAME[d.meal] || 'Meal')}</b>
+      <ul class="tk-rows">${rows}</ul>
+      ${d.unread?.length ? `<p class="small">Couldn't place: ${d.unread.map((x) => `“${E(x)}”`).join(', ')} — say it with an amount, or ✏️ Edit.</p>` : ''}
+      <p class="tk-tot"><b>${r0(t.kcal)}</b> kcal · <b>${r0(t.p)}</b> P · <b>${r0(t.c)}</b> C · <b>${r0(t.f)}</b> F</p>
+      ${msg}<p class="small">${live ? 'Does this look right?' : 'This one expired — say it again.'}</p>${acts(d.plan ? '✓ Plan meal' : '✓ Log meal')}</div>`;
+  }
+  const w = p.payload.workout, mins = W$?.durationFor(w)?.minutes;
+  const blocks = w.blocks.map((b) => (b.items.length > 1
+    ? `<li class="${b.items.some((it) => hot.has(it.id)) ? 'tk-hot' : ''}"><span><b>${b.kind === 'circuit' ? 'Circuit' : 'Superset'} · ${b.rounds} rounds</b><small class="muted">${b.items.map((it) => `${E(it.name)} ${E(exLine(it, true))}`).join(' + ')}</small></span></li>`
+    : `<li class="${hot.has(b.items[0].id) ? 'tk-hot' : ''}"><span><b>${E(b.items[0].name)}</b><small class="muted">${E(exLine(b.items[0]))}</small></span></li>`)).join('');
+  return `<div class="tk-card tk-review"><p class="tk-eyebrow">Review workout · not saved yet</p><b>🏋️ ${E(w.title)}${mins ? ` <small class="muted">· about ${mins} min</small>` : ''}</b>
+    <ul class="tk-rows">${blocks}</ul>
+    ${p.payload.unread?.length ? `<p class="small">Couldn't place: ${p.payload.unread.map((x) => `“${E(x)}”`).join(', ')} — ✏️ Edit to add it.</p>` : ''}
+    ${msg}<p class="small">${live ? 'Does this look right?' : 'This one expired — say it again.'}</p>${acts('✓ Create workout')}</div>`;
+}
+const totalsOf = (items) => items.reduce((a, x) => ({ kcal: a.kcal + (+x.kcal || 0), p: a.p + (+x.p || 0), c: a.c + (+x.c || 0), f: a.f + (+x.f || 0) }), { kcal: 0, p: 0, c: 0, f: 0 });
+// 🎤 Change by voice (started in the tap): listens for this card only.
+export function change(voice) {
+  if (!tk.prop) return null;
+  tk.propMsg = voice ? '' : "Listening isn't available here — type a change instead.";
+  if (!voice) return draw();
+  return listen(voice, { onWords: (text) => (text ? reply(text) : draw()) });
+}
+export function onFix(f) { const v = f.querySelector('input')?.value || ''; heard = false; return reply(v); }
+// What you said back: yes → save, cancel → drop it, anything else changes the draft.
+async function reply(text) {
+  const p = tk.prop;
+  text = String(text || '').trim();
+  if (!text) return draw();
+  if (!p || !P.isLive(p)) { tk.prop = null; tk.say = p ? 'This one expired — say it again.' : "There's nothing waiting to confirm."; speak(tk.say); return draw(); }
+  const k = P.replyKind(text);
+  if (k === 'confirm') return commitProp();
+  if (k === 'cancel') return cancelProp();
+  if (k === 'unclear') { tk.propMsg = `I heard “${text}”. Say “log it” to save it, or tell me what to change.`; speak(tk.propMsg); return draw(); }
+  return correct(text);
+}
+// A correction changes the current draft: on the phone when it can, else the AI reads the draft
+// plus your words (never your first words alone), and the changed rows light up. Nothing saves.
+async function correct(text) {
+  const p = tk.prop;
+  tk.busy = true; tk.propMsg = 'Changing it…'; draw();
+  try {
+    let next = null, changed = [], did = [];
+    if (p.kind === 'meal') {
+      const M = await c.dietMod(), d = p.payload;
+      const r = P.amendMeal(d, text, M.talkTools);
+      if (r.ok) ({ draft: next, changed, did } = r);
+      else if (await c.aiReady().catch(() => null)) {
+        const got = await M.talkRead(P.mealDraftText(d, text));
+        if (got.by === 'claude' && got.items.length) {
+          const key = (x) => `${x.name}|${x.amount}|${r0(x.kcal)}`, old = new Set(d.items.map(key));
+          const m = /\b(breakfast|lunch|dinner|snack)\b/i.exec(text);
+          next = { ...d, items: got.items, unread: [], meal: m ? m[1].toLowerCase() : d.meal };
+          changed = got.items.map((x, i) => (old.has(key(x)) ? -1 : i)).filter((i) => i >= 0);
+        }
+      }
+    } else {
+      const T = await import('../js/workoutText.js'), w = p.payload.workout;
+      const r = P.amendWorkout(w, text, { parseWorkout: T.parseWorkout, needsHelp: T.needsHelp, today: c.iso() });
+      if (r.ok) ({ workout: next, changed, did } = r);
+      else if (await c.aiReady().catch(() => null)) {
+        const got = await c.api.post('/ai/workout', { text: P.workoutDraftText(w, text), unit: 'lb', today: c.iso() }).catch(() => null);
+        if (got?.workout?.blocks?.length) {
+          const W = await import('../js/workout.js'), nw = W.normalize({ ...got.workout, id: w.id, title: w.title, date: w.date, source: 'text' });
+          const sig = (it) => `${it.name}|${it.sets.map((x) => `${x.reps}@${x.weight}`).join(',')}`, old = new Set(w.blocks.flatMap((b) => b.items).map(sig));
+          next = nw; changed = nw.blocks.flatMap((b) => b.items).filter((it) => !old.has(sig(it))).map((it) => it.id);
+        }
+      }
+      if (next) next = { ...p.payload, workout: next, unread: [] };
+    }
+    tk.busy = false;
+    if (!next) { tk.propMsg = `I couldn't work out “${text}” — try “remove the salsa”, “make the rice half a cup”, or ✏️ Edit.`; speak(tk.propMsg); return draw(); }
+    tk.prop = P.revise(p, next, changed);
+    tk.propMsg = did.length ? `Changed: ${did.join(', ')}.` : 'Changed — the new parts are highlighted.';
+    speak('Changed. Does this look right?');
+  } catch (e) { tk.busy = false; tk.propMsg = e.message || "Couldn't change it just now."; }
+  return draw();
+}
+async function commitProp() {
+  const p = tk.prop;
+  if (!p) return null;
+  try {
+    const r = await P.commitOnce(p, p.version, async () => {
+      if (p.kind === 'meal') { const M = await c.dietMod(), d = p.payload; await M.talkLog(d.meal, d.items, { plan: d.plan }); return null; }
+      return c.workoutCreate(p.payload.workout);
+    });
+    if (r?.error) { tk.propMsg = r.error === 'expired' ? 'This one expired — say it again.' : r.error === 'stale' ? 'It changed — check it once more.' : ''; return draw(); }
+    if (tk.prop !== p) return null;
+    tk.prop = null;
+    // The meal's own save closed the sheet and said "✓ Lunch logged", with Undo.
+    if (p.kind === 'workout') { c.closeSheet(); const undo = r.result; c.toast(`🏋️ ${p.payload.workout.title} is Today's Workout`, undo ? async () => { await undo(); c.toast('Undone'); } : undefined); }
+    return null;
+  } catch (e) { tk.propMsg = e.message || "Couldn't save that just now — try again."; return draw(); }
+}
+function cancelProp() { P.cancel(tk.prop); tk.prop = null; tk.propMsg = ''; tk.say = 'OK — nothing was saved.'; speak(tk.say); return draw(); }
+async function editProp() {
+  const p = tk.prop;
+  if (!p || !P.isLive(p)) return null;
+  P.cancel(p); tk.prop = null;
+  if (p.kind === 'meal') { const M = await c.dietMod(), d = p.payload; return M.talkEdit(d.meal, d.items, { plan: d.plan, text: d.text }); }
+  c.closeSheet();
+  return c.workoutEdit(p.payload.workout);
 }
 
 // ---------- "Ask about my day" (T2a) ----------
@@ -279,6 +471,9 @@ export async function onClick(t) {
   if (d.talkpickshow) { const [i, j] = d.talkpickshow.split(':').map(Number); const x = tk.cards[i]; tk.cards[i] = { type: 'watchstatus', show: x.hits[j], status: x.status, go: true }; return redraw(); }
   if (d.talkcare) { const [i, kind] = d.talkcare.split(':'); const k = tk.cards[+i].kinds.find((y) => y.kind === kind); tk.cards[+i] = { type: 'care', care: k, go: true }; return redraw(); }
   if (d.talk === 'all') { for (let i = 0; i < tk.cards.length; i++) if (tk.cards[i].go && !tk.cards[i].done && tk.cards[i].type !== 'handoff') await go(i); return null; }
+  if (d.talk === 'pyes') return commitProp();
+  if (d.talk === 'pno') return cancelProp();
+  if (d.talk === 'pedit') return editProp();
   if (d.talk === 'stop') return stopListening(false);
   if (d.talk === 'type') return stopListening(true);
   if (d.talk === 'voiceoff') { try { c.LS.set('fam.talk.voice', voiceOff() ? '' : 'off'); } catch { /* private mode */ } c.toast(voiceOff() ? 'Talk opens ready to type' : 'Talk starts listening when you open it'); return draw(); }

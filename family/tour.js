@@ -61,15 +61,16 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-11w',
-  title: 'New: 🎁 a wishlist in Us, 🍽 a better meal sheet, ⌚ WHOOP on Home',
-  text: 'Keep a 🎁 Wishlist in 💞 Us (a link, or a screenshot and a caption) — only your partner sees it, and "I’m getting this" stays secret. Tap a meal to pick another breakfast, a smoothie, a combo or a bar, and ⚖️ Fit it to your calories. Your WHOOP card is on Home with Sync WHOOP.',
+  id: '2026-11t',
+  title: 'New: 🗣️ Talk waits for you, and checks before it saves',
+  text: 'Talk keeps listening through pauses — tap Done when you’re finished. A meal or workout you tell it shows up as a card to check: say “yes” to log it, or say what to change. Plus 🎁 a wishlist in Us, a better 🍽 meal sheet and ⌚ WHOOP on Home.',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '🎁 Wishlist, 🍽 Meals, ⌚ WHOOP', cards: [
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '🗣️ Talk, 🎁 Wishlist, 🍽 Meals', cards: [
+  ['🎤', 'Take your time', 'Talk keeps listening through pauses (“Still listening…”). Tap Done when you’re finished — every word is kept.'],
+  ['✅', 'Check, then save', '“Log lunch: chicken and rice” or “I did 3x10 squats at 135” shows a card. Say “yes” to save, or “make the rice half a cup”.'],
   ['🎁', 'A wishlist for each of you', 'In 💞 Us: paste a link or add a screenshot with a caption. Your partner can mark 🎁 I’m getting this — you never see that.'],
-  ['🍽', 'Pick what the meal is', 'Tap a meal, then the button under its name: today’s plan, another breakfast, a 🥤 smoothie, your combos (and your partner’s, if shared), a bar or shake.'],
-  ['⚖️', 'Fit to your calories', 'Type 300, 400… or tap − / ＋. Protein stays; carbs and fat change. It remembers yours for each meal.'],
+  ['🍽', 'Pick and fit the meal', 'Tap a meal: another breakfast, a 🥤 smoothie, a combo or a bar, and ⚖️ Fit it to your calories.'],
   ['⌚', 'WHOOP on Home', 'The same card as Health, right under Talk, with a big Sync WHOOP for when the WHOOP app is ahead.'],
 ] });
 

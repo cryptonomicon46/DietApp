@@ -71,6 +71,11 @@ const RULES = [
   [/^(?:log\s+)?(.+?)\s+for\s+(breakfast|lunch|dinner)$/i, (m) => ({ do: 'diet.log', meal: m[2].toLowerCase(), text: m[1] })],
   // Fitness
   [/^make\s+(?:today'?s\s+|my\s+|the\s+)?workout\s+(?:a\s+bit\s+)?(?:lighter|easier)$/i, () => ({ do: 'fitness.lighter' })],
+  // A workout in words ("Log a workout: squats 3x8 at 185", "I did 3x10 squats at 135"): read on the
+  // phone into a review card. "I did …" counts only with sets, reps or rounds in it.
+  [/^(?:log|create|plan|add|save|make)\s+(?:a\s+|my\s+|today'?s\s+)?workout\s*[:,—–-]?\s*(?:of\s+)?(.+)$/i, (m) => ({ do: 'fitness.describe', text: m[1] })],
+  [/^(?:today'?s\s+)?workout\s*[:—–-]\s*(.+)$/i, (m) => ({ do: 'fitness.describe', text: m[1] })],
+  [/^i\s+(?:just\s+)?(?:did|finished)\s+(?=.*(?:\d\s*[x×]\s*\d|\bsets?\b|\breps?\b|\brounds?\b))(.+)$/i, (m) => ({ do: 'fitness.describe', text: m[1] })],
   // Weight (today's weigh-in): "Log my weight for today 160.6 pounds", "I weigh 72.5 kg", "Weighed in at 160.6 this morning"
   [new RegExp(`^(?:please\\s+)?(?:log|record|save|add|enter|put\\s+in)\\s+(?:my\\s+|today'?s\\s+)?(?:weight|weigh[- ]?in)${WHEN}\\s*(?:as|at|is|of|to|[:=,—–-])?\\s*${NUM}${WHEN}$`, 'i'), (m) => ({ do: 'weight.log', lb: toLb(m[1], m[2]) })],
   [new RegExp(`^(?:(?:my\\s+)?(?:today'?s\\s+)?(?:weight|weigh[- ]?in)${WHEN}\\s*(?:is|was|[:=,—–-])?|i\\s+(?:weigh|weighed)(?:\\s+in)?(?:\\s+at)?${WHEN}|weighed(?:\\s+in)?(?:\\s+at)?${WHEN})\\s*${NUM}${WHEN}$`, 'i'), (m) => ({ do: 'weight.log', lb: toLb(m[1], m[2]) })],
