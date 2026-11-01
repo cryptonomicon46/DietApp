@@ -17,7 +17,8 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 - **Deliverables:** `docs/mockups/daily/CHECKPOINT.md` (all 17 items, files, tests, perf, privacy, decisions a–f), `docs/mockups/daily/screens.html` + `shoot.mjs` (390 / 390 dark / 320 px; the WHOOP card rendered by the real `whoopHtml` + `recoveryContext`). No overflow.
 - **Tests:** `npm test` 501 pass, 0 fail (2026-11-01; no app code changed). **Not run:** perf budget (Phase 2 measures before/after on the same machine).
 - **Decisions needed:** (a) Home order, (b) auto-sync on Home open, (c) pause-to-finish 2.5 s, (d) qualified-day rule, (e) AI phrasing for "why" questions (Worker change → `pawdeploy`), (f) keep WHOOP recovery `updated_at`.
-- **Next:** Phase 2 implementation on this branch after explicit approval.
+- **Meal logging redesign (owner, 2026-11-01):** source picker (plan / combos / bars & shakes / smoothie), protein-aware Fit to N kcal, prominent Packaged and Ate out (photo, describe, drinks), "Something else" removed, `src` on logged meals. Design only, in `docs/mockups/daily/REVIEW_PROMPT.md` Part H (the self-contained GPT review prompt for the whole package).
+- **Next:** owner reviews the prompt with GPT; Phase 2 implementation on this branch after explicit approval.
 
 ### 🧗 Class links back on Home + a clearer "microphone blocked" (2026-10-31, `v2/home-classes` from `main` `2e8daf9`; merge authorized when no `pawdeploy` is needed)
 - **Owner's report:** the Movement Sunnyvale / Santa Clara links (fitness, calendar) were gone from Home; add Hot 8 Yoga at Santana Row. Amani tapped Don't Allow once and Talk no longer hears her, even after re-adding the Home Screen icon.

@@ -551,3 +551,19 @@ Checked: no horizontal overflow at 390 or 320 px.
   - With it: aggregates only, through a new gateway purpose. Needs a Worker change and `pawdeploy`.
   - Without it: answers are deterministic sentences on the phone (proposed for this build, with (e) as a follow-up).
 - **(f) Keep WHOOP's recovery `updated_at`**, so the card can say "Recovery scored 6:41 AM". It's small and additive.
+
+## 18. Meal logging redesign (owner's request, 2026-11-01): design only
+
+Written up in full in `docs/mockups/daily/REVIEW_PROMPT.md` Part H, the self-contained prompt for GPT
+review:
+- **Source picker** replacing "planned": today's plan, other templates, a new Protein smoothie, your
+  combos, Pat's combos (only if shared), bars and shakes, Same as yesterday, and from you (said or
+  photo).
+- **Fit to N kcal**, protein-aware, defaulting to the planned target and remembered per person and meal.
+- **Prominent 📦 Packaged and 🍴 Ate out.** Ate out becomes one screen: photo, describe, or closest dish,
+  plus inline drinks.
+- **"Something else" removed.**
+- **A `src` field on logged meals.**
+- **One meal editor for Talk, photo and plan.**
+
+Reuses the tracker's combos, quick swap and `fitItems`, and the template auto-sizer. No mockups yet.
