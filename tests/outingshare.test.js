@@ -55,3 +55,17 @@ test('null when even the shortest version cannot fit', () => {
   const o = { ...big(), stops: Array.from({ length: 60 }, (_, i) => stop(i)) };
   assert.equal(shareable(o, wrap), null);
 });
+
+test('Save to a thread: title and body keep every stop, its time and links', async () => {
+  const { outingThread } = await import('../js/outingShare.js');
+  const o = big(), t = outingThread(o);
+  assert.match(t.title, /^🧭 Golden hour in the Marina · Sat, Dec 5$/);
+  for (const x of o.stops) { assert.ok(t.body.includes(x.name)); assert.ok(t.body.includes(x.map)); }
+  assert.match(t.body, /## The plan\n\n### 4:00 PM · Stop number 0 with a fairly long name \(\$\$\)\nWalk-in/);
+  assert.ok(!t.body.includes('**'), 'Threads has no bold');
+  assert.match(t.body, /OpenTable: https:\/\/www\.opentable\.com/);
+  assert.match(t.body, /## Getting there\n- Leave 2:45 PM · /);
+  assert.match(t.body, /## Tips\n- Tip 0/);
+  assert.ok(t.body.length <= 11000);
+  assert.ok(!t.body.includes('Stop number 5'), "the other options aren't part of the plan");
+});
