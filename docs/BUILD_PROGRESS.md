@@ -1,8 +1,23 @@
 # OurPawmily Build Progress
 
-Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for review) on `v2/talk-t0` from `main` `5910e8a`, after T0 (mockups + action registry). Health 2 Phase B merged (PR #7 `5c9e5f2`, PR #8 `5910e8a`) and deployed (connector `37c7ea1c…` from `v2/health-2b` head, Pages from `main`; reported by the user) and checked on the owner's real WHOOP data. Health 2 Phase A merged as PR #6 (`aa4fe63`) and deployed (reported by the user). Earlier: 👔 Look MVP (L0–L6) on `v2/look-mvp` from `main` `f333274` (Health UX merged as PR #4 and deployed, reported by the user). Earlier: Health/Fitness/Diet UX (H1–H12 with amendments) on `v2/health-ux`. Phases 4–11 and the Describe-it change are merged to `main` (PR #2 `d94c25f`, PR #3 `e9708af`) and deployed (reported by the user).
+Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 px mockups on `v2/daily-health-talk-ux` from `main` `9e6cb18` (DESIGN ONLY, stopped for review; nothing in the app changed). Previous: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for review) on `v2/talk-t0` from `main` `5910e8a`, after T0 (mockups + action registry). Health 2 Phase B merged (PR #7 `5c9e5f2`, PR #8 `5910e8a`) and deployed (connector `37c7ea1c…` from `v2/health-2b` head, Pages from `main`; reported by the user) and checked on the owner's real WHOOP data. Health 2 Phase A merged as PR #6 (`aa4fe63`) and deployed (reported by the user). Earlier: 👔 Look MVP (L0–L6) on `v2/look-mvp` from `main` `f333274` (Health UX merged as PR #4 and deployed, reported by the user). Earlier: Health/Fitness/Diet UX (H1–H12 with amendments) on `v2/health-ux`. Phases 4–11 and the Describe-it change are merged to `main` (PR #2 `d94c25f`, PR #3 `e9708af`) and deployed (reported by the user).
 
 ## Current phase and task
+
+### 🌅 Daily Health + Talk UX — Phase 0/1 checkpoint (2026-11-01, `v2/daily-health-talk-ux` from `main` `9e6cb18`; STOPPED for review, not merged, not deployed)
+- **Priority change (owner):** Agent Hub / MCP / Muse paused. That work is committed and pushed, untouched: `v2/muse-m0` `ed22fcd`, `v2/agent-hub-m0` `6071ce0`, `v2/household-agent-m1` `5f8de15` (no stash needed — the tree was clean).
+- **Scope:** the WHOOP card on Home (the same component as Health) + a prominent SYNC WHOOP; listening that tolerates pauses; review-before-write for meals/workouts with spoken corrections; deterministic HealthInsights for Talk questions.
+- **Audit findings (repository-verified):**
+  - The voice cut-off is `continuous = false` (`family/app.js:436`) plus an immediate send on `onend` (`family/talk.js:75`).
+  - The WHOOP card is already a pure `whoopHtml` (`family/health.js:173`).
+  - There are three sync paths with no shared in-flight guard: Devices › Sync now ignores `whoopSyncing`. There's no "no newer data" result and no 429 handling.
+  - No Talk path writes without a tap today; meal and workout hand off to their own previews.
+  - `fitnessSummary` double-counts, and several modules date WHOOP workouts by the UTC date.
+  - The WHOOP public API has no battery or charging data (secondary sources; `developer.whoop.com` is unreachable from the session).
+- **Deliverables:** `docs/mockups/daily/CHECKPOINT.md` (all 17 items, files, tests, perf, privacy, decisions a–f), `docs/mockups/daily/screens.html` + `shoot.mjs` (390 / 390 dark / 320 px; the WHOOP card rendered by the real `whoopHtml` + `recoveryContext`). No overflow.
+- **Not run:** `npm test` (no app code changed), perf budget (Phase 2 measures before/after).
+- **Decisions needed:** (a) Home order, (b) auto-sync on Home open, (c) pause-to-finish 2.5 s, (d) qualified-day rule, (e) AI phrasing for "why" questions (Worker change → `pawdeploy`), (f) keep WHOOP recovery `updated_at`.
+- **Next:** Phase 2 implementation on this branch after explicit approval.
 
 ### 🧗 Class links back on Home + a clearer "microphone blocked" (2026-10-31, `v2/home-classes` from `main` `2e8daf9`; merge authorized when no `pawdeploy` is needed)
 - **Owner's report:** the Movement Sunnyvale / Santa Clara links (fitness, calendar) were gone from Home; add Hot 8 Yoga at Santana Row. Amani tapped Don't Allow once and Talk no longer hears her, even after re-adding the Home Screen icon.
