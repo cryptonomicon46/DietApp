@@ -667,6 +667,18 @@ async function whoopDays() {
 // plan and totals as Today's plan.
 const health = { data: null };
 let mealMod = null;
+// 🎁 Wishlist in Us (family/wishlist.js): yours from your own copy, your partner's from their "us"
+// part (only partners can read it). Loaded with Us.
+let wishMod = null;
+const wish = () => (wishMod ||= import(`./wishlist.js?v=${VERSION}`).then((m) => {
+  m.init({
+    esc, openSheet, closeSheet, toast, editMine, confirm: (q) => confirm(q), card: () => $('#usWishC'),
+    partner: () => { const p = partnerMember(); return p ? { id: p.id, first: p.name.split(/\s+/)[0] } : null; },
+    myData: async () => { const d = await openData(await memberData()); return d?.locked ? null : d; },
+    theirUs: async (id) => { const r = await theirParts(id, ['us']); return r?.data && !r.data.locked ? r.data : null; },
+  });
+  return m;
+}).catch((e) => { wishMod = null; throw e; }));
 function meals() {
   mealMod ||= (async () => {
     const M = await import(`./meals.js?v=${VERSION}`);
@@ -2145,9 +2157,11 @@ async function usView() {
     <section id="usFor"></section>
     <section class="card" id="usDatesC"></section>
     <section class="card" id="usIdeasC" hidden></section>
+    <section class="card us-wish" id="usWishC" aria-label="Wishlist"><div class="skeleton line"></div></section>
     <section class="card" id="usNotesC"><div class="skeleton line"></div></section>
     <div id="usBook"></div></div>`;
   importUs().catch(() => {});
+  wish().then((W) => W.render($('#usWishC'), { reload: true })).catch(() => { const el = $('#usWishC'); if (el) el.hidden = true; });
   // Read draws as soon as its books are in (its own request; covers aren't on this card).
   RM().then((R) => R.loadBooks().then(() => { if (state.view === 'us') R.renderUsRead(); })).catch(() => { const el = $('#usRead'); if (el) el.innerHTML = '<h2 class="card-h">📚 Read</h2><p class="small muted">Couldn\'t load your books — pull to refresh.</p>'; });
   // Watch draws as soon as it's in; the rest when everything has arrived.
@@ -4519,6 +4533,7 @@ document.addEventListener('click', (e) => {
   if (d.pact) return postAction(d.pact, t.closest('.menu').dataset);
   if (d.act === 'talk') { const voice = d.talkmic != null || d.talkmeal != null || t.closest('.talk-bar, .talk-fab') ? listenNow() : null; return act(async () => (await talk()).open(state.view, { voice, meal: d.talkmeal || null })); }
   if (d.talk === 'mic') { const voice = listenNow(true); return act(async () => (await talk()).listen(voice)); }
+  if (d.wl) return act(async () => (await wish()).onClick(t));
   if (d.talk || d.talkex != null || d.talkgo != null || d.talkundo != null || d.talkset || d.talkpick || d.talkpickshow || d.talkcare) return act(async () => (await talk()).onClick(t));
   if (d.care) {
     const box = t.getBoundingClientRect();
@@ -5568,6 +5583,8 @@ document.addEventListener('input', (e) => { if (e.target.dataset?.rdq != null) R
 document.addEventListener('input', (e) => { if (e.target.dataset?.fxe && fitMod) fitMod.then((F) => F.onInput(e.target)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.mle != null && mealMod) mealMod.then((M) => M.onInput(e.target)).catch(() => {}); });
 document.addEventListener('change', (e) => { if (e.target.dataset?.mlpick != null && mealMod) mealMod.then((M) => M.onPick(e.target)).catch(() => {}); });
+document.addEventListener('change', (e) => { if (e.target.dataset?.wlpick != null && wishMod) wishMod.then((W) => W.onPick(e.target)).catch(() => {}); });
+document.addEventListener('input', (e) => { if (e.target.dataset?.wle != null && wishMod) wishMod.then((W) => W.onInput(e.target)).catch(() => {}); });
 document.addEventListener('change', (e) => { if (e.target.dataset?.talkrec != null && talkMod) talkMod.then((T) => T.onChange(e.target)).catch(() => {}); });
 // Enter sends in the Talk box (Shift+Enter for a new line).
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'tkText') { e.preventDefault(); e.target.form?.requestSubmit(); } });
