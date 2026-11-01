@@ -1,0 +1,248 @@
+<!doctype html>
+<!-- Design mockups only (Daily Health + Talk UX, Phase 1 checkpoint). Not the app.
+     Serve the repo (node scripts/perf/pages.mjs) and open
+     http://localhost:8098/DietApp/docs/mockups/daily/screens.html#home
+     The WHOOP card is the REAL one: family/health.js whoopHtml() fed by js/whoopDay.js
+     recoveryContext() over synthetic WHOOP records — exactly what Health renders today.
+     Everything marked .mk-* is proposed and does not exist in the app yet. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2f7d5b">
+<title>Daily Health + Talk mockups</title>
+<script src="../../../theme.js"></script>
+<link rel="stylesheet" href="../../../family/style.css">
+<style>
+  body { margin: 0; padding: 12px 16px 40px; }
+  .scr { display: none; max-width: 560px; margin: 0 auto; }
+  .scr:target { display: block; }
+  .mk-note { font-size: .74rem; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 6px 9px; margin: 10px 0; }
+  .mk-sheet { position: static; display: block; border-radius: 22px; box-shadow: 0 -2px 18px rgba(0,0,0,.12); max-height: none; }
+  .mk-bg { opacity: .35; pointer-events: none; filter: saturate(.6); }
+  /* Proposed: SYNC WHOOP, straight under the shared card */
+  .mk-sync { display: grid; gap: 6px; margin: 8px 0 14px; }
+  .mk-syncbtn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 54px; border-radius: 16px; border: 0;
+    background: #101518; color: #fff; font: 800 15px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+  .mk-syncbtn .ic { font-size: 19px; letter-spacing: 0; }
+  .mk-syncbtn[disabled] { opacity: .8; }
+  .mk-spin { width: 18px; height: 18px; border-radius: 50%; border: 3px solid rgba(255,255,255,.25); border-top-color: #00F19F; animation: mkspin .8s linear infinite; }
+  @keyframes mkspin { to { transform: rotate(360deg); } }
+  .mk-when { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 12px; font-size: .8rem; color: var(--muted); text-align: center; }
+  .mk-res { text-align: center; font-size: .88rem; font-weight: 700; margin: 0; }
+  .mk-res.ok { color: var(--brand); } .mk-res.warn { color: #b26a00; }
+  .mk-state { border: 1px solid var(--line); border-radius: 14px; padding: 10px; margin: 0 0 12px; }
+  .mk-state > b { display: block; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .mk-stale { border-radius: 12px; background: #fff4df; color: #6b4300; padding: 8px 10px; font-size: .85rem; margin: 0 0 8px; }
+  :root[data-theme=dark] .mk-stale { background: #3a2c10; color: #ffdca0; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .mk-stale { background: #3a2c10; color: #ffdca0; } }
+  /* Proposed: listening */
+  .mk-tx { font-size: 1.08rem; line-height: 1.45; text-align: left; margin: 0; min-height: 4.4em; width: 100%; }
+  .mk-tx .int { color: var(--muted); }
+  .mk-pausebar { width: 100%; height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; }
+  .mk-pausebar i { display: block; height: 100%; width: 55%; background: var(--brand); border-radius: 6px; }
+  .mk-done { min-height: 56px; font-size: 1.1rem; width: 100%; }
+  .mk-small { font-size: .8rem; color: var(--muted); margin: 0; }
+  /* Proposed: review cards */
+  .mk-rv { border: 2px solid var(--brand); border-radius: 18px; padding: 14px; margin: 12px 0 0; display: grid; gap: 8px; background: var(--card); }
+  .mk-rv h3 { margin: 0; font-size: 1.05rem; }
+  .mk-kick { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 0; }
+  .mk-rows { display: grid; }
+  .mk-row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: .95rem; }
+  .mk-row span:last-child { white-space: nowrap; color: var(--muted); }
+  .mk-row.chg { background: color-mix(in srgb, var(--brand) 12%, transparent); border-radius: 8px; padding: 8px 6px; margin: 0 -6px; }
+  .mk-row.chg span:last-child { color: var(--brand); font-weight: 700; }
+  .mk-mac { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; }
+  .mk-mac div { border-radius: 12px; background: var(--brand-soft); padding: 8px 2px; }
+  .mk-mac b { display: block; font-size: 1.05rem; } .mk-mac small { font-size: .72rem; color: var(--muted); }
+  .mk-ask { font-weight: 700; margin: 4px 0 0; }
+  .mk-acts { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .mk-acts .main { min-height: 52px; font-size: 1.02rem; }
+  .mk-acts .two { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .mk-acts .two button { min-height: 46px; }
+  .mk-heard { font-size: .85rem; color: var(--muted); font-style: italic; margin: 0; }
+  .mk-blk { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
+  .mk-blk .t { font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 2px; }
+  .mk-blk .mk-row { border: 0; padding: 4px 0; }
+  .mk-facts { display: grid; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; }
+  .mk-facts li { display: flex; justify-content: space-between; gap: 10px; font-size: .9rem; border-bottom: 1px solid var(--line); padding: 6px 0; }
+  .mk-facts li span:last-child { font-weight: 700; white-space: nowrap; }
+  .mk-conf { display: inline-block; font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; border-radius: 999px; padding: 3px 8px; background: #fff4df; color: #6b4300; }
+  .mk-up { color: var(--brand); } .mk-down { color: #b3261e; }
+</style>
+</head>
+<body>
+
+<!-- 1. HOME: the shared WHOOP card near the top, SYNC WHOOP straight under it -->
+<section class="scr" id="home">
+  <h1 class="home-hi">Good morning, Sam. Here’s your Sunday, November 1.</h1>
+  <button type="button" class="talk-bar"><span class="in"><svg class="tk-ic" viewBox="0 0 32 32" aria-hidden="true"><path class="bub" d="M5 7.5A4.5 4.5 0 0 1 9.5 3h13A4.5 4.5 0 0 1 27 7.5v9a4.5 4.5 0 0 1-4.5 4.5H14l-6 5v-5h0A3 3 0 0 1 5 18z"/><rect class="mic" x="13.5" y="6.5" width="5" height="8" rx="2.5"/><path class="mic-s" d="M11 12a5 5 0 0 0 10 0M16 17v2"/></svg><span><b>Talk to Pawmily</b><small>Add, log or plan — just say it</small></span></span></button>
+  <div data-whoop="normal"></div>
+  <div class="mk-sync"><button type="button" class="mk-syncbtn"><span class="ic">⟳</span>Sync WHOOP</button>
+    <p class="mk-when"><span>Last synced 7:12 AM</span><span>Sleep ended 6:41 AM</span></p></div>
+  <section class="nextup"><div class="skeleton line"></div></section>
+  <p class="mk-note">Proposed. The WHOOP card above is the real <code>whoopHtml()</code> from Health (same rings, colours, “your usual”, line, Last 7 days ›, tap a ring for detail) — moved into one shared module that Home and Health both render. Home paints from what’s already on this phone; nothing waits for WHOOP. Next up, Look, needs-attention and the rest of Home follow unchanged.</p>
+</section>
+
+<!-- 2. SYNC STATES -->
+<section class="scr" id="sync">
+  <div class="mk-state"><b>Ready</b><div class="mk-sync"><button type="button" class="mk-syncbtn"><span class="ic">⟳</span>Sync WHOOP</button><p class="mk-when"><span>Last synced 7:12 AM</span><span>Sleep ended 6:41 AM</span></p></div></div>
+  <div class="mk-state"><b>Syncing (card stays as it was; one sync at a time)</b><div class="mk-sync"><button type="button" class="mk-syncbtn" disabled aria-busy="true"><span class="mk-spin" aria-hidden="true"></span>Syncing WHOOP…</button><p class="mk-when"><span>Last synced 7:12 AM</span></p></div></div>
+  <div class="mk-state"><b>Updated</b><div class="mk-sync"><button type="button" class="mk-syncbtn"><span class="ic">⟳</span>Sync WHOOP</button><p class="mk-res ok" role="status">✓ WHOOP updated</p><p class="mk-when"><span>Last synced 7:21 AM</span><span>Sleep ended 6:41 AM</span></p></div></div>
+  <div class="mk-state"><b>Synced, nothing new from WHOOP</b><div class="mk-sync"><button type="button" class="mk-syncbtn"><span class="ic">⟳</span>Sync WHOOP</button><p class="mk-res" role="status">WHOOP synced — no newer data yet</p><p class="mk-when"><span>Last synced 7:22 AM</span><span>Recovery not scored yet</span></p></div></div>
+  <div class="mk-state"><b>Couldn’t reach WHOOP</b><div class="mk-sync"><button type="button" class="mk-syncbtn"><span class="ic">⟳</span>Try again</button><p class="mk-res warn" role="alert">Couldn’t sync WHOOP — showing what you had</p><p class="mk-when"><span>Last synced 7:12 AM</span></p></div></div>
+  <div class="mk-state"><b>Needs reconnecting</b><div class="mk-sync"><button type="button" class="mk-syncbtn" style="background:#b3261e">Reconnect WHOOP</button><p class="mk-res warn" role="alert">WHOOP needs to reconnect</p><p class="mk-when"><span>WHOOP stopped sharing with OurPawmily</span></p></div></div>
+  <div class="mk-state"><b>Just synced (within a minute)</b><div class="mk-sync"><button type="button" class="mk-syncbtn"><span class="ic">⟳</span>Sync WHOOP</button><p class="mk-res" role="status">Up to date — synced a moment ago</p><p class="mk-when"><span>Last synced 7:21 AM</span></p></div></div>
+  <p class="mk-note">A tap within a minute of the last full sync asks WHOOP only for today so far (2 requests) instead of a full sync with an account save.</p>
+</section>
+
+<!-- 3. STALE + RECONNECT -->
+<section class="scr" id="stale">
+  <p class="mk-stale">⏳ Last synced yesterday 9:40 PM — tap Sync WHOOP for this morning’s numbers.</p>
+  <div data-whoop="stale"></div>
+  <div class="mk-sync"><button type="button" class="mk-syncbtn"><span class="ic">⟳</span>Sync WHOOP</button><p class="mk-when"><span>Last synced Sat 9:40 PM</span></p></div>
+  <div data-whoop="reconnect"></div>
+  <p class="mk-note">Top: the card shows yesterday’s numbers as “not scored yet” for today and says when it last synced. Bottom: the card’s existing reconnect state (WHOOP no longer shares Recovery/Sleep), unchanged; the Sync button becomes Reconnect.</p>
+</section>
+
+<!-- 4. TALK: LISTENING WITH A LIVE TRANSCRIPT -->
+<section class="scr" id="listen">
+  <div class="sheet mk-sheet"><div class="tk-sheet">
+    <div class="row between tk-top"><h2>Talk to Pawmily</h2><button type="button" class="icon-btn" aria-label="Close">✕</button></div>
+    <div class="tk-listen" role="status"><span class="tk-pulse" aria-hidden="true">🎤</span>
+      <p class="mk-small"><b>Listening…</b> take your time</p>
+      <p class="mk-tx">For breakfast I had two eggs, some sourdough — actually make that two slices — avocado <span class="int">and coffee with some oat</span></p>
+      <button type="button" class="mk-done">Done</button>
+      <div class="tk-two"><button type="button" class="ghost">Cancel</button><button type="button" class="ghost">Type instead</button></div>
+      <p class="tiny muted">Grey words are still being heard. Nothing is logged until you check it.</p></div>
+  </div></div>
+</section>
+
+<!-- 5. TALK: A NATURAL PAUSE -->
+<section class="scr" id="pause">
+  <div class="sheet mk-sheet"><div class="tk-sheet">
+    <div class="row between tk-top"><h2>Talk to Pawmily</h2><button type="button" class="icon-btn" aria-label="Close">✕</button></div>
+    <div class="tk-listen" role="status"><span class="tk-pulse" aria-hidden="true">🎤</span>
+      <p class="mk-small"><b>Still listening…</b> keep talking to add more</p>
+      <p class="mk-tx">For breakfast I had two eggs, two slices of sourdough, avocado and coffee with some oat milk.</p>
+      <div class="mk-pausebar" aria-hidden="true"><i></i></div>
+      <p class="mk-small">Reading it in a moment — or tap Done</p>
+      <button type="button" class="mk-done">Done</button>
+      <div class="tk-two"><button type="button" class="ghost">Cancel</button><button type="button" class="ghost">Type instead</button></div></div>
+  </div></div>
+  <p class="mk-note">Short pauses (under ~1.2 s) change nothing. After that the bar runs down; speaking again resets it. At ~2.5 s of quiet (tunable) Pawmily reads what it heard — into a review, never a write. If the phone’s speech service stops on its own, Pawmily restarts it and keeps what was already heard.</p>
+</section>
+
+<!-- 6. MEAL REVIEW -->
+<section class="scr" id="meal">
+  <div class="sheet mk-sheet"><div class="tk-sheet">
+    <div class="row between tk-top"><h2>Talk to Pawmily</h2><button type="button" class="icon-btn" aria-label="Close">✕</button></div>
+    <div class="mk-rv" role="group" aria-label="Meal to check">
+      <p class="mk-kick">Here’s what I heard · not logged yet</p>
+      <h3>🍽 Lunch</h3>
+      <p class="mk-heard">“Six ounces of chicken, a cup of rice, avocado and salsa”</p>
+      <div class="mk-rows">
+        <div class="mk-row"><span>Chicken breast</span><span>6 oz · 280 kcal</span></div>
+        <div class="mk-row"><span>White rice, cooked</span><span>1 cup · 205 kcal</span></div>
+        <div class="mk-row"><span>Avocado</span><span>½ fruit · 120 kcal</span></div>
+        <div class="mk-row"><span>Salsa</span><span>2 tbsp · 10 kcal</span></div>
+      </div>
+      <div class="mk-mac"><div><b>615</b><small>kcal</small></div><div><b>55 g</b><small>protein</small></div><div><b>51 g</b><small>carbs</small></div><div><b>20 g</b><small>fat</small></div></div>
+      <p class="tiny muted">Estimated · your phone read it</p>
+      <p class="mk-ask">Does this look right?</p>
+      <div class="mk-acts"><button type="button" class="main">✓ Log meal</button>
+        <div class="two"><button type="button" class="ghost">✏️ Edit</button><button type="button" class="ghost">🎤 Change</button><button type="button" class="ghost">Cancel</button></div></div>
+    </div>
+  </div></div>
+  <p class="mk-note">Stays in Talk (no hand-off to another sheet). Edit opens the existing meal estimate sheet with this draft. 🎤 Change listens for a correction or “yes, log it” — for this card only, for 10 minutes.</p>
+</section>
+
+<!-- 7. MEAL AFTER A SPOKEN CORRECTION -->
+<section class="scr" id="mealfix">
+  <div class="sheet mk-sheet"><div class="tk-sheet">
+    <div class="row between tk-top"><h2>Talk to Pawmily</h2><button type="button" class="icon-btn" aria-label="Close">✕</button></div>
+    <div class="mk-rv" role="group" aria-label="Meal to check">
+      <p class="mk-kick">Updated · still not logged</p>
+      <h3>🍽 Lunch</h3>
+      <p class="mk-heard">“Actually make the rice half a cup”</p>
+      <div class="mk-rows">
+        <div class="mk-row"><span>Chicken breast</span><span>6 oz · 280 kcal</span></div>
+        <div class="mk-row chg"><span>White rice, cooked</span><span>½ cup · 103 kcal</span></div>
+        <div class="mk-row"><span>Avocado</span><span>½ fruit · 120 kcal</span></div>
+        <div class="mk-row"><span>Salsa</span><span>2 tbsp · 10 kcal</span></div>
+      </div>
+      <div class="mk-mac"><div><b>513</b><small>kcal</small></div><div><b>53 g</b><small>protein</small></div><div><b>29 g</b><small>carbs</small></div><div><b>20 g</b><small>fat</small></div></div>
+      <p class="mk-ask">Does this look right?</p>
+      <div class="mk-acts"><button type="button" class="main">✓ Log meal</button>
+        <div class="two"><button type="button" class="ghost">✏️ Edit</button><button type="button" class="ghost">🎤 Change</button><button type="button" class="ghost">Cancel</button></div></div>
+    </div>
+  </div></div>
+  <p class="mk-note">Then “Yes, log it” (or the button) logs it exactly once, with Undo. A “yes” with no card on screen does nothing.</p>
+</section>
+
+<!-- 8. WORKOUT REVIEW -->
+<section class="scr" id="workout">
+  <div class="sheet mk-sheet"><div class="tk-sheet">
+    <div class="row between tk-top"><h2>Talk to Pawmily</h2><button type="button" class="icon-btn" aria-label="Close">✕</button></div>
+    <div class="mk-rv" role="group" aria-label="Workout to check">
+      <p class="mk-kick">Here’s what I heard · not saved yet</p>
+      <h3>🏋️ Upper body</h3>
+      <p class="mk-heard">“Bench and pull-ups, and superset lateral raises with curls”</p>
+      <div class="mk-blk"><p class="t">Straight sets</p><div class="mk-row"><span>Bench press</span><span>3 × 8</span></div></div>
+      <div class="mk-blk"><p class="t">Straight sets</p><div class="mk-row"><span>Pull-ups</span><span>3 × 6–8</span></div></div>
+      <div class="mk-blk"><p class="t">Superset · 3 rounds</p><div class="mk-row"><span>Lateral raise</span><span>× 12</span></div><div class="mk-row"><span>Dumbbell curl</span><span>× 10</span></div></div>
+      <p class="tiny muted">About 40 min · weights left blank — add them in Edit or as you go</p>
+      <p class="mk-ask">Does this look right?</p>
+      <div class="mk-acts"><button type="button" class="main">✓ Create workout</button>
+        <div class="two"><button type="button" class="ghost">✏️ Edit</button><button type="button" class="ghost">🎤 Change</button><button type="button" class="ghost">Cancel</button></div></div>
+    </div>
+  </div></div>
+  <p class="mk-note">Same rules as the meal card. Edit opens Fitness’s existing workout editor with this draft; Create saves it as today’s workout through Fitness’s own save.</p>
+</section>
+
+<!-- 9. HEALTH INSIGHT -->
+<section class="scr" id="insight">
+  <div class="sheet mk-sheet"><div class="tk-sheet">
+    <div class="row between tk-top"><h2>Talk to Pawmily</h2><button type="button" class="icon-btn" aria-label="Close">✕</button></div>
+    <p class="mk-heard" style="margin-top:10px">“How did I do this week?”</p>
+    <div class="tk-card tk-answer">
+      <p style="margin:0">A solid week for training and a patchy one for food logging. You trained 5 times — 3 lifts, a run and a climb — and hit all 3 planned lifts. You were under your calorie target on 3 of the 4 days you logged fully; the other 3 days don’t have enough food logged to say. Weight is down 0.8 lb on last week’s average.</p>
+      <ul class="mk-facts">
+        <li><span>Workouts (Mon–Sun)</span><span>5 · 3 lift · 1 run · 1 climb</span></li>
+        <li><span>Planned lifts done</span><span>3 of 3</span></li>
+        <li><span>Meals logged</span><span>15 on 5 of 7 days</span></li>
+        <li><span>Under calorie target</span><span>3 of 4 well-logged days</span></li>
+        <li><span>Weight, 7-day average</span><span class="mk-up">−0.8 lb</span></li>
+        <li><span>Recovery, average</span><span>58% (usual 52–71%)</span></li>
+      </ul>
+      <p class="small" style="margin:6px 0 0"><span class="mk-conf">Partial food data</span> 3 days have under 2 meals logged, so calories for the full week aren’t compared.</p>
+      <button type="button" class="linkish small">Compare with last week ›</button>
+    </div>
+  </div></div>
+  <p class="mk-note">Every number is worked out on the phone by HealthInsights. Claude (if used) only turns those numbers into the opening paragraph; it never sees meals, workouts or weights themselves.</p>
+</section>
+
+<script type="module">
+  import { whoopHtml } from '../../../family/health.js';
+  import { recoveryContext } from '../../../js/whoopDay.js';
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Synthetic WHOOP records (30 days, so "your usual" is ready) in the shape js/devices.js stores.
+  const today = '2026-11-01', add = (n) => { const d = new Date(`${today}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const h = (x) => Math.round(x * 3.6e6);
+  const day = (rec, perf, hours, strain) => ({ whoop: {
+    recovery: rec == null ? undefined : { score_state: 'SCORED', score: { recovery_score: rec, resting_heart_rate: 54, hrv_rmssd_milli: 61 } },
+    sleep: perf == null ? undefined : { id: 's', end: `${today}T13:41:00Z`, timezone_offset: '-08:00', score_state: 'SCORED', score: { sleep_performance_percentage: perf, stage_summary: { total_light_sleep_time_milli: h(hours * 0.55), total_slow_wave_sleep_time_milli: h(hours * 0.22), total_rem_sleep_time_milli: h(hours * 0.23) }, sleep_needed: { baseline_milli: h(7.6), need_from_sleep_debt_milli: h(0.3), need_from_recent_strain_milli: h(0.2) } } },
+    cycle: strain == null ? undefined : { id: 1, score_state: 'SCORED', score: { strain } } } });
+  const daily = {};
+  const recs = [62, 55, 71, 48, 66, 59, 74, 52, 63, 68, 57, 61, 70, 45, 64, 58, 66, 53, 69, 60, 56, 72, 50, 65, 62, 58, 67, 54, 61, 63];
+  recs.forEach((r, i) => { daily[add(-(i + 1))] = day(r, 80, 7.2, 9 + (i % 5)); });
+  const normal = { ...daily, [today]: day(76, 86, 7.4, 6.4) };
+  const stale = { ...daily };
+  const card = { normal: whoopHtml({ ...recoveryContext(normal, today), dailyMissing: false }, esc),
+    stale: whoopHtml({ ...recoveryContext(stale, today), dailyMissing: false }, esc),
+    reconnect: whoopHtml({ ...recoveryContext({}, today), dailyMissing: true }, esc) };
+  for (const el of document.querySelectorAll('[data-whoop]')) el.innerHTML = card[el.dataset.whoop].replaceAll('src="whoop-logo-white.svg"', 'src="../../../family/whoop-logo-white.svg"'); // the card's logo path is relative to family/
+  document.body.dataset.ready = '1';
+</script>
+</body>
+</html>

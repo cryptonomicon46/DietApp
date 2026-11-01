@@ -7,7 +7,7 @@ import * as T from '../js/talkActions.js';
 import { STATUSES as BOOK } from '../js/books.js';
 import { PLAN_KINDS, REPLIES } from '../server/us.js';
 import { REQUEST_KINDS } from '../server/home.js';
-import { dayContextForPlanning } from '../js/whoopDay.js';
+import { dayContextForPlanning } from '../js/whoopPlan.js';
 
 test('the vocabularies match the domains that own them', () => {
   assert.deepEqual(T.BOOK_STATES, BOOK);

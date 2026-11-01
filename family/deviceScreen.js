@@ -43,6 +43,8 @@ async function syncHere(days = 3) {
   c.clearShared();
   return r;
 }
+// The full sync for the app's one WHOOP sync (family/whoopSync.js). → { added, errors }
+export const syncNow = () => syncHere(3);
 // Opening Health: the same, quietly. → whether anything new came in.
 export async function quietSync() {
   const id = await owner();
@@ -66,7 +68,10 @@ export async function onAct(act, t) {
   if (act === 'devsync') {
     const el = c.$('#devWhoop'); if (el) el.textContent = 'Syncing…';
     if (t) t.disabled = true;
-    c.toast(said(await syncHere(), false));
+    // Through the app's one WHOOP sync (so it never runs twice at once); Strava alone syncs directly.
+    const r = c.syncManual ? await c.syncManual() : { status: 'none' };
+    if (r.status === 'none') c.toast(said(await syncHere(), false));
+    else c.toast(r.status === 'reconnect' ? 'WHOOP: reconnect to keep syncing' : r.status === 'error' ? "WHOOP: couldn't sync right now" : r.status === 'busy' || r.status === 'cooldown' ? 'WHOOP is busy — try again in a couple of minutes' : r.added ? `⌚ ${r.added} new workout${r.added === 1 ? '' : 's'}` : '⌚ Up to date');
   } else {
     const which = act === 'devoff' ? 'whoop' : 'strava';
     if (!confirm(`Disconnect ${which === 'whoop' ? 'WHOOP' : 'Strava'}? Workouts already brought in stay.`)) return;

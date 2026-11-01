@@ -92,7 +92,7 @@ export const devices = {
       } catch (err) {
         const kind = err.kind || 'unavailable';
         mark(provider, { problem: kind });
-        errors.push({ provider, kind, message: kind === 'reconnect' ? `${NAMES[provider]}: reconnect to keep syncing` : `${NAMES[provider]}: couldn't sync right now` });
+        errors.push({ provider, kind, ...(err.status ? { status: err.status } : {}), message: kind === 'reconnect' ? `${NAMES[provider]}: reconnect to keep syncing` : `${NAMES[provider]}: couldn't sync right now` });
       }
     }
     return { workouts: out, totals, errors, ...(days ? { daily: days } : {}) };
@@ -128,7 +128,8 @@ async function get(provider, path) {
     if (!res) throw new DeviceError('unavailable', 'offline');
     if (res.status === 401 && i === 0) continue;
     if (res.status === 401 || res.status === 403) throw new DeviceError('reconnect', `${res.status}`);
-    if (!res.ok) throw new DeviceError('unavailable', `${res.status}`);
+    // 429: WHOOP's rate limit — the status goes with the error so a manual sync can wait a little.
+    if (!res.ok) throw Object.assign(new DeviceError('unavailable', `${res.status}`), { status: res.status });
     return res.json();
   }
   return null;

@@ -499,8 +499,8 @@ function talk() {
         let whoopNow = null, food = null;
         const wh = whoopHere();
         if (wh) {
-          const WD = await import(`../js/whoopDay.js?v=${VERSION}`), F = fitMod ? await fitMod.catch(() => null) : null;
-          const rc = WD.recoveryContext(wh.daily, today), pw = WD.dayContextForPlanning({ daily: wh.daily, today, workout: F?.state?.today || null }).plannedWorkout;
+          const [WD, WP] = await Promise.all([import(`../js/whoopDay.js?v=${VERSION}`), import(`../js/whoopPlan.js?v=${VERSION}`)]), F = fitMod ? await fitMod.catch(() => null) : null;
+          const rc = WD.recoveryContext(wh.daily, today), pw = WP.dayContextForPlanning({ daily: wh.daily, today, workout: F?.state?.today || null }).plannedWorkout;
           whoopNow = { recovery: { state: rc.recovery.state, score: rc.recovery.score, scoreBand: rc.recovery.band, relativeToUsual: rc.recovery.relative, hrv: rc.recovery.hrv, restingHr: rc.recovery.rhr },
             sleep: { performance: rc.sleep.performance ?? null, hours: rc.sleep.hours ?? null, neededHours: rc.sleep.neededHours ?? null, deficitMinutes: rc.sleep.deficitMinutes ?? null },
             strain: rc.strain, plannedWorkout: pw ? { name: pw.name, minutes: pw.estimatedMinutes, status: pw.status } : null };
@@ -552,9 +552,9 @@ async function healthView() {
   if (F) F.setLegacy(data, LIFT_NAMES);
   health.data = data;
   if (mealMod) mealMod.then((M) => M.setData(data)).catch(() => {});
-  const whoop = wh && WD ? { ...WD.recoveryContext(wh.daily, isoLocal()), dailyMissing: !WD.hasDaily(wh.t), lighter: F ? F.lighterState() : null } : null;
+  const whoop = wh && WD ? whoopModel(wh, WD, F ? F.lighterState() : null) : null;
   $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), hour: new Date().getHours(), workout: F ? F.healthRow(esc) : undefined, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), devices: devicesLine(), whoop })}</div>`;
-  if (wh) { whoopAutoSync(wh.t); whoopTicker(); }
+  if (wh) { whoopAutoSync(); whoopTicker(); }
 }
 // ⌚ WHOOP on this phone (its sign-in and what it brought in live only here), read without loading
 // anything: null when WHOOP isn't connected, so Health shows nothing extra and asks for nothing.
@@ -567,36 +567,84 @@ function whoopHere() {
     return { t, daily: get('whoopDaily', {}), get history() { return get('workoutHistory', []); } };
   } catch { return null; }
 }
-// Opening Health brings in what's new from WHOOP (at most every 20 minutes), then shows it.
-let whoopSyncing = false;
-function whoopAutoSync(t) {
-  if (whoopSyncing || t.problem === 'reconnect' || Date.now() - (t.lastSync || 0) < 20 * 60000) return;
-  whoopSyncing = true;
-  devices().then((m) => m.quietSync()).then((changed) => { if (changed && state.view === 'health') healthView(); }).catch(() => {}).finally(() => { whoopSyncing = false; });
-}
+// ⌚ One WHOOP sync for the whole app (family/whoopSync.js): opening Home or Health (at most every
+// 20 minutes), Health's five-minute Strain refresh, 🏠 SYNC WHOOP and Devices › Sync now. Only one
+// runs at a time; when it finishes, whatever is on screen is redrawn from what's on the phone.
+let wsMod = null;
+const whoopSync = () => (wsMod ||= Promise.all([import(`./whoopSync.js?v=${VERSION}`), import(`../js/whoopDay.js?v=${VERSION}`)]).then(([S, WD]) => S.makeWhoopSync({
+  read: whoopHere,
+  full: () => devices().then((m) => m.syncNow()),
+  today: () => devices().then((m) => m.todayRefresh()),
+  // What the WHOOP card shows: so "updated" means the card really changed.
+  fingerprint: () => { const w = whoopHere(); if (!w) return ''; const cut = Date.now() - 36 * 3600e3; return JSON.stringify([WD.recoveryContext(w.daily, isoLocal()), w.t.problem || '', w.history.filter((x) => /^whoop:/.test(x.id) && Date.parse(x.start) > cut).map((x) => [x.id, x.strain, x.minutes, x.kcal])]); },
+  raw: () => { try { const o = JSON.parse(localStorage.getItem('lp.g.owner')); return ['whoopDaily', 'workoutHistory'].map((k) => localStorage.getItem(`lp.p.${o}.${k}`)).join('|'); } catch { return ''; } },
+  onResult: (r) => {
+    if (state.view === 'home') renderHomeWhoop();
+    if (state.view !== 'health' || !r.dataChanged) return;
+    if (open$('.whd[data-wd]')) whoopDetail(open$('.whd[data-wd]').dataset.wd);
+    else healthView();
+  },
+}))).catch((e) => { wsMod = null; throw e; });
+function whoopAutoSync() { whoopSync().then((s) => s.sync('auto')).catch(() => {}); }
 // ⌚ While Health is open (and on screen), today's Strain every 5 minutes: only the day so far, kept
 // on this phone (js/devices.js refreshToday — 2 WHOOP requests; nothing saved to the account).
 let whoopTick = null;
 function whoopTicker() {
   if (whoopTick) return;
-  const tick = async () => {
+  whoopTick = setInterval(() => {
     if (state.view !== 'health' || !whoopHere()) { clearInterval(whoopTick); whoopTick = null; return; }
-    if (document.visibilityState !== 'visible' || whoopSyncing) return;
-    const t = whoopHere().t;
-    if (Date.now() - Math.max(t.lastSync || 0, t.todayAt || 0) < 4.5 * 60000) return;
-    whoopSyncing = true;
-    const changed = await devices().then((m) => m.todayRefresh()).catch(() => false).finally(() => { whoopSyncing = false; });
-    if (!changed || state.view !== 'health') return;
-    if (open$('.whd[data-wd]')) whoopDetail(open$('.whd[data-wd]').dataset.wd);
-    else healthView();
-  };
-  whoopTick = setInterval(tick, 60000);
+    if (document.visibilityState === 'visible') whoopSync().then((s) => s.sync('tick')).catch(() => {});
+  }, 60000);
+}
+// The WHOOP card's model, the same for Home and Health (js/whoopDay.js recoveryContext + whether
+// WHOOP needs reconnecting for Recovery and Sleep + the "make it lighter" offer, when there is one).
+const whoopModel = (wh, WD, lighter = null) => ({ ...WD.recoveryContext(wh.daily, isoLocal()), dailyMissing: !WD.hasDaily(wh.t), lighter });
+// When last night's sleep ended, in WHOOP's own record ("6:41 AM"), or ''.
+const sleepEnded = (wh, WD) => { const s = wh.daily[isoLocal()]?.whoop?.sleep; return s?.end ? WD.clockAt(s.end, s.timezone_offset) : ''; };
+
+// 🏠 WHOOP on Home: the very card Health shows (family/whoopCard.js), then SYNC WHOOP. Only on a phone
+// where WHOOP is connected; Home paints first (the space is kept), then the card fills in from what's
+// already on the phone — nothing waits for WHOOP. The sync result stays under the button a moment.
+const hw = { msg: null, done: false, busy: false, t: null };
+const whoopOn = () => { try { const o = JSON.parse(localStorage.getItem('lp.g.owner')); return !!(o && JSON.parse(localStorage.getItem(`lp.p.${o}.devices`))?.whoop); } catch { return false; } };
+// The card as Home last drew it (this phone only, like the WHOOP data it's made from), so Home's
+// first paint already has it — nothing jumps when the fresh one fills in a moment later.
+const hwKey = () => { try { return `fam.homeWhoop.${JSON.parse(localStorage.getItem('lp.g.owner'))}`; } catch { return 'fam.homeWhoop'; } };
+function homeWhoopSlot() {
+  if (!whoopOn()) { LS.set(hwKey(), null); return ''; } // disconnected: the saved card goes too
+  return `<section class="home-whoop" id="homeWhoop" aria-label="WHOOP">${LS.get(hwKey()) || '<div class="skeleton card home-whoop-ph"></div>'}</section>`;
+}
+async function renderHomeWhoop() {
+  const el = $('#homeWhoop'), wh = whoopHere();
+  if (!el) return;
+  if (!wh) { el.remove(); LS.set(hwKey(), null); return; }
+  const [C, WD] = await Promise.all([import('./whoopCard.js'), import(`../js/whoopDay.js?v=${VERSION}`)]);
+  if (!$('#homeWhoop')) return;
+  const m = whoopModel(wh, WD, hw.lighter || null);
+  const sync = C.whoopSyncHtml({ busy: hw.busy, done: hw.done, msg: hw.msg, reconnect: wh.t.problem === 'reconnect', lastSync: wh.t.lastSync || 0, sleepEnd: sleepEnded(wh, WD) }, esc);
+  el.innerHTML = `${!hw.busy && !m.dailyMissing && C.isStale(wh.t.lastSync) ? C.staleHtml(wh.t.lastSync, esc) : ''}${C.whoopHtml(m, esc)}${sync}`;
+  if (!hw.busy && !hw.msg && !hw.done) { try { LS.set(hwKey(), el.innerHTML); } catch { /* full */ } }
+  // 🪶 Make today's workout lighter: only when the card would offer it (Recovery below your usual
+  // or a short night) — then Fitness is asked whether there's a workout today to make lighter.
+  if (m.lighterHint && hw.lighter === undefined) { hw.lighter = null; fit().then((F) => { hw.lighter = F.lighterState(); if (state.view === 'home') renderHomeWhoop(); }).catch(() => {}); }
+}
+async function homeWhoopSync() {
+  if (hw.busy) return;
+  hw.busy = true; hw.msg = null; hw.done = false;
+  renderHomeWhoop();
+  const S = await import(`./whoopSync.js?v=${VERSION}`);
+  let r;
+  try { r = await (await whoopSync()).sync('manual'); } catch { r = { status: 'error' }; }
+  hw.busy = false; hw.msg = S.resultMessage(r); hw.done = r.status === 'updated' || r.status === 'nochange' || r.status === 'fresh';
+  renderHomeWhoop();
+  clearTimeout(hw.t);
+  hw.t = setTimeout(() => { hw.done = false; hw.msg = null; if (state.view === 'home') renderHomeWhoop(); }, 6000);
 }
 // Tap Sleep, Recovery or Strain: what's behind the number (WHOOP's, under WHOOP's names).
 async function whoopDetail(which) {
   const wh = whoopHere();
   if (!wh) return;
-  const [H, WD] = await Promise.all([import(`./health.js?v=${VERSION}`), import(`../js/whoopDay.js?v=${VERSION}`)]);
+  const [H, WD] = await Promise.all([import('./whoopCard.js'), import(`../js/whoopDay.js?v=${VERSION}`)]);
   const today = isoLocal(), when = new Date(`${today}T12:00:00`).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
   let html;
   if (which === 'recovery') html = H.recoveryDetailHtml(WD.recoveryDetail(wh.daily, today), esc, when);
@@ -611,7 +659,7 @@ async function whoopDetail(which) {
 async function whoopDays() {
   const wh = whoopHere();
   if (!wh) return;
-  const [H, WD] = await Promise.all([import(`./health.js?v=${VERSION}`), import(`../js/whoopDay.js?v=${VERSION}`)]);
+  const [H, WD] = await Promise.all([import('./whoopCard.js'), import(`../js/whoopDay.js?v=${VERSION}`)]);
   openSheet(H.whoopDaysHtml(WD.lastDays(wh.daily, isoLocal()), WD.usualRange(wh.daily, isoLocal()), esc));
 }
 // 🍽 Logging food from Health (family/meals.js, loaded the first time you tap a meal action):
@@ -670,7 +718,7 @@ async function saveWeighIn(f) {
 // ⌚ Devices (Health › Devices): family/deviceScreen.js, loaded when you open Devices or come back
 // from connecting WHOOP.
 let devUi = null;
-const devices = () => (devUi ||= import(`./deviceScreen.js?v=${VERSION}`).then((m) => { m.init({ esc, openSheet, toast, api, VERSION, state, clearShared: () => shared.clear(), refresh: () => state.view === 'health' && healthView(), $ }); return m; }).catch((e) => { devUi = null; throw e; }));
+const devices = () => (devUi ||= import(`./deviceScreen.js?v=${VERSION}`).then((m) => { m.init({ esc, openSheet, toast, api, VERSION, state, clearShared: () => shared.clear(), syncManual: () => whoopSync().then((w) => w.sync('manual')), refresh: () => state.view === 'health' && healthView(), $ }); return m; }).catch((e) => { devUi = null; throw e; }));
 // The Health card's line, without loading anything: what this device knows about its connection.
 function devicesLine() {
   const w = whoopHere()?.t;
@@ -806,6 +854,7 @@ async function homeView() {
   const h = new Date().getHours(), first = esc((me()?.name || state.user?.name || '').split(' ')[0]);
   const top = `<h1 class="home-hi">${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}${first ? `, ${first}` : ''}. Here’s your ${esc(new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))}.</h1>
     ${talkBar()}
+    ${homeWhoopSlot()}
     <div id="hello"></div><section class="nextup" id="nextUp" style="${homeH('nextUp')}" ${nuSettings().off ? 'hidden' : ''}><div class="skeleton line"></div></section>
     ${homeLook()}
     <section class="card attn" id="attn" aria-labelledby="attnH" style="${homeH('attn')}"><div class="skeleton line"></div></section>
@@ -817,6 +866,7 @@ async function homeView() {
   $('#view').innerHTML = `${demoBanner()}${wide() && (house || dogPart)
     ? `<div class="wide2 pets"><div class="col-main">${top}${pins}</div><div class="col-main">${house}${dogPart}${fame}</div></div>`
     : `${top}${house}${dogPart}${pins}${fame}`}`;
+  if ($('#homeWhoop')) { renderHomeWhoop().catch(() => {}); later(whoopAutoSync, 1500); }
   goldNews();
   renderMovies().catch(() => {});
   helloCard();
@@ -4783,6 +4833,7 @@ document.addEventListener('click', (e) => {
     case 'grocclear': return act(() => grocAct(() => api.post(`/families/${state.fid}/groceries/clear`)));
     case 'devices': return act(async () => (await devices()).sheet());
     case 'whoopdays': return act(whoopDays);
+    case 'whoopsync': return act(homeWhoopSync);
     case 'whoopdetail': return act(() => whoopDetail(d.wd));
     case 'devconnect': case 'devsync': case 'devoff': case 'devoffstrava': return act(async () => (await devices()).onAct(d.act, t));
     case 'weighremind': return act(async () => {

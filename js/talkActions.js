@@ -161,7 +161,7 @@ export const CONTEXT = {
   'calendar.freeBusy': ['date', 'start', 'end', 'busy', 'who'],
   'watch.find': ['id', 'title', 'year', 'media', 'status', 'addedBy'],
   'read.find': ['id', 'title', 'author', 'year', 'state'],
-  'fitness.day': ['date', 'recovery', 'sleep', 'strain', 'plannedWorkout'], // whoopDay.js dayContextForPlanning
+  'fitness.day': ['date', 'recovery', 'sleep', 'strain', 'plannedWorkout'], // whoopPlan.js dayContextForPlanning
   // External context adapters (T2a/T3): each provider's answer is normalised on the phone or the
   // connector into these fields only — no provider objects travel further (js/talkDay.js).
   'weather': ['date', 'at', 'tempF', 'rainChance', 'windMph'], // dayWeather ← Open-Meteo

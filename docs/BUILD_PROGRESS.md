@@ -1,8 +1,62 @@
 # OurPawmily Build Progress
 
-Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for review) on `v2/talk-t0` from `main` `5910e8a`, after T0 (mockups + action registry). Health 2 Phase B merged (PR #7 `5c9e5f2`, PR #8 `5910e8a`) and deployed (connector `37c7ea1c…` from `v2/health-2b` head, Pages from `main`; reported by the user) and checked on the owner's real WHOOP data. Health 2 Phase A merged as PR #6 (`aa4fe63`) and deployed (reported by the user). Earlier: 👔 Look MVP (L0–L6) on `v2/look-mvp` from `main` `f333274` (Health UX merged as PR #4 and deployed, reported by the user). Earlier: Health/Fitness/Diet UX (H1–H12 with amendments) on `v2/health-ux`. Phases 4–11 and the Describe-it change are merged to `main` (PR #2 `d94c25f`, PR #3 `e9708af`) and deployed (reported by the user).
+Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 px mockups on `v2/daily-health-talk-ux` from `main` `9e6cb18` (DESIGN ONLY, stopped for review; nothing in the app changed). Previous: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for review) on `v2/talk-t0` from `main` `5910e8a`, after T0 (mockups + action registry). Health 2 Phase B merged (PR #7 `5c9e5f2`, PR #8 `5910e8a`) and deployed (connector `37c7ea1c…` from `v2/health-2b` head, Pages from `main`; reported by the user) and checked on the owner's real WHOOP data. Health 2 Phase A merged as PR #6 (`aa4fe63`) and deployed (reported by the user). Earlier: 👔 Look MVP (L0–L6) on `v2/look-mvp` from `main` `f333274` (Health UX merged as PR #4 and deployed, reported by the user). Earlier: Health/Fitness/Diet UX (H1–H12 with amendments) on `v2/health-ux`. Phases 4–11 and the Describe-it change are merged to `main` (PR #2 `d94c25f`, PR #3 `e9708af`) and deployed (reported by the user).
 
 ## Current phase and task
+
+### ⌚ Release 1 part C — WHOOP card on Home + ⟳ SYNC WHOOP (2026-11-01, `v2/daily-health-talk-ux`; front end only — no `pawdeploy`; owner: "deploy the whoop… merge into main when done" if no redeploy is needed)
+- **Built:**
+  - `family/whoopCard.js` is the one WHOOP card, its sheets, the SYNC WHOOP control and the stale line. Health re-exports it.
+  - Home renders it under Talk, only on a phone where WHOOP is connected. The first paint shows the last card drawn on this phone, so nothing jumps; it then refreshes from the phone's data, with no network wait.
+  - `family/whoopSync.js` is the one sync controller for Home, Health's auto/tick and Devices › Sync now:
+    - one sync in flight at a time;
+    - results are updated / no newer scores / synced a moment ago / couldn't refresh / WHOOP busy (429, 2-minute wait) / reconnect;
+    - "updated" means the card's model changed.
+  - `js/devices.js` errors carry the HTTP status.
+  - `dayContextForPlanning` moved to `js/whoopPlan.js`, so Home doesn't load `js/workout.js`.
+  - The 🪶 lighter offer appears on Home only when the card would offer it.
+- **Not in this part:**
+  - Conditional "urgent needs-attention above WHOOP": deferred, because moving it after its data loads would shift the page.
+  - WHOOP battery: not in WHOOP's public API.
+  - "Recovery scored at": WHOOP's `updated_at` isn't kept.
+- **Tests:** `tests/whoopsync.test.js` (9) and `tests/whoopcard.test.js` (3). `npm test` 519 pass.
+- **Browser check** (local Pages + `wrangler dev`, synthetic family with seeded WHOOP data and WHOOP's API stubbed; 390 px, plus 320 px dark):
+  - The card sits under Talk.
+  - Sync makes 4 WHOOP requests; Strain 6.4 → 11.2 in place, with "✓ WHOOP updated" and "✓ WHOOP SYNCED".
+  - A second tap within a minute makes 2 requests and says "Up to date — synced a moment ago."
+  - Health shows the same 11.2.
+  - A 503 gives "Couldn't refresh WHOOP. Showing your last synced data." with the card kept.
+  - Stale data with WHOOP down gives "WHOOP data may be out of date · Last synced …".
+  - With no WHOOP connected, there's no section.
+- **Performance** (`scripts/perf/budget.mjs`, the demo family has no WHOOP, same machine; `main` served from a worktree vs this branch):
+
+  | | Before (`main`, 3 runs) | After (this branch, 4 runs) |
+  | --- | --- | --- |
+  | Requests | 15 | 15 |
+  | Duplicates | 0 | 0 |
+  | Layout shift | 0.024 | 0.024 |
+  | Script | 188 KB | 189 KB |
+  | Cold first paint | 1332–1424 ms | 1356–1652 ms (the 1652 was a single outlier run) |
+  | Long tasks | 411–551 ms | 499–828 ms |
+
+  The ranges overlap: run-to-run noise. Everything is within budget.
+
+
+### 🌅 Daily Health + Talk UX — Phase 0/1 checkpoint (2026-11-01, `v2/daily-health-talk-ux` from `main` `9e6cb18`; STOPPED for review, not merged, not deployed)
+- **Priority change (owner):** Agent Hub / MCP / Muse paused. That work is committed and pushed, untouched: `v2/muse-m0` `ed22fcd`, `v2/agent-hub-m0` `6071ce0`, `v2/household-agent-m1` `5f8de15` (no stash needed — the tree was clean).
+- **Scope:** the WHOOP card on Home (the same component as Health) + a prominent SYNC WHOOP; listening that tolerates pauses; review-before-write for meals/workouts with spoken corrections; deterministic HealthInsights for Talk questions.
+- **Audit findings (repository-verified):**
+  - The voice cut-off is `continuous = false` (`family/app.js:436`) plus an immediate send on `onend` (`family/talk.js:75`).
+  - The WHOOP card is already a pure `whoopHtml` (`family/health.js:173`).
+  - There are three sync paths with no shared in-flight guard: Devices › Sync now ignores `whoopSyncing`. There's no "no newer data" result and no 429 handling.
+  - No Talk path writes without a tap today; meal and workout hand off to their own previews.
+  - `fitnessSummary` double-counts, and several modules date WHOOP workouts by the UTC date.
+  - The WHOOP public API has no battery or charging data (secondary sources; `developer.whoop.com` is unreachable from the session).
+- **Deliverables:** `docs/mockups/daily/CHECKPOINT.md` (all 17 items, files, tests, perf, privacy, decisions a–f), `docs/mockups/daily/screens.html` + `shoot.mjs` (390 / 390 dark / 320 px; the WHOOP card rendered by the real `whoopHtml` + `recoveryContext`). No overflow.
+- **Tests:** `npm test` 501 pass, 0 fail (2026-11-01; no app code changed). **Not run:** perf budget (Phase 2 measures before/after on the same machine).
+- **Decisions needed:** (a) Home order, (b) auto-sync on Home open, (c) pause-to-finish 2.5 s, (d) qualified-day rule, (e) AI phrasing for "why" questions (Worker change → `pawdeploy`), (f) keep WHOOP recovery `updated_at`.
+- **Meal logging redesign (owner, 2026-11-01):** source picker (plan / combos / bars & shakes / smoothie), protein-aware Fit to N kcal, prominent Packaged and Ate out (photo, describe, drinks), "Something else" removed, `src` on logged meals. Design only, in `docs/mockups/daily/REVIEW_PROMPT.md` Part H (the self-contained GPT review prompt for the whole package).
+- **Next:** owner reviews the prompt with GPT; Phase 2 implementation on this branch after explicit approval.
 
 ### 💞 Send a date plan to your partner (2026-11-01, `v2/outing-send` from `main` `9e6cb18`; front end only, merge authorized when no `pawdeploy` is needed)
 - **Owner's report:** a full date plan (Marina, five stops) → **💞 Send to Amani** did nothing.

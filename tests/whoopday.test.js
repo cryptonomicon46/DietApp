@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as D from '../js/whoopDay.js';
+import * as P from '../js/whoopPlan.js';
 import { normalize, complete } from '../js/workout.js';
 import { splitHealth, PARTS } from '../js/healthParts.js';
 
@@ -132,7 +133,7 @@ test('planning facts: exactly the structured fields, nothing private, and they n
   daily[today] = { whoop: { recovery: D.recoveryFacts(rec(9, 's9', 31)), sleep: D.sleepFacts(sleep('s9', 9, '2026-10-30T06:00:00Z', '2026-10-30T14:00:00Z', '-07:00')), cycle: D.cycleFacts(cyc(9, '2026-10-30T06:00:00Z', '-07:00', 4.3)) } };
   const w = normalize({ id: 'wk1', title: 'Upper Body', status: 'planned', notes: 'Pat said go easy', blocks: [{ items: [{ name: 'Bench Press', note: 'shoulder twinge', sets: [{ reps: 8, weight: 135 }, { reps: 8, weight: 135 }, { reps: 8, weight: 135 }] }] }] });
   const past = [40, 50].map((m) => ({ ...complete(normalize({ title: 'Upper Body' })), startedAt: 1e12, doneAt: 1e12 + m * 60000 }));
-  const ctx = D.dayContextForPlanning({ daily, today, workout: w, history: past });
+  const ctx = P.dayContextForPlanning({ daily, today, workout: w, history: past });
   assert.deepEqual(ctx, {
     date: today,
     recovery: { state: 'scored', scoreBand: 'red', relativeToUsual: 'lower' },
@@ -142,8 +143,8 @@ test('planning facts: exactly the structured fields, nothing private, and they n
   });
   const s = JSON.stringify(ctx);
   for (const bad of ['Pat', 'twinge', 'Bench', '61.4', 'hrv', 'resting', 'stage', 'rem', 'spo2', 'skin', '-07:00', '2026-10-29', 'score":31']) assert.ok(!s.toLowerCase().includes(bad.toLowerCase()), bad);
-  assert.equal(D.dayContextForPlanning({ daily, today }).plannedWorkout, null);
-  assert.equal(D.dayContextForPlanning({ daily: {}, today }).recovery.state, 'none');
+  assert.equal(P.dayContextForPlanning({ daily, today }).plannedWorkout, null);
+  assert.equal(P.dayContextForPlanning({ daily: {}, today }).recovery.state, 'none');
   // whoopDaily is in no Health part: it stays in your own full copy, never shared.
   assert.ok(!Object.values(PARTS).flat().includes('whoopDaily'));
   assert.deepEqual(splitHealth({ whoopDaily: daily, workouts: [] }), { diet: {}, fitness: { workouts: [] }, us: {} });
