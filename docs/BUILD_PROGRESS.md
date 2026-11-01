@@ -15,7 +15,7 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
   - `fitnessSummary` double-counts, and several modules date WHOOP workouts by the UTC date.
   - The WHOOP public API has no battery or charging data (secondary sources; `developer.whoop.com` is unreachable from the session).
 - **Deliverables:** `docs/mockups/daily/CHECKPOINT.md` (all 17 items, files, tests, perf, privacy, decisions a–f), `docs/mockups/daily/screens.html` + `shoot.mjs` (390 / 390 dark / 320 px; the WHOOP card rendered by the real `whoopHtml` + `recoveryContext`). No overflow.
-- **Not run:** `npm test` (no app code changed), perf budget (Phase 2 measures before/after).
+- **Tests:** `npm test` 501 pass, 0 fail (2026-11-01; no app code changed). **Not run:** perf budget (Phase 2 measures before/after on the same machine).
 - **Decisions needed:** (a) Home order, (b) auto-sync on Home open, (c) pause-to-finish 2.5 s, (d) qualified-day rule, (e) AI phrasing for "why" questions (Worker change → `pawdeploy`), (f) keep WHOOP recovery `updated_at`.
 - **Next:** Phase 2 implementation on this branch after explicit approval.
 
