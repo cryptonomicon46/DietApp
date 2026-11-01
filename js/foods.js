@@ -127,6 +127,9 @@ const PROTEIN_OPTIONS = ['chicken', 'thigh', 'steak', 'beef', 'salmon', 'wildSal
 // Meal templates. Each item is a slot with swappable `options` (first = default).
 // `drives` = the macro that slot is sized to hit; `fixed` = default grams for a fixed slot.
 // `min`/`max` narrow the food's own range while auto-portioning.
+// The breakfasts the plan rotates through day by day (the order is the rotation: never reorder,
+// or every past and future day's breakfast changes). Others in BREAKFASTS are picked by hand.
+export const BREAKFAST_ROTATION = ['eggs', 'oatmeal'];
 export const BREAKFASTS = {
   eggs: {
     title: () => 'Eggs & toast',
@@ -144,6 +147,16 @@ export const BREAKFASTS = {
       { slot: 'carb', options: ['oats'], drives: 'c', min: 40, max: 120 },
       { slot: 'fruit', options: ['berries', 'frozenBerries', 'strawberries', 'banana'], fixed: 75 },
       { slot: 'fat', options: ['pb', 'almondButter', 'walnuts', 'mixedNuts', 'cashews', 'avocado'], drives: 'f' },
+    ],
+  },
+  // 🥤 Picked from the meal sheet only — not part of the daily rotation (BREAKFAST_ROTATION).
+  smoothie: {
+    title: () => 'Protein smoothie',
+    items: [
+      { slot: 'protein', options: ['whey', 'greekYogurt'], drives: 'p', min: 15, max: 60 },
+      { slot: 'carb', options: ['banana', 'frozenBerries', 'berries', 'strawberries'], drives: 'c', min: 60, max: 300 },
+      { slot: 'liquid', options: ['almondMilk', 'oatMilk'], fixed: 240 },
+      { slot: 'fat', options: ['pb', 'almondButter'], drives: 'f' },
     ],
   },
 };

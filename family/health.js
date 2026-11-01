@@ -141,8 +141,9 @@ const mealList = (f, esc) => (f.meals?.length ? `<div class="hl-meals" role="lis
 function foodRow(f, esc, hot) {
   const cls = `hl-row2${hot ? ' hot' : ''}`;
   if (!f.set) return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><div><b>Your food plan</b><small>Set your goal and Health shows each meal here.</small></div><div class="hl-acts"><a class="btn grow" href="../#weight">Set up Diet</a></div></div>`;
-  // ✓ As planned, or ＋ Something else (one sheet: say it in Talk, a photo, ate out, packaged…).
-  const acts = (m) => `<div class="hl-acts"><button type="button" class="grow" data-ml="plan:${m}">✓ As planned</button><button type="button" class="ghost grow" data-ml="other:${m}">＋ Something else</button></div>`;
+  // ✓ As planned, or 🍴 Ate out. Anything else (another breakfast, a combo, a bar, packaged, Fit
+  // to N kcal) is in the meal's own sheet: tap the meal's name or its chip.
+  const acts = (m) => `<div class="hl-acts"><button type="button" class="grow" data-ml="plan:${m}">✓ As planned</button><button type="button" class="ghost grow" data-ml="out:${m}">🍴 Ate out</button></div>`;
   if (f.off) {
     return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><div><b>${esc(MEAL_NAMES[f.off.meal])} logged ✓</b><small>${esc(f.off.title)} · ${r0(f.off.kcal)} kcal</small></div>
       <p class="hl-ctx">Plans change. ${leftText(f.left)}</p>

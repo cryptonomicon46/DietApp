@@ -1521,6 +1521,26 @@ body.has-talk main { padding-bottom: 96px; }
 .ml-pack { display: block; margin: 6px auto 0; }
 .ml-food { flex-wrap: wrap; } .ml-food .ml-slide { flex: 1 0 100%; width: 100%; accent-color: var(--brand); min-height: 32px; margin: 2px 0 0; }
 .ml-food .ml-unit { flex: 1 0 100%; display: block; margin-top: -2px; min-height: 1em; }
+/* 🍽 The meal sheet's source picker, Fit to, and the two big ways in (Packaged, Ate out). */
+.ml-src { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; min-height: 56px; font-weight: 600; }
+.ml-src small { display: block; color: var(--muted); font-weight: 500; font-size: .8rem; margin-top: 1px; }
+.ml-src > span:last-child { font-size: 1.1rem; color: var(--brand); }
+.ml-picker { max-height: 45vh; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 14px; padding: 4px 10px 10px; display: grid; gap: 4px; background: var(--card); }
+.ml-optg { display: grid; gap: 6px; }
+.ml-optg .ml-label { margin: 8px 2px 0; }
+button.ml-opt, .ml-packs button.ml-opt { width: 100%; text-align: left; background: var(--bg); color: var(--ink); font-weight: 600; min-height: 52px; justify-content: space-between; }
+button.ml-opt small { font-weight: 500; color: var(--muted); font-size: .8rem; margin-top: 1px; }
+button.ml-opt.on { border-color: var(--brand); background: var(--brand-soft); }
+button.ml-opt.on > span:last-child { color: var(--brand); font-weight: 800; }
+.ml-packs { display: grid; gap: 6px; }
+.ml-fit { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 10px; padding: 6px 0 0; }
+.ml-fit > button { min-height: 44px; }
+.ml-fitnote { margin: 0; }
+.ml-big { margin-top: 2px; }
+.ml-big button { min-height: 54px; font-size: 1rem; font-weight: 700; }
+.ml-way.on { border-color: var(--brand); background: var(--brand-soft); }
+.ml-where { color: var(--muted); }
+.ml-outdrinks .ml-drink:last-of-type { border-bottom: 0; }
 /* 👥 Calendar: whose events — Together (everyone) or one person (theirs + shared) */
 .cal-who { display: flex; flex-wrap: wrap; margin: 0 0 10px; }
 .cal-who button { flex: 1 1 auto; min-width: 0; padding: 8px 12px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }

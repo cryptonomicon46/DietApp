@@ -61,16 +61,16 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-11w',
-  title: 'New: ⌚ WHOOP on Home',
-  text: 'Your WHOOP card is now on Home too, with a big Sync WHOOP button for when the WHOOP app is ahead. And date plans: 🧵 Save to a thread, and 💞 Send works for long plans.',
+  id: '2026-11m',
+  title: 'New: 🍽 a better meal sheet, and ⌚ WHOOP on Home',
+  text: 'Tap a meal to pick another breakfast, a smoothie, a combo or a bar, and ⚖️ Fit it to your calories. 📦 Packaged and 🍴 Ate out (photo, describe it, drinks) are right there. And your WHOOP card is on Home with Sync WHOOP.',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '⌚ WHOOP on Home', cards: [
-  ['⌚', 'Your WHOOP card on Home', 'The same Sleep, Recovery and Strain card as in Health, right under Talk — only on a phone where WHOOP is connected.'],
-  ['⟳', 'Sync WHOOP', 'WHOOP has newer numbers? Tap it. It says when something new came in, when there’s nothing newer yet, or when WHOOP needs reconnecting.'],
-  ['🧵', 'Save a date plan to a thread', 'Opens Write it up with the whole timeline (💞 Just us, 🥂 Date plans) for last edits before you post.'],
-  ['💞', 'Send long plans', 'A long date plan now sends to your partner (the extra options are left out so it fits).'],
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '🍽 Meals, ⌚ WHOOP', cards: [
+  ['🍽', 'Pick what the meal is', 'Tap a meal, then the button under its name: today’s plan, another breakfast, a 🥤 smoothie, your combos (and your partner’s, if shared), a bar or shake.'],
+  ['⚖️', 'Fit to your calories', 'Type 300, 400… or tap − / ＋. Protein stays; carbs and fat change. It remembers yours for each meal.'],
+  ['🍴', 'Ate out, in one place', 'A photo of the dish, describe it, or pick the closest plate — and add drinks on the same screen. 📦 Packaged shows your saved ones first.'],
+  ['⌚', 'WHOOP on Home', 'The same card as Health, right under Talk, with a big Sync WHOOP for when the WHOOP app is ahead.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);
