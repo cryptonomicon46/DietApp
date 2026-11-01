@@ -18,7 +18,7 @@ export const SLIDES = [
     ['🐾', 'The dogs', 'Fed, walked, park, treats, meds; appointments, vaccines and more under More about the dogs.'],
   ] },
   { id: 'threads', eyebrow: '📖 Threads', title: 'Longer conversations, and your photos', go: 'threads', cards: [
-    ['📚', 'Write it up', 'Learned, Talk, How-to, ❓ Ask or 📊 Poll — for just you two, the family, or friends’ families.'],
+    ['📚', 'Write it up', 'Learned, Talk, How-to, ❓ Ask, 📊 Poll or 🥂 Date plans — for just you two, the family, or friends’ families.'],
     ['📷', 'Screenshots and 📎 PDFs', 'Add plan comparisons, tables or a whole deck as a PDF: pick, paste or drag them in.'],
     ['🏷️', 'Tag people', 'Tap a face or type @. They get a notification, and you see when they’ve seen it.'],
     ['🔎', 'Search and ★ Saved', 'Find anything said in a thread — searched on your phone. ☆ Save the ones you’ll want again.'],

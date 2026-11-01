@@ -20,6 +20,49 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 - **Meal logging redesign (owner, 2026-11-01):** source picker (plan / combos / bars & shakes / smoothie), protein-aware Fit to N kcal, prominent Packaged and Ate out (photo, describe, drinks), "Something else" removed, `src` on logged meals. Design only, in `docs/mockups/daily/REVIEW_PROMPT.md` Part H (the self-contained GPT review prompt for the whole package).
 - **Next:** owner reviews the prompt with GPT; Phase 2 implementation on this branch after explicit approval.
 
+### 💞 Send a date plan to your partner (2026-11-01, `v2/outing-send` from `main` `9e6cb18`; front end only, merge authorized when no `pawdeploy` is needed)
+- **Owner's report:** a full date plan (Marina, five stops) → **💞 Send to Amani** did nothing.
+- **Cause:**
+  - The connector keeps a sealed Us plan only up to 8,000 characters (`server/family.js` `/us/plans`: `sealed(v, 8000)`).
+  - A full plan sealed is bigger than that, so the server answered 400.
+  - The error toast was behind the open sheet: a modal `<dialog>` is the top layer, and `#toast` lives in `body`. So nothing seemed to happen.
+- **Fixed:**
+  - `js/outingShare.js` (new, pure): `sealedLength` is exactly what `seal()` makes. `shareable()` sends the fullest version that fits:
+    - first the other options go;
+    - then long descriptions are shortened;
+    - every stop, time and link stays.
+  - The planner's own copy is unchanged.
+  - **Send** is disabled while sending, and the toast says when descriptions were shortened.
+  - `toast()` shows inside the open sheet, so an error from any sheet's button is now visible (a fix for every sheet, not just this one).
+  - Outing stop notes wrap instead of running off the card (the owner's screenshot cut "…It is tiny and pop").
+- **Tests:** `tests/outingshare.test.js`:
+  - `sealedLength` equals real `seal()` output;
+  - the old five-stop payload is over the limit, and the new one fits with all stops and links;
+  - a small plan is sent unchanged;
+  - missing options or tips don't break it;
+  - an impossibly long plan returns null.
+  - `npm test` 506 pass.
+- **Browser check** (local Pages + `wrangler dev`, synthetic family, 390 px): a long saved plan → Send → `POST /us/plans` 200, "💞 Sent — Pat can say 🙌 I'm in", and the plan appears on Us. With the POST forced to 500, the error toast is shown on top of the open sheet. Notes don't overflow.
+- **Follow-up:** 🧵 Save to a thread, below.
+
+### 🧵 Save a date plan to a thread (2026-11-01, `v2/outing-thread` on top of `v2/outing-send`; **needs `pawdeploy` for the label**, so it isn't merged)
+- **Owner:** "save is a useless option, instead it should be save to a thread… waits for any final edits before saving… dinner/date plans label".
+- **Built:**
+  - 💾 Save, which only kept the plan on this phone (every plan is already kept there under Recent), is replaced by **🧵 Save to a thread**.
+  - It opens ✍️ Write it up pre-filled for final edits; nothing posts until Post. The pre-fill is:
+    - **💞 Just us** (the family, for someone without a partner);
+    - **🥂 Date plans**;
+    - the title "🧭 {plan} · {day}";
+    - the whole timeline as the body (`js/outingShare.js` `outingThread`): getting there, each stop as a heading with its time, note, why, place and OpenTable/website/map links, then tips.
+  - An unfinished thread draft is replaced only after you confirm.
+- **Connector:** `server/threads.js` `CATS` gains `dates: '🥂 Date plans'`.
+  - Until the next `pawdeploy`, the live connector files such a thread as 💬 Talk; it falls back on an unknown category, so nothing breaks.
+- **Tests:** `outingThread` keeps every stop, its time and links, and uses Threads' markdown (no bold). `npm test` passes.
+- **Browser check** (local Pages + `wrangler dev` from this branch, synthetic family, 390 px light and dark):
+  - the plan sheet shows *🧵 Save to a thread* · *💞 Send to Pat*;
+  - the pre-filled form reads `aud=us`, `cat=dates`;
+  - after Post, Threads lists "🥂 Date plans · 💞 Just us · 🧭 Golden hour in the Marina · Sat, Dec 5", and the thread renders its headings and links.
+
 ### 🧗 Class links back on Home + a clearer "microphone blocked" (2026-10-31, `v2/home-classes` from `main` `2e8daf9`; merge authorized when no `pawdeploy` is needed)
 - **Owner's report:** the Movement Sunnyvale / Santa Clara links (fitness, calendar) were gone from Home; add Hot 8 Yoga at Santana Row. Amani tapped Don't Allow once and Talk no longer hears her, even after re-adding the Home Screen icon.
 - **Cause (links):** they were in the old feed's 🏃 Your day card (`renderYourDay`), which the five-tab redesign took out of navigation.
