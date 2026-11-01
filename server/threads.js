@@ -7,7 +7,7 @@
 import { okPhotoId, deletePhoto, SIZES } from './photos.js';
 
 export const BOARDS = { family: '👨‍👩‍👧 Family', dogs: '🐾 Dogs', house: '🏠 House & money', app: '💡 App feedback' };
-export const CATS = { learned: '📚 Learned', talk: '💬 Talk', howto: '📌 How-to', ask: '❓ Ask', poll: '📊 Poll' };
+export const CATS = { learned: '📚 Learned', talk: '💬 Talk', howto: '📌 How-to', ask: '❓ Ask', poll: '📊 Poll', dates: '🥂 Date plans' };
 
 // 📷 Screenshots on a thread (plan comparisons, tables…): photo files locked with the thread's key,
 // with an optional sealed caption each. At most 12.

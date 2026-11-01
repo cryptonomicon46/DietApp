@@ -31,3 +31,26 @@ export function shareable(outing, wrap = (o) => o, max = MAX) {
   }
   return null;
 }
+
+// 🧵 Save to a thread: the plan as a thread's title and body (Threads' plain-text markdown: "## " and
+// "### " headings, "- " lists), opened in Write it up for any last edits before it's posted. Every stop
+// keeps its time, place, note and links. → { title, body } (body ≤ `max` characters).
+const clock = (t) => { const m = String(t || '').match(/^(\d{1,2}):(\d{2})/); if (!m) return ''; const h = +m[1]; return `${h % 12 || 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`; };
+const dayLong = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? new Date(`${d}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '');
+export function outingThread(o, max = 11000) {
+  const title = `🧭 ${o.title}${o.day ? ` · ${dayLong(o.day)}` : ''}`.slice(0, 120);
+  const line = (x) => {
+    const links = [x.reserve ? `OpenTable: ${x.reserve}` : '', x.url ? `Website: ${x.url}` : '', x.map ? `Map: ${x.map}` : ''].filter(Boolean);
+    // Threads' markdown (family/app.js mdBlocks): "### " a heading, the lines under it one paragraph.
+    return [`### ${clock(x.time) ? `${clock(x.time)} · ` : ''}${x.name}${x.price ? ` (${x.price})` : ''}`, x.note, [x.why, x.where].filter(Boolean).join(' · '), links.join(' · ')].filter(Boolean).join('\n');
+  };
+  const parts = [
+    `${o.area || ''}${o.day ? ` · ${dayLong(o.day)}` : ''}`.replace(/^ · /, ''),
+    (o.getting || []).length || o.back || o.parking ? `## Getting there\n${[...(o.getting || []).map((g) => `- ${clock(g.depart) ? `Leave ${clock(g.depart)} · ` : ''}${g.text}`), o.parking ? `- 🅿️ ${o.parking}` : '', o.back ? `- ↩︎ ${o.back}` : '', o.directions ? `- Directions: ${o.directions}` : ''].filter(Boolean).join('\n')}` : '',
+    (o.stops || []).length ? `## The plan\n\n${o.stops.map(line).join('\n\n')}` : '',
+    (o.tips || []).length ? `## Tips\n${o.tips.map((t) => `- ${t}`).join('\n')}` : '',
+  ].filter(Boolean);
+  let body = parts.join('\n\n');
+  if (body.length > max) body = `${body.slice(0, max - 1).trimEnd()}…`;
+  return { title, body };
+}

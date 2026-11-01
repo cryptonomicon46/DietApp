@@ -2391,7 +2391,7 @@ function outingView() {
     go,
   }[outing.tab];
   const p = outing.plan, meId = fam().me;
-  const foot = !p ? `<div class="row"><button type="button" class="ghost grow" data-act="outsave">💾 Save</button>${partnerMember() ? `<button type="button" class="hot grow" data-act="outsend">💞 Send to ${esc(partnerName())}</button>` : ''}</div>`
+  const foot = !p ? `<div class="row"><button type="button" class="ghost grow" data-act="outthread">🧵 Save to a thread</button>${partnerMember() ? `<button type="button" class="hot grow" data-act="outsend">💞 Send to ${esc(partnerName())}</button>` : ''}</div>`
     : p.by !== meId && !p.replies?.[meId] ? `<div class="ans">${Object.entries(ANSWERS).map(([k, t], i) => `<button type="button" class="${i ? 'ghost' : ''} small" data-answer="${p.id}:${k}">${t}</button>`).join('')}</div>` : '';
   openSheet(`<div class="row between"><h2>🧭 ${esc(o.title)}</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
     <p class="small muted">${esc(o.area)} · ${esc(dayText(o.day))}</p>
@@ -2450,10 +2450,18 @@ async function cuisinePick(i, cuisine) {
   jobWait(id, `🍽 Finding ${cuisine || 'something else'} near ${o.area.split(',')[0]}…`);
   runJob('swap', body, `🍽 ${cuisine ? cuisine[0].toUpperCase() + cuisine.slice(1) : 'Other'} picks`, { outing: `${o.title}|${o.day}`, stop: i });
 }
-function outingSave() {
-  const l = [outing.cur, ...savedOutings().filter((x) => !(x.title === outing.cur.title && x.day === outing.cur.day))].slice(0, 8);
-  try { LS.set(outKey(), JSON.stringify(l)); toast('💾 Saved on this phone'); } catch { toast("Couldn't save — this phone is out of space"); }
-  renderOutingCard();
+// 🧵 Save to a thread (it replaced 💾 Save, which only kept it on this phone — every plan is kept
+// there anyway, under Recent): the plan opens in ✍️ Write it up — 💞 Just us, 🥂 Date plans, the
+// whole timeline as the body — for any last edits; nothing is posted until you tap Post.
+async function outingToThread() {
+  const o = outing.cur;
+  if (!o) return;
+  const S = await import(`../js/outingShare.js?v=${VERSION}`);
+  const { title, body } = S.outingThread(o);
+  let d = {}; try { d = JSON.parse(LS.get(draftKey()) || '{}'); } catch { /* none */ }
+  const had = (d.title || d.body || '').trim() && d.title !== title;
+  if (had && !confirm('Replace the thread you were writing with this plan? (Your unfinished draft is replaced.)')) return;
+  writeupSheet({ aud: partnerMember() ? 'us' : 'family', cat: 'dates', title, body });
 }
 // The calendar event's notes: getting there, the timeline with links, and the way home.
 const outingNotes = (o) => [...o.getting.map((g) => `${MODE_ICON[g.mode] || '🚌'} ${g.depart ? `${hm(g.depart)} ` : ''}${g.text}`),
@@ -2689,7 +2697,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ---------- 📖 threads: write-ups read in your own time, with replies, polls and best answers ----------
-const THREAD_CATS = { learned: ['📚', 'Learned'], talk: ['💬', 'Talk'], howto: ['📌', 'How-to'], ask: ['❓', 'Ask'], poll: ['📊', 'Poll'] };
+const THREAD_CATS = { learned: ['📚', 'Learned'], talk: ['💬', 'Talk'], howto: ['📌', 'How-to'], ask: ['❓', 'Ask'], poll: ['📊', 'Poll'], dates: ['🥂', 'Date plans'] };
 const THREAD_BOARDS = { us: '💞 Just us', family: '👨‍👩‍👧 Family', dogs: '🐾 Dogs', house: '🏠 House & money', app: '💡 App feedback', friends: "🤝 Friends'", saved: '★ Saved' };
 // 🗂 The built-in boards and the family's own ("🎓 School"…).
 const ownBoards = () => fam()?.boards || [];
@@ -3006,7 +3014,8 @@ function writeupSheet(preset = {}) {
   const aud = preset.aud || d.aud || (state.view === 'us' && p ? 'us' : 'family');
   // Writing from a board (💡 App feedback, 🐾 Dogs…) puts it on that board.
   const here = ['family', 'dogs', 'house', 'app', ...ownBoards().map((b) => b.id)].includes(th.board) ? th.board : 'family';
-  const v = { aud, board: d.board || here, cat: preset.cat || d.cat || (aud === 'us' ? 'learned' : 'talk'), title: d.title || '', body: d.body || '', opts: d.opts || ['', ''] };
+  // A preset title/body (🧭 an outing's 🧵 Save to a thread) replaces the draft; the caller asks first.
+  const v = { aud, board: d.board || here, cat: preset.cat || d.cat || (aud === 'us' ? 'learned' : 'talk'), title: preset.title ?? d.title ?? '', body: preset.body ?? d.body ?? '', opts: preset.title != null ? ['', ''] : d.opts || ['', ''] };
   const auds = [...(p ? [['us', `💞 Just ${p.name}`]] : []), ['family', '👨‍👩‍👧 Family'], ...(hasFriends ? [['connections', "🤝 Friends' families"]] : [])];
   const boards = [['family', 'General'], ...((fam().modules || []).includes('dogs') ? [['dogs', '🐾 Dogs']] : []), ['house', '🏠 House & money'], ['app', '💡 App feedback'], ...ownBoards().map((b) => [b.id, b.label])];
   openSheet(`<div class="row between"><h2>✍️ Write it up</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
@@ -4729,7 +4738,7 @@ document.addEventListener('click', (e) => {
         .catch((err) => { toast(err.message); t.textContent = '✨ Tidy it up'; }).finally(() => { t.disabled = false; });
     }
     case 'untidy': { const ta = $('#writeForm [name=body]'); ta.value = t.dataset.before || ta.value; saveDraft(); t.textContent = '✨ Tidy it up'; t.dataset.act = 'tidy'; return; }
-    case 'outsave': return outingSave();
+    case 'outthread': return act(outingToThread);
     case 'outsend': return act(outingSend);
     case 'ideaunpass': LS.set(passKey(), null); ideas.i = 0; return ideasSheet();
     case 'ideas': return act(async () => { if (!ideas.loaded) await loadIdeas(); ideas.i = 0; ideasSheet(); });

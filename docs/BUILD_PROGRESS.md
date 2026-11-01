@@ -27,7 +27,25 @@ Last update: 2026-10-30 — 🗣️ Talk to Pawmily T1 (built, stopped for revie
   - an impossibly long plan returns null.
   - `npm test` 506 pass.
 - **Browser check** (local Pages + `wrangler dev`, synthetic family, 390 px): a long saved plan → Send → `POST /us/plans` 200, "💞 Sent — Pat can say 🙌 I'm in", and the plan appears on Us. With the POST forced to 500, the error toast is shown on top of the open sheet. Notes don't overflow.
-- **Follow-up (owner's idea, not built yet):** replace 💾 Save (this phone only) with **Save to a thread**. It opens the existing Write-it-up sheet pre-filled ("💞 Just us", the plan as the body) for final edits before posting. A "Date plans" label needs a new thread category on the connector (`pawdeploy`).
+- **Follow-up:** 🧵 Save to a thread, below.
+
+### 🧵 Save a date plan to a thread (2026-11-01, `v2/outing-thread` on top of `v2/outing-send`; **needs `pawdeploy` for the label**, so it isn't merged)
+- **Owner:** "save is a useless option, instead it should be save to a thread… waits for any final edits before saving… dinner/date plans label".
+- **Built:**
+  - 💾 Save, which only kept the plan on this phone (every plan is already kept there under Recent), is replaced by **🧵 Save to a thread**.
+  - It opens ✍️ Write it up pre-filled for final edits; nothing posts until Post. The pre-fill is:
+    - **💞 Just us** (the family, for someone without a partner);
+    - **🥂 Date plans**;
+    - the title "🧭 {plan} · {day}";
+    - the whole timeline as the body (`js/outingShare.js` `outingThread`): getting there, each stop as a heading with its time, note, why, place and OpenTable/website/map links, then tips.
+  - An unfinished thread draft is replaced only after you confirm.
+- **Connector:** `server/threads.js` `CATS` gains `dates: '🥂 Date plans'`.
+  - Until the next `pawdeploy`, the live connector files such a thread as 💬 Talk; it falls back on an unknown category, so nothing breaks.
+- **Tests:** `outingThread` keeps every stop, its time and links, and uses Threads' markdown (no bold). `npm test` passes.
+- **Browser check** (local Pages + `wrangler dev` from this branch, synthetic family, 390 px light and dark):
+  - the plan sheet shows *🧵 Save to a thread* · *💞 Send to Pat*;
+  - the pre-filled form reads `aud=us`, `cat=dates`;
+  - after Post, Threads lists "🥂 Date plans · 💞 Just us · 🧭 Golden hour in the Marina · Sat, Dec 5", and the thread renders its headings and links.
 
 ### 🧗 Class links back on Home + a clearer "microphone blocked" (2026-10-31, `v2/home-classes` from `main` `2e8daf9`; merge authorized when no `pawdeploy` is needed)
 - **Owner's report:** the Movement Sunnyvale / Santa Clara links (fitness, calendar) were gone from Home; add Hot 8 Yoga at Santana Row. Amani tapped Don't Allow once and Talk no longer hears her, even after re-adding the Home Screen icon.
