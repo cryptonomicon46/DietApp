@@ -4,7 +4,7 @@
 // stay on this phone only (js/photos.js: IndexedDB, never synced, uploaded or sent to AI).
 // Loaded the first time you tap Save on Health's weight row (or 📸 Photos once you've weighed in).
 let c = null; // { esc, openSheet, closeSheet, toast, saveWeight, owner, VERSION }
-const st = { lb: null, last: null, files: [], mode: 'weigh', busy: false };
+const st = { lb: null, last: null, files: [], mode: 'weigh', busy: false, done: [], more: false };
 let P = null;
 const photos = () => (P ||= import(`../js/photos.js?v=${c.VERSION}`).catch((e) => { P = null; throw e; }));
 
@@ -30,7 +30,10 @@ const urls = new Map();
 const urlOf = (f) => { if (!urls.has(f)) urls.set(f, URL.createObjectURL(f)); return urls.get(f); };
 function dropUrls() { for (const u of urls.values()) URL.revokeObjectURL(u); urls.clear(); }
 
+// Today's photos already in (their poses): one quiet line instead of asking again, with Add more.
+export const doneLine = (done) => (done?.length ? `📸 ✓ Today's photos are in (${done.map((p) => LABEL[p] || p).join(' · ')})` : '');
 function photosHtml() {
+  if (st.done.length && !st.files.length && !st.more) return `<p class="small muted wi-done">${E(doneLine(st.done))} · <button type="button" class="linkish small" data-wi="more">Add more</button></p>`;
   const tiles = st.files.map((x, i) => `<figure class="wi-tile"><img src="${urlOf(x.file)}" alt="${LABEL[x.pose]} photo">
       <button type="button" class="ghost wi-pose" data-wi="pose:${i}" aria-label="${LABEL[x.pose]} — tap to change">${LABEL[x.pose]} ↻</button>
       <button type="button" class="wi-x" data-wi="drop:${i}" aria-label="Remove the ${LABEL[x.pose].toLowerCase()} photo">✕</button></figure>`).join('');
@@ -56,15 +59,15 @@ function render() {
 }
 
 // Save on Health's weight row: check it first.
-export function confirm(lb, last) {
+export function confirm(lb, last, done = []) {
   dropUrls();
-  Object.assign(st, { lb, last, files: [], mode: 'weigh', busy: false });
+  Object.assign(st, { lb, last, files: [], mode: 'weigh', busy: false, done, more: false });
   render();
 }
 // 📸 Photos on Health once you've weighed in.
 export function photosOnly() {
   dropUrls();
-  Object.assign(st, { lb: null, last: null, files: [], mode: 'photos', busy: false });
+  Object.assign(st, { lb: null, last: null, files: [], mode: 'photos', busy: false, done: [], more: false });
   render();
 }
 export function onPick(input) {
@@ -87,6 +90,7 @@ export async function onClick(t) {
   if (k === 'pose') { const x = st.files[+i]; if (x) x.pose = nextPose(x.pose); return render(); }
   if (k === 'drop') { st.files.splice(+i, 1); return render(); }
   if (k === 'photos') return photosOnly();
+  if (k === 'more') { st.more = true; return render(); }
   if (st.busy) return null;
   if (k === 'savephotos') {
     st.busy = true; render();
@@ -102,6 +106,7 @@ export async function onClick(t) {
     const lb = st.lb.toFixed(1);
     dropUrls(); c.closeSheet();
     c.toast(`⚖️ ${lb} lb saved${n ? ` · 📸 ${n} photo${n === 1 ? '' : 's'} on this phone` : ''} · ${r.line}${photoErr ? ` — photos not saved: ${photoErr}` : ''}`);
+    if (n) c.refresh(); // the weight row then says today's photos are in
     return null;
   }
   return null;

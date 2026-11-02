@@ -558,7 +558,7 @@ function talk() {
 async function healthView() {
   $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div><div class="skeleton card"></div>`;
   const wh = whoopHere();
-  const [H, rec, F, nudges, WD] = await Promise.all([import(`./health.js?v=${VERSION}`), memberData().catch(() => null), fit().catch(() => null), loadNudges().catch(() => null), wh ? import(`../js/whoopDay.js?v=${VERSION}`).catch(() => null) : null]);
+  const [H, rec, F, nudges, WD, photosToday] = await Promise.all([import(`./health.js?v=${VERSION}`), memberData().catch(() => null), fit().catch(() => null), loadNudges().catch(() => null), wh ? import(`../js/whoopDay.js?v=${VERSION}`).catch(() => null) : null, posesToday().catch(() => [])]);
   if (state.view !== 'health') return;
   const data = await openData(rec);
   if (data.locked) { $('#view').innerHTML = `${demoBanner()}<section class="card"><b>🔒 Locked on this device</b><p class="small muted">This device needs the family key to show your Health. Me › 🔐 Encryption.</p></section>`; return; }
@@ -566,8 +566,17 @@ async function healthView() {
   health.data = data;
   if (mealMod) mealMod.then((M) => M.setData(data)).catch(() => {});
   const whoop = wh && WD ? whoopModel(wh, WD, F ? F.lighterState() : null) : null;
-  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), hour: new Date().getHours(), now: Date.now(), workout: F ? F.healthRow(esc) : undefined, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), devices: devicesLine(), whoop })}</div>`;
+  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), hour: new Date().getHours(), now: Date.now(), photosToday, workout: F ? F.healthRow(esc) : undefined, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), devices: devicesLine(), whoop })}</div>`;
   if (wh) { whoopAutoSync(); whoopTicker(); }
+}
+// 📸 The poses of today's progress photos on this phone (js/photos.js; never leaves it).
+async function posesToday() {
+  let owner = null;
+  try { owner = JSON.parse(localStorage.getItem('lp.g.owner')); } catch { /* none */ }
+  if (!owner || !('indexedDB' in window)) return [];
+  const PH = await import(`../js/photos.js?v=${VERSION}`), today = isoLocal();
+  const poses = new Set((await PH.allPhotos(owner)).filter((p) => p.date === today).map((p) => p.pose));
+  return ['front', 'side', 'back'].filter((p) => poses.has(p));
 }
 // ⌚ WHOOP on this phone (its sign-in and what it brought in live only here), read without loading
 // anything: null when WHOOP isn't connected, so Health shows nothing extra and asks for nothing.
@@ -754,7 +763,7 @@ async function saveWeighIn(f) {
   const lb = Math.round(parseFloat(f.lb.value) * 10) / 10;
   if (!(lb >= 60 && lb <= 700)) return toast('Type your weight in pounds (60–700)');
   const today = isoLocal(), last = [...(health.data?.weights || [])].filter((x) => x.date < today && x.weight > 0).sort((a, b) => a.date.localeCompare(b.date)).pop() || null;
-  return act(async () => (await weighIn()).confirm(lb, last));
+  return act(async () => (await weighIn()).confirm(lb, last, await posesToday().catch(() => [])));
 }
 // ⌚ Devices (Health › Devices): family/deviceScreen.js, loaded when you open Devices or come back
 // from connecting WHOOP.
