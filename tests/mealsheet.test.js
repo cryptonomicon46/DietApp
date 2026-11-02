@@ -2,7 +2,7 @@
 // rotated in), and where each logged meal came from (sourceContext / captureMethod).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitPortions, isProtein } from '../js/mealFit.js';
+import { fitPortions, fitMacros, perMealProtein, isFreeVeg } from '../js/mealFit.js';
 import { FOODS, BREAKFASTS, BREAKFAST_ROTATION } from '../js/foods.js';
 import { planForDay, portionMeal } from '../js/plan.js';
 import * as D from '../js/dayPlan.js';
@@ -13,32 +13,53 @@ const eggs = [
   { slot: 'carb', food: 'sourdough', grams: 50 }, { slot: 'fat', food: 'avocado', grams: 30 },
 ];
 
-test('fit to fewer calories keeps the protein and trims carbs and fat', () => {
-  assert.ok(isProtein(FOODS.eggWhites) && !isProtein(FOODS.sourdough) && !isProtein(FOODS.avocado));
-  const r = fitPortions(eggs, 300, FOODS);
-  assert.equal(r.grams.protein, undefined, 'egg whites untouched');
-  assert.ok(r.grams.carb < 50 && r.grams.fat < 30);
-  assert.equal(r.proteinCut, false);
-  assert.ok(r.reached, `came to ${r.kcal}`);
-  assert.equal(r.kcal, kcalOf(eggs, r.grams));
+test('fit macros: protein in grams (≤ ½ the calories, ≥ 0.4 g/kg), carbs and fat in the plan\'s ratio', () => {
+  const plan = { p: 72, c: 48, f: 22 };
+  const a = fitMacros(400, plan, { minP: 33 });
+  assert.equal(a.p, 50, 'half of 400 kcal');
+  assert.ok(Math.abs((a.c * 4) / (a.c * 4 + a.f * 9) - (48 * 4) / (48 * 4 + 22 * 9)) < 0.03, 'the plan\'s carb : fat split');
+  assert.ok(Math.abs(a.p * 4 + a.c * 4 + a.f * 9 - 400) <= 10);
+  assert.equal(fitMacros(800, plan, { minP: 33 }).p, 72, 'a bigger meal keeps the planned protein');
+  assert.equal(fitMacros(220, plan, { minP: 33 }).p, 33, 'never under 0.4 g/kg while that is ≤ 60 %');
+  assert.equal(fitMacros(150, plan, { minP: 33 }).p, 23, '…and over 60 % it gives way');
+  assert.equal(perMealProtein(180), 33);
+  assert.equal(fitMacros(700, { p: 90, c: 20, f: 20 }, { minP: 33, maxShare: 0.6 }).p, 90, 'What\'s left can make up protein');
 });
 
-test('fit to more calories grows carbs and fat, never past their range', () => {
-  const r = fitPortions(eggs, 600, FOODS);
-  assert.ok(r.grams.carb > 50 && r.grams.fat > 30);
-  for (const x of eggs) if (r.grams[x.slot] != null) assert.ok(r.grams[x.slot] <= Math.max(FOODS[x.food].range?.[1] ?? 2000, x.grams), x.food);
-});
-
-test('too few calories to keep the protein: everything shrinks, and it says so', () => {
-  const r = fitPortions(eggs, 150, FOODS);
-  assert.equal(r.proteinCut, true);
-  assert.ok(r.grams.protein < 240);
+test('fit to a plan meal: lands on N, protein first, the same foods smaller or bigger, veg kept', () => {
+  const data = { profile: { sex: 'male', age: 40, heightIn: 70, weight: 180, goal: 'lose', rate: 1 }, weights: [{ date: '2026-11-01', weight: 180 }] };
+  for (const day of ['2026-11-02', '2026-11-03']) for (const meal of ['breakfast', 'lunch', 'dinner']) {
+    const m = D.planOf(data, day)[meal], live = m.portions.filter((x) => x.grams > 0);
+    for (const n of [300, 400, 500, 600, 800]) {
+      const r = fitPortions(m.portions, n, FOODS, { plan: m.target, minP: perMealProtein(180) }), tag = `${day} ${meal} ${n}`;
+      assert.ok(r.reached, `${tag}: came to ${r.kcal}`);
+      assert.equal(r.kcal, kcalOf(m.portions, r.grams), tag);
+      for (const x of live) {
+        const g = r.grams[x.slot] ?? x.grams;
+        assert.ok(g > 0, `${tag}: ${x.food} stays in the meal`);
+        if (n < m.totals.kcal) assert.ok(g <= x.grams, `${tag}: ${x.food} never grows when fitting down`);
+        else assert.ok(g >= x.grams, `${tag}: ${x.food} never shrinks when fitting up`);
+        if (isFreeVeg(FOODS[x.food]) && n >= 350) assert.equal(g, x.grams, `${tag}: veg kept`);
+      }
+      // A lean protein reaches its aim; a fatty one (salmon) gets as close as its fat allows.
+      const lean = live.some((x) => ['chicken', 'eggWhites', 'whey', 'trout', 'beef'].includes(x.food));
+      if (lean && (n < m.totals.kcal || r.aim.p <= m.totals.p)) assert.ok(r.macros.p >= r.aim.p - 5, `${tag}: protein ${r.macros.p} vs aim ${r.aim.p}`);
+      assert.ok(r.macros.p * 4 <= Math.max(n * 0.55, m.totals.p * 4 * 1.15), `${tag}: protein isn't more than about half`);
+    }
+  }
 });
 
 test('locked foods never move; nothing to fit returns nothing', () => {
   const r = fitPortions(eggs.map((x) => (x.slot === 'carb' ? { ...x, locked: true } : x)), 320, FOODS);
   assert.equal(r.grams.carb, undefined);
   assert.deepEqual(fitPortions([], 300, FOODS).grams, {});
+});
+
+test('What\'s left: aims for the day\'s remaining macros', () => {
+  const aim = { p: 60, c: 20, f: 15 };
+  const r = fitPortions(eggs, 480, FOODS, { aim });
+  assert.deepEqual(r.aim, aim);
+  assert.ok(r.reached && r.macros.p >= 52, JSON.stringify(r.macros));
 });
 
 test('the smoothie is sized to the meal, and never joins the daily rotation', () => {

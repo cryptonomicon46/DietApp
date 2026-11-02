@@ -28,6 +28,59 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 - No results: *🎧 Fruit Fly · Josh Silver · as you said it (not in the book catalogue) → Want to Read*, with 🎧 Audiobook selected.
 - Pest-book results: *Which book? The book catalogue has nothing by Josh Silver called that*, with *＋ Fruit Fly · Josh Silver · add it as you said it* first.
 - A Josh Silver result: picked straight away. Added, and asking again gives "Already Want to Read".
+### ⚖️ Fit by nutrition science, weigh-in check + 📸 front/side/back, ✓ just-logged macros (2026-11-02, `v2/fit-weigh-summary` from `main` `4e793a5`; front end only, no `pawdeploy`; owner asked to confirm the fit math, and for the weigh-in check, photos and meal summary)
+
+**Merged:** PR #35 (meal locks) → `main` `4e793a5`; PR #36 (this entry, plus clear lock icons — drawn open padlock in a dashed ring when unlocked, green "🔒 Locked" pill when locked, since the 🔓/🔒 emoji look alike on a phone) → `main` `f907eaf`. Both front end only.
+
+**Fit audit (before).** Probe: the seeded 180 lb profile, Nov 2–3 plan meals, fitted to 300/400/500/600/800 kcal. The old rule kept "mostly protein" foods and scaled everything else evenly, or scaled everything once carbs and fat would fall under ¼. Findings:
+- 95/5 beef dinner at 400 kcal: protein dropped from 72 to 42 g.
+- Chicken lunch at 400 kcal: protein 60 g, but rice cut to 14 g carbs.
+- Veggies counted as "protein" (19 kcal/100 g), and were shrunk or kept depending on the case.
+- Salmon (only ~43 % of its calories are protein) shrank with everything else.
+
+**Fit now** (`js/mealFit.js`):
+- `fitMacros` sets the aim. Protein is in grams: the meal's planned amount, capped at ½ of N, with a floor of 0.4 g/kg (Schoenfeld & Aragon 2018; daily 1.6–2.2 g/kg, Morton 2018) unless the floor alone is over 60 %. Carbs and fat split the rest in the plan's own ratio.
+- `fitPortions` finds the grams by weighted least squares. It keeps veg fixed (unless under 350 kcal), only shrinks foods when fitting down and only grows them when fitting up, keeps every food in the meal, and leaves 🔒 locked amounts alone.
+- What's left aims for the day's remaining macros, with protein allowed up to 60 %.
+- The trackers' Fit uses it too.
+
+After, with the same probe:
+
+| Meal | Fit | P / C / F |
+| --- | --- | --- |
+| Beef dinner | 400 | 46 / 20 / 16 |
+| Beef dinner | 800 | 75 / 62 / 27 |
+| Chicken lunch | 400 | 50 / 25 / 10 |
+| Oatmeal | 300 | 37 / 20 / 9 |
+
+Every case lands within 5 % of N.
+
+**Weigh-in** (`family/weighin.js`, lazy):
+- Health's Save opens *Save today's weight?*. It shows the number and the change since the last weigh-in. A jump of more than 5 lb or 3 % reads "— is that right?".
+- **📸 Add progress photos** on the same screen: pick up to 3 at once; they're labelled front, side, back in pick order (tap a label to cycle, ✕ to drop).
+- **✓ Save N lb + 3 photos** saves both. Once weighed, the row has **📸 Progress photos**.
+- Photos go to the same on-phone IndexedDB as Food › Weight (`js/photos.js` `savePhotos`, owner `lp.g.owner`). They are never synced or uploaded.
+
+**Just logged** (`family/health.js`):
+- Logged meals now carry `ts`. For an hour after logging or updating a meal, the food row shows *✓ Breakfast logged · 8:05 AM · title · kcal · on plan / ±N kcal vs plan* with P · C · F chips, and the next meal's preview under it.
+- It ends at the next meal's window (`MEAL_HOURS`), but always shows at least 15 minutes. Older meals without `ts` are read from `at`.
+- The "X is next" preview now shows the planned P · C · F.
+
+**Privacy:**
+- Weights go through `editMine`, as before.
+- Photos stay on the phone, as before; the privacy page now says photos can be added from Health.
+- Nothing new is sent to the server or to AI.
+
+**Tests:**
+- `tests/mealsheet.test.js`: fit tests rewritten for the new spec. One checks every plan meal × 5 targets for: reached, protein, the shrink-only/grow-only rule, veg kept, nothing dropped. Also covers What's left and locks.
+- `tests/health.test.js` (+2): just-logged timing, the 15-minute minimum, done day, parsing `at`; weigh-in check lines and poses.
+- `npm test`: 570/570 pass.
+
+**Browser check** (local, seeded, 390 px):
+- 179.4 lb gave *−0.5 lb since Nov 1*. 160.6 lb gave *⚠️ −19.3 lb … is that right?*.
+- 3 photos showed as Front / Side / Back, and tapping cycled the label. Save gave "⚖️ 179.4 lb saved · 📸 3 photos on this phone". IndexedDB has 3 entries (front, side, back) for the owner.
+- ✓ As planned breakfast gave *✓ Breakfast logged · 3:33 PM · Oatmeal with whey protein · 422 kcal · on plan · 42 P 39 C 13 F*, then *Lunch next · … · 59 P 48 C 17 F*.
+- Fit 400 on the beef dinner gave *Fitted to 400 kcal (406) · 45 P · 23 C · 15 F (aim 50 · 27 · 10)*.
 
 ### 🔒 Lock a food's amount for the coming days (2026-11-02, `v2/meal-locks` from `main` `5468366`; front end only, no `pawdeploy`; owner: "Provide the option to lock and unlock the macro nutrient weights… If no redeploy needed, build and merge into main")
 

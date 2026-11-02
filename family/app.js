@@ -566,7 +566,7 @@ async function healthView() {
   health.data = data;
   if (mealMod) mealMod.then((M) => M.setData(data)).catch(() => {});
   const whoop = wh && WD ? whoopModel(wh, WD, F ? F.lighterState() : null) : null;
-  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), hour: new Date().getHours(), workout: F ? F.healthRow(esc) : undefined, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), devices: devicesLine(), whoop })}</div>`;
+  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), hour: new Date().getHours(), now: Date.now(), workout: F ? F.healthRow(esc) : undefined, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), devices: devicesLine(), whoop })}</div>`;
   if (wh) { whoopAutoSync(); whoopTicker(); }
 }
 // ⌚ WHOOP on this phone (its sign-in and what it brought in live only here), read without loading
@@ -739,13 +739,22 @@ async function undoWeight(prev) {
   await editMine((s) => s.set('weights', [...(s.get('weights', []) || []).filter((x) => x.date !== today), ...(prev != null ? [{ date: today, weight: prev }] : [])].sort((a, b) => a.date.localeCompare(b.date))));
   if (state.view === 'health') healthView();
 }
+// Health's Save: the number is checked first (and progress photos can go with it) in
+// family/weighin.js; ✓ Save there is what saves it.
+let wiMod = null;
+const weighIn = () => (wiMod ||= import(`./weighin.js?v=${VERSION}`).then((m) => {
+  m.init({
+    esc, openSheet, closeSheet, toast, saveWeight, VERSION,
+    owner: () => { try { return JSON.parse(localStorage.getItem('lp.g.owner')); } catch { return null; } },
+    refresh: () => (state.view === 'health' ? healthView() : null),
+  });
+  return m;
+}).catch((e) => { wiMod = null; throw e; }));
 async function saveWeighIn(f) {
   const lb = Math.round(parseFloat(f.lb.value) * 10) / 10;
   if (!(lb >= 60 && lb <= 700)) return toast('Type your weight in pounds (60–700)');
-  const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Saving…';
-  let r;
-  try { r = await saveWeight(lb, { from: btn }); } catch (e) { btn.disabled = false; btn.textContent = 'Save'; return toast(e.message); }
-  toast(`⚖️ ${lb.toFixed(1)} lb saved · ${r.line}`);
+  const today = isoLocal(), last = [...(health.data?.weights || [])].filter((x) => x.date < today && x.weight > 0).sort((a, b) => a.date.localeCompare(b.date)).pop() || null;
+  return act(async () => (await weighIn()).confirm(lb, last));
 }
 // ⌚ Devices (Health › Devices): family/deviceScreen.js, loaded when you open Devices or come back
 // from connecting WHOOP.
@@ -4903,6 +4912,7 @@ document.addEventListener('click', (e) => {
   if (d.rd) return act(async () => (await RM()).onClick(t));
   // From Health: open Fitness on the right screen (Start Workout starts it and opens Train).
   if (d.lk) return act(async () => (await looks()).onClick(t));
+  if (d.wi) return act(async () => (await weighIn()).onClick(t));
   if (d.ml) return act(async () => { const M = await meals(); if (health.data) M.setData(health.data); return M.onClick(t); });
   if (d.fx) return act(async () => { const F = await fit(); if (['open', 'main', 'add', 'today', 'train', 'start'].includes(d.fx) && state.view !== 'fitness') { if (d.fx === 'start') F.begin(); else F.state.view = { open: 'today', today: 'today', train: 'train' }[d.fx] || 'main'; return show('fitness'); } return F.onClick(t); });
   if (d.discuss) return act(() => discuss(d.discuss, d.dtitle || '💬', d.dbody || ''));
@@ -5798,6 +5808,7 @@ document.addEventListener('pointerdown', (e) => { if (e.target.closest?.('[data-
 document.addEventListener('input', (e) => { if (e.target.dataset?.rdq != null) RM().then((R) => R.onInput(e.target)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.fxe && fitMod) fitMod.then((F) => F.onInput(e.target)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.mle != null && mealMod) mealMod.then((M) => M.onInput(e.target)).catch(() => {}); });
+document.addEventListener('change', (e) => { if (e.target.dataset?.wiphotos != null) weighIn().then((W) => W.onPick(e.target)).catch((err) => toast(err.message)); });
 document.addEventListener('change', (e) => { if (e.target.dataset?.mlpick != null && mealMod) mealMod.then((M) => M.onPick(e.target)).catch(() => {}); });
 document.addEventListener('change', (e) => { if (e.target.dataset?.wlpick != null && wishMod) wishMod.then((W) => W.onPick(e.target)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.wle != null && wishMod) wishMod.then((W) => W.onInput(e.target)).catch(() => {}); });
