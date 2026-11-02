@@ -28,12 +28,15 @@ const NAME = D.MEAL_NAMES;
 // 🔒 / 🔓 drawn (the emoji look alike at this size): a closed padlock when locked, an open one when not.
 const LOCK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5" fill="currentColor" stroke="none"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>';
 const UNLOCK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 7.6-1.8"/></svg>';
+const SLOT_NAME = { protein: 'Protein', carb: 'Carbs', fat: 'Fat', veggies: 'Veggies', fruit: 'Fruit', eggs: 'Eggs', liquid: 'Liquid' };
 const lockWhere = (meal) => (meal === 'breakfast' ? 'whenever you have this breakfast' : 'at lunch and dinner');
 // A copy to preview changes on (grams you're nudging, before they're saved).
 function mem() { const d = clone(ms.data) || {}; return { d, get: (k, f) => (k in d ? d[k] : f), set: (k, v) => { d[k] = v; } }; }
 const dataOf = (s) => new Proxy({}, { get: (_, k) => s.get(k, undefined) });
 const OPS = {
   grams: (s, [meal, slot, g]) => D.setGrams(s, today(), meal, slot, g),
+  // 🔁 Another food in that slot (its own options: proteins for the protein, carbs for the carb…).
+  pick: (s, [meal, slot, food]) => D.setPick(s, today(), meal, slot, food),
   // A different source for the meal (the plan, another breakfast, a combo, a bar or shake…).
   use: (s, [meal, c]) => D.planAs(s, today(), meal, clone(c)),
   // ⚖️ Fit to N kcal: protein in grams, carbs and fat in the plan's ratio (js/mealFit.js).
@@ -122,7 +125,10 @@ function mealSheet(meal) {
     // 🔒 / 🔓: lock this amount for the coming days, or let the plan size it (the plan's own meals).
     const lockable = !m.custom && !m.prepared && !m.eatout && D.prefKeyOf(m, meal), on = lockable && D.isLockedFor(s.d, m, meal, x.slot);
     const lockBtn = lockable ? `<button type="button" class="ml-lock${on ? ' on' : ''}" data-ml="lock:${meal}:${x.slot}:${on ? 0 : 1}" aria-pressed="${!!on}" aria-label="${on ? `Unlock ${E(FOODS[x.food].name)} — let the plan size it` : `Lock ${E(FOODS[x.food].name)} at this amount ${lockWhere(meal)}`}" title="${on ? `Locked ${lockWhere(meal)} — tap to unlock` : 'Tap to keep this amount on the coming days'}">${on ? `${LOCK_SVG}<span>Locked</span>` : UNLOCK_SVG}</button>` : x.locked ? ` <span class="ml-lockmark" title="Set by you">${LOCK_SVG}</span>` : '';
-    return `<div class="ml-food"><span><b>${E(FOODS[x.food].name)}</b>${lockBtn}</span>
+    // 🔁 Unlocked plan foods are a menu of that slot's own options (a locked one stays as it is).
+    const opts = lockable && !on ? (x.options || []).filter((f) => FOODS[f]) : [];
+    const name = opts.length > 1 ? `<select class="ml-swap" data-mle="pick:${meal}:${x.slot}" aria-label="${E(SLOT_NAME[x.slot] || 'Food')}: swap ${E(FOODS[x.food].name)}">${opts.map((f) => `<option value="${f}"${f === x.food ? ' selected' : ''}>${E(FOODS[f].name)}</option>`).join('')}</select>` : `<b>${E(FOODS[x.food].name)}</b>`;
+    return `<div class="ml-food"><span>${name}${lockBtn}</span>
       <span class="ml-step"><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${-step}" aria-label="Less ${E(FOODS[x.food].name)}">−</button><input inputmode="decimal" data-mle="g:${meal}:${x.slot}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams"><span class="small muted">g</span><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${step}" aria-label="More ${E(FOODS[x.food].name)}">＋</button></span>
       <input type="range" class="ml-slide" data-mle="gs:${meal}:${x.slot}" min="0" max="${Math.max(x.range?.[1] || 400, r0(x.grams) * 2)}" step="${step}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams" aria-valuetext="${r0(x.grams)} grams${unitHint(x)}"><small class="muted ml-unit" id="mlU-${x.slot}">${E(unitHint(x).replace(/^, /, ''))}</small></div>`;
   }).join('');
@@ -635,7 +641,7 @@ export async function onClick(t) {
       const [meal, ...rest] = r, c = sourceFor(meal, rest.join(':'));
       if (!c) return null;
       // A new source replaces what you'd changed on the old one.
-      ms.ops = ms.ops.filter((o) => !(['grams', 'use', 'fit', 'fitpref'].includes(o[0]) && o[1] === meal));
+      ms.ops = ms.ops.filter((o) => !(['grams', 'pick', 'use', 'fit', 'fitpref'].includes(o[0]) && o[1] === meal));
       ms.ops.push(['use', meal, c]);
       sh.pick = false; sh.fit = undefined; sh.fitNote = '';
       return mealSheet(meal);
@@ -732,6 +738,13 @@ export async function onClick(t) {
 export function onInput(t) {
   const [a, k] = t.dataset.mle.split(':'), sh = ms.sheet;
   if (!sh) return;
+  if (a === 'pick') {
+    const [, meal, slot] = t.dataset.mle.split(':');
+    // Like the grams: shown now, saved when you log (or Update meal). The slot's grams go back to the plan's.
+    ms.ops = ms.ops.filter((o) => !((o[0] === 'pick' || o[0] === 'grams') && o[1] === meal && o[2] === slot));
+    ms.ops.push(['pick', meal, slot, t.value]);
+    return mealSheet(meal);
+  }
   if (a === 'g') {
     const [, meal, slot] = t.dataset.mle.split(':');
     if (t.value === '') return;

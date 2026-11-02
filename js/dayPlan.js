@@ -292,6 +292,32 @@ export function lockAmount(s, today, meal, slot, on, grams = null) {
   return true;
 }
 export const isLockedFor = (data, m, meal, slot) => { const key = prefKeyOf(m, meal); return !!(key && data?.prefs?.locks?.[key]?.[slot]); };
+// 🔁 Swap the food in one of a plan meal's slots (another protein, carb, fat… from that slot's own
+// options), as the trackers' food menus do: today's meal takes it, sized by the plan again, and the
+// choice is remembered for next time — except lunch and dinner proteins, which rotate day by day.
+export function setPick(s, today, meal, slot, food) {
+  rollDay(s, today);
+  const m = planOf(dataOf(s), today)[meal], x = m?.portions?.find((p) => p.slot === slot);
+  if (!x || m.custom || !(x.options || []).includes(food)) return false;
+  const custom = s.get('custom'), daily = (s.get('dailyMeals', {}) || {})[meal];
+  const meals = custom.meals, c0 = meals[meal] || {};
+  if (daily && !c0.items && !c0.prepared && !c0.eatout) meals[meal] = { ...clone(daily), ...c0 };
+  const c = (meals[meal] ||= {});
+  if (meal === 'breakfast') c.template = m.template;
+  c.picks = { ...c.picks, [slot]: food };
+  if (c.grams) delete c.grams[slot];
+  s.set('custom', custom);
+  const key = prefKeyOf(m, meal);
+  if (key && !(key === 'main' && slot === 'protein')) {
+    const prefs = { ...(s.get('prefs', {}) || {}) };
+    prefs[key] = { ...(prefs[key] || {}), [slot]: food };
+    s.set('prefs', prefs);
+  }
+  const log = s.get('eaten');
+  if (log.meals?.[meal]) { log.meals[meal] = { ...snapshotOf(planOf(dataOf(s), today)[meal]), at: log.meals[meal].at }; s.set('eaten', log); }
+  record(s, today);
+  return true;
+}
 // One food's grams in a planned meal (locks that amount, like the trackers' grams box). A meal
 // you already logged is corrected to match.
 export function setGrams(s, today, meal, slot, grams) {
