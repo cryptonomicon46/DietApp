@@ -1701,8 +1701,10 @@ button.ml-opt.on > span:last-child { color: var(--brand); font-weight: 800; }
 .wg-card { border: 1px solid var(--line); border-radius: 16px; background: var(--card); padding: 12px 14px; margin: 0 0 10px; }
 .wt-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .watch-head + .seg.wt-tabs button { min-width: 0; padding: 6px 4px; font-size: .78rem; line-height: 1.15; white-space: normal; }
-.ml-lock { min-width: 40px; min-height: 40px; padding: 0 6px; margin-left: 4px; border-radius: 10px; background: transparent; border: 1px solid transparent; font-size: 1rem; vertical-align: middle; opacity: .55; }
-.ml-lock.on { opacity: 1; border-color: var(--line); background: var(--bg); }
+.ml-lock { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 40px; min-height: 40px; padding: 0 8px; margin-left: 6px; border-radius: 999px; background: transparent; border: 1px dashed var(--line); color: var(--muted); vertical-align: middle; font-size: .8rem; font-weight: 600; }
+.ml-lock.on { border: 1px solid var(--brand); background: var(--brand); color: #fff; }
+.ml-lock svg { flex: none; }
+.ml-lockmark { display: inline-flex; vertical-align: middle; margin-left: 4px; color: var(--muted); }
 /* ⚖️ Weigh-in check + 📸 progress photos (family/weighin.js) */
 .hl-row2 .hl-phbtn { grid-column: 2; justify-self: start; min-height: 40px; margin-top: 4px; }
 .hl-row2 .hl-phnote { grid-column: 2; }

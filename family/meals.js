@@ -25,6 +25,9 @@ const today = () => ms.c.iso();
 const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
 const r0 = (n) => Math.round(n || 0);
 const NAME = D.MEAL_NAMES;
+// 🔒 / 🔓 drawn (the emoji look alike at this size): a closed padlock when locked, an open one when not.
+const LOCK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5" fill="currentColor" stroke="none"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>';
+const UNLOCK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 7.6-1.8"/></svg>';
 const lockWhere = (meal) => (meal === 'breakfast' ? 'whenever you have this breakfast' : 'at lunch and dinner');
 // A copy to preview changes on (grams you're nudging, before they're saved).
 function mem() { const d = clone(ms.data) || {}; return { d, get: (k, f) => (k in d ? d[k] : f), set: (k, v) => { d[k] = v; } }; }
@@ -118,7 +121,7 @@ function mealSheet(meal) {
     const step = x.range?.[2] || 5;
     // 🔒 / 🔓: lock this amount for the coming days, or let the plan size it (the plan's own meals).
     const lockable = !m.custom && !m.prepared && !m.eatout && D.prefKeyOf(m, meal), on = lockable && D.isLockedFor(s.d, m, meal, x.slot);
-    const lockBtn = lockable ? `<button type="button" class="ml-lock${on ? ' on' : ''}" data-ml="lock:${meal}:${x.slot}:${on ? 0 : 1}" aria-pressed="${!!on}" aria-label="${on ? `Unlock ${E(FOODS[x.food].name)} — let the plan size it` : `Lock ${E(FOODS[x.food].name)} at this amount ${lockWhere(meal)}`}" title="${on ? `Locked ${lockWhere(meal)} — tap to unlock` : 'Tap to keep this amount on the coming days'}">${on ? '🔒' : '🔓'}</button>` : x.locked ? ' <small class="muted">🔒</small>' : '';
+    const lockBtn = lockable ? `<button type="button" class="ml-lock${on ? ' on' : ''}" data-ml="lock:${meal}:${x.slot}:${on ? 0 : 1}" aria-pressed="${!!on}" aria-label="${on ? `Unlock ${E(FOODS[x.food].name)} — let the plan size it` : `Lock ${E(FOODS[x.food].name)} at this amount ${lockWhere(meal)}`}" title="${on ? `Locked ${lockWhere(meal)} — tap to unlock` : 'Tap to keep this amount on the coming days'}">${on ? `${LOCK_SVG}<span>Locked</span>` : UNLOCK_SVG}</button>` : x.locked ? ` <span class="ml-lockmark" title="Set by you">${LOCK_SVG}</span>` : '';
     return `<div class="ml-food"><span><b>${E(FOODS[x.food].name)}</b>${lockBtn}</span>
       <span class="ml-step"><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${-step}" aria-label="Less ${E(FOODS[x.food].name)}">−</button><input inputmode="decimal" data-mle="g:${meal}:${x.slot}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams"><span class="small muted">g</span><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${step}" aria-label="More ${E(FOODS[x.food].name)}">＋</button></span>
       <input type="range" class="ml-slide" data-mle="gs:${meal}:${x.slot}" min="0" max="${Math.max(x.range?.[1] || 400, r0(x.grams) * 2)}" step="${step}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams" aria-valuetext="${r0(x.grams)} grams${unitHint(x)}"><small class="muted ml-unit" id="mlU-${x.slot}">${E(unitHint(x).replace(/^, /, ''))}</small></div>`;
@@ -646,7 +649,7 @@ export async function onClick(t) {
         await ms.c.editMine((s) => { D.lockAmount(s, today(), meal, slot, on === '1', shown ? shown.grams : null); fresh = Object.fromEntries(['custom', 'eaten', 'prefs'].map((k) => [k, s.get(k, undefined)])); });
         if (fresh && ms.data) Object.assign(ms.data, clone(fresh));
         ms.ops = ops;
-        ms.c.toast(on === '1' ? `🔒 ${name} stays at this amount ${lockWhere(meal)} — tap 🔒 to unlock` : `🔓 ${name} is sized by your plan again`);
+        ms.c.toast(on === '1' ? `🔒 ${name} stays at this amount ${lockWhere(meal)} — tap Locked to unlock` : `🔓 ${name} is sized by your plan again`);
         return mealSheet(meal);
       })();
     }
