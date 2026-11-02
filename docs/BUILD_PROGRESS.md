@@ -4,6 +4,28 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🔒 Lock a food's amount for the coming days (2026-11-02, `v2/meal-locks` from `main` `5468366`; front end only, no `pawdeploy`; owner: "Provide the option to lock and unlock the macro nutrient weights… If no redeploy needed, build and merge into main")
+
+**Report:** out of blueberries, the owner had to set them to 0 g again every day.
+
+**Done:**
+
+| Change | Where |
+| --- | --- |
+| 🔓 / 🔒 next to each food in a plan meal (not a custom, prepared or ate-out meal). Locking keeps the amount you see, including unsaved slider changes; it saves at once and keeps the sheet's other pending changes | `family/meals.js` (`case 'lock'`, `lockWhere`), `family/style.css` (`.ml-lock`, 40 px tap target, `aria-pressed`) |
+| `prefs.locks[key][slot] = {food, grams}`, where key is the breakfast template or `main` (lunch and dinner). Unlock writes `null`, so an older copy can't bring the lock back | `js/dayPlan.js` (`prefKeyOf`, `lockAmount`, `isLockedFor`) |
+| The plan applies locks while the slot still has the locked food; the rest of the meal re-balances. A day's own grams still win | `js/plan.js` (`stickyGrams` in `planForDay`'s `merge`) |
+
+**Privacy:** `prefs` is already part of the diet part. A lock is shared and synced like the meal picks, with nothing new sent to the server or AI.
+
+**Tests:** `tests/meallocks.test.js` (4). They cover: the lock holds the next day; unlock goes back to the plan; the shown amount (0 g) is what's kept; a rotating protein holds only on its own days. `npm test` passes.
+
+**Browser check** (local, seeded):
+- Dinner ground beef slid to 0, then 🔓 tapped. The toast read "🔒 95/5 ground beef stays at this amount at lunch and dinner — tap 🔒 to unlock", and the button became 🔒 with `aria-pressed` true.
+- Reopened, it still showed 0 g 🔒.
+- Unlocked, it went back to 195 g, with "🔓 … is sized by your plan again".
+- Node check: blueberries locked at 0 g in oatmeal stay at 0 g on every oatmeal day (Nov 4 and 6), and egg days are unchanged.
+
 ### 🎲💑 A show's bingo and couples picks next to the show (2026-11-02, `v2/watch-games` from `main` `30ba985`; front end only, no `pawdeploy`; owner: "proceed with building and merge"; mockups `docs/mockups/watchgames/`)
 
 **Report:** finding a show's bingo card took 4 taps (Open Watchlist, then scroll to the bottom). Games were also matched to shows by exact title, so "Love Is Blind" picks never linked to "Love Is Blind - US".

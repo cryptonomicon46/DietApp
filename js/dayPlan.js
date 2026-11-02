@@ -270,6 +270,28 @@ export function addExtras(s, today, items) { return editLog(s, today, (log) => {
 export function removeExtra(s, today, i) { return editLog(s, today, (log) => { log.extras = (log.extras || []).filter((_, j) => j !== i); }); }
 // "Done logging today" (or not): tells the weekly review this day is complete.
 export function setDone(s, today, done = true) { return editLog(s, today, (log) => { if (done) log.done = true; else delete log.done; }); }
+// 🔒 Lock a food's amount for the coming days (on: true), or let the plan size it again (on: false,
+// which also drops today's fixed amount). Only for the plan's own meals (not foods you built).
+export const prefKeyOf = (m, meal) => (meal === 'breakfast' ? m?.template : meal === 'lunch' || meal === 'dinner' ? 'main' : null);
+export function lockAmount(s, today, meal, slot, on, grams = null) {
+  rollDay(s, today);
+  const m = planOf(dataOf(s), today)[meal], key = prefKeyOf(m, meal), x = m?.portions?.find((p) => p.slot === slot);
+  if (!key || !x || m.custom) return false;
+  const prefs = { ...(s.get('prefs', {}) || {}) };
+  const g = Math.round(Number.isFinite(+grams) && grams !== null ? +grams : x.grams);
+  prefs.locks = { ...(prefs.locks || {}), [key]: { ...(prefs.locks?.[key] || {}), [slot]: on ? { food: x.food, grams: g } : null } };
+  s.set('prefs', prefs);
+  if (on) setGrams(s, today, meal, slot, g);
+  else {
+    const custom = s.get('custom'), c = custom.meals?.[meal];
+    if (c?.grams && slot in c.grams) { delete c.grams[slot]; s.set('custom', custom); }
+    const log = s.get('eaten');
+    if (log.meals?.[meal]) { log.meals[meal] = { ...snapshotOf(planOf(dataOf(s), today)[meal]), at: log.meals[meal].at }; s.set('eaten', log); }
+  }
+  record(s, today);
+  return true;
+}
+export const isLockedFor = (data, m, meal, slot) => { const key = prefKeyOf(m, meal); return !!(key && data?.prefs?.locks?.[key]?.[slot]); };
 // One food's grams in a planned meal (locks that amount, like the trackers' grams box). A meal
 // you already logged is corrected to match.
 export function setGrams(s, today, meal, slot, grams) {

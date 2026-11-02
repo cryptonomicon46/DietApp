@@ -334,6 +334,21 @@ export function preparedMeal(cust) {
   return { title, portions: [], totals, custom: true, prepared: true };
 }
 
+// 🔒 Amounts you locked for the coming days (prefs.locks[template][slot] = { food, grams }; an
+// unlocked one is null, so another phone's older copy can't bring it back). A lock holds only
+// while the slot still has that food — swap the fruit and the plan sizes the new one.
+export function stickyGrams(prefs = {}, prefKey, template, picks = {}) {
+  const out = {}, locks = prefs?.locks?.[prefKey] || {};
+  for (const [slot, v] of Object.entries(locks)) {
+    if (!v || !Number.isFinite(+v.grams)) continue;
+    const it = template?.items?.find((x) => x.slot === slot);
+    if (!it) continue;
+    const food = it.options.includes(picks[slot]) ? picks[slot] : it.options[0];
+    if (food === v.food) out[slot] = +v.grams;
+  }
+  return out;
+}
+
 // Deterministic rotation so each day looks different.
 export function dayIndex(date) {
   const d = new Date(date);
@@ -349,7 +364,10 @@ export function planForDay(dayTargets, date, custom = {}, prefs = {}, opts = {})
   const bKeys = BREAKFAST_ROTATION;
   // A low-carb breakfast is eggs (oatmeal can't go low-carb).
   const bKey = BREAKFASTS[custom.breakfast?.template] ? custom.breakfast.template : custom.breakfast?.lowCarb ? 'eggs' : bKeys[n % bKeys.length];
-  const merge = (prefKey, c = {}, extra = {}) => ({ picks: { ...extra, ...prefs[prefKey], ...c.picks }, grams: c.grams });
+  const merge = (prefKey, c = {}, extra = {}) => {
+    const picks = { ...extra, ...prefs[prefKey], ...c.picks };
+    return { picks, grams: { ...stickyGrams(prefs, prefKey, prefKey === 'main' ? MAIN_MEAL : BREAKFASTS[prefKey], picks), ...c.grams } };
+  };
   const rotate = (offset) => ({ protein: PROTEINS[(n + offset) % PROTEINS.length] });
   const build = (name, auto) => (custom[name]?.prepared ? preparedMeal(custom[name]) : custom[name]?.eatout ? eatOutMeal(custom[name], meals[name])
     : custom[name]?.items ? customMeal(custom[name], meals[name]) : auto());
