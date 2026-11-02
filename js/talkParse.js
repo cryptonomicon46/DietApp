@@ -115,6 +115,39 @@ const RULES = [
   [/^(?:i|we)?\s*fed\s+(?:the\s+)?dogs?\s+(breakfast|dinner)$/i, (m) => ({ do: 'care.log', chore: m[1].toLowerCase() })],
   [/^(?:i|we)?\s*gave\s+(?:the\s+)?dogs?\s+(?:a\s+|their\s+)?(treats?|meds|medicine)$/i, (m) => ({ do: 'care.log', chore: /treat/i.test(m[1]) ? 'treat' : 'meds' })],
 ];
+// 📷 "Take a photo of my dinner", "snap my lunch", "photo of my lunch — I ate out": a meal from a
+// photo, eaten out. "Take a photo of my workout / the WOD / the whiteboard": today's workout from a
+// photo. Read on the phone only (no step for Claude): Talk shows 📷 Take a photo / 🖼 From Photos
+// straight away. → { kind: 'meal', meal } | { kind: 'workout' } | null. No meal named: the one for
+// the time of day.
+const PHOTO_WORD = /\b(photo|picture|pic|snap|snapshot|screenshot|camera)\b/i;
+const MEAL_WORD = /\b(breakfast|lunch|dinner|snack|meal|food|plate|dish)\b/i;
+const WORKOUT_WORD = /\b(workout|work out|wod|whiteboard|white board|training|exercises?|sets and reps|lifting|crossfit|class programming)\b/i;
+const NOT_THIS_PHOTO = /\b(label|nutrition facts|receipt|menu board|wardrobe|outfit|look|dog|pup|book|cover)\b/i;
+export function photoAsk(text, hour = 12) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim().replace(/[.!]+$/, '');
+  if (!t || t.length > 160 || /\?$/.test(t) || !PHOTO_WORD.test(t) || NOT_THIS_PHOTO.test(t)) return null;
+  const workout = WORKOUT_WORD.test(t);
+  if (!workout && !MEAL_WORD.test(t)) return null;
+  // A request: "take / snap / capture / log … a photo", "photo of …", "from a photo", "I ate out …".
+  if (!/^(?:please\s+|can you\s+|let(?:'s| me)\s+|i(?:'d like to|'ll| want to| will)\s+)?(?:take|snap|capture|log|add|upload|use|grab|scan|read|open the camera|photo|picture|pic|screenshot|i\s+ate\s+out|ate\s+out)\b/i.test(t) && !/\bfrom (?:a|my) (?:photo|picture)\b/i.test(t)) return null;
+  if (workout) return { kind: 'workout' };
+  const said = t.match(/\b(breakfast|lunch|dinner|snack)\b/i)?.[1]?.toLowerCase();
+  const meal = said === 'snack' ? 'extra' : said || (hour < 11 ? 'breakfast' : hour < 16 ? 'lunch' : 'dinner');
+  return { kind: 'meal', meal };
+}
+// ❓ "How do I log a meal?", "how can I add a workout", "ways to track my weight": the ways to do
+// it, as a card (Talk shows them, each one tappable). → { topic: 'meal' | 'workout' | 'weight' } or null.
+export function howAsk(text) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  const m = t.match(/^(?:(?:hi|hey|ok|okay)[,!]?\s+)?(?:how\s+(?:do|can|should|would|could)\s+(?:i|we)|how\s+to|what(?:'s| is| are)\s+the\s+(?:best\s+|easiest\s+)?ways?\s+to|(?:the\s+)?ways\s+to|show\s+me\s+how\s+to|teach\s+me\s+(?:how\s+)?to|help\s+me|where\s+do\s+i|can\s+(?:i|you\s+help\s+me))\s+(?:log|add|track|record|enter|put\s+in|save|keep\s+track\s+of)\s+(?:a\s+|an\s+|my\s+|the\s+|today'?s\s+|what\s+i\s+(?:ate|eat|did))?\s*(.{0,60}?)\s*[?.!]*$/i);
+  if (!m) return null;
+  const what = m[1] || '';
+  if (/\b(meals?|food|breakfast|lunch|dinner|snacks?|eat|ate|calories|macros|drinks?)\b/i.test(what) || /what i (?:ate|eat)/i.test(t)) return { topic: 'meal' };
+  if (/\b(workouts?|exercises?|training|lifts?|lifting|wod|runs?|gym|sets|reps)\b/i.test(what) || /what i did/i.test(t)) return { topic: 'workout' };
+  if (/\b(weight|weigh[- ]?ins?)\b/i.test(what)) return { topic: 'weight' };
+  return null;
+}
 // → { steps } when the phone could read it all, else null (ask Claude, if it's on).
 export function parseTalk(text) {
   const t = String(text || '').replace(/\s+/g, ' ').trim().replace(/[.!]+$/, '');

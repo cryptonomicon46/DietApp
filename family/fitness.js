@@ -282,6 +282,17 @@ export async function onPick(input) {
   render();
 }
 function dropPic() { if (fx.pic?.url) URL.revokeObjectURL(fx.pic.url); fx.pic = null; }
+// 📷 From Talk ("take a photo of my workout"): the photo already taken or picked there — read
+// straight away (choosing it in Talk was the go-ahead, and the card said where it goes), then the
+// editor shows today's workout to check before anything is saved.
+export async function photoWith(file) {
+  dropPic(); fx.view = 'photo'; fx.c.show();
+  try { const { blob, b64 } = await redraw(file); fx.pic = { url: URL.createObjectURL(blob), b64 }; }
+  catch { fx.pic = { error: "Couldn't open that picture — try a screenshot, or a JPEG or PNG." }; return render(); }
+  if (fx.ai == null) fx.ai = await fx.c.aiReady().catch(() => null);
+  if (fx.ai === false) return render();
+  return readPic();
+}
 async function readPic() {
   const c = fx.c, p = fx.pic;
   if (!p?.b64 || fx.reading) return;

@@ -509,12 +509,16 @@ function talk() {
       weighUndo: (prev) => undoWeight(prev),
       careUndo: async (id) => { if (id) await api.del(`/families/${state.fid}/care/${isoLocal()}/${id}`); if (state.view === 'home') { renderCare(); renderRace(); } },
       dietTell: async (meal, text, opts = {}) => { const M = await dietReady(); return M.tellWith(meal, text, opts); },
+      // 📷 A meal eaten out, from the photo taken or picked in Talk: the meal photo sheet, estimating it.
+      mealPhoto: async (meal, file) => { const M = await dietReady(); return M.talkPhoto(meal, file); },
       // ✅ Review before saving: Talk reads a meal or a workout into a draft card; these save it
       // through that area's own save (with Undo) or open its own editor with the draft.
       dietMod: () => dietReady(),
       workoutCreate: async (w) => (await fit()).talkCreate(w),
       workoutEdit: async (w) => { const F = await fit(); if (state.view !== 'fitness') show('fitness'); return F.talkEdit(w); },
       fitDescribe: async (text) => { const F = await fit(); if (state.view !== 'fitness') show('fitness'); return F.describeWith(text); },
+      // 📷 Today's workout from the photo taken or picked in Talk: Fitness reads it into the editor.
+      workoutPhoto: async (file) => { const F = await fit(); if (state.view !== 'fitness') show('fitness'); return F.photoWith(file); },
       who: () => `${state.fid}.${fam().me}`,
       // "Ask about my day": what the Calendar tab shows for today and tomorrow, put together here.
       dayContext: async (asked = '') => {
@@ -4764,7 +4768,7 @@ document.addEventListener('click', (e) => {
   // 🎤 Change by voice on a review card: listening starts in this tap, for that card only.
   if (d.talk === 'change') { const voice = listenNow(true); return act(async () => (await talk()).change(voice)); }
   if (d.wl) return act(async () => (await wish()).onClick(t));
-  if (d.talk || d.talkex != null || d.talkgo != null || d.talkundo != null || d.talkset || d.talkpick || d.talkpickshow || d.talkcare) return act(async () => (await talk()).onClick(t));
+  if (d.talk || d.talkex != null || d.talkgo != null || d.talkundo != null || d.talkset || d.talkpick || d.talkpickshow || d.talkcare || d.talksay) return act(async () => (await talk()).onClick(t));
   if (d.care) {
     const box = t.getBoundingClientRect();
     celebrate(d.care, box.left + box.width / 2, box.top + box.height / 2);
@@ -5873,6 +5877,6 @@ document.addEventListener('change', (e) => { if (e.target.dataset?.wiphotos != n
 document.addEventListener('change', (e) => { if (e.target.dataset?.mlpick != null && mealMod) mealMod.then((M) => M.onPick(e.target)).catch(() => {}); });
 document.addEventListener('change', (e) => { if (e.target.dataset?.wlpick != null && wishMod) wishMod.then((W) => W.onPick(e.target)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.wle != null && wishMod) wishMod.then((W) => W.onInput(e.target)).catch(() => {}); });
-document.addEventListener('change', (e) => { if (e.target.dataset?.talkrec != null && talkMod) talkMod.then((T) => T.onChange(e.target)).catch(() => {}); });
+document.addEventListener('change', (e) => { if ((e.target.dataset?.talkrec != null || e.target.dataset?.talkphoto != null) && talkMod) talkMod.then((T) => T.onChange(e.target)).catch(() => {}); });
 // Enter sends in the Talk box (Shift+Enter for a new line).
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'tkText') { e.preventDefault(); e.target.form?.requestSubmit(); } });

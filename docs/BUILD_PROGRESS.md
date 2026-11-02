@@ -4,6 +4,36 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 📷 Talk: "take a photo of my dinner / the WOD", and "how do I log…?" cards (2026-11-02, `v2/talk-meal-photo` from `main` `16a5921`; front end only, no `pawdeploy`; owner: "take a photo of my lunch or dinner… prompt me to capture a photo… or use a photo from the library", then "take a photo of my workout… populate the workout for the day", then "show a card on the various options if posed with such a question"; "build this and merge into main if no redeploy needed")
+
+**Done:**
+- `js/talkParse.js` gains `photoAsk` and `howAsk`. Both are read on the phone before `parseTalk`; they are not steps, so `DOS` and the server schema are unchanged and no `pawdeploy` is needed.
+  - Meal: no meal named → the one for the time of day (before 11 breakfast, before 16 lunch, otherwise dinner).
+  - Questions, labels, the dog and workouts-as-text are left alone.
+- `family/talk.js` adds three cards:
+  - `photomeal`: meal chips, plus 📷 Take a photo / 🖼 From Photos, which are the file inputs themselves.
+  - `photoworkout`.
+  - `how`: the ways for a meal, a workout or a weight. Examples fill the box (`data-talkex`), 📷 sends straight away (`data-talksay`), and Open Health / Open Fitness go to those screens.
+- The file goes to `meals.js` `talkPhoto` (restaurant photo → estimate → review) or `fitness.js` `photoWith` (→ `/ai/workout` → the editor). Both use the existing routes.
+- README, help guide, tour What's new (`2026-11f`), ARCHITECTURE.
+
+**Tests:** `tests/talkparse.test.js` (+2):
+- meal and workout phrasings, the time-of-day default, and the cases that should not match;
+- "how" questions for each topic, and the non-matches ("How do I log in?").
+
+`npm test` 578/578.
+
+**Browser check** (local, seeded; `/ai/diet/photo` and `/ai/workout` mocked, `config.ai` true):
+
+| Flow | Result |
+| --- | --- |
+| "Take a photo of my dinner" | card with camera (`capture=environment`) and library inputs; switched to Lunch; picked a JPEG → sent with `hint: restaurant` → estimate sheet (Salmon 170 g + rice · 553 kcal · ✓ Plan & log) |
+| "Take a photo of the WOD" | camera input → `/ai/workout` → Review Workout: "Read from your photo… nothing is saved until you choose", Back Squat 3×5 @ 185 + a 3-round circuit |
+| "How do I log a meal?" | four ways with taps |
+| "How do I log a workout?" | four ways; 📷 opened the WOD photo card; an example filled the box |
+
+**Perf budget:** within budget (15 start-up requests, CLS 0.004). The start-up script is now **200 KB of 200** (`family/app.js` +127 B gzipped here). The next change that adds start-up code must first move something lazy; candidates are Me / Family settings, the dog appointment sheet and the bingo screens out of `app.js`.
+
 ### 📸 Don't ask for today's progress photos twice (2026-11-02, `v2/photos-done` from `main` `882a810`; front end only, no `pawdeploy`; owner: "If progress photos have already been uploaded for the day, don't ask for it again under the weight bar")
 
 **Done:** `healthView` reads today's photo poses from this phone (`posesToday()` → `js/photos.js` `allPhotos`, IndexedDB; never leaves the phone) and passes `photosToday` to `healthHtml`.

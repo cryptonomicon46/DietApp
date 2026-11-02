@@ -7,7 +7,7 @@
 // for workouts, Make it lighter). T1 only does things that are yours; T2a answers questions about your
 // day (js/talkDay.js — with your OK once) and can add a suggested time to your own calendar only.
 // Nothing you said is kept (no history).
-import { parseTalk } from '../js/talkParse.js';
+import { parseTalk, photoAsk, howAsk } from '../js/talkParse.js';
 import { toTokens, fromTokens } from '../js/talkActions.js';
 import { isDayQuestion, checkSuggestions } from '../js/talkDay.js';
 import { browserVoiceOutput } from './voice.js';
@@ -32,6 +32,7 @@ const EXAMPLES = {
 };
 const WATCH = { want: 'Want to Watch', watching: 'Watching', finished: 'Watched', upnext: 'Up Next', dropped: 'Stopped' };
 const READ = { want: 'Want to Read', reading: 'Reading', finished: 'Finished', dropped: 'Stopped' };
+const HOW_SAY = { meal: 'Here are the ways to log a meal.', workout: 'Here are the ways to log a workout.', weight: 'Here are the ways to log your weight.' };
 const MEAL = { breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Snack', dinner: 'Dinner', extra: 'A snack or extra' };
 const MIC_OK = () => typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 const voiceOff = () => { try { return c.LS.get('fam.talk.voice') === 'off'; } catch { return false; } };
@@ -144,6 +145,18 @@ export async function send(text) {
   tk.text = text; tk.error = ''; tk.say = ''; tk.cards = null; tk.consent = null;
   // A "yes" with no card on screen confirms nothing.
   if (P.replyKind(text) === 'confirm') { tk.say = "There's nothing waiting to confirm."; speak(tk.say); return draw(); }
+  // 📷 "Take a photo of my dinner": eaten out, from a photo — the card has the camera and Photos
+  // buttons themselves (the phone only opens its camera for a tap right on them).
+  // ❓ "How do I log a meal / a workout?": every way to do it, each one a tap away.
+  const how = howAsk(text);
+  if (how) { tk.cards = [{ type: 'how', topic: how.topic }]; tk.say = ''; speak(HOW_SAY[how.topic]); return draw(); }
+  const photo = photoAsk(text, new Date().getHours());
+  if (photo) {
+    tk.cards = [photo.kind === 'workout' ? { type: 'photoworkout' } : { type: 'photomeal', meal: tk.meal && !/\b(breakfast|lunch|dinner|snack)\b/i.test(text) ? tk.meal : photo.meal }];
+    tk.say = '';
+    speak('Take a photo, or pick one from your Photos.');
+    return draw();
+  }
   // From a meal's "Say what you had": "two eggs and toast" → "Log lunch: two eggs and toast".
   const mealSaid = /\b(breakfast|lunch|dinner|snack)\b/i.test(text), forMeal = tk.meal && !mealSaid && !isDayQuestion(text);
   if (forMeal) text = `Log ${tk.meal === 'extra' || tk.meal === 'snack' ? 'a snack' : tk.meal}: ${text}`;
@@ -421,6 +434,43 @@ function cardHtml(x, i) {
   }
   if (x.type === 'answer') return `<div class="tk-card tk-answer">${SPEAK_OK() ? '<button type="button" class="icon-btn tk-say" data-talk="speak" aria-label="Read this aloud">🔊</button>' : ''}${E(x.text).replace(/\n/g, '<br>')}${(x.go || []).map((g) => `<a class="tk-go small" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(g.q)}&travelmode=driving" target="_blank" rel="noopener">🚗 ${E(g.name)}${g.min ? ` · ${g.min} min now` : ''} · Directions ›</a>`).join('')}${x.to === 'health' ? '<button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button>' : '<button type="button" class="linkish small" data-talk="calopen">Open Calendar ›</button>'}</div>`;
   if (x.type === 'suggest') { const d = new Date(`${x.s.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' }); return `<div class="tk-card"><b>🗓 ${E(x.s.title)} · ${E(d)} ${E(time12(x.s.start))}–${E(time12(x.s.end))}</b>${x.s.why ? `<small class="muted">${E(x.s.why)}</small>` : ''}${btn('Add to my calendar', true)}</div>`; }
+  if (x.type === 'photomeal') {
+    const meals = ['breakfast', 'lunch', 'dinner', 'extra'];
+    return `<div class="tk-card"><b>📷 ${E(MEAL[x.meal] || 'Your meal')} · eaten out</b><small class="muted">A photo of the dish — it estimates it, and you check it before it's logged.</small>
+      <div class="seg tk-seg">${meals.map((m) => `<button type="button" class="${x.meal === m ? 'on' : ''}" aria-pressed="${x.meal === m}" data-talkset="${i}:meal:${m}">${m === 'extra' ? 'Snack' : MEAL[m]}</button>`).join('')}</div>
+      <div class="tk-photo"><label class="btn">📷 Take a photo<input type="file" accept="image/*" capture="environment" data-talkphoto="${i}" hidden></label><label class="btn ghost">🖼 From Photos<input type="file" accept="image/*" data-talkphoto="${i}" hidden></label></div>
+      <small class="tiny muted">The photo goes to Claude to estimate the dish (redrawn on your phone first, with no location); it isn't kept.</small></div>`;
+  }
+  if (x.type === 'how') {
+    // Each way: what it is, then a tap — say it (fills the box to change first), send it, or open the screen.
+    const way = (ic, title, sub, act) => `<div class="tk-way"><span class="ic" aria-hidden="true">${ic}</span><span><b>${E(title)}</b><small>${E(sub)}</small>${act}</span></div>`;
+    const ex = (t) => `<button type="button" class="linkish small" data-talkex="${E(t)}">“${E(t)}” ›</button>`;
+    const go = (t, label) => `<button type="button" class="linkish small" data-talksay="${E(t)}">${E(label)} ›</button>`;
+    const ways = {
+      meal: [
+        way('✓', 'As planned — one tap', 'Your plan has every meal ready: 💪 Health › ✓ As planned logs the next one.', '<button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button>'),
+        way('🗣️', 'Say what you had', 'Here in Talk. "Log dinner: …" replaces that meal; "Add … to dinner" adds to it. You check a card before it saves.', ex('Log lunch: chicken, rice and broccoli') + ' ' + ex('Add a coffee to breakfast')),
+        way('📷', 'A photo of the dish', 'Eaten out? Take a photo or pick one — it estimates the dish for you to check.', go('Take a photo of my dinner', '📷 Take a photo')),
+        way('🍽', 'Change the plan meal', 'Tap a meal on Health: swap a food (🔁), slide the grams, ⚖️ Fit to N kcal, 🔒 lock an amount, 📦 Packaged or 🍴 Ate out.', '<button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button>'),
+      ],
+      workout: [
+        way('🗣️', 'Say it', 'Here in Talk — exercises with sets, reps and weight. You check a card before it saves.', ex('Log a workout: squats 3x8 at 185, bench 3x10 at 135') + ' ' + ex('I did 3x10 squats at 135')),
+        way('📷', 'A photo of the WOD', 'The whiteboard, a screenshot or a written plan — it reads the sets and reps into today\'s workout.', go('Take a photo of the WOD', '📷 Take a photo')),
+        way('✍️', 'Build or describe it in Fitness', 'Pick exercises and sets yourself, describe it in words, or use your lifting program; then Start it and tick sets as you go.', '<button type="button" class="linkish small" data-talk="fitopen">Open Fitness ›</button>'),
+        way('⌚', 'From WHOOP', 'With WHOOP connected (Health › Devices), its workouts come in by themselves.', ''),
+      ],
+      weight: [
+        way('⚖️', 'On Health', 'Type it under Today\'s weight and Save — you check it first, and can add front, side and back photos.', '<button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button>'),
+        way('🗣️', 'Say it', 'Here in Talk.', ex('Log my weight 160.6')),
+      ],
+    }[x.topic] || [];
+    return `<div class="tk-card"><b>${{ meal: '🍽 Ways to log a meal', workout: '🏋️ Ways to log a workout', weight: '⚖️ Ways to log your weight' }[x.topic]}</b><div class="tk-ways">${ways.join('')}</div></div>`;
+  }
+  if (x.type === 'photoworkout') {
+    return `<div class="tk-card"><b>📷 Today's workout from a photo</b><small class="muted">The WOD on the whiteboard, a screenshot or a written plan — it reads the exercises, sets and reps into today's workout, and you check it before it's saved.</small>
+      <div class="tk-photo"><label class="btn">📷 Take a photo<input type="file" accept="image/*" capture="environment" data-talkphoto="${i}" hidden></label><label class="btn ghost">🖼 From Photos<input type="file" accept="image/*" data-talkphoto="${i}" hidden></label></div>
+      <small class="tiny muted">The photo goes to Claude to read the workout (redrawn on your phone first, with no location); it isn't kept.</small></div>`;
+  }
   if (x.type === 'weight') return `<div class="tk-card"><b>⚖️ Today's weight · ${E(x.lb.toFixed(1))} lb</b><small class="muted">Saved to Health, Meals and Weight${x.done ? '' : " — replaces today's weigh-in if you already logged one"}</small>${btn('Log it')}</div>`;
   if (x.type === 'care') return `<div class="tk-card"><b>${E(x.care.icon)} ${E(x.care.label)}</b><small class="muted">Today · logged for you</small>${btn('Log it')}</div>`;
   if (x.type === 'pickcare') return `<div class="tk-card"><b>Which one?</b><small class="muted">I don't know "${E(x.chore)}" — pick it:</small><div class="tk-ex">${x.kinds.map((k) => `<button type="button" data-talkcare="${i}:${E(k.kind)}">${E(k.icon)} ${E(k.label)}</button>`).join('')}</div></div>`;
@@ -478,6 +528,7 @@ async function go(i) {
 
 export async function onClick(t) {
   const d = t.dataset;
+  if (d.talksay) return send(d.talksay);
   if (d.talkex) { const box = document.getElementById('tkText'); if (box) { box.value = d.talkex; box.focus(); box.setSelectionRange(box.value.length, box.value.length); } return null; }
   if (d.talkgo != null) return go(+d.talkgo);
   if (d.talkundo != null) { const x = tk.cards?.[+d.talkundo]; if (!x?.undo) return null; await x.undo(); Object.assign(x, { done: '', undo: null, said: '' }); c.toast('Undone'); return redraw(); }
@@ -498,8 +549,16 @@ export async function onClick(t) {
   if (d.talk === 'speak') { const a = tk.cards?.find((x) => x.type === 'answer'); return speak(a?.text, { always: true }); }
   if (d.talk === 'calopen') { c.closeSheet(); return c.show('calendar'); }
   if (d.talk === 'healthopen') { c.closeSheet(); return c.show('health'); }
+  if (d.talk === 'fitopen') { c.closeSheet(); return c.show('fitness'); }
   if (d.talk === 'seen') { try { c.LS.set(SEEN, '1'); } catch { /* private mode */ } return draw(); }
   return null;
 }
-export function onChange(t) { if (t.dataset.talkrec != null) { const x = tk.cards[+t.dataset.talkrec]; x.recBy = t.checked && c.partner() ? c.partner().id : ''; } }
+export function onChange(t) {
+  if (t.dataset.talkphoto != null) {
+    const x = tk.cards?.[+t.dataset.talkphoto], file = t.files?.[0];
+    if (!x || !file) return null;
+    c.closeSheet();
+    return (x.type === 'photoworkout' ? c.workoutPhoto(file) : c.mealPhoto(x.meal, file)).catch((e) => c.toast(e.message || "Couldn't open that photo"));
+  }
+  if (t.dataset.talkrec != null) { const x = tk.cards[+t.dataset.talkrec]; x.recBy = t.checked && c.partner() ? c.partner().id : ''; } }
 export function onSubmit(f) { heard = false; hush(); const v = f.querySelector('textarea')?.value || ''; return send(v); }
