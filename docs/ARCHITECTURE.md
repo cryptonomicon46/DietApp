@@ -177,4 +177,14 @@ Design items deferred to the security redesign:
 - **`families()`** loads every family record of the caller on many requests.
 - **Reminders cron:** lists all push subscriptions every 15 minutes and walks each user's families.
 - **External lookups** (scout, news, outings, movies) are cached in KV or the Cache API and run in the background (`ctx.waitUntil`, background jobs with notifications), but the first news edition (when `NEWS_ON` is set) and the first scout of the week are slow by design.
-- **The phone caches** photos (decrypted bytes in IndexedDB), TMDB lookups, news (30 min), movies (6 h) and geocoding in localStorage.
+- **The phone caches** photos (decrypted bytes in IndexedDB), TMDB lookups, news (30 min), movies (6 h), the walk weather (`fam.weather`: shown up to 6 h old, refreshed behind it after 30 min) and geocoding in localStorage.
+- **⚡ Snappy screens and saves** (`v2/snappy`):
+  - **Shared requests** (`family/shared.js`, in memory only, gone when the app closes): one request per path at a time, reused for 20 s. Up to 30 min old, an answer comes back at once and a fresh one is fetched behind it (stale-while-revalidate). When it differs, `onFresh(path)` tells `app.js`, which redraws the screen on show if it read that path (`viewPaths`, reset by `show()`; `redrawSoon` waits while a sheet is open or you're typing, and keeps the scroll position). `/threads` also refreshes the badges.
+  - **Writes:** any non-GET still `clear()`s everything, so there are no stale answers after your own change. Offline, the last good answer stays.
+  - **`editMine`** is a queue (one change at a time, in order). It brings down only your own copy (`account.pullMine()`, not the dogs or your partner's parts) and pushes. Afterwards it `drop()`s only your `…/members/<me>/data` and `…/health/*` entries and `seed()`s your record with the copy just saved, so Health redraws without a request. It seeds only when no other change is waiting.
+  - **Meal sheet saves** (`family/meals.js` `saveSoon`): the change is applied to the screen's copy first (sheet closed, toast, confetti, Health redrawn from `seedMine`), then `editMine` repeats it on your trackers. If that fails, the copy is put back and a *Not saved — …* toast shows. 🔒 lock / unlock works the same way.
+  - **`warmTabs()`** runs once per family per app open, about 8 s after start (after the budget's 6 s start-up window) and when idle; it is skipped when the page is hidden or on Save-Data. It fetches what Health (`memberData`, `fit()`) and Us (`/ideas`, `/watch`, the partner's `us` part) read first.
+  - Measured with 150 ms added per request (local, seeded):
+    - lock 2,452 → 23 ms on screen (14 → 7 requests, now behind); unlock 1,423 → 18 ms (8 → 3);
+    - revisits: Us 183 → 15 ms, Home 318 → 20 ms, Health 23 → 19 ms;
+    - first visits: Health 240 → 45 ms, Us 409 → 205 ms.

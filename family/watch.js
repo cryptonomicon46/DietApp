@@ -1,8 +1,8 @@
 // 📺 Watch (2.0): the Watch card on 💞 Us and the full Watchlist — loading, episode dates, the cards,
 // details and their actions. Loaded the first time Us or Watch needs it, so it isn't in the app's
 // start-up script. The shared state (`watch`) and the helpers it uses come from app.js once (init).
-let $, LS, act, api, bingo, bingoNew, can, openPicks, seasonNew, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide;
-export function init(c) { ({ $, LS, act, api, bingo, bingoNew, can, openPicks, seasonNew, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide } = c); }
+let $, LS, act, api, shared, bingo, bingoNew, can, openPicks, seasonNew, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide;
+export function init(c) { ({ $, LS, act, api, shared, bingo, bingoNew, can, openPicks, seasonNew, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide } = c); }
 
 // 📺 The Watch card: "2 watching · 3 want to watch", the shows that matter tonight, one action each.
 export function renderUsWatch() {
@@ -63,7 +63,8 @@ export function gamesByShow() {
 export async function loadWatch() {
   watch.S ||= await import('../js/showsCore.js');
   loadGames().then(() => { if (state.view === 'us') renderUsWatch(); else if (state.view === 'watch') renderWatch(); }).catch(() => {});
-  const w = await api.get(`/families/${state.fid}/watch`);
+  // (Shared: going back to Us or Watch shows the list at once; a change you make asks again.)
+  const w = await (shared ? shared(`/families/${state.fid}/watch`) : api.get(`/families/${state.fid}/watch`));
   const bodies = await Promise.all(w.shows.map(async (x) => ({ ...x, ...((await unlock(x.body)) || {}) })));
   const people = fam().members.filter((m) => m.kind === 'person');
   const records = people.map((m) => ({

@@ -4,6 +4,50 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### ⚡ Snappy: instant saves and screens that come back at once (2026-11-02, `v2/snappy` from `main` `882a810`; front end only, no `pawdeploy`; owner: "making the app snappy… locking and unlocking takes a fraction of a second… loading up the various tables… cache info and make it quick for reload")
+
+**Merged before this:** PR #37 (Talk audiobooks) → `main` `882a810`.
+
+**Why it was slow:**
+- Every 🔒 tap waited on `editMine`: a full `account.pull()` (your data, the dogs, three parts per partner), then the change, then the push. That's 8–14 requests in a row before the button changed.
+- Afterwards `shared.clear()` threw away every cached answer, so the next screens re-asked the server.
+- Expired (20 s) or cleared answers meant waiting again on each visit.
+
+**Done:**
+- `js/account.js`: `pull()` split into `pullMine`, the dogs and `pullPartners`.
+- `family/shared.js`: stale-while-revalidate (up to 30 min), `onFresh`, `drop`, `seed`. Memory only.
+- `family/app.js`:
+  - `editMine` is a queue using `pullMine`, then a targeted drop plus seed of your saved record. `seedMine` is passed to meals.
+  - `viewPaths` + `redrawSoon` (not during a sheet or typing; scroll kept).
+  - `warmTabs()` after start-up.
+  - Health redraws without a skeleton flash.
+  - Gold news chores and `/ideas` go through `shared`.
+  - Walk weather is shown up to 6 h old and refreshed behind.
+- `family/meals.js`: `saveSoon` (optimistic, reverted with *Not saved — …* on failure) for `commit()` and 🔒.
+- `family/watch.js`: `/watch` goes through `shared`.
+
+**Measured** (local, seeded, 390 px, +150 ms per API request to mimic 5G; `scratchpad speed.mjs`):
+
+| | before | after |
+| --- | --- | --- |
+| 🔒 lock, tap → shown | 2,452 ms (14 req, blocking) | 23 ms (7 req, behind) |
+| 🔓 unlock | 1,423 ms (8 req) | 18 ms (3 req, behind) |
+| Us, again | 183 ms (2 req) | 15 ms (0) |
+| Home, again | 318 ms (5 req) | 20 ms (refresh behind) |
+| Health, first | 240 ms | 45 ms (warmed) |
+| Us, first | 409 ms (11 req) | 205 ms (2 req) |
+| ✓ As planned → toast | — (waited on the save) | 31 ms |
+
+**Correctness** (browser): a lock is still locked after a reload, so it reached the server. With PUT `/data` forced to 500, unlock showed at once, then went back to Locked with *Not saved — server down*. A logged breakfast is still there after a reload.
+
+**Privacy:** nothing new is stored on the phone. The shared cache is memory only and holds what the server sent (sealed in an encrypted family); seeded own data is this phone's copy, already in localStorage. The weather cache is unchanged in kind.
+
+**Tests:** `tests/shared.test.js` (+2: stale-at-once with one `onFresh` per change, the `keep` limit, offline keeps the last answer, drop/seed copies). `npm test` 574/574.
+
+**Perf budget:** within budget. Cold run: 15 requests, CLS 0.017, FCP 1,448–1,520 ms over two reruns (the first run's 1,768 was noise). Startup script 199 KB of 200 — little headroom left; the next startup addition should move something lazy.
+
+**Not done (option):** keeping the cache across app restarts (IndexedDB) would make the very first screen after opening instant too. In a non-encrypted family that would store family data on the phone, so it needs a privacy decision first.
+
 ### 🎧 Talk: add a book by its author, as an audiobook — or as you said it (2026-11-02, `v2/talk-books` from `main` `4e793a5`; front end only, no `pawdeploy`; owner reported that "To my audiobooks add this title by the author Josh Silver called fruit fly" offered only pest-control books)
 
 **Cause:**

@@ -54,7 +54,24 @@ const OPS = {
 };
 function preview() { const s = mem(); for (const [k, ...a] of ms.ops) OPS[k](s, a); return s; }
 function planNow(s = preview()) { try { return D.planOf(s.d, today()); } catch { return null; } }
-// Save: what you changed in the sheet, then the action — on a fresh copy of your trackers.
+// ⚡ Saving a meal: the change is made on this screen's copy first (sheet closed, Health redrawn,
+// confetti) and saved to your trackers right after (ms.c.editMine, in order). If that save fails,
+// the screen goes back to how it was and says so.
+// Changes made on this screen's copy, then saved behind it. `apply(s)` runs twice: on a copy now,
+// and on your trackers once they're up to date — so it must only change the store it's given.
+// (editMine then keeps your saved record for Health to redraw from.)
+function replaceData(d) { if (!ms.data) return; for (const k of Object.keys(ms.data)) if (!(k in d)) delete ms.data[k]; Object.assign(ms.data, d); }
+function saveSoon(apply, { redraw = () => ms.c.refresh() } = {}) {
+  const before = ms.data ? clone(ms.data) : null;
+  const s = mem(), out = apply(s);
+  if (ms.data) { replaceData(s.d); ms.c.seedMine?.(ms.data); }
+  const saved = ms.c.editMine((real) => apply(real)).catch(async (e) => {
+    if (before) { replaceData(before); ms.c.seedMine?.(ms.data); }
+    ms.c.toast(`Not saved — ${e.message || 'try again'}`);
+    await redraw();
+  });
+  return { out, saved };
+}
 async function commit(action, msg, undo = null) {
   if (ms.busy) return null;
   ms.busy = true;
@@ -62,19 +79,15 @@ async function commit(action, msg, undo = null) {
   try {
     // 🎉 A meal newly logged today gets confetti and a line on how the day is going (js/cheer.js).
     const loggedNow = (s) => { const e = s.get('eaten', {}) || {}; return e.date === today() ? Object.keys(e.meals || {}) : []; };
-    let added = [], day = null, fresh = null;
-    const out = await ms.c.editMine((s) => {
+    let added = [], day = null;
+    const { out } = saveSoon((s) => {
       const before = loggedNow(s);
       for (const [k, ...a] of ops) OPS[k](s, a);
       const r = action ? action(s) : null;
       added = loggedNow(s).filter((m) => !before.includes(m));
       if (added.length) day = healthDay({ weights: s.get('weights', []) || [], eaten: s.get('eaten', {}) || {}, mealLog: s.get('mealLog', {}) || {} }, today());
-      // This screen's copy (shared with Health) follows what was just saved, so the next sheet or
-      // Talk card shows the meal as it is now, not as it was.
-      fresh = Object.fromEntries(['custom', 'eaten', 'planned', 'mealLog', 'mealFit', 'combos', 'preparedMeals'].map((k) => [k, s.get(k, undefined)]).filter(([, v]) => v !== undefined));
       return r;
     });
-    if (fresh && ms.data) Object.assign(ms.data, clone(fresh));
     ms.ops = [];
     ms.c.closeSheet();
     const cheer = day ? logCheer(day, today(), { meal: added[added.length - 1] }) : null;
@@ -643,15 +656,11 @@ export async function onClick(t) {
     case 'lock': {
       // Saved right away (it's about the coming days, not this log): the meal's other changes stay as they are.
       const [meal, slot, on] = r, shown = planNow()?.[meal]?.portions?.find((p) => p.slot === slot), name = FOODS[shown?.food]?.name || 'It';
-      return (async () => {
-        const ops = ms.ops.slice();
-        let fresh = null;
-        await ms.c.editMine((s) => { D.lockAmount(s, today(), meal, slot, on === '1', shown ? shown.grams : null); fresh = Object.fromEntries(['custom', 'eaten', 'prefs'].map((k) => [k, s.get(k, undefined)])); });
-        if (fresh && ms.data) Object.assign(ms.data, clone(fresh));
-        ms.ops = ops;
-        ms.c.toast(on === '1' ? `🔒 ${name} stays at this amount ${lockWhere(meal)} — tap Locked to unlock` : `🔓 ${name} is sized by your plan again`);
-        return mealSheet(meal);
-      })();
+      // ⚡ Shown at once; saved right behind (and put back, with a note, if that fails).
+      const grams = shown ? shown.grams : null, reopen = () => (document.querySelector('#sheet')?.open && document.querySelector('.ml-sheet') && ms.sheet?.meal === meal ? mealSheet(meal) : ms.c.refresh());
+      saveSoon((s) => D.lockAmount(s, today(), meal, slot, on === '1', grams), { redraw: reopen });
+      ms.c.toast(on === '1' ? `🔒 ${name} stays at this amount ${lockWhere(meal)} — tap Locked to unlock` : `🔓 ${name} is sized by your plan again`);
+      return mealSheet(meal);
     }
     case 'fitto': { const [meal, n, left] = r; sh.fit = Math.max(50, +n || 0); return applyFit(meal, left === 'left'); }
     case 'fitstep': { const [meal, d] = r, m = planNow()?.[meal]; if (!m) return null; sh.fit = Math.max(50, (sh.fit ?? fitDefault(meal, m)) + +d); return applyFit(meal); }
