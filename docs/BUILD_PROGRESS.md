@@ -22,6 +22,8 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 | Card shows the meal as it is now | `family/meals.js` `commit` | Keeps its copy in step after each save, so the card no longer shows the meal from before the last log. |
 | Section-only dropdowns | trackers' meal editor (`js/app.js`) | Each food's dropdown lists only its section's foods. "＋ Add another protein / carb / fat…" appears once there's one. The carbs menu is grouped: Rice, bread & potatoes · Beans · Fruit · Veggies. |
 
+**⚖️ Fit** (owner: "fit to macros remaining for the day or 400 or 500. Not 600"). The trackers' meal page and Health's meal sheet both offer *What's left · N kcal* (today's target minus what's eaten, plus this meal's own logged calories), *400 kcal* and *500 kcal*. The trackers no longer have the single "Fit to <plan> kcal" button. In the browser, 400 brought dinner to 388 kcal, and 500 fit lunch to 508 (*protein had to come down too*).
+
 **Tests:** `npm test` passes 562/562. New: `tests/mealadd.test.js` (4: comma-less lists, add to a logged meal, add to a planned meal / packaged → extra, Undo) and 1 in `tests/talkparse.test.js`.
 
 **Browser check** (local, seeded): the owner's exact sequence.

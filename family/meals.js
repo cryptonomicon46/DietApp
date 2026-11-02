@@ -123,6 +123,7 @@ function mealSheet(meal) {
   const canFit = rows && !m.prepared && !m.eatout && !m.manual;
   const fitVal = sh.fit ?? fitDefault(meal, m);
   const fit = canFit ? `<div class="ml-fit"><label for="mlFit" class="small"><b>Fit to</b></label><span class="ml-step"><button type="button" class="ghost" data-ml="fitstep:${meal}:-25" aria-label="25 kcal less">−</button><input id="mlFit" inputmode="numeric" data-mle="fit:${meal}" value="${fitVal}" aria-label="Fit this meal to how many calories"><span class="small muted">kcal</span><button type="button" class="ghost" data-ml="fitstep:${meal}:25" aria-label="25 kcal more">＋</button></span><button type="button" class="ghost small" data-ml="fitgo:${meal}">⚖️ Fit</button></div>
+    <div class="row wrap ml-fitq">${fitLeft(meal) >= 150 ? `<button type="button" class="ghost small" data-ml="fitto:${meal}:${fitLeft(meal)}">What's left · ${fitLeft(meal)} kcal</button>` : ''}<button type="button" class="ghost small" data-ml="fitto:${meal}:400">400 kcal</button><button type="button" class="ghost small" data-ml="fitto:${meal}:500">500 kcal</button></div>
     <p class="tiny muted ml-fitnote" role="status">${sh.fitNote ? E(sh.fitNote) : `Planned ${r0(m.target?.kcal)} kcal · keeps the protein, adjusts carbs and fat`}</p>` : '';
   const lowcarb = meal !== 'snack' && !m.eatout && !m.prepared && !c.items ? `<button type="button" class="ghost" data-ml="lowcarb:${meal}">🥑 Low-carb ${c.lowCarb ? 'off' : 'today'}</button>` : '';
   const save = rows && !m.prepared && !m.eatout ? `<button type="button" class="ghost" data-ml="savecombo:${meal}">☆ Save as combo</button>` : '';
@@ -418,6 +419,11 @@ export function talkExisting(target) {
   if (!m) return null;
   return { title: m.title, kcal: r0(m.totals?.kcal), logged: !!D.logOf(s.d, today()).meals?.[target], foods: (m.portions || []).filter((x) => x.grams > 0).length };
 }
+// ⚖️ What's left of today's calories for this meal (its own logged calories count as left, since
+// fitting replaces them).
+function fitLeft(meal) {
+  try { const s = preview(); return r0(D.dayEntry(s.d, today()).left.kcal + (D.logOf(s.d, today()).meals?.[meal]?.kcal || 0)); } catch { return 0; }
+}
 // ✏️ Edit: the meal's own estimate sheet with the draft (its amounts, ✓ Plan & log, Plan it).
 export function talkEdit(target, items, { plan = false, text = '' } = {}) {
   ms.sheet = null;
@@ -612,6 +618,7 @@ export async function onClick(t) {
       sh.pick = false; sh.fit = undefined; sh.fitNote = '';
       return mealSheet(meal);
     }
+    case 'fitto': { const [meal, n] = r; sh.fit = Math.max(50, +n || 0); return applyFit(meal); }
     case 'fitstep': { const [meal, d] = r, m = planNow()?.[meal]; if (!m) return null; sh.fit = Math.max(50, (sh.fit ?? fitDefault(meal, m)) + +d); return applyFit(meal); }
     case 'fitgo': { const m = planNow()?.[r[0]]; if (!m) return null; sh.fit = sh.fit ?? fitDefault(r[0], m); return applyFit(r[0]); }
     case 'relog': { const meal = r[0], at = D.logOf(ms.data, today()).meals?.[meal]?.at; return commit((x) => D.logPlanned(x, today(), meal, at), (e) => (e ? `✓ ${NAME[meal]} updated · ${e.kcal} kcal` : 'Updated')); }

@@ -217,6 +217,16 @@ function pastTally() {
   return tally(past, today);
 }
 
+// ⚖️ Fit the meal: to what's left of today's calories (this meal's own logged calories count
+// as left, since fitting replaces them), or to 400 or 500 kcal.
+function fitLeft(meal) {
+  const logged = Math.round(todaysLog().meals?.[meal]?.kcal || 0);
+  return Math.round(targets().kcal - consumed().kcal) + logged;
+}
+function fitRow(meal) {
+  const left = fitLeft(meal);
+  return `<div class="row wrap fit-row"><span class="small muted">⚖️ Fit to</span>${left >= 150 ? `<button type="button" class="ghost small" data-fit="${left}" title="Scale every food so the meal uses what's left of today">What's left · ${left} kcal</button>` : ''}<button type="button" class="ghost small" data-fit="400">400 kcal</button><button type="button" class="ghost small" data-fit="500">500 kcal</button></div>`;
+}
 // Quick reference in the header on every tab: eaten vs left for today.
 function renderDayBar() {
   if (state.profile) recordDay();
@@ -1137,7 +1147,7 @@ function customBody(meal, m) {
       <div class="row" style="margin-top:6px"><select data-cadd aria-label="Add a food">${foodOptions('', '+ Add a food…')}</select></div>`
       : sectioned(meal, m, (x, i, key) => customRow(x, i, meal, key))}
     <div class="row" style="margin-top:6px">
-      ${meal !== 'snack' && m.portions.length && !m.manual ? `<button type="button" class="ghost small" data-fit title="Scale every food so the meal hits its calorie target">⚖️ Fit to ${m.target.kcal} kcal</button>` : ''}
+      ${meal !== 'snack' && m.portions.length && !m.manual ? fitRow(meal) : ''}
     </div>
     <details class="manual" ${m.manual ? 'open' : ''}>
       <summary>✍️ Enter the meal's macros yourself (a packaged meal, another app)</summary>
@@ -1309,8 +1319,8 @@ $('#meals').addEventListener('click', (e) => {
       renderToday();
     }
   } else if (e.target.closest('[data-fit]')) {
-    const m = todayPlan()[meal];
-    editCustom(meal, (c) => { c.items = fitItems(c.items, m.target.kcal); });
+    const m = todayPlan()[meal], kcal = +e.target.closest('[data-fit]').dataset.fit || m.target.kcal;
+    editCustom(meal, (c) => { c.items = fitItems(c.items, kcal); });
     resnap(meal);
     renderToday();
   } else if (e.target.closest('[data-prepared]')) {
