@@ -138,3 +138,22 @@ test('📚 the catalogue\'s books by the author you named come first', async () 
   assert.equal(authorHit({ authors: [{ name: 'Alan Kolipore' }] }, 'Josh Silver'), false);
   assert.equal(authorHit({ authors: [] }, ''), false);
 });
+
+test('📷 "take a photo of my dinner" (eaten out) or "…of my workout" (today\'s WOD): read on the phone only', async () => {
+  const { photoAsk } = await import('../js/talkParse.js');
+  for (const [t, meal] of [['Take a photo of my dinner', 'dinner'], ['take a picture of my lunch', 'lunch'], ['Snap my dinner', 'dinner'], ['I ate out for lunch, take a photo', 'lunch'],
+    ['Log dinner from a photo', 'dinner'], ['Can you take a photo of my plate', 'dinner'], ['Let me take a picture of my breakfast', 'breakfast'], ['Take a photo of my snack', 'extra']]) assert.deepEqual(photoAsk(t, 19), { kind: 'meal', meal }, t);
+  assert.deepEqual(photoAsk('Take a photo of my meal', 8), { kind: 'meal', meal: 'breakfast' }, 'no meal said: the one for the time of day');
+  assert.deepEqual(photoAsk('Take a photo of my meal', 13), { kind: 'meal', meal: 'lunch' });
+  // 🏋️ The WOD: today's workout from a photo.
+  for (const t of ['Take a photo of my workout', 'take a picture of the WOD', 'Snap the whiteboard', 'screenshot of my training', 'Read the WOD from a photo']) assert.deepEqual(photoAsk(t, 19), { kind: 'workout' }, t);
+  for (const t of ['Did I take a photo of my dinner?', 'Did I take a photo of my workout?', 'Snap the nutrition label', 'Log dinner: chicken and rice', 'Log a workout: squats 3x8', 'Add a photo of my dog', 'Add Dune to our watchlist']) assert.equal(photoAsk(t, 19), null, t);
+  assert.equal(parseTalk('Take a photo of my dinner'), null, 'never a step for Claude (its list is unchanged)');
+});
+
+test('❓ "how do I log a meal / a workout / my weight?" → the ways to do it (never a step)', async () => {
+  const { howAsk } = await import('../js/talkParse.js');
+  for (const [t, topic] of [['How do I log a meal?', 'meal'], ['What are the ways to log my lunch?', 'meal'], ['How do I log what I ate', 'meal'], ['Help me log dinner', 'meal'],
+    ['how can I add a workout', 'workout'], ['Show me how to log a workout', 'workout'], ['How do I track my WOD?', 'workout'], ['How to track my weight', 'weight']]) assert.deepEqual(howAsk(t), { topic }, t);
+  for (const t of ['How do I log in?', 'How was my day?', 'Log lunch: chicken', 'Log a workout: squats 3x8', 'How do I add Pat to the family?']) assert.equal(howAsk(t), null, t);
+});

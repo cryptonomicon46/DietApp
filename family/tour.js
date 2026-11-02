@@ -61,9 +61,9 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-11e',
-  title: 'New in 💪 Health: check your weight, 📸 photos, and each meal\'s macros',
-  text: 'Save on today\'s weight shows the number to check, with front, side and back photos in one pick. After you log a meal, Health shows its protein, carbs and fat for an hour. Fit to N kcal keeps your protein and your plan\'s carb : fat balance.',
+  id: '2026-11f',
+  title: 'New: 📷 "Take a photo of my dinner" — or of the WOD — in Talk',
+  text: 'Say it in 🗣️ Talk and tap 📷 Take a photo or 🖼 From Photos: a meal eaten out is estimated, a workout photo becomes today\'s workout — you check both first. Ask "how do I log a meal?" to see every way. Health also saves as you tap, and foods swap from their own menu.',
   slides: ['new', 'help'],
 };
 SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '⚖️ Weigh-in, 📸 Photos, 🍽 Macros', cards: [

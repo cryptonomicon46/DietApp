@@ -15,7 +15,7 @@ jobs:
           node-version: 22
       - run: npm test
   links:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.56 has no Chromium for ubuntu-latest (26.04) yet
     needs: test
     timeout-minutes: 20
     steps:
@@ -35,7 +35,7 @@ jobs:
   # ⚡ Start-up stays within scripts/perf/budget.json: API requests, no duplicates, layout shift,
   # script size. Against the real Worker (wrangler dev, demo sign-in) and a synthetic family.
   perf:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # (same: the browser jobs stay on 24.04 until Playwright supports 26.04)
     needs: test
     timeout-minutes: 15
     env:

@@ -379,6 +379,18 @@ export async function onPick(input) {
   if (ms.sheet.pic?.b64 && ms.ai !== false) return readPhoto();
   drawPhoto();
 }
+// 📷 From Talk ("take a photo of my dinner"): the photo already taken or picked there, read as a
+// restaurant dish for that meal — the same sheet, estimate and review as 🍴 Ate out › Photo.
+export async function talkPhoto(meal, file) {
+  photoSheet(meal, 'restaurant');
+  const sh = ms.sheet;
+  try { const { blob, b64 } = await redraw(file); sh.pic = { url: URL.createObjectURL(blob), b64 }; sh.error = ''; }
+  catch { sh.error = "Couldn't open that picture — try a JPEG or PNG."; return drawPhoto(); }
+  await aiCheck();
+  if (ms.sheet !== sh) return null;
+  if (ms.ai !== false) return readPhoto();
+  return drawPhoto();
+}
 function dropPic() { if (ms.sheet?.pic?.url) URL.revokeObjectURL(ms.sheet.pic.url); }
 async function readPhoto() {
   const sh = ms.sheet;
