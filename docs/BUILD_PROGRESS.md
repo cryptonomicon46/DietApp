@@ -4,6 +4,32 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🎲💑 A show's bingo and couples picks next to the show (2026-11-02, `v2/watch-games` from `main` `30ba985`; front end only, no `pawdeploy`; owner: "proceed with building and merge"; mockups `docs/mockups/watchgames/`)
+
+**Report:** finding a show's bingo card took 4 taps (Open Watchlist, then scroll to the bottom). Games were also matched to shows by exact title, so "Love Is Blind" picks never linked to "Love Is Blind - US".
+
+**Done:**
+
+| Change | Where |
+| --- | --- |
+| Matching by name, ignoring region / season / year tags | `js/showGames.js` (`showKey`, `sameShow`, `gamesFor`) |
+| Chips under the show's name: 💑 Picks · playing ›, 🎲 Bingo ▶, 🎲 Bingo · playing now › | Us rows and Watchlist cards |
+| **Play along** on the show's page (Open / ▶ Play, or ＋ Make a bingo card / ＋ Start couples picks, filled in with the show's name); it replaces the old 🎲 Bingo for it button | the show's page |
+| 🎲 Games, in place of the link at the bottom of the Watchlist | a 🎲 button on Us, the 4th Watchlist tab |
+| The Games page starts with *What you're watching*, grouped by show | Games page |
+| "💑 Update picks" on the ＋ Episode message, for a show whose picks are being played | `toast` gets an optional extra action |
+
+**Scope note:** the chips show "playing", not scores. The season list has no scores, and reading them would mean one extra request per show.
+
+**Tests:** `tests/showgames.test.js` (2), and `npm test` passes.
+
+**Browser check** (local, seeded): Love Is Blind - US with a "Love Is Blind" card set and season.
+- The Watchlist card shows 💑 Picks · playing › and 🎲 Bingo ▶.
+- Its page has Play along (Couples picks · 3 couples · playing · Open ›, Bingo · 26 squares · ▶ Play), and ▶ Play started a game.
+- ＋ Episode gives "✓ Love Is Blind - US · S1 E1 💑 Update picks".
+- The tabs fit at 390 px: Watching 4 · Want to Watch 2 · Watched · 🎲 Games.
+- The Games tab lists what you're watching.
+
 ### 🍽 Talk: "Log dinner" replaces, "Add … to dinner" adds; every spoken food kept; section-only dropdowns (2026-11-02, `v2/talk-add-meal` from `main` `e8f6174`; front end only, no `pawdeploy`; owner: "Make these changes and if no redeploy needed, merge into main")
 
 **Owner's report:**

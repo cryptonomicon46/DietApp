@@ -1683,3 +1683,21 @@ button.ml-opt.on > span:last-child { color: var(--brand); font-weight: 800; }
 .di-stars { display: flex; gap: 6px; margin-top: 8px; } .di-stars button { flex: 1; min-width: 0; min-height: 44px; padding: 0 2px; font-size: .9rem; background: var(--card); color: #e0a400; border: 1px solid var(--line); }
 .tk-now { margin: 0; } .tk-cmds { margin: 8px 0 0; }
 .ml-fitq { gap: 6px; margin: 4px 0 0; } .ml-fitq button { min-height: 40px; }
+/* 🎲💑 A show's games, next to the show */
+.uw-col { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.uw-row { align-items: flex-start; } .uw-row > button.small { margin-top: 6px; }
+.wg-games { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 4px; }
+.wg-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; min-width: 0; padding: 4px 11px; border-radius: 999px; font-size: .8rem; font-weight: 700; border: 1px solid var(--line); background: var(--card); color: var(--ink); white-space: nowrap; }
+.wg-chip.live { background: #fff1d6; border-color: #f3cf86; color: #7a4d00; }
+.wg-chip.picks { background: #ffe3ec; border-color: #f3c1cf; color: #8a1f45; }
+:root[data-theme=dark] .wg-chip.live { background: #3a2f17; border-color: #5a4720; color: #f3cf86; }
+:root[data-theme=dark] .wg-chip.picks { background: #3a1f2a; border-color: #5a2e3e; color: #f8b4c9; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .wg-chip.live { background: #3a2f17; border-color: #5a4720; color: #f3cf86; } :root:not([data-theme=light]) .wg-chip.picks { background: #3a1f2a; border-color: #5a2e3e; color: #f8b4c9; } }
+.uw-foot .wg-icon { flex: none; width: 48px; min-width: 48px; padding: 0; font-size: 1.2rem; }
+.wg-game { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); margin: 6px 0; }
+.wg-game .ic { font-size: 1.45rem; text-align: center; }
+.wg-game b { display: block; } .wg-game small { display: block; color: var(--muted); font-size: .8rem; }
+.wg-game button { min-height: 40px; }
+.wg-card { border: 1px solid var(--line); border-radius: 16px; background: var(--card); padding: 12px 14px; margin: 0 0 10px; }
+.wt-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.watch-head + .seg.wt-tabs button { min-width: 0; padding: 6px 4px; font-size: .78rem; line-height: 1.15; white-space: normal; }

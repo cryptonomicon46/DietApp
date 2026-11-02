@@ -104,7 +104,7 @@ const member = (id) => fam()?.members.find((m) => m.id === id);
 
 // ---------- little helpers ----------
 // undo: optional — the toast gets an Undo button and stays a little longer.
-function toast(text, undo) {
+function toast(text, undo, extra = null) {
   const t = $('#toast');
   // An open sheet is a modal <dialog> (the top layer): a toast behind it can't be seen, so while a
   // sheet is open the toast is shown inside it (errors from a sheet's buttons used to vanish).
@@ -117,7 +117,14 @@ function toast(text, undo) {
     b.addEventListener('click', (e) => { e.stopPropagation(); t.hidden = true; undo(); });
     t.append(' ', b);
   }
-  clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, typeof undo === 'function' ? 7000 : 3200);
+  // One more action on the message ("💑 Update picks" after an episode).
+  if (extra?.label && typeof extra.fn === 'function') {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'toast-undo'; b.textContent = extra.label;
+    b.addEventListener('click', (e) => { e.stopPropagation(); t.hidden = true; extra.fn(); });
+    t.append(' ', b);
+  }
+  clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, typeof undo === 'function' || extra ? 7000 : 3200);
 }
 const hue = (id = '') => HUES[[...id].reduce((a, c) => a + c.charCodeAt(0), 0) % HUES.length];
 function avatar(m, size = 40) {
@@ -3887,7 +3894,7 @@ let readMod = null;
 const RM = () => (readMod ||= import(`./read.js?v=${VERSION}`).then((m) => { m.init({ $, api, state, fam, me, member, partnerMember, esc, openSheet, closeSheet, toast, act, show, unlock, lock, discuss, isoLocal, demoBanner, lockedHere, LOCKED_MSG }); return m; }).catch((e) => { readMod = null; throw e; }));
 // 📺 Watch's screens (family/watch.js) load the first time Us or Watch needs them.
 let watchMod = null;
-const WM = () => (watchMod ||= import(`./watch.js?v=${VERSION}`).then((m) => { m.init({ $, LS, act, api, bingo, bingoNew, can, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide }); return m; }).catch((e) => { watchMod = null; throw e; }));
+const WM = () => (watchMod ||= import(`./watch.js?v=${VERSION}`).then((m) => { m.init({ $, LS, act, api, bingo, bingoNew, can, openPicks, seasonNew, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide }); return m; }).catch((e) => { watchMod = null; throw e; }));
 const loadTv = (...a) => WM().then((m) => m.loadTv(...a));
 const loadWatch = (...a) => WM().then((m) => m.loadWatch(...a));
 const renderUsWatch = (...a) => WM().then((m) => m.renderUsWatch(...a));
@@ -3898,6 +3905,7 @@ const watchBingo = (...a) => WM().then((m) => m.watchBingo(...a));
 const watchDetail = (...a) => WM().then((m) => m.watchDetail(...a));
 const watchOne = (...a) => WM().then((m) => m.watchOne(...a));
 const watchSaved = (...a) => WM().then((m) => m.watchSaved(...a));
+const gamesStale = () => { if (watchMod) watchMod.then((m) => m.gamesStale()).catch(() => {}); };
 const watchView = (...a) => WM().then((m) => m.watchView(...a));
 // 📺 Episode dates for the shows you're watching (or have up next), from TMDB through the
 // connector. Which TMDB show each one is, and the dates, are kept on this phone.
@@ -4200,7 +4208,8 @@ Reply with just the squares, one per line, no numbers or bullets.`;
 async function bingoView() {
   if (bingo.game) return bingoGame();
   if (bingo.season) return seasonView();
-  const [r, pk] = await Promise.all([act(() => api.get(`/families/${state.fid}/bingo`)), api.get(`/families/${state.fid}/picks`).catch(() => ({ seasons: [] }))]);
+  const [r, pk, W] = await Promise.all([act(() => api.get(`/families/${state.fid}/bingo`)), api.get(`/families/${state.fid}/picks`).catch(() => ({ seasons: [] })),
+    WM().then(async (m) => { await Promise.all([m.loadWatch(), m.loadGames(true)]); return m; }).catch(() => null)]);
   if (!r || state.view !== 'bingo') return;
   bingo.seasons = pk.seasons;
   bingo.list = r;
@@ -4208,7 +4217,8 @@ async function bingoView() {
   $('#view').innerHTML = `${demoBanner()}
     <section class="card bingo-hero"><div class="big">🎲</div><h2>Show bingo</h2><p class="small muted">Pick a card set before an episode, everyone gets their own card, and the first line wins. New show? Add a card set — no app update needed.</p></section>
     ${live.length ? `<h3>Playing now</h3>${live.map((g) => `<button type="button" class="card bingo-row" data-bingogame="${g.id}"><b>${esc(g.title)}</b><small class="muted">started by ${esc(g.byName)} · ${ago(g.at)}${g.winners.length ? ` · 🏆 ${g.winners.map((w) => esc(w.name)).join(', ')}` : ''}</small><span class="go">Play ›</span></button>`).join('')}` : ''}
-    <h3>Card sets</h3>
+    ${W ? W.gamesByShow() : ''}
+    <h3>All card sets</h3>
     ${r.packs.length ? r.packs.map((p) => `<div class="card bingo-row"><b>${esc(p.title)}</b><small class="muted">${p.count} squares · added by ${esc(p.byName)}</small>
       <div class="row"><button type="button" data-bingostart="${p.id}">▶ Start a game</button>${p.mine || me().role === 'owner' ? `<button type="button" class="linkish small danger" data-bingodel="${p.id}">Remove</button>` : ''}</div></div>`).join('')
       : '<p class="small muted">No card sets yet — add one for the next show you watch.</p>'}
@@ -4254,10 +4264,12 @@ async function bingoGame(r) {
 }
 
 // 💑 Couples picks: one season of a dating show, everyone's predictions and the leaderboard.
-function seasonNew() {
+// 💑 A show's couples picks (from its chip, its page or the "logged" message).
+function openPicks(sid) { closeSheet(); bingo.season = sid; bingo.game = null; return show('bingo'); }
+function seasonNew({ title = 'Love Is Blind' } = {}) {
   openSheet(`<h2>💑 New season</h2>
     <form id="seasonForm" class="stack">
-      <label>Show<input name="title" maxlength="60" value="Love Is Blind"></label>
+      <label>Show<input name="title" maxlength="60" value="${esc(title)}"></label>
       <label>Couples — one per line<textarea name="text" rows="7" placeholder="Name & Name&#10;Name & Name"></textarea></label>
       <label>Anything else to predict? (optional, one per line)<textarea name="events" rows="3" placeholder="Talks about their dog&#10;Brings up astrology"></textarea></label>
       <p class="tiny muted">Built in: they fight · someone cries · someone cheats · gets drunk &amp; passes out · says "I love you" · family disapproves · an ex comes up · fights about money — and how it ends: 💍 I do, 🙅 a no at the altar, or 💔 split before the wedding.</p>
@@ -4885,7 +4897,7 @@ document.addEventListener('click', (e) => {
   if (d.photoid && t.classList.contains('ph')) return photoViewer(d.pfid, d.photoid, d.pin);
   if (d.momentedit) return momentSheet({ id: d.momentedit });
   if (d.watchaud) { const [id, aud] = d.watchaud.split(':'); return act(async () => { await api.patch(`/families/${state.fid}/watch/shows/${id}`, { aud }); await watchSaved(); toast(aud === 'family' ? '👨‍👩‍👧 Shared with the family' : '🔒 Just you two now'); }); }
-  if (d.watchtab) { watch.tab = d.watchtab; return renderWatch(); }
+  if (d.watchtab) { if (d.watchtab === 'games') { bingo.game = null; bingo.season = null; return show('bingo'); } watch.tab = d.watchtab; return renderWatch(); }
   if (d.watchone) { t.disabled = true; return act(() => watchOne(d.watchone)).finally(() => { t.disabled = false; }); }
   if (d.watchopen) return watchDetail(d.watchopen);
   if (d.rd) return act(async () => (await RM()).onClick(t));
@@ -4916,9 +4928,12 @@ document.addEventListener('click', (e) => {
     const pg = watch.shows.find((x) => x.id === d.watchpg)?.progress;
     return openSheet(`<h2>Where are you up to?</h2><form id="watchPgForm" class="stack" data-id="${d.watchpg}"><div class="row"><label>Season<input name="s" type="number" min="1" max="99" value="${pg?.s || 1}"></label><label>Episode<input name="e" type="number" min="0" max="999" value="${pg?.e || 0}"></label></div><div class="row end"><button type="button" class="ghost" data-act="close">Cancel</button><button>Save</button></div></form>`);
   }
+  if (d.watchpicks) return openPicks(d.watchpicks);
+  if (d.watchgame) { closeSheet(); bingo.game = d.watchgame; bingo.season = null; return show('bingo'); }
+  if (d.watchpicksnew) { const x = watch.shows.find((y) => y.id === d.watchpicksnew); return seasonNew({ title: x?.title.replace(/\s*[-–—:(]\s*(season|series)\s*\d+\)?\s*$/i, '') || '' }); }
   if (d.watchbingo) { const x = watch.shows.find((y) => y.id === d.watchbingo); return x ? act(() => watchBingo(x.title)) : null; }
   if (d.watchdel) { if (!confirm('Delete this from Watch? Its nights and ratings go too.')) return; return act(async () => { await api.del(`/families/${state.fid}/watch/shows/${d.watchdel}`); await watchSaved(); }); }
-  if (d.bingostart) return act(async () => { const r = await api.post(`/families/${state.fid}/bingo/games`, { packId: d.bingostart }); bingo.game = r.game.id; bingoGame(); });
+  if (d.bingostart) return act(async () => { const r = await api.post(`/families/${state.fid}/bingo/games`, { packId: d.bingostart }); gamesStale(); bingo.game = r.game.id; bingoGame(); });
   if (d.bingodel) { if (!confirm('Remove this card set?')) return; return act(async () => { await api.del(`/families/${state.fid}/bingo/packs/${d.bingodel}`); bingoView(); }); }
   if (d.bsq != null) {
     t.classList.toggle('on');
@@ -5546,6 +5561,7 @@ document.addEventListener('submit', (e) => {
   if (f.id === 'seasonForm') {
     e.preventDefault();
     return act(async () => {
+      gamesStale();
       const r = await api.post(`/families/${state.fid}/picks`, { title: v.title, text: v.text, events: v.events.split(/\n/).map((x) => x.trim()).filter(Boolean) });
       closeSheet(); bingo.season = r.season.id; seasonView(); toast('💑 Make your picks — they stay private until something happens');
     });
@@ -5556,7 +5572,7 @@ document.addEventListener('submit', (e) => {
   }
   if (f.id === 'bingoForm') {
     e.preventDefault();
-    return act(async () => { const r = await api.post(`/families/${state.fid}/bingo/packs`, { title: v.title, text: v.text }); closeSheet(); toast(`${r.pack.title}: ${r.pack.count} squares saved 🎲`); bingoView(); });
+    return act(async () => { const r = await api.post(`/families/${state.fid}/bingo/packs`, { title: v.title, text: v.text }); gamesStale(); closeSheet(); toast(`${r.pack.title}: ${r.pack.count} squares saved 🎲`); bingoView(); });
   }
   if (f.id === 'petCallsForm') {
     e.preventDefault();
