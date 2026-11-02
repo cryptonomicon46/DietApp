@@ -4,6 +4,26 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### ⚙️ Free start-up space: Me and Family settings load when opened (2026-11-02, `v2/lazy-settings` from `main` `392e804`; front end only, no `pawdeploy`; owner: "Free up startup space by lazy-loading Me and Family settings")
+
+**Done:** eight functions moved out of `family/app.js` into a new lazy `family/settings.js`:
+- `meView`, `familyView`, `memberView` with `healthCard` and `petDetails`;
+- `renderNotify`, `adminView`, `turnOnEncryption`.
+
+`app.js` keeps a hoisted stand-in for each one (`settingsUi()` loads the module once and passes its 40 helpers with `init`). Callers (the view map, the click handler, `pushOn`) are unchanged.
+
+The move was made with a parser-based script (acorn), then checked two ways:
+- no name the module uses is left undefined;
+- nothing removed from `app.js` is still referenced there.
+
+None of the moved code assigns an `app.js` variable.
+
+**Checks:**
+- `npm test` 578/578.
+- **Browser:** Me (every section open), Family and a member page render **identical text** on `main` and on the branch, with no page errors on either.
+- **Perf, same machine, `main` vs branch:** start-up script 200 → **192 KB**; 15 requests and CLS 0.004 on both. Cold first paint was 1,400 / 1,428 ms on `main` and 1,448 / 1,604 ms on the branch, so a little slower both runs on a noisy measure; warm ~1,050 ms on both.
+- **Cost:** the first open of Me fetches `settings.js` (~8 KB gz); after that it's cached.
+
 ### 📷 Talk: "take a photo of my dinner / the WOD", and "how do I log…?" cards (2026-11-02, `v2/talk-meal-photo` from `main` `16a5921`; front end only, no `pawdeploy`; owner: "take a photo of my lunch or dinner… prompt me to capture a photo… or use a photo from the library", then "take a photo of my workout… populate the workout for the day", then "show a card on the various options if posed with such a question"; "build this and merge into main if no redeploy needed")
 
 **Done:**
@@ -32,7 +52,7 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 | "How do I log a meal?" | four ways with taps |
 | "How do I log a workout?" | four ways; 📷 opened the WOD photo card; an example filled the box |
 
-**Perf budget:** within budget (15 start-up requests, CLS 0.004). The start-up script is now **200 KB of 200** (`family/app.js` +127 B gzipped here). The next change that adds start-up code must first move something lazy; candidates are Me / Family settings, the dog appointment sheet and the bingo screens out of `app.js`.
+**Perf budget:** within budget (15 start-up requests, CLS 0.004). The start-up script is now **200 KB of 200** (`family/app.js` +127 B gzipped here). The next change that adds start-up code must first move something lazy (done next: Me / Family settings → 192 KB).
 
 ### 📸 Don't ask for today's progress photos twice (2026-11-02, `v2/photos-done` from `main` `882a810`; front end only, no `pawdeploy`; owner: "If progress photos have already been uploaded for the day, don't ask for it again under the weight bar")
 
