@@ -307,14 +307,26 @@ function mergeList(x, y, yWins) {
   }
   return byDate ? out.sort((a, b) => String(a.date).localeCompare(String(b.date))) : out;
 }
+// A day's food is one record, never blended: today's meal changes (`custom`), what was eaten
+// (`eaten`), a day planned ahead (`planned[date]`) and a meal kept every day (`dailyMeals[meal]`).
+// Combining two versions of one of these field by field kept the old meal's name and foods next
+// to the new ones (a protein bar plus the chicken you said; the plan's salmon plus your shake),
+// and brought back meals you had taken off. So the later day wins, and on the same day the
+// winning copy is taken whole.
+const WHOLE = (path) => (path.length === 1 && (path[0] === 'custom' || path[0] === 'eaten'))
+  || (path.length === 2 && (path[0] === 'planned' || path[0] === 'dailyMeals'));
 // Everything from both; where both have a different single value, yWins picks y's.
-export function mergeData(x, y, yWins = true) {
+export function mergeData(x, y, yWins = true, path = []) {
   if (x === undefined) return y;
   if (y === undefined) return x;
+  if (WHOLE(path)) {
+    if (plain(x) && plain(y) && x.date && y.date && x.date !== y.date) return x.date > y.date ? x : y;
+    return yWins ? y : x;
+  }
   if (Array.isArray(x) && Array.isArray(y)) return mergeList(x, y, yWins);
   if (plain(x) && plain(y)) {
     const out = {};
-    for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) out[k] = mergeData(x[k], y[k], yWins);
+    for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) out[k] = mergeData(x[k], y[k], yWins, [...path, k]);
     return out;
   }
   return yWins ? y : x;

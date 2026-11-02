@@ -398,7 +398,7 @@ export function talkLog(target, items, { plan = false } = {}) {
     return commit((s) => { snap = D.mealSnapshot(s, today(), 'snack'); return D.addExtras(s, today(), [{ title: `${icon} ${name}`, kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) }]); }, `✓ ${name} logged · ${kc}`, undo);
   }
   const undo = () => commit((s) => D.restoreMeal(s, today(), target, snap), `Undone — ${NAME[target].toLowerCase()} is back as it was`);
-  return commit((s) => { snap = D.mealSnapshot(s, today(), target); return plan ? D.planAs(s, today(), target, c) : D.logAs(s, today(), target, c); }, `✓ ${NAME[target]} ${plan ? 'planned' : 'logged'} · ${kc}`, undo);
+  return commit((s) => { snap = D.mealSnapshot(s, today(), target); if (!plan) return D.logAs(s, today(), target, c); const x = D.planAs(s, today(), target, c); D.unlog(s, today(), target); return x; }, `✓ ${NAME[target]} ${plan ? 'planned' : 'logged'} · ${kc}`, undo);
 }
 // ✏️ Edit: the meal's own estimate sheet with the draft (its amounts, ✓ Plan & log, Plan it).
 export function talkEdit(target, items, { plan = false, text = '' } = {}) {
@@ -515,7 +515,7 @@ function logEstimate() {
 }
 function planEstimate() {
   const { target } = ms.sheet, { c, t } = estMeal();
-  return commit((s) => D.planAs(s, today(), target, c), `🗓 ${NAME[target]} planned · ${r0(t.kcal)} kcal — log it from Health when you eat it`);
+  return commit((s) => { const x = D.planAs(s, today(), target, c); D.unlog(s, today(), target); return x; }, `🗓 ${NAME[target]} planned · ${r0(t.kcal)} kcal — log it from Health when you eat it`);
 }
 
 // ---------- 🔎 What fits? / Adjust the rest of today ----------

@@ -4,6 +4,25 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🔀 Fix: a meal you say or set replaces the old one (2026-11-02, `v2/meal-replace` from `main` `d34b3e7`; front end only, no `pawdeploy`; owner reported two cases)
+
+**The two cases:**
+- Lunch said in Talk (chicken thigh, sweet potato, veggies, nuts) showed as "Barebells protein bar" at 837 kcal.
+- A protein shake said for dinner (whey and berries) was added next to the plan's turkey and salmon.
+
+**Root cause:** `mergeData` (`js/account.js`), which combines this device's tracker copy with a newer one from another device (or the family app), merged field by field.
+- It kept the old meal's `title` and joined the two `items` lists.
+- The device then pushed the blend back.
+- It also brought back meals taken off.
+
+**Fix:**
+- A day's food is one record: `custom`, `eaten`, `planned[date]` and `dailyMeals[meal]`. The later day wins, or on the same day the newer copy is taken whole.
+- Planning over a logged meal (Talk "Plan …", Tell me › Plan it) un-logs it, so the log matches what you entered.
+
+**Tests:** `tests/account.test.js` adds the owner's lunch case: the new lunch only, a meal taken off stays off, the later day wins, `planned` per day. `npm test` gives 551/551.
+
+**Not done:** meals already blended on the owner's account stay as they are until re-entered. Saying the meal again in Talk, or removing the extra foods, replaces it.
+
 ### 🎤✅ Release 1 parts D + E: Talk listens patiently, and checks before it saves (2026-11-01, `v2/talk-listen-review` from `main` `823dcfa`; front end only, no `pawdeploy`; owner: "Proceed with D and E as they're critical improvements")
 
 **D: listening.**
