@@ -141,6 +141,7 @@ Usage is counted per provider in KV (`searchruns:<month>`, `scoutruns:…`, `out
   - crypto (`e2ee.test.js`).
   - 2.0 guard rails (`dependencies.test.js`): where the household code is still used, no code or connector set-up in what people see, and Home starting without the feed or news.
 - CI (`check.yml`) runs the tests, then `scripts/check-links.mjs` in Chromium. Sites that block robots (OpenTable, Ticketmaster) are reported as "check by hand".
+- **CI runners:** `test` runs on `ubuntu-latest`; the browser jobs (`links`, `perf`) are pinned to `ubuntu-24.04`, because Playwright 1.56 can't install Chromium on `ubuntu-latest` (26.04) — move them back once Playwright supports it.
 - **Performance budget** (a separate CI job, `scripts/perf/`: `seed.mjs`, `pages.mjs`, `weather.mjs`, `budget.mjs`, `budget.json`): cold and warm start of `/family/` on a throttled phone profile against `wrangler dev`. It fails on more than 18 start-up API requests, any duplicate request, layout shift over 0.05, or start-up script over 200 KB gzipped. Paint times (FCP/LCP) are reported, and checked only with `PERF_STRICT=1`.
 - UI flows are checked with Playwright scripts during development (not committed). There are no committed end-to-end UI tests.
 
