@@ -4,6 +4,76 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### ❤️💡 Us: date nights from your calendar + a clearer Date ideas deck (2026-11-02, `v2/us-dates-ideas` from `main` `d34b3e7`; front end only, no `pawdeploy`; owner: "this looks good. Build it… If not [a redeploy], merge into main")
+
+Design: `docs/mockups/dateideas/` (screens, research and decisions in `DESIGN.md`).
+
+**Date nights**
+- `js/dateNights.js` (pure):
+  - `classify`, `eventKey`, `verdict` (yes / ask / no), `comingUp` (21 days);
+  - `toCount` (last 3 days), `entryFor` (a 2-2-2-2 entry with `cal`), `bookedIdeas`.
+- `family/app.js`:
+  - `loadDateNights` reads the Calendar tab's own `calItems` after Us draws, skipping plans;
+  - Dates › Coming up mixes plans and calendar date nights, with a day box, Showtimes / Directions and *Not a date?*;
+  - a one-time *Is this a date night?* question for might-be's;
+  - **❤️ Mark as date night** in event details;
+  - the chip reads *date night booked · Fri* when the date is due;
+  - `countDates` adds the day-after entry once (your partner's entry with the same `cal` counts) and marks a booked scouted movie seen;
+  - For you shows *How was X?* with ⭐ Rate it / Skip and *Counted · Undo*.
+- Marks and counts are `dates` in your full tracker copy (in no part).
+
+**Date ideas**
+- `family/ideas.js`:
+  - `deck` drops seen / saved / passed / picked / booked ideas (`all: true` keeps them);
+  - `forKids` keeps kids' events out;
+  - `answer` and `mergeState` handle the deck state;
+  - `views(v)` draws the Us card, the sheet and the date-night rows.
+- The sheet:
+  - 🃏 One at a time with ✕ Not for us · 👁 Seen it (✓ Been there / Going) · ⏭ Save · 💗 Want to;
+  - each answer moves on with Undo (the in-sheet bar);
+  - ‹ › flip through; a swipe on the picture → / ← answers;
+  - ★ Rate it after Seen it adds or updates a 📺 Watch show (finished, rating);
+  - ▦ Browse all is a poster grid, 12 at a time, with badges and Show / Hide seen;
+  - lists: 💗 My picks, 💞 Matches (📅 Make it a plan), ⏭ Saved (*Back in deck*).
+- The Us card shows the match first, then a poster row and 💡 Find a date idea.
+- Answers are kept in `fam.ideaState.<fid>` at once and in your trackers (`ideaState`) 2.5 s later. The old per-phone passes are read once.
+
+**Tests:** `npm test` gives 556/556. New: `tests/datenights.test.js` (5) and 1 in `tests/ideas.test.js` (seen / saved / picked / booked, `all`, kids, `answer`, `mergeState`).
+
+**Browser check** (local pages + `wrangler dev` DEMO, seeded family; `/ideas` week mocked with 14 movies, a kids' show, an event and a place; 390 px light, 320 px dark).
+
+Events added through the Calendar form:
+- Clayface, both of you, in 4 days at AMC Mercado 20;
+- a dinner reservation, both of you, yesterday;
+- jazz, Sam only, in 10 days;
+- dentist, both of you, in 2 days.
+
+Results:
+- Coming up shows Clayface (📅 both of you, Showtimes, Directions) and Jazz with *Is this a date night?*; the dentist doesn't appear.
+- The dinner was counted (*Last: … Nov 1*, the chip shows ✓) and For you asked *How was it?*. Undo removed it, and the chip then read *date night booked · Fri*.
+- Yes on the jazz kept it as a date night.
+- On Us, Clayface (booked) and the kids' show are out of Ideas.
+- In the sheet:
+  - Seen it moved on and showed ★ Rate it / Undo; Undo brought the idea back;
+  - Save, Want to, ‹ › and a mouse swipe → all worked (the swipe picked);
+  - My picks and Saved listed the right ideas;
+  - Browse showed 12 of 14 with Show 2 more and badges (📅 Booked Fri, ⏭ Saved, 💗 Picked); a poster opened one idea with ‹ Back;
+  - ★ 4 after Seen it put the movie in Watch › Watched · 4★.
+- No overflow at 320 px apart from the existing notes row.
+
+**Performance** (`scripts/perf/budget.mjs`, same machine):
+
+| | requests | CLS | start-up script |
+|---|---|---|---|
+| this branch | 15 | 0.005 | 197 KB |
+| after D + E (earlier today) | 15 | 0.015 | 193 KB |
+
+The budget is 200 KB. The first version was 200 KB, so the drawing moved to `family/ideas.js`, which loads with Us.
+
+**Not verified:**
+- real linked calendars (iCloud / Google) — the logic is the same `calItems` list, tested with family events;
+- the 2.5 s sync of answers to your trackers across two phones.
+
 ### 🎤✅ Release 1 parts D + E: Talk listens patiently, and checks before it saves (2026-11-01, `v2/talk-listen-review` from `main` `823dcfa`; front end only, no `pawdeploy`; owner: "Proceed with D and E as they're critical improvements")
 
 **D: listening.**
