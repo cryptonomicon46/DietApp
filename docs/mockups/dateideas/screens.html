@@ -1,0 +1,257 @@
+<!doctype html>
+<!-- Design mockups only (💞 Us: dates from your calendar, and a better Date ideas deck). Not the app.
+     Serve the repo (node scripts/perf/pages.mjs) and open
+     http://localhost:8098/DietApp/docs/mockups/dateideas/screens.html#dates
+     Posters are drawn placeholders (no studio artwork). Sam and Pat are example names.
+     Classes .di-* are proposed; everything else is the app's own style.css. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2f7d5b">
+<title>Date ideas mockups</title>
+<script src="../../../theme.js"></script>
+<link rel="stylesheet" href="../../../family/style.css">
+<style>
+  body { margin: 0; padding: 12px 16px 40px; }
+  .scr { display: none; max-width: 560px; margin: 0 auto; }
+  .scr:target { display: block; }
+  .mk-note { font-size: .74rem; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 6px 9px; margin: 10px 0; }
+  .mk-sheet { position: static; display: block; border-radius: 22px; box-shadow: 0 -2px 18px rgba(0,0,0,.12); max-height: none; padding: 16px; background: var(--card); }
+  .mk-dim { opacity: .4; pointer-events: none; }
+  /* Placeholder posters */
+  .pst { border-radius: 12px; display: grid; align-content: end; padding: 10px; color: #fff; font-weight: 800; text-shadow: 0 1px 3px rgba(0,0,0,.5); overflow: hidden; position: relative; }
+  .pst.p1 { background: linear-gradient(160deg, #1d2b64, #7a2e8e 60%, #f8a96b); }
+  .pst.p2 { background: linear-gradient(160deg, #0f3d3e, #2f7d5b 55%, #d9e8a8); }
+  .pst.p3 { background: linear-gradient(160deg, #3b0d11, #9b2226 55%, #f2c14e); }
+  .pst.p4 { background: linear-gradient(160deg, #22223b, #4a4e69 55%, #c9ada7); }
+  .pst.p5 { background: linear-gradient(160deg, #283618, #606c38 55%, #fefae0); color: #222; text-shadow: none; }
+  .pst.p6 { background: linear-gradient(160deg, #03045e, #0077b6 55%, #90e0ef); }
+  .pst.food { background: linear-gradient(160deg, #6a040f, #d00000 50%, #ffba08); }
+  .pst.ev { background: linear-gradient(160deg, #3c096c, #9d4edd 55%, #ffd6ff); }
+  .pst .big { font-size: 3rem; position: absolute; top: 14px; left: 14px; text-shadow: none; }
+  .pst small { font-weight: 600; opacity: .9; }
+  /* Dates › Coming up */
+  .di-sec { font-size: .74rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 10px 0 2px; }
+  .di-up { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .di-up:first-of-type { border-top: 0; }
+  .di-day { width: 46px; border-radius: 10px; border: 1px solid var(--line); text-align: center; line-height: 1.1; padding: 5px 0; background: var(--bg); }
+  .di-day b { display: block; font-size: 1.15rem; } .di-day small { font-size: .66rem; font-weight: 800; color: var(--like); text-transform: uppercase; }
+  .di-up .t { font-weight: 700; } .di-up .s { font-size: .8rem; color: var(--muted); display: block; }
+  .di-src { display: inline-flex; gap: 4px; align-items: center; font-size: .72rem; font-weight: 700; color: var(--brand); background: var(--brand-soft); border-radius: 999px; padding: 1px 7px; margin-top: 3px; }
+  .di-links { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; font-size: .8rem; }
+  .di-ask { background: var(--bg); border: 1px dashed var(--line); border-radius: 12px; padding: 8px 10px; margin-top: 6px; font-size: .84rem; }
+  .di-ask .row { gap: 8px; margin-top: 6px; } .di-ask button { min-height: 38px; font-size: .84rem; }
+  .rchip.booked { background: var(--brand-soft); color: var(--brand); font-weight: 700; }
+  /* Deck */
+  .di-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 3px; margin: 6px 0 8px; }
+  .di-seg button { min-height: 36px; background: transparent; color: var(--ink); font-weight: 700; font-size: .88rem; border-radius: 9px; }
+  .di-seg button.on { background: var(--card); box-shadow: var(--shadow); }
+  .di-lists { display: flex; gap: 6px; margin: 2px 0 8px; }
+  .di-lists button { flex: 1; min-height: 40px; background: var(--card); color: var(--ink); border: 1px solid var(--line); font-weight: 700; font-size: .84rem; }
+  .di-lists button { min-width: 0; padding: 0 6px; white-space: normal; line-height: 1.15; }
+  .di-lists button b { color: var(--like); }
+  .di-card { border: 1px solid var(--line); border-radius: 18px; background: var(--card); overflow: hidden; position: relative; }
+  .di-card .pst { height: 300px; border-radius: 0; }
+  .di-card .body { padding: 12px 14px 4px; display: grid; gap: 6px; }
+  .di-card h3 { margin: 0; font-size: 1.2rem; text-transform: none; letter-spacing: 0; color: var(--ink); }
+  .di-card p { margin: 0; }
+  .di-nav { position: absolute; top: 128px; width: 40px; height: 40px; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; display: grid; place-items: center; font-size: 1.3rem; font-weight: 800; border: 0; }
+  .di-nav.l { left: 8px; } .di-nav.r { right: 8px; }
+  .di-prog { height: 4px; border-radius: 2px; background: var(--line); margin: 8px 0 2px; overflow: hidden; } .di-prog i { display: block; height: 100%; background: var(--brand); }
+  .di-acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 2px; }
+  .di-act { display: grid; justify-items: center; gap: 2px; min-height: 64px; padding: 6px 2px; border-radius: 16px; background: var(--card); color: var(--ink); border: 1px solid var(--line); font-size: .72rem; font-weight: 700; }
+  .di-act span { font-size: 1.45rem; line-height: 1.2; }
+  .di-act.want { background: var(--like); color: #fff; border-color: var(--like); }
+  .di-act.want span { background: #fff; border-radius: 50%; width: 34px; height: 34px; display: grid; place-items: center; font-size: 1.2rem; }
+  .di-act.on { outline: 3px solid var(--brand); }
+  .di-hint { text-align: center; font-size: .72rem; color: var(--muted); margin: 6px 0 0; }
+  .di-toast { position: static; display: flex; gap: 10px; align-items: center; justify-content: space-between; background: var(--ink); color: var(--bg); border-radius: 14px; padding: 10px 12px; margin: 10px 0; font-size: .86rem; }
+  .di-toast { flex-wrap: wrap; } .di-toast > span:last-child { display: flex; gap: 4px; margin-left: auto; }
+  .di-toast button { min-width: 0; background: transparent; color: var(--bg); font-weight: 800; padding: 4px 6px; min-height: 0; text-decoration: underline; }
+  .di-match { border-radius: 16px; background: linear-gradient(135deg, #ffe3ec, #fff1d6); color: #5a2e3e; padding: 12px; display: grid; gap: 6px; margin: 8px 0; }
+  :root[data-theme=dark] .di-match { background: linear-gradient(135deg, #3a1f2a, #3a2f17); color: #f8d7e3; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .di-match { background: linear-gradient(135deg, #3a1f2a, #3a2f17); color: #f8d7e3; } }
+  /* Browse grid */
+  .di-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .di-tile { display: grid; gap: 4px; }
+  .di-tile .pst { height: 190px; font-size: .9rem; }
+  .di-tile b { font-size: .86rem; line-height: 1.2; } .di-tile small { color: var(--muted); font-size: .74rem; }
+  .di-badge { position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,.92); color: #222; text-shadow: none; border-radius: 999px; font-size: .7rem; font-weight: 800; padding: 2px 7px; }
+  .di-tbtn { position: absolute; bottom: 8px; right: 8px; width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.92); color: var(--like); border: 0; font-size: 1.1rem; display: grid; place-items: center; text-shadow: none; padding: 0; }
+  .di-more { width: 100%; min-height: 44px; margin-top: 10px; }
+  /* Us card carousel */
+  .di-row { display: grid; grid-auto-flow: column; grid-auto-columns: 118px; gap: 10px; overflow-x: auto; padding: 4px 0 8px; scroll-snap-type: x mandatory; }
+  .di-row > div { scroll-snap-align: start; display: grid; gap: 4px; }
+  .di-row .pst { height: 168px; font-size: .82rem; }
+  .di-row b { font-size: .8rem; line-height: 1.2; } .di-row small { font-size: .7rem; color: var(--muted); }
+  .di-pl { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+  .di-pl .pst { height: 64px; padding: 0; } .di-pl .pst .big { font-size: 1.6rem; top: 14px; left: 10px; }
+  .di-pl b { font-size: .92rem; } .di-pl small { display: block; color: var(--muted); font-size: .78rem; }
+  .di-stars { display: flex; gap: 6px; margin-top: 6px; } .di-stars button { min-height: 40px; flex: 1; min-width: 0; padding: 0 2px; font-size: .9rem; background: var(--card); color: var(--ink); border: 1px solid var(--line); font-size: 1.1rem; }
+</style>
+</head>
+<body>
+
+<!-- 1 ─────────────── Us › ❤️ Dates with what's booked on your calendars -->
+<section class="scr" id="dates">
+  <div class="mk-note">💞 Us › ❤️ Dates. <b>Coming up</b> now includes date-night bookings from your calendars (here a movie booking from a linked Google Calendar), not only plans made with ✨ Suggest or 🧭 Plan an outing. The 2-2-2-2 chip says the date night is booked instead of "due".</div>
+  <section class="card">
+    <h2 class="card-h">❤️ Dates</h2>
+    <div class="di-sec">Coming up</div>
+    <div class="di-up"><div class="di-day"><small>Fri</small><b>6</b></div><div><span class="t">🎬 Clayface</span><span class="s">7:30 PM · AMC Mercado 20, Santa Clara · 2 tickets</span><span class="di-src">📅 On your calendar · both of you</span>
+      <div class="di-links"><a href="#">🎟 Tickets</a><a href="#">🚗 Directions</a><a href="#">💬 Discuss</a></div></div></div>
+    <div class="di-up"><div class="di-day"><small>Sat</small><b>14</b></div><div><span class="t">🍝 Dinner at Adega</span><span class="s">7:00 PM · San Jose · OpenTable, party of 2</span><span class="di-src">📅 On your calendar</span></div></div>
+    <div class="di-up"><div class="di-day"><small>Sat</small><b>5</b><small style="color:var(--muted)">Dec</small></div><div><span class="t">🧭 Marina Beach dinner &amp; Bay views</span><span class="s">2:45 PM · Marina District, San Francisco · <a href="#">See plan</a></span><span class="tag">waiting for Pat</span>
+      <div class="di-links"><a href="#">Another day</a><a href="#">Cancel</a></div></div></div>
+    <div class="rchips" style="margin-top:8px"><span class="rchip booked">🍷 date night booked · Fri</span><span class="rchip">💗 0 of 2 this week</span><span class="rchip">🏨 overnight trip · not yet</span><span class="rchip">🌴 getaway · not yet</span></div>
+    <details class="small"><summary>Last: ❤️ Bookstore &amp; Coffee · Barnes &amp; Noble · Oct 18</summary></details>
+    <div class="row wrap us-acts"><button type="button" class="small">✨ Suggest</button><button type="button" class="ghost small">🧭 Plan an outing</button><button type="button" class="ghost small">❤️ Log a date</button></div>
+  </section>
+  <div class="mk-note"><b>What counts</b>, all worked out on the phone from what your Calendar tab already shows (nothing new is sent anywhere):
+    an event for <b>both of you</b> in the next 3 weeks that looks like a date — a movie (a theatre you set for Ideas, or a title the scout found), a restaurant booking (OpenTable/Resy), a show or concert, or the words date / dinner / movie — or anything you've marked <b>❤️ Date night</b>. Plans from ✨ Suggest still show here as before.</div>
+</section>
+
+<!-- 2 ─────────────── An event that might be a date: ask once -->
+<section class="scr" id="isdate">
+  <div class="mk-note">When an event <i>might</i> be a date (yours only, or no clear sign), Dates asks once, right in Coming up. The answer is remembered for that event. Any event on the Calendar also gets <b>❤️ Mark as date night</b> in its details.</div>
+  <section class="card">
+    <h2 class="card-h">❤️ Dates</h2>
+    <div class="di-sec">Coming up</div>
+    <div class="di-up"><div class="di-day"><small>Fri</small><b>6</b></div><div><span class="t">🎬 Clayface</span><span class="s">7:30 PM · AMC Mercado 20 · 2 tickets</span><span class="di-src">📅 On your calendar · both of you</span></div></div>
+    <div class="di-up"><div class="di-day"><small>Thu</small><b>12</b></div><div><span class="t">🎵 Jazz at SJZ Break Room</span><span class="s">8:00 PM · San Jose · on Sam's calendar</span>
+      <div class="di-ask">Is this a date night for you two?<div class="row"><button type="button" class="small">❤️ Yes, date night</button><button type="button" class="ghost small">Not a date</button></div></div></div></div>
+  </section>
+  <div class="mk-note"><b>Calendar › event details</b> (any event, yours or shared):</div>
+  <div class="mk-sheet">
+    <div class="row between"><h2>🎵 Jazz at SJZ Break Room</h2><span class="icon-btn">✕</span></div>
+    <p class="small muted">Thu, Nov 12 · 8:00 PM · San Jose · Sam's linked calendar</p>
+    <div class="stack"><button type="button">❤️ Mark as date night</button><button type="button" class="ghost">Add to my phone's calendar</button></div>
+  </div>
+</section>
+
+<!-- 3 ─────────────── The new deck -->
+<section class="scr" id="deck">
+  <div class="mk-note"><b>Date ideas › Deck.</b> One idea at a time, like the couple-matching apps, but every answer moves on at once and can be undone. Swipe: → want, ← not for us, ↑ seen it. Or use the buttons. ‹ › flip without answering.</div>
+  <div class="mk-sheet">
+    <div class="row between"><h2>💡 Date ideas</h2><span class="icon-btn">✕</span></div>
+    <div class="di-seg" role="tablist"><button type="button" class="on">🃏 One at a time</button><button type="button">▦ Browse all</button></div>
+    <div class="rchips ideatabs"><span class="chip on">✨ All</span><span class="chip">🎬 Movies</span><span class="chip">🍸 Eat &amp; drink</span><span class="chip">🎟 Events</span><span class="chip">🏡 Ideas</span></div>
+    <div class="di-lists"><button type="button">💗 My picks <b>3</b></button><button type="button">💞 Matches <b>1</b></button><button type="button">⏭ Saved <b>2</b></button></div>
+    <div class="di-card">
+      <div class="pst p1"><span class="big">🎬</span>Starfall<br><small>placeholder poster</small></div>
+      <button type="button" class="di-nav l" aria-label="Back">‹</button><button type="button" class="di-nav r" aria-label="Next">›</button>
+      <div class="body">
+        <h3>Starfall <span class="tag pk">Critics' pick</span></h3>
+        <p class="small"><b>🍅 94% · 🍿 84</b> <span class="tiny muted">critics · audiences</span></p>
+        <p class="small muted">Sci-fi · 2 h 1 min · PG-13 · new this week</p>
+        <p class="small"><b>Tonight</b> 7:10 · 9:40 at Century Great Mall · <b>Fri</b> 7:30 at AMC Mercado 20</p>
+        <p class="fitwhy small">You both liked the last two sci-fi picks</p>
+        <div class="row wrap"><button type="button" class="linkish small">🎟 Showtimes</button><button type="button" class="linkish small">✨ Suggest it to Pat</button><button type="button" class="linkish small">💬 Discuss</button></div>
+      </div>
+    </div>
+    <div class="di-prog" aria-hidden="true"><i style="width:4%"></i></div>
+    <div class="di-acts">
+      <button type="button" class="di-act"><span>✕</span>Not for us</button>
+      <button type="button" class="di-act"><span>👁</span>Seen it</button>
+      <button type="button" class="di-act"><span>⏭</span>Save</button>
+      <button type="button" class="di-act want"><span>💗</span>Want to</button>
+    </div>
+    <p class="di-hint">3 of 79 movies · ← not for us · ↑ seen it · → want to</p>
+    <p class="tiny muted">🔒 Pat can't see what you 💗 — only a match, when you've both picked it.</p>
+  </div>
+</section>
+
+<!-- 4 ─────────────── Seen it: moves on, with Undo and a rating -->
+<section class="scr" id="seen">
+  <div class="mk-note">After <b>👁 Seen it</b> the next idea is already there, and a bar offers <b>Undo</b> and <b>★ Rate it</b> (it goes to 📺 Watch › Watched, with your stars, if you like). Seen it never comes back. For a restaurant it reads <b>✓ Been there</b>; for an event, <b>✓ Going / went</b>.</div>
+  <div class="mk-sheet">
+    <div class="row between"><h2>💡 Date ideas</h2><span class="icon-btn">✕</span></div>
+    <div class="di-seg"><button type="button" class="on">🃏 One at a time</button><button type="button">▦ Browse all</button></div>
+    <div class="rchips ideatabs"><span class="chip">✨ All</span><span class="chip on">🎬 Movies</span><span class="chip">🍸 Eat &amp; drink</span><span class="chip">🎟 Events</span><span class="chip">🏡 Ideas</span></div>
+    <div class="di-card">
+      <div class="pst p2"><span class="big">🎬</span>The Long Field<br><small>placeholder poster</small></div>
+      <button type="button" class="di-nav l" aria-label="Back">‹</button><button type="button" class="di-nav r" aria-label="Next">›</button>
+      <div class="body"><h3>The Long Field</h3><p class="small"><b>🍅 88% · 🍿 91</b></p><p class="small muted">Drama · 1 h 52 min · PG-13</p></div>
+    </div>
+    <div class="di-toast" role="status"><span>👁 Seen it — it won't come back</span><span><button type="button">★ Rate it</button><button type="button">Undo</button></span></div>
+    <div class="di-acts">
+      <button type="button" class="di-act"><span>✕</span>Not for us</button>
+      <button type="button" class="di-act"><span>👁</span>Seen it</button>
+      <button type="button" class="di-act"><span>⏭</span>Save</button>
+      <button type="button" class="di-act want"><span>💗</span>Want to</button>
+    </div>
+    <p class="di-hint">4 of 79 movies</p>
+  </div>
+  <div class="mk-note"><b>★ Rate it</b> (optional, one tap):</div>
+  <div class="mk-sheet"><b>How was Starfall?</b><p class="small muted">Saved to 📺 Watch › Watched with your rating. It also teaches Ideas what you two like.</p>
+    <div class="di-stars"><button type="button">★</button><button type="button">★★</button><button type="button">★★★</button><button type="button">★★★★</button><button type="button">★★★★★</button></div></div>
+</section>
+
+<!-- 5 ─────────────── Browse all: a poster grid -->
+<section class="scr" id="browse">
+  <div class="mk-note"><b>▦ Browse all</b> for scrolling and comparing (like a streaming app's grid): 12 at a time with <b>Show 12 more</b>, the same tabs, a 💗 on each poster, and badges. Tap a poster to open it in the deck at that spot.</div>
+  <div class="mk-sheet">
+    <div class="row between"><h2>💡 Date ideas</h2><span class="icon-btn">✕</span></div>
+    <div class="di-seg"><button type="button">🃏 One at a time</button><button type="button" class="on">▦ Browse all</button></div>
+    <div class="rchips ideatabs"><span class="chip">✨ All</span><span class="chip on">🎬 Movies</span><span class="chip">🍸 Eat &amp; drink</span><span class="chip">🎟 Events</span><span class="chip">🏡 Ideas</span></div>
+    <div class="row between small" style="margin:4px 0 8px"><span class="muted">79 movies · best first</span><span class="muted">Hide seen ✓</span></div>
+    <div class="di-grid">
+      <div class="di-tile"><div class="pst p1"><span class="big">🎬</span>Starfall<span class="di-badge">💞 Match</span><button type="button" class="di-tbtn" aria-label="Picked">💗</button></div><b>Starfall</b><small>🍅 94% · Tonight 7:10</small></div>
+      <div class="di-tile"><div class="pst p3"><span class="big">🎬</span>Clayface<span class="di-badge">📅 Booked Fri</span></div><b>Clayface</b><small>🍅 81% · Fri 7:30 · AMC</small></div>
+      <div class="di-tile"><div class="pst p4"><span class="big">🎬</span>Quiet Harbor<button type="button" class="di-tbtn" aria-label="Pick">🤍</button></div><b>Quiet Harbor</b><small>🍅 90% · Sat matinee</small></div>
+      <div class="di-tile"><div class="pst p5"><span class="big">🎬</span>Paper Moons<span class="di-badge">💗 Picked</span><button type="button" class="di-tbtn" aria-label="Picked">💗</button></div><b>Paper Moons</b><small>🍅 86% · comedy</small></div>
+      <div class="di-tile"><div class="pst p6"><span class="big">🎬</span>Deep Blue Line<button type="button" class="di-tbtn" aria-label="Pick">🤍</button></div><b>Deep Blue Line</b><small>🍅 77% · thriller</small></div>
+      <div class="di-tile"><div class="pst p2"><span class="big">🎬</span>The Long Field<button type="button" class="di-tbtn" aria-label="Pick">🤍</button></div><b>The Long Field</b><small>🍅 88% · drama</small></div>
+    </div>
+    <button type="button" class="ghost di-more">Show 12 more</button>
+  </div>
+</section>
+
+<!-- 6 ─────────────── My picks, Matches, Saved -->
+<section class="scr" id="lists">
+  <div class="mk-note"><b>💗 My picks</b> (private), <b>💞 Matches</b> (you both picked) and <b>⏭ Saved</b> (for later) are lists you can come back to — today "Later" just hides an idea for two days. A match goes straight to <b>📅 Make it a plan</b>.</div>
+  <div class="mk-sheet">
+    <div class="row between"><h2>💡 Date ideas</h2><span class="icon-btn">✕</span></div>
+    <div class="di-lists"><button type="button">💗 My picks <b>3</b></button><button type="button" style="outline:2px solid var(--brand)">💞 Matches <b>1</b></button><button type="button">⏭ Saved <b>2</b></button></div>
+    <div class="di-match"><b>💞 You both want Starfall</b><span class="small">Tonight 7:10 · 9:40 at Century Great Mall · Fri 7:30 at AMC Mercado 20</span>
+      <div class="row wrap" style="gap:8px"><button type="button" class="small">📅 Make it a plan</button><button type="button" class="ghost small">🎟 Showtimes</button><button type="button" class="ghost small">💬 Discuss</button></div></div>
+    <div class="di-sec">💗 My picks · only you see these</div>
+    <div class="di-pl"><div class="pst p5"><span class="big">🎬</span></div><div><b>Paper Moons</b><small>Comedy · 🍅 86% · waiting for a match</small></div><button type="button" class="ghost small">Unpick</button></div>
+    <div class="di-pl"><div class="pst food"><span class="big">🍝</span></div><div><b>Adega</b><small>Portuguese · $$$ · OpenTable</small></div><button type="button" class="ghost small">Unpick</button></div>
+    <div class="di-pl"><div class="pst ev"><span class="big">🎟</span></div><div><b>Winter Lights at the Garden</b><small>Fri–Sun evenings · San Jose</small></div><button type="button" class="ghost small">Unpick</button></div>
+    <div class="di-sec">⏭ Saved</div>
+    <div class="di-pl"><div class="pst p4"><span class="big">🎬</span></div><div><b>Quiet Harbor</b><small>Saved Mon</small></div><button type="button" class="ghost small">💗</button></div>
+  </div>
+</section>
+
+<!-- 7 ─────────────── After the date -->
+<section class="scr" id="after">
+  <div class="mk-note">The morning after a calendar date: <b>For you</b> asks how it was (the existing ⭐ rating), and the date is <b>already counted</b> on the 2-2-2-2 — with Undo if it wasn't one. The movie leaves Ideas and, if you rate it, goes to 📺 Watch › Watched.</div>
+  <div class="foryou"><div class="row between"><b class="small up">For you</b></div>
+    <div class="fy"><span class="fy-i">🎬</span><div><b>How was Clayface?</b><small>Fri, Nov 6 · 7:30 PM · AMC Mercado 20</small>
+      <small>❤️ Counted as your date night · <a href="#">Undo</a></small>
+      <div class="ans"><button type="button" class="small">⭐ Rate it</button><button type="button" class="ghost small">Skip</button></div></div></div></div>
+  <section class="card mk-dim"><h2 class="card-h">❤️ Dates</h2><div class="rchips"><span class="rchip">🍷 date night ✓</span><span class="rchip">💗 1 of 2 this week</span></div></section>
+</section>
+
+<!-- 8 ─────────────── The Ideas card on Us -->
+<section class="scr" id="uscard">
+  <div class="mk-note"><b>✨ Ideas for Us</b> on the Us page: a swipeable poster row (instead of three text rows), what's matched first, and one obvious way in. Kids' and family shows (like a children's stage show) are left out of date ideas.</div>
+  <section class="card">
+    <div class="row between"><h2 class="card-h">✨ Ideas for Us</h2><span class="small"><button type="button" class="linkish small" aria-label="Settings">⚙︎</button></span></div>
+    <div class="di-match" style="margin-top:0"><b>💞 It's a match: Starfall</b><div class="row wrap" style="gap:8px"><button type="button" class="small">📅 Make it a plan</button><button type="button" class="ghost small">💬 Discuss</button></div></div>
+    <div class="di-row">
+      <div><div class="pst p4"><span class="big">🎬</span></div><b>Quiet Harbor</b><small>🍅 90% · Sat</small></div>
+      <div><div class="pst food"><span class="big">🍝</span></div><b>Adega</b><small>New · $$$</small></div>
+      <div><div class="pst ev"><span class="big">🎟</span></div><b>Winter Lights</b><small>Fri–Sun</small></div>
+      <div><div class="pst p6"><span class="big">🎬</span></div><b>Deep Blue Line</b><small>🍅 77%</small></div>
+    </div>
+    <button type="button" class="wide">💡 Find a date idea · 93 this week</button>
+    <p class="tiny muted">🔒 Your 💗 stay private until you both pick the same one.</p>
+  </section>
+</section>
+
+<script>document.body.dataset.ready = '1';</script>
+</body>
+</html>
