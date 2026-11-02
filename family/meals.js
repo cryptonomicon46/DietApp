@@ -25,6 +25,7 @@ const today = () => ms.c.iso();
 const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
 const r0 = (n) => Math.round(n || 0);
 const NAME = D.MEAL_NAMES;
+const lockWhere = (meal) => (meal === 'breakfast' ? 'whenever you have this breakfast' : 'at lunch and dinner');
 // A copy to preview changes on (grams you're nudging, before they're saved).
 function mem() { const d = clone(ms.data) || {}; return { d, get: (k, f) => (k in d ? d[k] : f), set: (k, v) => { d[k] = v; } }; }
 const dataOf = (s) => new Proxy({}, { get: (_, k) => s.get(k, undefined) });
@@ -116,7 +117,10 @@ function mealSheet(meal) {
   const c = customOf(s, meal);
   const rows = (m.portions || []).filter((x) => FOODS[x.food]).map((x) => {
     const step = x.range?.[2] || 5;
-    return `<div class="ml-food"><span><b>${E(FOODS[x.food].name)}</b>${x.locked ? ' <small class="muted">🔒</small>' : ''}</span>
+    // 🔒 / 🔓: lock this amount for the coming days, or let the plan size it (the plan's own meals).
+    const lockable = !m.custom && !m.prepared && !m.eatout && D.prefKeyOf(m, meal), on = lockable && D.isLockedFor(s.d, m, meal, x.slot);
+    const lockBtn = lockable ? `<button type="button" class="ml-lock${on ? ' on' : ''}" data-ml="lock:${meal}:${x.slot}:${on ? 0 : 1}" aria-pressed="${!!on}" aria-label="${on ? `Unlock ${E(FOODS[x.food].name)} — let the plan size it` : `Lock ${E(FOODS[x.food].name)} at this amount ${lockWhere(meal)}`}" title="${on ? `Locked ${lockWhere(meal)} — tap to unlock` : 'Tap to keep this amount on the coming days'}">${on ? '🔒' : '🔓'}</button>` : x.locked ? ' <small class="muted">🔒</small>' : '';
+    return `<div class="ml-food"><span><b>${E(FOODS[x.food].name)}</b>${lockBtn}</span>
       <span class="ml-step"><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${-step}" aria-label="Less ${E(FOODS[x.food].name)}">−</button><input inputmode="decimal" data-mle="g:${meal}:${x.slot}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams"><span class="small muted">g</span><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${step}" aria-label="More ${E(FOODS[x.food].name)}">＋</button></span>
       <input type="range" class="ml-slide" data-mle="gs:${meal}:${x.slot}" min="0" max="${Math.max(x.range?.[1] || 400, r0(x.grams) * 2)}" step="${step}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams" aria-valuetext="${r0(x.grams)} grams${unitHint(x)}"><small class="muted ml-unit" id="mlU-${x.slot}">${E(unitHint(x).replace(/^, /, ''))}</small></div>`;
   }).join('');
@@ -617,6 +621,19 @@ export async function onClick(t) {
       ms.ops.push(['use', meal, c]);
       sh.pick = false; sh.fit = undefined; sh.fitNote = '';
       return mealSheet(meal);
+    }
+    case 'lock': {
+      // Saved right away (it's about the coming days, not this log): the meal's other changes stay as they are.
+      const [meal, slot, on] = r, shown = planNow()?.[meal]?.portions?.find((p) => p.slot === slot), name = FOODS[shown?.food]?.name || 'It';
+      return (async () => {
+        const ops = ms.ops.slice();
+        let fresh = null;
+        await ms.c.editMine((s) => { D.lockAmount(s, today(), meal, slot, on === '1', shown ? shown.grams : null); fresh = Object.fromEntries(['custom', 'eaten', 'prefs'].map((k) => [k, s.get(k, undefined)])); });
+        if (fresh && ms.data) Object.assign(ms.data, clone(fresh));
+        ms.ops = ops;
+        ms.c.toast(on === '1' ? `🔒 ${name} stays at this amount ${lockWhere(meal)} — tap 🔒 to unlock` : `🔓 ${name} is sized by your plan again`);
+        return mealSheet(meal);
+      })();
     }
     case 'fitto': { const [meal, n] = r; sh.fit = Math.max(50, +n || 0); return applyFit(meal); }
     case 'fitstep': { const [meal, d] = r, m = planNow()?.[meal]; if (!m) return null; sh.fit = Math.max(50, (sh.fit ?? fitDefault(meal, m)) + +d); return applyFit(meal); }
