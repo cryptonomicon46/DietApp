@@ -246,3 +246,18 @@ test('⚖️ weigh-in check: the change since last time, a warning on a big jump
   assert.match(healthHtml({ profile: p, weights: [] }, { esc, today, hour: 7, sharing: '' }), /photos optional/);
   assert.match(healthHtml({ profile: p, weights: [{ date: today, weight: 180 }] }, { esc, today, hour: 7, sharing: '' }), /data-wi="photos"/);
 });
+
+test('📸 today\'s progress photos already in: the weight row stops asking', async () => {
+  const { healthHtml } = await import('../family/health.js');
+  const W = await import('../family/weighin.js');
+  const p = { sex: 'male', age: 35, heightIn: 70, phase: 'cut', goalLb: 175, activity: 'light', pace: 'steady' };
+  const weighed = { profile: p, weights: [{ date: today, weight: 180 }] }, notYet = { profile: p, weights: [] };
+  assert.match(healthHtml(weighed, { esc, today, hour: 7, sharing: '' }), /data-wi="photos"/, 'no photos yet: asked');
+  const done = healthHtml(weighed, { esc, today, hour: 7, sharing: '', photosToday: ['front', 'side', 'back'] });
+  assert.ok(!done.includes('data-wi="photos"'), 'photos in: not asked again');
+  assert.match(done, /📸 ✓ Front · Side · Back photos today/);
+  assert.match(healthHtml(notYet, { esc, today, hour: 7, sharing: '' }), /photos optional/);
+  assert.ok(!healthHtml(notYet, { esc, today, hour: 7, sharing: '', photosToday: ['front'] }).includes('photos optional'), 'before weighing in, too');
+  assert.equal(W.doneLine(['front', 'back']), "📸 ✓ Today's photos are in (Front · Back)");
+  assert.equal(W.doneLine([]), '');
+});

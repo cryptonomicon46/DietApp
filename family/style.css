@@ -1707,7 +1707,7 @@ button.ml-opt.on > span:last-child { color: var(--brand); font-weight: 800; }
 .ml-lockmark { display: inline-flex; vertical-align: middle; margin-left: 4px; color: var(--muted); }
 /* ⚖️ Weigh-in check + 📸 progress photos (family/weighin.js) */
 .hl-row2 .hl-phbtn { grid-column: 2; justify-self: start; min-height: 40px; margin-top: 4px; }
-.hl-row2 .hl-phnote { grid-column: 2; }
+.hl-row2 .hl-phnote, .hl-row2 .hl-phdone { grid-column: 2; }
 .wi-sheet h2 { margin: 0; }
 .wi-big { font-size: 2.4rem; margin: 10px 0 0; line-height: 1.1; }
 .wi-big b { font-weight: 800; }

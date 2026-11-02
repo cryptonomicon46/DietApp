@@ -4,6 +4,17 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 📸 Don't ask for today's progress photos twice (2026-11-02, `v2/photos-done` from `main` `882a810`; front end only, no `pawdeploy`; owner: "If progress photos have already been uploaded for the day, don't ask for it again under the weight bar")
+
+**Done:** `healthView` reads today's photo poses from this phone (`posesToday()` → `js/photos.js` `allPhotos`, IndexedDB; never leaves the phone) and passes `photosToday` to `healthHtml`.
+- **Weighed in:** *📸 ✓ Front · Side · Back photos today* in place of the 📸 Progress photos button.
+- **Not yet weighed:** the note drops "📸 photos optional".
+- **The Save check sheet** shows *📸 ✓ Today's photos are in (…) · Add more* in place of the upload box (`doneLine`, `data-wi="more"`).
+- **After a weigh-in with photos**, Health redraws so the row updates.
+
+**Tests:** `tests/health.test.js` (+1). `npm test` 573/573.
+
+**Browser check** (local, seeded): weighed 179.4 lb with 3 photos → toast "📸 3 photos on this phone"; the row now reads *Weight ✓ 179.4 lb · 📸 ✓ Front · Side · Back photos today*, with no button.
 ### ⚡ Snappy: instant saves and screens that come back at once (2026-11-02, `v2/snappy` from `main` `882a810`; front end only, no `pawdeploy`; owner: "making the app snappy… locking and unlocking takes a fraction of a second… loading up the various tables… cache info and make it quick for reload")
 
 **Merged before this:** PR #37 (Talk audiobooks) → `main` `882a810`.

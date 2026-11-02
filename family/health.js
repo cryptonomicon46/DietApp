@@ -202,10 +202,15 @@ export function healthHtml(data, ctx) {
   const food = foodState(data, ctx.today, hour, ctx.now ?? Date.now());
   const wk = ctx.workout || { state: 'none', html: () => '' };
   const up = nextUp({ hour, weighed: d.weighedToday != null, set: d.set, food, workout: wk.state, title: wk.title });
+  // 📸 Today's progress photos already on this phone (ctx.photosToday: their poses): no asking again.
+  const photosToday = ctx.photosToday || [], photosDone = photosToday.length > 0;
+  const POSE = { front: 'Front', side: 'Side', back: 'Back' };
+  const photoLine = photosDone ? `<small class="hl-phdone">📸 ✓ ${esc(photosToday.map((p) => POSE[p] || p).join(' · '))} photo${photosToday.length === 1 ? '' : 's'} today</small>`
+    : '<button type="button" class="ghost small hl-phbtn" data-wi="photos">📸 Progress photos</button>';
   const weight = d.weighedToday != null
-    ? `<div class="hl-row2"><span class="hl-ic" aria-hidden="true">⚖️</span><div class="hl-mini"><span><b>Weight</b> <span class="good">✓ ${lb(d.weighedToday)} lb</span></span>${d.trendText ? `<small class="hl-trend">${esc(d.trendText)}</small>` : ''}</div><button type="button" class="ghost small hl-phbtn" data-wi="photos">📸 Progress photos</button></div>`
+    ? `<div class="hl-row2"><span class="hl-ic" aria-hidden="true">⚖️</span><div class="hl-mini"><span><b>Weight</b> <span class="good">✓ ${lb(d.weighedToday)} lb</span></span>${d.trendText ? `<small class="hl-trend">${esc(d.trendText)}</small>` : ''}</div>${photoLine}</div>`
     : `<div class="hl-row2${up.anchor === 'weight' ? ' hot' : ''}"><span class="hl-ic" aria-hidden="true">⚖️</span><div><b>Today's weight</b><small>${hour < 11 ? 'Morning is best' : 'Any time counts'}${d.weightLb ? ` · last ${lb(d.weightLb)} lb` : ''}</small></div>
-      <form class="hl-weigh" data-weigh><label for="hlWeigh" class="visually-hidden">Today's weight in pounds</label><span class="hl-weigh-in"><input id="hlWeigh" name="lb" type="number" step="0.1" min="60" max="700" inputmode="decimal" placeholder="${d.weightLb ? lb(d.weightLb) : 'lb'}" required aria-describedby="hlWeighU"><span id="hlWeighU" class="small">lb</span></span><button>Save</button></form><small class="hl-phnote">You check it before it saves · 📸 photos optional</small></div>`;
+      <form class="hl-weigh" data-weigh><label for="hlWeigh" class="visually-hidden">Today's weight in pounds</label><span class="hl-weigh-in"><input id="hlWeigh" name="lb" type="number" step="0.1" min="60" max="700" inputmode="decimal" placeholder="${d.weightLb ? lb(d.weightLb) : 'lb'}" required aria-describedby="hlWeighU"><span id="hlWeighU" class="small">lb</span></span><button>Save</button></form><small class="hl-phnote">You check it before it saves${photosDone ? '' : ' · 📸 photos optional'}</small></div>`;
   const status = pr ? `<span class="hl-status ${pr.status}">${STATUS[pr.status].icon} ${STATUS[pr.status].label}</span>` : '';
   const t = d.today;
   const nutrition = !d.set
