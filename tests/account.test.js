@@ -225,3 +225,23 @@ test('🔐 an encrypted family: the trackers send only locked data, and a device
   const after = await api(`/families/${family.fid}/members/${family.members[0].id}/data`, sam);
   assert.equal(after.data.enc, stored.data.enc, 'the locked copy is unchanged');
 });
+
+test('a day\'s food is replaced whole, never blended (no old bar next to the chicken you said)', async () => {
+  const { mergeData } = await import('../js/account.js');
+  const day = '2026-11-02';
+  const stale = { custom: { date: day, meals: { lunch: { title: 'Barebells protein bar', items: [{ food: 'barebells', grams: 55 }] }, dinner: { items: [{ food: 'turkey', grams: 200 }] } } },
+    eaten: { date: day, meals: { lunch: { title: 'Barebells protein bar', kcal: 200 }, breakfast: { kcal: 400 } }, extras: [] } };
+  const fresh = { custom: { date: day, meals: { lunch: { items: [{ food: 'thigh', grams: 100 }, { food: 'sweetPotato', grams: 150 }], how: 'said' } } },
+    eaten: { date: day, meals: { lunch: { title: 'Chicken thigh, sweet potato', kcal: 560 } }, extras: [] } };
+  const m = mergeData(stale, fresh, true);
+  assert.deepEqual(m.custom.meals.lunch, fresh.custom.meals.lunch, 'the new lunch, not bar + chicken');
+  assert.equal(m.custom.meals.dinner, undefined, 'a meal taken off stays off');
+  assert.deepEqual(m.eaten.meals, fresh.eaten.meals, 'what was eaten is the newer copy');
+  // The later day wins whichever side is newer; other days planned ahead are each one record.
+  assert.equal(mergeData({ custom: { date: '2026-11-03', meals: {} } }, { custom: { date: day, meals: { lunch: {} } } }, true).custom.date, '2026-11-03');
+  const p = mergeData({ planned: { '2026-11-05': { dinner: { items: [1] } }, '2026-11-06': { lunch: {} } } }, { planned: { '2026-11-05': { dinner: { items: [2] } } } }, true).planned;
+  assert.deepEqual(p['2026-11-05'], { dinner: { items: [2] } });
+  assert.ok(p['2026-11-06'], 'a day only one copy has is kept');
+  // Everything else still combines (weights, profile fields).
+  assert.equal(mergeData({ profile: { a: 1 } }, { profile: { b: 2 } }).profile.a, 1);
+});
