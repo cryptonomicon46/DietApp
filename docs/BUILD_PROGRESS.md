@@ -4,7 +4,33 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🎧 Talk: add a book by its author, as an audiobook — or as you said it (2026-11-02, `v2/talk-books` from `main` `4e793a5`; front end only, no `pawdeploy`; owner reported that "To my audiobooks add this title by the author Josh Silver called fruit fly" offered only pest-control books)
+
+**Cause:**
+- The phone's reader knew only "add X to my reading list", so the request went to Claude.
+- The Talk card ignored the `author` that `/ai/talk` returns, and searched the catalogue for "fruit fly" alone.
+- When nothing matched, there was no way to add the book as said, and "audiobooks" was dropped.
+
+**Fix:**
+
+| Change | Where |
+| --- | --- |
+| Reader understands "to my audiobooks / reading list / books add … (by the author A) called T", "add T by A to my audiobooks", "the audiobook T", "I'm listening to T by A". `bookPhrase` and `splitByAuthor` keep the author ("Stand by Me" stays a title); a lower-case title is title-cased | `js/talkParse.js` |
+| Claude's `author`, or "T by A" left in its title, is kept | `tidySteps` |
+| Search is title + author; that author's books come first. With none by them, the card says so and puts **＋ T · A · add it as you said it** first; with no results at all, the as-said card shows directly | `family/read.js` (`talkFind(title, author)`, `authorHit`) |
+| The card has 📖 Book / 🎧 Audiobook; audiobook is chosen when you said "audiobook" or "listen" | `family/talk.js` |
+| Added with `f: 'listen'` | `talkAdd(…, f)` |
+| Removed the dead `nobook` card | `family/talk.js` |
+
+**Tests:** `tests/talkparse.test.js` (+2). These cover the exact failing sentence, four other phrasings, the "Stand by Me" and "Death by Chocolate" guards, and author matching. `npm test` passes.
+
+**Browser check** (local, seeded; book search mocked because Open Library is blocked from this sandbox):
+- No results: *🎧 Fruit Fly · Josh Silver · as you said it (not in the book catalogue) → Want to Read*, with 🎧 Audiobook selected.
+- Pest-book results: *Which book? The book catalogue has nothing by Josh Silver called that*, with *＋ Fruit Fly · Josh Silver · add it as you said it* first.
+- A Josh Silver result: picked straight away. Added, and asking again gives "Already Want to Read".
 ### ⚖️ Fit by nutrition science, weigh-in check + 📸 front/side/back, ✓ just-logged macros (2026-11-02, `v2/fit-weigh-summary` from `main` `4e793a5`; front end only, no `pawdeploy`; owner asked to confirm the fit math, and for the weigh-in check, photos and meal summary)
+
+**Merged:** PR #35 (meal locks) → `main` `4e793a5`; PR #36 (this entry, plus clear lock icons — drawn open padlock in a dashed ring when unlocked, green "🔒 Locked" pill when locked, since the 🔓/🔒 emoji look alike on a phone) → `main` `f907eaf`. Both front end only.
 
 **Fit audit (before).** Probe: the seeded 180 lb profile, Nov 2–3 plan meals, fitted to 300/400/500/600/800 kcal. The old rule kept "mostly protein" foods and scaled everything else evenly, or scaled everything once carbs and fat would fall under ¼. Findings:
 - 95/5 beef dinner at 400 kcal: protein dropped from 72 to 42 g.

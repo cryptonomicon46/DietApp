@@ -154,16 +154,31 @@ function refresh() { if (state.view === 'read') renderRead(); else if (state.vie
 // 🗣️ For Talk to Pawmily: find a book (yours first, then Open Library), add one, change your state,
 // and undo — the same records and calls as the screens above.
 const norm = (t) => String(t || '').toLowerCase().replace(/^(the|a|an)\s+/, '').replace(/[^a-z0-9]+/g, ' ').trim();
-export async function talkFind(title) {
+// 🗣️ Talk: a book you named — on your list already, or the catalogue's best matches. With an author
+// ("Fruit Fly by Josh Silver") it searches for both and puts that author's books first; when none
+// of the catalogue's books is by them, `byAuthor` is false (the card then offers to add it as said).
+export const authorHit = (b, author) => {
+  const want = norm(author).split(' ').filter((w) => w.length > 1);
+  const names = (b.authors || []).map((a) => norm(a.name || a)).join(' ');
+  return want.length > 0 && want.every((w) => names.includes(w));
+};
+export async function talkFind(title, author = '') {
   await loadBooks();
-  const q = norm(title), have = rd.books.filter((b) => !b.locked && (norm(b.title) === q || (q.length > 3 && norm(b.title).startsWith(q))));
+  const q = norm(title), have = rd.books.filter((b) => !b.locked && (norm(b.title) === q || (q.length > 3 && norm(b.title).startsWith(q))) && (!author || !b.authors?.length || authorHit(b, author)));
   if (have.length) return { have: have.map((b) => ({ id: b.id, title: b.title, author: B.authorLine(b), state: mine(b.id)?.s || null })) };
-  const r = await api.get(`/books/search?q=${encodeURIComponent(title)}`).catch(() => ({ results: [] }));
-  return { results: (r.results || []).slice(0, 3) };
+  const find = (s) => api.get(`/books/search?q=${encodeURIComponent(s)}`).then((r) => r.results || []).catch(() => []);
+  let list = await find(author ? `${title} ${author}` : title);
+  if (author) {
+    const hits = list.filter((b) => authorHit(b, author));
+    if (hits.length) return { results: hits.slice(0, 3), byAuthor: true };
+    list = list.length ? list : await find(title);
+    return { results: list.slice(0, 3), byAuthor: false };
+  }
+  return { results: list.slice(0, 3) };
 }
-export async function talkAdd(pick, s, recBy = '') {
+export async function talkAdd(pick, s, recBy = '', f = 'read') {
   const book = B.normalizeBook({ ...pick, ...(recBy ? { recBy } : {}) });
-  const st = { s, f: 'read', ...(s === 'reading' ? { start: isoLocal() } : s === 'finished' ? { done: isoLocal() } : {}) };
+  const st = { s, f: B.FORMATS[f] ? f : 'read', ...(s === 'reading' ? { start: isoLocal() } : s === 'finished' ? { done: isoLocal() } : {}) };
   const r = await api.post(P(), { body: await lock(book), state: st });
   await loadBooks(true); refresh();
   return r.book?.id || null;
