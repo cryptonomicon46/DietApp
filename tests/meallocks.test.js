@@ -51,3 +51,19 @@ test('a locked protein holds only on days that protein comes round', () => {
     else assert.equal(p.locked, false, `${n}: ${p.food} is sized by the plan`);
   }
 });
+
+test('🔁 swap a plan food for another of its slot: sized by the plan, remembered (not lunch/dinner proteins)', () => {
+  const d = data(), s = store(d), day = '2026-11-02';
+  const carb = D.planOf(d, day).dinner.portions.find((p) => p.slot === 'carb');
+  const other = carb.options.find((f) => f !== carb.food);
+  assert.equal(D.setPick(s, day, 'dinner', 'carb', other), true);
+  const now = D.planOf(d, day).dinner.portions.find((p) => p.slot === 'carb');
+  assert.equal(now.food, other);
+  assert.ok(now.grams > 0, 'the plan sizes the new food');
+  assert.equal(d.prefs.main.carb, other, 'remembered for lunch and dinner');
+  assert.equal(D.planOf(d, '2026-11-03').lunch.portions.find((p) => p.slot === 'carb').food, other);
+  const prot = D.planOf(d, day).dinner.portions.find((p) => p.slot === 'protein');
+  D.setPick(s, day, 'dinner', 'protein', prot.options.find((f) => f !== prot.food));
+  assert.equal(d.prefs.main.protein, undefined, 'proteins keep rotating day by day');
+  assert.equal(D.setPick(s, day, 'dinner', 'carb', 'whey'), false, 'only that slot\'s own options');
+});
