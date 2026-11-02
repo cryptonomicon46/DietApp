@@ -1,8 +1,8 @@
 // 📺 Watch (2.0): the Watch card on 💞 Us and the full Watchlist — loading, episode dates, the cards,
 // details and their actions. Loaded the first time Us or Watch needs it, so it isn't in the app's
 // start-up script. The shared state (`watch`) and the helpers it uses come from app.js once (init).
-let $, LS, act, api, bingo, bingoNew, can, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide;
-export function init(c) { ({ $, LS, act, api, bingo, bingoNew, can, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide } = c); }
+let $, LS, act, api, bingo, bingoNew, can, openPicks, seasonNew, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide;
+export function init(c) { ({ $, LS, act, api, bingo, bingoNew, can, openPicks, seasonNew, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide } = c); }
 
 // 📺 The Watch card: "2 watching · 3 want to watch", the shows that matter tonight, one action each.
 export function renderUsWatch() {
@@ -12,15 +12,57 @@ export function renderUsWatch() {
   const line = (x) => {
     const life = watch.S.lifecycle(x);
     const what = x.ep?.newCount ? `🆕 ${x.ep.newCount} new episode${x.ep.newCount === 1 ? '' : 's'}` : life === 'watching' ? (pgText(x.progress) ? `Watching · ${pgText(x.progress)}` : 'Watching') : watch.S.isUpNext(x) ? '⭐ Up Next' : 'Want to Watch';
-    return `<div class="uw-row"><button type="button" class="uw-main" data-watchopen="${x.id}" aria-label="${esc(x.title)}: details"><b>${esc(x.title)}</b><small class="muted">${svcBadge(x.service)} ${esc(what)}</small></button>${watchPrimary(x, true)}</div>`;
+    return `<div class="uw-row"><div class="uw-col"><button type="button" class="uw-main" data-watchopen="${x.id}" aria-label="${esc(x.title)}: details"><b>${esc(x.title)}</b><small class="muted">${svcBadge(x.service)} ${esc(what)}</small></button>${gameChips(x)}</div>${watchPrimary(x, true)}</div>`;
   };
   el.innerHTML = `<div class="row between"><h2 class="card-h" id="usWatchH">📺 Watch</h2>${p.watching || p.want ? `<span class="small muted">${p.watching} watching · ${p.want} want to watch</span>` : ''}</div>
     ${p.items.length ? `<div class="uw-list">${p.items.map(line).join('')}</div>` : '<p class="small muted">What are you two watching? Add it, and what you want to watch next.</p>'}
-    <div class="row uw-foot"><button type="button" class="grow" data-view="watch">Open Watchlist →</button><button type="button" class="ghost" data-act="watchadd" aria-label="Add a show or movie">＋ Add</button></div>`;
+    <div class="row uw-foot"><button type="button" class="grow" data-view="watch">Open Watchlist →</button><button type="button" class="ghost wg-icon" data-act="games" aria-label="Games: bingo and couples picks">🎲</button><button type="button" class="ghost" data-act="watchadd" aria-label="Add a show or movie">＋ Add</button></div>`;
+}
+// 🎲💑 The family's bingo card sets and games and the couples-picks seasons, so each show can show
+// its own (js/showGames.js matches them by name). Kept for a minute; a failure just shows none.
+let G = null, gamesAt = 0;
+export async function loadGames(force = false) {
+  G ||= await import('../js/showGames.js');
+  if (!force && watch.games && Date.now() - gamesAt < 60000) return watch.games;
+  const [b, p] = await Promise.all([api.get(`/families/${state.fid}/bingo`).catch(() => null), api.get(`/families/${state.fid}/picks`).catch(() => null)]);
+  watch.games = { packs: b?.packs || [], games: b?.games || [], seasons: p?.seasons || [] };
+  gamesAt = Date.now();
+  return watch.games;
+}
+// A card set, season or game was just made: read them again next time.
+export const gamesStale = () => { gamesAt = 0; };
+const gamesOf = (x) => (G && watch.games && !x.locked ? G.gamesFor(x.title, watch.games) : { live: null, pack: null, picks: null });
+// The chips under a show's name: 💑 its couples picks, 🎲 its bingo (playing now, or ▶ from its card set).
+function gameChips(x) {
+  const g = gamesOf(x), out = [];
+  if (g.picks) out.push(`<button type="button" class="wg-chip picks" data-watchpicks="${esc(g.picks.id)}">💑 Picks · ${g.picks.status === 'live' ? 'playing' : 'see who won'} ›</button>`);
+  if (g.live) out.push(`<button type="button" class="wg-chip live" data-watchgame="${esc(g.live.id)}">🎲 Bingo · playing now ›</button>`);
+  else if (g.pack) out.push(`<button type="button" class="wg-chip" data-watchbingo="${x.id}">🎲 Bingo ▶</button>`);
+  return out.length ? `<div class="wg-games">${out.join('')}</div>` : '';
+}
+// "Play along" on a show's page: its games, or ready-filled ways to start one.
+function playAlong(x) {
+  if (x.locked || x.kind === 'movie') return '';
+  const g = gamesOf(x);
+  const row = (ic, title, sub, btn) => `<div class="wg-game"><span class="ic" aria-hidden="true">${ic}</span><div><b>${title}</b><small>${sub}</small></div>${btn}</div>`;
+  return `<div class="grp">Play along</div>
+    ${g.picks ? row('💑', 'Couples picks', `${g.picks.couples} couples · ${g.picks.status === 'live' ? 'playing' : 'finished'}`, `<button type="button" class="small" data-watchpicks="${esc(g.picks.id)}">Open ›</button>`)
+      : row('💑', 'Couples picks', 'Predict each couple — for dating and reality shows', `<button type="button" class="ghost small" data-watchpicksnew="${x.id}">＋ Start</button>`)}
+    ${g.live ? row('🎲', 'Bingo · playing now', `started by ${esc(g.live.byName || '')}`, `<button type="button" class="small" data-watchgame="${esc(g.live.id)}">Open ›</button>`)
+      : g.pack ? row('🎲', 'Bingo', `${g.pack.count} squares`, `<button type="button" class="small" data-watchbingo="${x.id}">▶ Play</button>`)
+        : row('🎲', 'Make a bingo card', `Squares for ${esc(x.title)} — ask Claude or write your own`, `<button type="button" class="ghost small" data-watchbingo="${x.id}">＋ Make</button>`)}`;
+}
+// 🎲 Games, grouped by what you're watching (top of the Games page).
+export function gamesByShow() {
+  if (!watch.S || !G) return '';
+  const S = watch.S, list = S.watchlist(watch.shows).watching.filter((x) => x.kind !== 'movie' && !x.locked);
+  if (!list.length) return '';
+  return `<h3>What you're watching</h3>${list.map((x) => `<div class="wg-card"><b>${esc(x.title)}</b>${playAlong(x).replace('<div class="grp">Play along</div>', '')}</div>`).join('')}`;
 }
 // Bringing over the trackers' "Feeling like" plans, answers and notes (once per family, each
 export async function loadWatch() {
   watch.S ||= await import('../js/showsCore.js');
+  loadGames().then(() => { if (state.view === 'us') renderUsWatch(); else if (state.view === 'watch') renderWatch(); }).catch(() => {});
   const w = await api.get(`/families/${state.fid}/watch`);
   const bodies = await Promise.all(w.shows.map(async (x) => ({ ...x, ...((await unlock(x.body)) || {}) })));
   const people = fam().members.filter((m) => m.kind === 'person');
@@ -119,6 +161,7 @@ function watchCard(x) {
   return `<div class="show-card ${life}">
     <button type="button" class="show-main" data-watchopen="${x.id}" aria-label="${esc(x.title)}: details"><span class="show-top">${svcBadge(x.service)}${x.kind === 'movie' ? '<span class="small muted">🍿 Movie</span>' : ''}</span>
       <span class="show-title">${esc(x.title)}</span><span class="small muted">${esc(bits.join(' · '))}</span>${epLine(x)}</button>
+    ${life === 'watching' || life === 'want' ? gameChips(x) : ''}
     <div class="show-do">${watchPrimary(x)}<button type="button" class="icon-btn" data-watchopen="${x.id}" aria-label="More for ${esc(x.title)}">•••</button></div>
   </div>`;
 }
@@ -136,13 +179,13 @@ export function watchDetail(id) {
     <div class="seg" role="group" aria-label="Where it is">${states.map(([k, l]) => `<button type="button" class="${lifeKey === k ? 'on' : ''}" data-watchlife="${x.id}:${k}" aria-pressed="${lifeKey === k}">${l}</button>`).join('')}</div>
     ${life === 'want' ? `<button type="button" class="ghost wide" data-watchlife="${x.id}:${S.isUpNext(x) ? 'want' : 'upnext'}">${S.isUpNext(x) ? '☆ Not Up Next' : '⭐ Make it Up Next'}</button>` : ''}
     ${watchPrimary(x) ? `<div class="row">${watchPrimary(x)}</div>` : ''}
+    ${playAlong(x)}
     ${x.kind !== 'movie' ? `<div class="grp">Where you're up to</div><div class="row pg-row"><button type="button" class="icon-btn" data-watchpgstep="${x.id}:-1" aria-label="One episode back">−</button><span class="pill">${pgText(x.progress) || 'Not started'}</span><button type="button" class="icon-btn" data-watchpgstep="${x.id}:1" aria-label="One episode on">＋</button><button type="button" class="linkish small" data-watchpg="${x.id}">Set season &amp; episode…</button></div>${epLine(x)}` : ''}
     <div class="grp">Your rating</div><div class="show-rate">${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="star ${n <= mine ? 'on' : ''}" data-watchrate="${x.id}:${n}" aria-label="Rate ${n} of 5" aria-pressed="${n <= mine}">★</button>`).join('')}
       ${theirs.map(([p, r]) => `<span class="small muted">· ${esc(member(p)?.name || '')} <span class="stars" aria-label="${r} of 5">${'★'.repeat(r)}${'☆'.repeat(5 - r)}</span></span>`).join('')}</div>
     <div class="grp">History</div><p class="small muted">${x.nights.length ? `${x.nights.length} night${x.nights.length === 1 ? '' : 's'} together · last ${shortDay(x.nights[x.nights.length - 1].date)}` : 'Not watched together yet'}${x.statusDate && life === 'watched' ? ` · finished ${shortDay(x.statusDate)}` : ''}</p>
     <div class="stack tight">
       <button type="button" class="ghost wide" data-discuss="w:${x.id}" data-dtitle="${esc(`🍿 ${x.title}`)}">💬 Discuss</button>
-      ${x.locked ? '' : `<button type="button" class="ghost wide" data-watchbingo="${x.id}">🎲 Bingo for it</button>`}
     </div>
     <details class="more"><summary class="small">More</summary><div class="stack tight">
       <button type="button" class="linkish small" data-watchaud="${x.id}:${x.aud === 'family' ? 'us' : 'family'}">${x.aud === 'family' ? '🔒 Make it just us' : '👨‍👩‍👧 Share with the family'}</button>
@@ -155,7 +198,7 @@ export function renderWatch() {
   const S = watch.S, shows = watch.shows, ym = isoLocal().slice(0, 7), year = ym.slice(0, 4);
   const L = S.watchlist(shows);
   if (!['watching', 'want', 'watched'].includes(watch.tab)) watch.tab = L.watching.length || !L.want.length ? 'watching' : 'want';
-  const tabs = [['watching', `Watching${L.watching.length ? ` ${L.watching.length}` : ''}`], ['want', `Want to Watch${L.want.length ? ` ${L.want.length}` : ''}`], ['watched', 'Watched']];
+  const tabs = [['watching', `Watching${L.watching.length ? ` ${L.watching.length}` : ''}`], ['want', `Want to Watch${L.want.length ? ` ${L.want.length}` : ''}`], ['watched', 'Watched'], ['games', '🎲 Games']];
   let body = '';
   if (watch.tab === 'watching') {
     body = L.watching.length ? L.watching.sort((a, b) => (b.ep?.newCount || 0) - (a.ep?.newCount || 0) || S.lastActive(b).localeCompare(S.lastActive(a))).map(watchCard).join('')
@@ -181,9 +224,8 @@ export function renderWatch() {
   }
   $('#view').innerHTML = `${demoBanner()}
     <section class="watch-head"><h2><button type="button" class="linkish" data-view="us" aria-label="Back to Us">‹</button> 📺 Watchlist</h2><button type="button" class="small" data-act="watchadd">＋ Add</button></section>
-    <div class="seg" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" aria-selected="${watch.tab === k}" class="${watch.tab === k ? 'on' : ''}" data-watchtab="${k}">${l}</button>`).join('')}</div>
-    <div class="watchlist">${body}</div>
-    <button type="button" class="linkish small" data-act="games">🎲 Bingo &amp; 💑 couples picks ›</button>`;
+    <div class="seg wt-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" aria-selected="${watch.tab === k}" class="${watch.tab === k ? 'on' : ''}" data-watchtab="${k}">${l}</button>`).join('')}</div>
+    <div class="watchlist">${body}</div>`;
 }
 export function watchAddSheet() {
   const S = watch.S, a = watch.adding;
@@ -206,7 +248,9 @@ export async function watchOne(id) {
   await api.patch(`/families/${state.fid}/watch/shows/${id}`, { ...(ch.status ? { status: ch.status, date: today } : {}), ...(ch.progress ? { progress: ch.progress } : {}), ...(ch.night ? { night: today } : {}) });
   await watchSaved();
   if (x.kind === 'movie') return toast(`🍿 ${x.title} — watched. Rate it in its details.`);
-  toast(`✓ ${x.title} · S${ch.progress.s} E${ch.progress.e}${ch.status === 'watching' ? ' — now in Watching' : ''}`);
+  // A show with couples picks being played: the moment to update them.
+  const pk = gamesOf(x).picks;
+  toast(`✓ ${x.title} · S${ch.progress.s} E${ch.progress.e}${ch.status === 'watching' ? ' — now in Watching' : ''}`, null, pk?.status === 'live' ? { label: '💑 Update picks', fn: () => openPicks(pk.id) } : null);
   if (S.isFinale(ch.progress, x.tv) && confirm(`That was the last episode of ${x.title}. Mark it Watched?`)) {
     await api.patch(`/families/${state.fid}/watch/shows/${id}`, { status: 'finished', date: today });
     await watchSaved(); toast('🎉 Watched — it goes in your history');
@@ -216,11 +260,13 @@ export const watchSaved = async () => { await loadWatch(); if (state.view === 'w
 // Bingo for this show: its live game, or a new game from its card set, or a new card set.
 export async function watchBingo(title) {
   const r = await api.get(`/families/${state.fid}/bingo`);
-  const same = (t) => t.trim().toLowerCase() === title.trim().toLowerCase();
+  G ||= await import('../js/showGames.js');
+  closeSheet();
+  const same = (t) => G.sameShow(t, title);
   const live = r.games.find((g) => g.status === 'live' && same(g.title));
   if (live) { bingo.game = live.id; state.view = 'bingo'; return show('bingo'); }
   const pack = r.packs.find((p) => same(p.title));
-  if (pack) { const g = await api.post(`/families/${state.fid}/bingo/games`, { packId: pack.id }); bingo.game = g.game.id; return show('bingo'); }
+  if (pack) { const g = await api.post(`/families/${state.fid}/bingo/games`, { packId: pack.id }); gamesStale(); bingo.game = g.game.id; return show('bingo'); }
   return bingoNew({ title });
 }
 async function importWatch() {
