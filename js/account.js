@@ -227,6 +227,16 @@ export const account = {
     const a = this.get();
     const out = { changed: false, got: [] };
     if (!a) return out;
+    if (await this.pullMine(a)) out.changed = true;
+    if (await this.pullDogs(a).catch(() => false)) out.changed = true;
+    await this.pushDogs(a).catch(() => {});
+    return this.pullPartners(a, out);
+  },
+  // Only your own copy (before a change made from the family app: what it needs, and the one
+  // request on the way to saving). → true when it changed this device's copy.
+  async pullMine(a = this.get()) {
+    if (!a) return false;
+    let changed = false;
     const mine = await call('GET', `/families/${a.fid}/members/${a.me}/data`);
     if (mine.status === 200) {
       const remote = { ...mine.data, data: await openData(a, mine.data.data) };
@@ -241,7 +251,7 @@ export const account = {
         const merged = mergeData(local, theirs, remoteWins);
         if (!same(merged, local)) {
           importProfile(a.profile, merged);
-          out.changed = true;
+          changed = true;
           if (!first && typeof window !== 'undefined') window.dispatchEvent(new Event('lp:mine'));
         }
         global.set('account.mineAt', remote.savedAt || 0);
@@ -249,8 +259,9 @@ export const account = {
         if (!same(merged, theirs)) await this.push();
       }
     }
-    if (await this.pullDogs(a).catch(() => false)) out.changed = true;
-    await this.pushDogs(a).catch(() => {});
+    return changed;
+  },
+  async pullPartners(a, out) {
     for (const p of PROFILES.filter((x) => x.id !== a.profile)) {
       const id = a.members[p.id];
       if (!id) continue;
