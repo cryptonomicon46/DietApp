@@ -33,8 +33,8 @@ export const SLIDES = [
   { id: 'us', eyebrow: '💞 Us', title: 'Just the two of you', go: 'us', cards: [
     ['📺', 'Watch', 'What you’re watching and what’s next. ＋ Episode logs tonight; Want to Watch → Watching → Watched.'],
     ['📚', 'Read', 'What each of you is reading or listening to. ＋ Book, pick it, 📖 Reading or 🎧 Listening — done.'],
-    ['❤️', 'Dates', 'Plans you answer 🙌 / 🤔 / ⏰, 🧭 Plan an outing, and the 2-2-2-2 rhythm.'],
-    ['✨', 'Ideas for Us', 'A few movies, new restaurants and events. 💗 privately, 💬 discuss, and a match becomes a plan.'],
+    ['❤️', 'Dates', 'Plans and the date nights on your calendars, 🧭 Plan an outing, and the 2-2-2-2 rhythm.'],
+    ['✨', 'Ideas for Us', 'Movies, new restaurants and events, one at a time or as a grid. 💗 privately, 👁 seen it, ⏭ save — a match becomes a plan.'],
     ['🎁', 'Wishlist & notes', 'Each of you keeps a wishlist (a link or a screenshot) only the other sees, plus little notes just for you two.'],
   ] },
   { id: 'calendar', eyebrow: '📅 Calendar', title: 'When it’s happening', go: 'calendar', cards: [
@@ -61,17 +61,16 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-11t',
-  title: 'New: 🗣️ Talk waits for you, and checks before it saves',
-  text: 'Talk keeps listening through pauses — tap Done when you’re finished. A meal or workout you tell it shows up as a card to check: say “yes” to log it, or say what to change. Plus 🎁 a wishlist in Us, a better 🍽 meal sheet and ⌚ WHOOP on Home.',
+  id: '2026-11d',
+  title: 'New: ❤️ date nights from your calendar, and easier 💡 date ideas',
+  text: 'A movie or dinner you booked shows under 💞 Us › Dates and counts on your 2-2-2-2. Date ideas now go one at a time with 👁 Seen it, ⏭ Save and Undo — or browse them all as posters.',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '🗣️ Talk, 🎁 Wishlist, 🍽 Meals', cards: [
-  ['🎤', 'Take your time', 'Talk keeps listening through pauses (“Still listening…”). Tap Done when you’re finished — every word is kept.'],
-  ['✅', 'Check, then save', '“Log lunch: chicken and rice” or “I did 3x10 squats at 135” shows a card. Say “yes” to save, or “make the rice half a cup”.'],
-  ['🎁', 'A wishlist for each of you', 'In 💞 Us: paste a link or add a screenshot with a caption. Your partner can mark 🎁 I’m getting this — you never see that.'],
-  ['🍽', 'Pick and fit the meal', 'Tap a meal: another breakfast, a 🥤 smoothie, a combo or a bar, and ⚖️ Fit it to your calories.'],
-  ['⌚', 'WHOOP on Home', 'The same card as Health, right under Talk, with a big Sync WHOOP for when the WHOOP app is ahead.'],
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '❤️ Dates, 💡 Ideas, 🗣️ Talk', cards: [
+  ['❤️', 'Booked dates show up', 'A movie or dinner on your calendars for both of you appears under Dates › Coming up, and counts on your 2-2-2-2 the day after.'],
+  ['💡', 'Date ideas, easier', 'One at a time: ✕ Not for us · 👁 Seen it · ⏭ Save · 💗 Want to, each with Undo. Or ▦ Browse all as posters.'],
+  ['💞', 'Picks, matches, saved', 'Your 💗 picks (private), 💞 matches ready to plan, and ⏭ Saved — right at the top of Date ideas.'],
+  ['🗣️', 'Talk waits for you', 'It keeps listening through pauses, and a meal or workout shows as a card to check before it saves.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);

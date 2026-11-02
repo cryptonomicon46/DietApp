@@ -61,3 +61,22 @@ test('ratings become a taste: what fits, why, what to hide, and the line an outi
   assert.match(line, /loved Omakase counter/);
   assert.equal(tasteLine(tasteOf([])), '');
 });
+
+test('seen, saved, picked and booked leave the deck; Browse all keeps them; kids\' shows never show', async () => {
+  const { answer, mergeState, emptyState, forKids } = await import('../family/ideas.js');
+  let st = answer(emptyState(), 'mv1', 'seen', 1000);
+  st = answer(st, 'tm0', 'save', 1000);
+  const d = deck({ week, rhythm: [], today: '2026-10-25', seen: st.seen, saved: st.saved, skip: new Set(['pl1']) });
+  assert.ok(!d.some((x) => ['mv1', 'tm0', 'pl1'].includes(x.id)));
+  assert.ok(deck({ week, rhythm: [], today: '2026-10-25', seen: st.seen, all: true }).some((x) => x.id === 'mv1'));
+  assert.equal(forKids({ kind: 'event', title: "Bluey's Big Play" }), true);
+  assert.equal(forKids({ kind: 'event', title: 'Symphony', tags: ['arts & theatre', 'family'] }), true);
+  assert.equal(forKids({ kind: 'movie', title: 'Kids' }), false, 'only events');
+  const kidsWeek = { ideas: [...week.ideas, { id: 'kid', kind: 'event', title: "Bluey's Big Play", day: '2026-11-01' }] };
+  assert.ok(!deck({ week: kidsWeek, rhythm: [], today: '2026-10-25' }).some((x) => x.id === 'kid'));
+  // An answer replaces the earlier one; two copies merge with the later answer winning.
+  assert.deepEqual(answer(st, 'mv1', 'clear', 2000).seen, {});
+  const phone = answer(emptyState(), 'x', 'seen', 5000), saved = answer(emptyState(), 'x', 'save', 9000);
+  assert.deepEqual(mergeState(phone, saved, 10000).saved, { x: 9000 });
+  assert.deepEqual(mergeState(answer(emptyState(), 'y', 'pass', 0), emptyState(), 91 * 864e5).pass, {}, 'expired passes drop off');
+});
