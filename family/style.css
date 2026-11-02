@@ -1730,3 +1730,8 @@ button.ml-opt.on > span:last-child { color: var(--brand); font-weight: 800; }
 .hl-mac b { font-size: .95rem; }
 .hl-nextup { grid-column: 2; margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--line); }
 
+/* 🔁 An unlocked plan food is a menu of its slot's own options */
+.ml-swap { font: inherit; font-weight: 700; font-size: 1rem; color: var(--ink); background: var(--card); border: 1px dashed var(--line); border-radius: 10px; min-height: 40px; padding: 4px 26px 4px 10px; max-width: 62vw; text-overflow: ellipsis; }
+.ml-food > span:first-child:has(.ml-swap) { display: flex; align-items: center; gap: 4px; flex: 1 1 100%; }
+.ml-food .ml-swap { flex: 1 1 auto; min-width: 0; max-width: none; }
+.ml-swap:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }

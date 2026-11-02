@@ -41,7 +41,24 @@ const VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
 const state = { user: null, families: [], fid: LS.get('fam.fid'), family: null, connected: [], feed: [], view: 'home', memberId: null, invite: null, open: {} };
 const fam = () => state.family;
 // Requests for the same thing at start-up (and within a few seconds) are shared: see shared.js.
-const shared = makeShared((path) => api.get(path));
+// ⚡ A screen you come back to shows what it had at once; when the fresh answer differs, that
+// screen redraws (only the one on show, and not while you're typing or in a sheet).
+const viewPaths = new Set(); // what the screen on show asked for
+const shared0 = makeShared((path) => api.get(path), { onFresh: (path) => { if (path === '/threads') loadThreads().catch(() => {}); if (viewPaths.has(path)) redrawSoon(); } });
+const shared = Object.assign((path, maxAge) => { viewPaths.add(path); return shared0(path, maxAge); }, { clear: shared0.clear, drop: shared0.drop, seed: shared0.seed, size: shared0.size });
+const REDRAW = ['home', 'us', 'calendar', 'threads', 'health', 'watch'];
+let redrawT = null;
+function redrawSoon(tries = 0) {
+  clearTimeout(redrawT);
+  redrawT = setTimeout(async () => {
+    if (!REDRAW.includes(state.view)) return;
+    const typing = document.activeElement?.closest?.('#view') && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+    if ($('#sheet')?.open || typing) { if (tries < 20) redrawSoon(tries + 1); return; }
+    const y = window.scrollY, v = state.view;
+    await drawView(v);
+    if (state.view === v) window.scrollTo(0, y);
+  }, tries ? 1500 : 120);
+}
 // Changes (not opening the live chat or marking it read) clear what's shared.
 const call0 = api.call;
 // (A chat ticket or read receipt, the vaccine due list for reminders and reading a linked calendar change nothing the app reads.)
@@ -404,7 +421,11 @@ function show(view, extra) {
   $('#chatTop')?.classList.toggle('on', view === 'chats' || view === 'chat');
   if (view === 'chats' || view === 'chat') return dms().then((d) => (view === 'chat' ? d.convView(extra) : d.listView())).catch((e) => toast(e.message));
   talkFab();
-  ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, read: () => RM().then((R) => R.readView()), us: usView, health: healthView, fitness: fitnessView, look: lookView })[view]?.();
+  viewPaths.clear();
+  return drawView(view, extra);
+}
+function drawView(view, extra) {
+  return ({ home: homeView, threads: threadsPage, family: familyView, me: meView, member: memberView, bingo: bingoView, calendar: calendarView, watch: watchView, read: () => RM().then((R) => R.readView()), us: usView, health: healthView, fitness: fitnessView, look: lookView })[view]?.();
 }
 // 🗣️ Talk to Pawmily (family/talk.js, loaded on the first tap): a golden bar under the greeting on
 // Home, and a small gold circle on the other main tabs — hidden while you scroll down, while you're
@@ -556,7 +577,8 @@ function talk() {
 }
 // 💪 Health: your own Diet and Fitness (family/health.js, loaded when you open it).
 async function healthView() {
-  $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div><div class="skeleton card"></div>`;
+  // (Already on show — after a change, or fresher data: redrawn in place, no skeleton flash.)
+  if (!$('#view .health-page')) $('#view').innerHTML = `${demoBanner()}<div class="skeleton card"></div><div class="skeleton card"></div>`;
   const wh = whoopHere();
   const [H, rec, F, nudges, WD, photosToday] = await Promise.all([import(`./health.js?v=${VERSION}`), memberData().catch(() => null), fit().catch(() => null), loadNudges().catch(() => null), wh ? import(`../js/whoopDay.js?v=${VERSION}`).catch(() => null) : null, posesToday().catch(() => [])]);
   if (state.view !== 'health') return;
@@ -710,7 +732,7 @@ function meals() {
   mealMod ||= (async () => {
     const M = await import(`./meals.js?v=${VERSION}`);
     M.init({
-      api, esc, toast, openSheet, closeSheet, editMine, iso: () => isoLocal(), confirm: (q) => confirm(q),
+      api, esc, toast, openSheet, closeSheet, editMine, seedMine, iso: () => isoLocal(), confirm: (q) => confirm(q),
       refresh: () => (state.view === 'health' ? healthView() : null),
       aiReady: async () => { const cfg = await api.liveConfig(); return cfg.missing || cfg.offline ? null : !!cfg.ai; },
       // Your partner's saved meal combos, only when they share their Diet with you.
@@ -829,16 +851,32 @@ async function lookView() {
 // program): your account copy comes down first, the change is made to this device's copy, then it
 // goes back up — the path ⌚ Devices uses, so a device that has only opened OurPawmily never
 // uploads a partial copy. Returns what change() returns.
-async function editMine(change) {
+// ⚡ One at a time, in order: a screen can show the change straight away (seedMine) and let this
+// catch up behind it. Only your own copy comes down first (not the dogs or your partner's), and
+// afterwards only your own records are forgotten from what's shared — your saved copy is kept
+// there, so Health redraws without asking the server again.
+let mineQ = Promise.resolve(), mineWaiting = 0;
+function editMine(change) {
+  mineWaiting++;
+  const run = mineQ.catch(() => {}).then(() => editMineNow(change)).finally(() => { mineWaiting--; });
+  mineQ = run;
+  return run;
+}
+// What Health and the meal sheet read as your own record, set to what this phone now holds.
+function seedMine(data) { if (state.fid && fam()?.me && data) shared.seed(`/families/${state.fid}/members/${fam().me}/data`, { data: structuredClone(data), savedAt: Date.now() }); }
+async function editMineNow(change) {
   if (fam().e2ee && !fk()) throw new Error('🔒 This device needs the family key first — Me › 🔐 Encryption');
   const [{ account }, { ownerId, profileStore, global }] = await Promise.all([import(`../js/account.js?v=${VERSION}`), import(`../js/storage.js?v=${VERSION}`)]);
   if (!account.active()) await account.connect().catch(() => null);
   if (!account.active() || !ownerId()) throw new Error(navigator.onLine ? "Your trackers aren't set up for you on this device yet — open Today's plan once, then try again" : "You seem to be offline — try again when you're connected");
-  await account.pull().catch(() => { throw new Error("Couldn't save — you seem to be offline. Try again in a moment."); });
+  await account.pullMine().catch(() => { throw new Error("Couldn't save — you seem to be offline. Try again in a moment."); });
   if (!global.get('account.pulled', false)) throw new Error("Couldn't read your saved copy yet — try again in a moment");
   const out = change(profileStore(ownerId()));
   await account.push();
-  shared.clear();
+  const me = `/members/${fam().me}`;
+  shared.drop((p) => p.endsWith(`${me}/data`) || p.includes(`${me}/health/`));
+  // (With more changes still waiting, the screen's own copy is ahead of this one: leave it.)
+  if (mineWaiting <= 1) { const { exportProfile } = await import(`../js/storage.js?v=${VERSION}`); seedMine(exportProfile(ownerId(), { shared: true })); }
   return out;
 }
 async function fitnessView() {
@@ -922,6 +960,7 @@ async function homeView() {
   helloCard();
   renderNextUp().catch(() => { const el = $('#nextUp'); if (el?.querySelector('.skeleton')) el.hidden = true; });
   later(() => importUs().catch(() => {}), 10000); // once per family on this phone
+  later(warmTabs, 8000);
   later(() => syncVaxDue().catch(() => {}), 8000); // the dogs' vaccine dates, for the 9 AM reminders
   const dogsDone = petsFill();
   // The badges' reads can be two minutes old here: coming back to the app refreshes them anyway.
@@ -1155,7 +1194,7 @@ async function goldNews() {
   if (+today.slice(8, 10) > 7) return;
   const d = new Date(`${today}T12:00:00`); d.setDate(0);
   const last = isoLocal(d).slice(0, 7);
-  const r = await api.get(`/families/${state.fid}/chores?month=${last}&today=${today}`).catch(() => null);
+  const r = await shared(`/families/${state.fid}/chores?month=${last}&today=${today}`).catch(() => null);
   const g = r?.gold.find((x) => x.month === last);
   const el = $('#goldNews');
   if (!g || !el) return;
@@ -1632,7 +1671,9 @@ async function walkWeather() {
   const B = await import('../js/brief.js');
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem('fam.weather') || 'null'); } catch { /* none */ }
-  if (!cached || Date.now() - cached.at > 30 * 60000) {
+  // ⚡ Up to 6 hours old it's shown at once (and fetched fresh behind it after 30 minutes).
+  const age = cached ? Date.now() - cached.at : Infinity;
+  if (age > 30 * 60000) {
     wxFetch ||= (async () => {
       const u = B.weatherUrls(B.PLACE);
       const [f, air] = await Promise.all([fetch(u.forecast).then((r) => r.json()), fetch(u.air).then((r) => (r.ok ? r.json() : null)).catch(() => null)]);
@@ -1640,7 +1681,7 @@ async function walkWeather() {
       try { localStorage.setItem('fam.weather', JSON.stringify(fresh)); } catch { /* full */ }
       return fresh;
     })().finally(() => { wxFetch = null; });
-    cached = await wxFetch;
+    if (age > 6 * 3600e3) cached = await wxFetch; else wxFetch.catch(() => {});
   }
   const hourly = B.parseWeather(cached.f, cached.air);
   const now = new Date();
@@ -2303,7 +2344,7 @@ function setIdeaSt(v) {
 const passed = () => ideaSt().pass || {};
 async function loadIdeas() {
   ideas.I ||= await import('./ideas.js');
-  const r = await api.get(`/families/${state.fid}/ideas`).catch(() => null);
+  const r = await shared(`/families/${state.fid}/ideas`).catch(() => null);
   if (!r) return;
   Object.assign(ideas, { week: r.week, settings: r.settings, mine: r.mine || [], loaded: true });
   const openBox = async (b) => (isSealed(b) ? unlock(b) : (() => { try { return typeof b === 'string' ? JSON.parse(b) : b; } catch { return null; } })());
@@ -3497,6 +3538,17 @@ async function nextUpCtx() {
   for (const w of Array.isArray(mine?.workouts) ? mine.workouts : []) { const k = { running: 'run', cycling: 'bike', hotYoga: 'hotyoga' }[A.sportOf(w.name || '')]; if (k) (workouts[k] ||= []).push(new Date(w.start).getHours()); }
   return { N, ctx: { now, hours, busy: busyFor(fam().me), partnerBusy: p ? busyFor(p.id) : [], nudges: all, classes, callWindows, dogs, shows, learned: nuLearned(), workouts } };
 }
+// ⚡ Once the app has settled (after start-up, when the phone is idle): what 💞 Us and 💪 Health
+// read first is fetched behind the scenes, so the first visit to each is as quick as going back.
+// Only reads — the same requests those screens make — once per family each time the app opens.
+let warmedFor = null;
+function warmTabs() {
+  if (!state.fid || warmedFor === state.fid || document.visibilityState !== 'visible' || navigator.connection?.saveData) return;
+  warmedFor = state.fid;
+  if (can('diet') || can('fitness')) { memberData().catch(() => {}); fit().catch(() => {}); }
+  const p = partnerMember();
+  if (p) { loadIdeas().catch(() => {}); loadWatch().catch(() => {}); theirParts(p.id, ['us']).catch(() => {}); }
+}
 async function renderNextUp() {
   const el = $('#nextUp');
   if (!el || nuSettings().off) { if (el) el.hidden = true; return; }
@@ -3912,7 +3964,7 @@ let readMod = null;
 const RM = () => (readMod ||= import(`./read.js?v=${VERSION}`).then((m) => { m.init({ $, api, state, fam, me, member, partnerMember, esc, openSheet, closeSheet, toast, act, show, unlock, lock, discuss, isoLocal, demoBanner, lockedHere, LOCKED_MSG }); return m; }).catch((e) => { readMod = null; throw e; }));
 // 📺 Watch's screens (family/watch.js) load the first time Us or Watch needs them.
 let watchMod = null;
-const WM = () => (watchMod ||= import(`./watch.js?v=${VERSION}`).then((m) => { m.init({ $, LS, act, api, bingo, bingoNew, can, openPicks, seasonNew, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide }); return m; }).catch((e) => { watchMod = null; throw e; }));
+const WM = () => (watchMod ||= import(`./watch.js?v=${VERSION}`).then((m) => { m.init({ $, LS, act, api, shared, bingo, bingoNew, can, openPicks, seasonNew, closeSheet, demoBanner, discuss, esc, fam, isoLocal, later, lock, lockedHere, me, member, openData, openSheet, renderUs, shortDay, show, state, toast, tvMap, tvMapKey, unlock, us, watch, who, wide }); return m; }).catch((e) => { watchMod = null; throw e; }));
 const loadTv = (...a) => WM().then((m) => m.loadTv(...a));
 const loadWatch = (...a) => WM().then((m) => m.loadWatch(...a));
 const renderUsWatch = (...a) => WM().then((m) => m.renderUsWatch(...a));
