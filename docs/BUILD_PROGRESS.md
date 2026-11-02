@@ -47,6 +47,26 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 **Perf budget:** within budget. Cold run: 15 requests, CLS 0.017, FCP 1,448–1,520 ms over two reruns (the first run's 1,768 was noise). Startup script 199 KB of 200 — little headroom left; the next startup addition should move something lazy.
 
 **Not done (option):** keeping the cache across app restarts (IndexedDB) would make the very first screen after opening instant too. In a non-encrypted family that would store family data on the phone, so it needs a privacy decision first.
+### 🔁 Swap a plan food in place from the meal sheet (2026-11-02, `v2/meal-swap` from `main` `882a810`; front end only, no `pawdeploy`; owner: "once I unlock it, you should also provide the drop down box for protein options… similarly for carbs and fats")
+
+**Done:**
+- `family/meals.js`: in a plan meal (not custom, prepared or ate-out), each unlocked food's name is a `<select class="ml-swap">` of that slot's own `options`.
+  - Lunch and dinner offer 12 proteins, 7 carbs, 5 veggies and 5 fats; breakfasts offer their own lists.
+  - A 🔒 locked food stays a plain name.
+  - A swap is a preview op (`pick`) that drops that slot's grams change and is saved on ✓ Log / Update. Choosing a new source clears swaps.
+- `js/dayPlan.js` `setPick` follows the trackers' rule:
+  - today's `custom.meals[meal].picks`;
+  - `prefs[key][slot]` remembered, except lunch/dinner proteins, which rotate;
+  - re-snapshots a logged meal.
+- `family/style.css`: the select and the padlock share one line at 390 px.
+
+**Tests:** `tests/meallocks.test.js` (+1): the swap is sized by the plan, remembered for lunch and dinner, proteins aren't remembered, and only the slot's own options are allowed. `npm test` 573/573.
+
+**Browser check** (local, seeded, dark, 390 px):
+- Dinner shows menus for beef (12 options), rice (7), veggies (5) and oil (5).
+- Picking Sweet potato gives 677 kcal · 68 P · 56 C · 21 F.
+- Locking the protein turns its menu into a plain name.
+- ✓ Log, then reopening, still shows Sweet potato.
 
 ### 🎧 Talk: add a book by its author, as an audiobook — or as you said it (2026-11-02, `v2/talk-books` from `main` `4e793a5`; front end only, no `pawdeploy`; owner reported that "To my audiobooks add this title by the author Josh Silver called fruit fly" offered only pest-control books)
 
