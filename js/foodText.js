@@ -13,8 +13,8 @@ const ALIAS = {
   coffee: 'dripCoffee', 'black coffee': 'dripCoffee', 'drip coffee': 'dripCoffee', latte: 'latte', cappuccino: 'cappuccino', espresso: 'espresso', americano: 'americano',
   avocado: 'avocado', avo: 'avocado', oatmeal: 'oats', oats: 'oats', 'protein shake': 'premierShake', shake: 'premierShake', yogurt: 'greekYogurt', 'greek yogurt': 'greekYogurt',
   chicken: 'chicken', 'chicken breast': 'chicken', 'chicken thigh': 'thigh', rice: 'rice', 'brown rice': 'brownRice', salmon: 'salmon', steak: 'steak', beef: 'beef', 'ground beef': 'beef',
-  tuna: 'tuna', shrimp: 'shrimp', cod: 'cod', potato: 'potato', 'sweet potato': 'sweetPotato', quinoa: 'quinoa', broccoli: 'broccoli', veggies: 'veggies', vegetables: 'veggies', salad: 'salad',
-  banana: 'banana', apple: 'apple', orange: 'orange', pear: 'pear', grapes: 'grapes', blueberries: 'berries', berries: 'berries', strawberries: 'strawberries',
+  tuna: 'tuna', shrimp: 'shrimp', cod: 'cod', beans: 'blackBeans', 'black beans': 'blackBeans', chickpeas: 'chickpeas', garbanzo: 'chickpeas', potato: 'potato', 'sweet potato': 'sweetPotato', quinoa: 'quinoa', broccoli: 'broccoli', veggies: 'veggies', vegetables: 'veggies', salad: 'salad',
+  banana: 'banana', apple: 'apple', orange: 'orange', pear: 'pear', grapes: 'grapes', blueberries: 'berries', berries: 'berries', strawberries: 'strawberries', 'frozen berries': 'frozenBerries', 'frozen mixed berries': 'frozenBerries', 'mixed berries': 'frozenBerries', 'frozen fruit': 'frozenBerries',
   'peanut butter': 'pb', 'almond butter': 'almondButter', almonds: 'almonds', cashews: 'cashews', nuts: 'mixedNuts', walnuts: 'walnuts', butter: 'butter', cheese: 'cheddar', cheddar: 'cheddar',
   'olive oil': 'oliveOil', milk: 'milk2', 'oat milk': 'oatMilk', 'almond milk': 'almondMilk', cookie: 'chocCookie', 'protein bar': 'questBar', whey: 'whey', 'protein powder': 'whey',
 };
@@ -77,11 +77,38 @@ export function parsePart(part, foods, lex = lexicon(foods)) {
     kcal: Math.round(f.kcal * k), p: Math.round(f.p * k), c: Math.round(f.c * k), f: Math.round(f.f * k),
   };
 }
+// Spoken lists have no commas ("whey protein frozen berries and peanut butter"): a part that names
+// more than one food is cut before each food after the first, keeping its amount with it
+// ("1 scoop whey 1 cup frozen berries" → "1 scoop whey" · "1 cup frozen berries"). At each word the
+// longest name wins, so "sweet potato", "peanut butter" and "chicken thigh" stay whole.
+const QTY_WORD = (w) => /^\d/.test(w) || FRAC[w] != null || NUM[w] != null || w === 'of' || w === 'and' || !!WEIGHT[w] || UNIT_WORDS.includes(w);
+export function splitFoods(part, lex) {
+  const words = norm(part).split(' ').filter(Boolean);
+  const spans = [];
+  for (let i = 0; i < words.length;) {
+    let best = 0, key = '';
+    for (const [a, k] of lex) {
+      const aw = a.split(' ');
+      if (aw.length <= best || i + aw.length > words.length) continue;
+      if (aw.every((w, j) => words[i + j] === w || sing(words[i + j]) === sing(w))) { best = aw.length; key = k; }
+    }
+    // The same food named twice ("2 eggs whole eggs") is one food.
+    if (best && spans.length && spans[spans.length - 1][2] === key) { spans[spans.length - 1][1] = i + best; i += best; } else if (best) { spans.push([i, i + best, key]); i += best; } else i++;
+  }
+  if (spans.length < 2) return [part];
+  const cuts = [];
+  for (let n = 1; n < spans.length; n++) {
+    let c = spans[n][0];
+    while (c > spans[n - 1][1] && QTY_WORD(words[c - 1])) c--;
+    cuts.push(c);
+  }
+  return [0, ...cuts].map((c, n) => words.slice(c, cuts[n] ?? words.length).join(' ')).filter(Boolean);
+}
 // The whole sentence → { items, unread: parts it couldn't place }.
 export function parseMeal(text, foods) {
   const lex = lexicon(foods);
   const clean = String(text || '').replace(/(\d)\s*(g|grams?|oz)\b/gi, '$1 $2').replace(/(\d+)\s+and\s+a\s+half/gi, (m, d) => `${d}.5`);
-  const parts = clean.split(/,|;|\n|\band\b|\bwith\b|\bplus\b|\+|&/i).map((x) => x.trim()).filter(Boolean);
+  const parts = clean.split(/,|;|\n|\band\b|\bwith\b|\bplus\b|\+|&/i).map((x) => x.trim()).filter(Boolean).flatMap((x) => splitFoods(x, lex));
   const items = [], unread = [];
   for (const p of parts.slice(0, 20)) { const it = parsePart(p, foods, lex); if (it) items.push(it); else unread.push(p.slice(0, 60)); }
   return { items, unread };

@@ -59,15 +59,19 @@ async function commit(action, msg, undo = null) {
   try {
     // 🎉 A meal newly logged today gets confetti and a line on how the day is going (js/cheer.js).
     const loggedNow = (s) => { const e = s.get('eaten', {}) || {}; return e.date === today() ? Object.keys(e.meals || {}) : []; };
-    let added = [], day = null;
+    let added = [], day = null, fresh = null;
     const out = await ms.c.editMine((s) => {
       const before = loggedNow(s);
       for (const [k, ...a] of ops) OPS[k](s, a);
       const r = action ? action(s) : null;
       added = loggedNow(s).filter((m) => !before.includes(m));
       if (added.length) day = healthDay({ weights: s.get('weights', []) || [], eaten: s.get('eaten', {}) || {}, mealLog: s.get('mealLog', {}) || {} }, today());
+      // This screen's copy (shared with Health) follows what was just saved, so the next sheet or
+      // Talk card shows the meal as it is now, not as it was.
+      fresh = Object.fromEntries(['custom', 'eaten', 'planned', 'mealLog', 'mealFit', 'combos', 'preparedMeals'].map((k) => [k, s.get(k, undefined)]).filter(([, v]) => v !== undefined));
       return r;
     });
+    if (fresh && ms.data) Object.assign(ms.data, clone(fresh));
     ms.ops = [];
     ms.c.closeSheet();
     const cheer = day ? logCheer(day, today(), { meal: added[added.length - 1] }) : null;
@@ -389,16 +393,30 @@ export async function talkRead(text) {
   }
 }
 // ✓ Log meal (or Plan it), through the meal's own save — with Undo, which puts the meal back as it was.
-export function talkLog(target, items, { plan = false } = {}) {
+export function talkLog(target, items, { plan = false, add = false } = {}) {
   ms.sheet = { kind: 'est', target, est: { size: 1, ate: 1, from: 'tell', name: '', items, plan } };
   const { c, t, name, icon } = estMeal(), kc = `${r0(t.kcal)} kcal`;
   let snap = null;
+  // ＋ Add to the meal (not a new one): undo puts the meal and the extras back as they were.
+  if (add && target !== 'extra') {
+    const undo = () => commit((s) => D.restoreMeal(s, today(), target, snap), `Undone — ${NAME[target].toLowerCase()} is back as it was`);
+    const foods = asMealItems(items);
+    return commit((s) => { snap = D.mealSnapshot(s, today(), target); return D.addToMeal(s, today(), target, foods ? { items: foods } : { entry: { title: `${icon} ${name}`, kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) } }); },
+      (r) => `＋ Added to ${NAME[target].toLowerCase()} · +${kc}${r?.meal ? ` · ${NAME[target].toLowerCase()} is ${r0(r.meal.totals.kcal)} kcal now` : ''}`, undo);
+  }
   if (target === 'extra') {
     const undo = () => commit((s) => D.removeExtra(s, today(), snap.extras), 'Undone');
     return commit((s) => { snap = D.mealSnapshot(s, today(), 'snack'); return D.addExtras(s, today(), [{ title: `${icon} ${name}`, kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) }]); }, `✓ ${name} logged · ${kc}`, undo);
   }
   const undo = () => commit((s) => D.restoreMeal(s, today(), target, snap), `Undone — ${NAME[target].toLowerCase()} is back as it was`);
   return commit((s) => { snap = D.mealSnapshot(s, today(), target); if (!plan) return D.logAs(s, today(), target, c); const x = D.planAs(s, today(), target, c); D.unlog(s, today(), target); return x; }, `✓ ${NAME[target]} ${plan ? 'planned' : 'logged'} · ${kc}`, undo);
+}
+// What a meal is now (for Talk's card): its name, calories, foods and whether it's logged.
+export function talkExisting(target) {
+  if (target === 'extra') return null;
+  const s = preview(), m = planNow(s)?.[target];
+  if (!m) return null;
+  return { title: m.title, kcal: r0(m.totals?.kcal), logged: !!D.logOf(s.d, today()).meals?.[target], foods: (m.portions || []).filter((x) => x.grams > 0).length };
 }
 // ✏️ Edit: the meal's own estimate sheet with the draft (its amounts, ✓ Plan & log, Plan it).
 export function talkEdit(target, items, { plan = false, text = '' } = {}) {

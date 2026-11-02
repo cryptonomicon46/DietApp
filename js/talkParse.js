@@ -37,7 +37,7 @@ export function tidySteps(list) {
     } else if (d === 'diet.log' || d === 'fitness.describe') {
       const text = clean(s.text, d === 'diet.log' ? 600 : 1500);
       if (!text) continue;
-      out.push(d === 'diet.log' ? { do: d, meal: pick(s.meal === 'snack' ? 'extra' : s.meal, MEALS, 'extra'), text, ...(s.plan === true ? { plan: true } : {}) } : { do: d, text });
+      out.push(d === 'diet.log' ? { do: d, meal: pick(s.meal === 'snack' ? 'extra' : s.meal, MEALS, 'extra'), text, ...(s.plan === true ? { plan: true } : {}), ...(s.add === true ? { add: true } : {}) } : { do: d, text });
     } else if (d === 'fitness.lighter') out.push({ do: d });
     else if (d === 'care.log') { const chore = clean(s.chore, 40); if (chore) out.push({ do: d, chore }); }
     else if (d === 'weight.log') { const lb = toLb(s.lb); if (lb) out.push({ do: d, lb }); }
@@ -66,6 +66,10 @@ const RULES = [
   // Food — planning ahead ("Plan dinner: salmon and rice", "I'll have a burrito bowl for lunch") opens it with Plan it first.
   [/^plan\s+(?:my\s+)?(breakfast|lunch|dinner)\s*[:,—–-]?\s*(?:as\s+)?(.+)$/i, (m) => ({ do: 'diet.log', meal: m[1].toLowerCase(), text: m[2], plan: true })],
   [/^(?:i(?:'ll|’ll| will)\s+have|i(?:'m|’m| am)\s+(?:having|going\s+to\s+have))\s+(.+?)\s+for\s+(breakfast|lunch|dinner)$/i, (m) => ({ do: 'diet.log', meal: m[2].toLowerCase(), text: m[1], plan: true })],
+  // Food — "Add … to dinner" adds to the meal; "Log dinner: …" replaces it.
+  [/^(?:please\s+)?(?:add|also\s+add|plus)\s+(.+?)\s+(?:to|into|in)\s+(?:my\s+|the\s+|today'?s\s+)?(breakfast|lunch|dinner|snack)$/i, (m) => ({ do: 'diet.log', meal: m[2].toLowerCase() === 'snack' ? 'extra' : m[2].toLowerCase(), text: m[1], add: true })],
+  [/^(?:please\s+)?add\s+to\s+(?:my\s+|the\s+|today'?s\s+)?(breakfast|lunch|dinner|snack)\s*[:,—–-]?\s*(.+)$/i, (m) => ({ do: 'diet.log', meal: m[1].toLowerCase() === 'snack' ? 'extra' : m[1].toLowerCase(), text: m[2], add: true })],
+  [/^i\s+also\s+had\s+(.+?)\s+(?:for|with)\s+(breakfast|lunch|dinner)$/i, (m) => ({ do: 'diet.log', meal: m[2].toLowerCase(), text: m[1], add: true })],
   // Food
   [/^(?:log|i\s+had|i\s+ate|for)\s+(?:my\s+)?(breakfast|lunch|dinner|a\s+snack|snack)\s*[:,—–-]?\s*(?:was\s+|of\s+)?(.+)$/i, (m) => ({ do: 'diet.log', meal: /snack/i.test(m[1]) ? 'extra' : m[1].toLowerCase(), text: m[2] })],
   [/^(?:log\s+)?(.+?)\s+for\s+(breakfast|lunch|dinner)$/i, (m) => ({ do: 'diet.log', meal: m[2].toLowerCase(), text: m[1] })],

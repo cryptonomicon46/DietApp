@@ -81,6 +81,8 @@ export const FOODS = {
   sweetPotato:{ name: 'Sweet potato (baked)',     kcal: 90,  p: 2.0, f: 0.2,  c: 20.7, unit: { label: 'medium', grams: 150 }, raw: 0.8, range: [0, 600, 10] },
   potato:     { name: 'Potato (baked)',           kcal: 93,  p: 2.5, f: 0.1,  c: 21.2, unit: { label: 'medium', grams: 170 }, raw: 0.8, range: [0, 600, 10] },
   quinoa:     { name: 'Quinoa',                   kcal: 120, p: 4.4, f: 1.9,  c: 21.3, unit: { label: 'cup', grams: 185 }, raw: 2.75, range: [0, 450, 10] },
+  blackBeans: { name: 'Black beans (cooked)',     kcal: 132, p: 8.9, f: 0.5,  c: 23.7, unit: { label: 'cup', grams: 172 }, range: [0, 350, 10] },
+  chickpeas:  { name: 'Chickpeas (cooked)',       kcal: 164, p: 8.9, f: 2.6,  c: 27.4, unit: { label: 'cup', grams: 164 }, range: [0, 330, 10] },
   veggies:    { name: 'Mixed veggies',            kcal: 35,  p: 2.5, f: 0.3,  c: 7.0,  unit: { label: 'cup', grams: 100 }, raw: 0.9, range: [0, 400, 25] },
   broccoli:   { name: 'Broccoli',                 kcal: 35,  p: 2.4, f: 0.4,  c: 7.2,  unit: { label: 'cup', grams: 156 }, raw: 0.9, range: [0, 400, 25] },
   salad:      { name: 'Salad (butter lettuce & cucumber)', kcal: 14, p: 1.0, f: 0.2, c: 2.9, unit: { label: 'bowl', grams: 150 }, range: [0, 400, 25] },
@@ -96,7 +98,7 @@ export const FOODS = {
 export const FIBER = {
   sourdough: 2.4, wheatBread: 6.0, avocado: 6.7, oats: 10.1, berries: 2.4, frozenBerries: 3.0, strawberries: 2.0,
   banana: 2.6, pb: 5.0, apple: 2.4, orange: 2.4, pear: 3.1, grapes: 0.9, mixedNuts: 7.0, cashews: 3.3, almonds: 12.5,
-  almondButter: 10.3, walnuts: 6.7, rice: 0.4, brownRice: 1.8, sweetPotato: 3.3, potato: 2.2, quinoa: 2.8,
+  almondButter: 10.3, walnuts: 6.7, rice: 0.4, brownRice: 1.8, sweetPotato: 3.3, potato: 2.2, quinoa: 2.8, blackBeans: 8.7, chickpeas: 7.6,
   veggies: 4.0, broccoli: 3.3, cauliflower: 2.3, zucchini: 1.0, salad: 1.0, chocCookie: 2.0, oatMilk: 0.8,
   clifBar: 5.9, clifBuilders: 2.9, questBar: 23.3, rxBar: 9.6, kirklandBar: 25.0,
 };
@@ -111,7 +113,7 @@ for (const [k, fiber] of Object.entries(FIBER)) if (FOODS[k]) netCarbs(FOODS[k],
 // Groups for the "add a food" picker when you build a meal yourself.
 export const FOOD_GROUPS = {
   Protein: ['whey', 'eggWhites', 'egg', 'chicken', 'thigh', 'beef', 'steak', 'salmon', 'wildSalmon', 'cod', 'trout', 'shrimp', 'tuna', 'turkeyDeli', 'chickenDeli', 'cheddar'],
-  Carbs: ['oats', 'sourdough', 'wheatBread', 'lavash', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'banana'],
+  Carbs: ['oats', 'sourdough', 'wheatBread', 'lavash', 'rice', 'brownRice', 'sweetPotato', 'potato', 'quinoa', 'blackBeans', 'chickpeas', 'banana'],
   'Fruit & veg': ['frozenBerries', 'berries', 'strawberries', 'veggies', 'broccoli', 'zucchini', 'cauliflower', 'salad'],
   Milk: ['oatMilk', 'almondMilk', 'milk2'],
   'Coffee shop': ['latte', 'cappuccino', 'icedLatte', 'cortado', 'flatWhite', 'oatLatte', 'mocha', 'chaiLatte', 'americano', 'espresso', 'dripCoffee', 'chocCookie'],

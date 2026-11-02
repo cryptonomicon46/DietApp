@@ -1681,3 +1681,4 @@ button.ml-opt.on > span:last-child { color: var(--brand); font-weight: 800; }
 .di-pl b { font-size: .92rem; } .di-pl small { display: block; color: var(--muted); font-size: .78rem; }
 .di-pl .row { gap: 6px; }
 .di-stars { display: flex; gap: 6px; margin-top: 8px; } .di-stars button { flex: 1; min-width: 0; min-height: 44px; padding: 0 2px; font-size: .9rem; background: var(--card); color: #e0a400; border: 1px solid var(--line); }
+.tk-now { margin: 0; } .tk-cmds { margin: 8px 0 0; }

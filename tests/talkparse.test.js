@@ -105,3 +105,12 @@ test('a workout in words is read on the phone (for its review card); "I did the 
   assert.equal(parseTalk('I did the dishes'), null);
   assert.equal(parseTalk('I finished reading Piranesi')?.steps[0].do, 'read.state');
 });
+
+test('"Add … to dinner" adds to the meal; "Log dinner: …" replaces it', () => {
+  assert.deepEqual(parseTalk('add frozen mixed berries to dinner')?.steps, [{ do: 'diet.log', meal: 'dinner', text: 'frozen mixed berries', add: true }]);
+  assert.deepEqual(parseTalk('Add to breakfast: peanut butter')?.steps, [{ do: 'diet.log', meal: 'breakfast', text: 'peanut butter', add: true }]);
+  assert.deepEqual(parseTalk('I also had a coffee with lunch')?.steps, [{ do: 'diet.log', meal: 'lunch', text: 'a coffee', add: true }]);
+  assert.equal(parseTalk('Log dinner: whey protein frozen berries and peanut butter')?.steps[0].add, undefined);
+  assert.equal(parseTalk('Add Dune to our watchlist')?.steps[0].do, 'watch.add', 'Watch still wins its own words');
+  assert.equal(tidySteps([{ do: 'diet.log', meal: 'dinner', text: 'x', add: true }])[0].add, true);
+});

@@ -28,7 +28,7 @@ export const ICON = '<svg class="tk-ic" viewBox="0 0 32 32" aria-hidden="true"><
 const EXAMPLES = {
   home: ["What's on today?", 'When should I go for a run today?', 'Add Dune to our watchlist', 'Walked the dogs', 'Fed the dogs dinner'],
   us: ["We're watching Severance now", 'Add Project Hail Mary to our reading list', 'I finished reading Piranesi'],
-  health: ['Log my weight 160.6', 'Log 2 eggs and a slice of sourdough for breakfast', 'Plan dinner: salmon and rice', 'Log a packaged meal for lunch', 'How much protein is left today?', "Make today's workout lighter"],
+  health: ['Log dinner: salmon and rice', 'Add peanut butter to breakfast', 'Log my weight 160.6', 'Plan dinner: salmon and rice', 'Log a packaged meal for lunch', 'How much protein is left today?', "Make today's workout lighter"],
 };
 const WATCH = { want: 'Want to Watch', watching: 'Watching', finished: 'Watched', upnext: 'Up Next', dropped: 'Stopped' };
 const READ = { want: 'Want to Read', reading: 'Reading', finished: 'Finished', dropped: 'Stopped' };
@@ -132,7 +132,9 @@ function out() {
   if (tk.say) return `<div class="tk-card"><p class="small" style="margin:0">${E(tk.say)}</p></div>${examples()}`;
   return examples();
 }
-const examples = () => `<div class="tk-ex">${(EXAMPLES[tk.tab] || EXAMPLES.home).map((x) => `<button type="button" data-talkex="${E(x)}">${E(x)}</button>`).join('')}</div>`;
+// Under the examples on Home and Health: the two ways to tell it about a meal.
+const MEAL_CMDS = '<p class="tiny muted tk-cmds">🍽 <b>Log dinner: …</b> (or breakfast, lunch) replaces that meal · <b>Add … to dinner</b> adds to it</p>';
+const examples = () => `<div class="tk-ex">${(EXAMPLES[tk.tab] || EXAMPLES.home).map((x) => `<button type="button" data-talkex="${E(x)}">${E(x)}</button>`).join('')}</div>${tk.tab === 'health' || tk.tab === 'home' ? MEAL_CMDS : ''}`;
 const redraw = () => { const o = document.getElementById('tkOut'); if (o) o.innerHTML = out(); else draw(); };
 
 // ---------- reading a request ----------
@@ -189,7 +191,8 @@ async function proposeMeal(s) {
     const r = await M.talkRead(s.text);
     tk.busy = false;
     if (!r.items.length) { tk.say = r.note || "I couldn't make out the food in that — try naming each thing, like “2 eggs and a slice of toast”."; speak(tk.say); return draw(); }
-    tk.prop = P.makeProposal('meal', { meal: s.meal, items: r.items, unread: r.unread || [], plan: !!s.plan, text: s.text, by: r.by });
+    tk.M = M;
+    tk.prop = P.makeProposal('meal', { meal: s.meal, items: r.items, unread: r.unread || [], plan: !!s.plan, add: !!s.add && s.meal !== 'extra', text: s.text, by: r.by });
     tk.propMsg = r.note || '';
     speak('Here’s what I heard. Does this look right?');
   } catch (e) { tk.busy = false; tk.error = e.message || "Couldn't read that just now."; }
@@ -236,11 +239,15 @@ function propHtml() {
   if (p.kind === 'meal') {
     const d = p.payload, t = totalsOf(d.items);
     const rows = d.items.map((x, i) => `<li class="${hot.has(i) ? 'tk-hot' : ''}"><span><b>${E(x.name)}</b><small class="muted">${E(x.amount || '')}${x.guess ? ' · typical portion — check' : ''}</small></span><span>${r0(x.kcal)} kcal</span></li>`).join('');
-    return `<div class="tk-card tk-review"><p class="tk-eyebrow">${d.plan ? 'Review plan · not saved yet' : 'Review meal · not logged yet'}</p><b>🍽 ${E(MEALNAME[d.meal] || 'Meal')}</b>
+    // What's there now: "Add … to dinner" adds to it; "Log dinner: …" replaces it (and says so).
+    const ex = d.meal !== 'extra' ? tk.M?.talkExisting(d.meal) : null, mn = (MEALNAME[d.meal] || 'meal').toLowerCase();
+    const now = ex ? (d.add ? `<p class="small tk-now">Adds to ${E(mn)}: <b>${E(ex.title)}</b> · ${ex.kcal} kcal${ex.logged ? ' (logged)' : ' (planned)'} → <b>${ex.kcal + r0(t.kcal)} kcal</b></p>`
+      : `<p class="small tk-now">Replaces ${ex.logged ? 'the' : 'today\'s planned'} ${E(mn)}${ex.logged ? ' you logged' : ''}: <span class="muted">${E(ex.title)} · ${ex.kcal} kcal</span>. To keep it, say <i>Add … to ${E(mn)}</i>.</p>`) : '';
+    return `<div class="tk-card tk-review"><p class="tk-eyebrow">${d.add ? `Add to ${E(mn)} · not ${ex?.logged ? 'saved' : 'logged'} yet` : d.plan ? 'Review plan · not saved yet' : 'Review meal · not logged yet'}</p><b>🍽 ${d.add ? '＋ ' : ''}${E(MEALNAME[d.meal] || 'Meal')}</b>${now}
       <ul class="tk-rows">${rows}</ul>
       ${d.unread?.length ? `<p class="small">Couldn't place: ${d.unread.map((x) => `“${E(x)}”`).join(', ')} — say it with an amount, or ✏️ Edit.</p>` : ''}
       <p class="tk-tot"><b>${r0(t.kcal)}</b> kcal · <b>${r0(t.p)}</b> P · <b>${r0(t.c)}</b> C · <b>${r0(t.f)}</b> F</p>
-      ${msg}<p class="small">${live ? 'Does this look right?' : 'This one expired — say it again.'}</p>${acts(d.plan ? '✓ Plan meal' : '✓ Log meal')}</div>`;
+      ${msg}<p class="small">${live ? 'Does this look right?' : 'This one expired — say it again.'}</p>${acts(d.add ? `✓ Add to ${mn}` : d.plan ? '✓ Plan meal' : '✓ Log meal')}</div>`;
   }
   const w = p.payload.workout, mins = W$?.durationFor(w)?.minutes;
   const blocks = w.blocks.map((b) => (b.items.length > 1
@@ -319,7 +326,7 @@ async function commitProp() {
   if (!p) return null;
   try {
     const r = await P.commitOnce(p, p.version, async () => {
-      if (p.kind === 'meal') { const M = await c.dietMod(), d = p.payload; await M.talkLog(d.meal, d.items, { plan: d.plan }); return null; }
+      if (p.kind === 'meal') { const M = await c.dietMod(), d = p.payload; await M.talkLog(d.meal, d.items, { plan: d.plan, add: d.add }); return null; }
       return c.workoutCreate(p.payload.workout);
     });
     if (r?.error) { tk.propMsg = r.error === 'expired' ? 'This one expired — say it again.' : r.error === 'stale' ? 'It changed — check it once more.' : ''; return draw(); }
