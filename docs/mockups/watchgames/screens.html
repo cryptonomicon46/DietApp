@@ -1,0 +1,130 @@
+<!doctype html>
+<!-- Design mockups only (📺 Watch: a show's 🎲 bingo and 💑 couples picks right next to the show).
+     Not the app. Serve the repo (node scripts/perf/pages.mjs) and open
+     http://localhost:8098/DietApp/docs/mockups/watchgames/screens.html#us
+     Sam and Pat are example names. Classes .wg-* are proposed; the rest is the app's own style.css. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2f7d5b">
+<title>Watch games mockups</title>
+<script src="../../../theme.js"></script>
+<link rel="stylesheet" href="../../../family/style.css">
+<style>
+  body { margin: 0; padding: 12px 16px 40px; }
+  .scr { display: none; max-width: 560px; margin: 0 auto; }
+  .scr:target { display: block; }
+  .mk-note { font-size: .74rem; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 6px 9px; margin: 10px 0; }
+  .mk-sheet { position: static; display: block; border-radius: 22px; box-shadow: 0 -2px 18px rgba(0,0,0,.12); max-height: none; padding: 16px; background: var(--card); }
+  .mk-dim { opacity: .45; pointer-events: none; }
+  /* A show's games, right under its name */
+  .wg-games { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 2px; }
+  .wg-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 4px 10px; border-radius: 999px; font-size: .8rem; font-weight: 700; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  .wg-chip.live { background: #fff1d6; border-color: #f3cf86; color: #7a4d00; }
+  .wg-chip.picks { background: #ffe3ec; border-color: #f3c1cf; color: #8a1f45; }
+  :root[data-theme=dark] .wg-chip.live { background: #3a2f17; border-color: #5a4720; color: #f3cf86; }
+  :root[data-theme=dark] .wg-chip.picks { background: #3a1f2a; border-color: #5a2e3e; color: #f8b4c9; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .wg-chip.live { background: #3a2f17; border-color: #5a4720; color: #f3cf86; } :root:not([data-theme=light]) .wg-chip.picks { background: #3a1f2a; border-color: #5a2e3e; color: #f8b4c9; } }
+  .wg-chip small { font-weight: 600; opacity: .8; }
+  .wg-chip { white-space: nowrap; }
+  .uw-foot .wg-icon { flex: none; width: 48px; min-width: 48px; padding: 0; font-size: 1.2rem; }
+  .uw-row { align-items: flex-start; }
+  .uw-row > button.small { margin-top: 6px; }
+  .wg-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 8px 0 10px; }
+  .wg-tabs button { min-width: 0; min-height: 42px; padding: 0 4px; background: var(--card); color: var(--ink); border: 1px solid var(--line); font-weight: 700; font-size: .82rem; }
+  .wg-tabs button.on { background: var(--brand-soft); color: var(--brand); border-color: var(--brand); }
+  .wg-card { border: 1px solid var(--line); border-radius: 16px; background: var(--card); padding: 12px 14px; margin: 0 0 10px; display: grid; gap: 6px; }
+  .wg-card h3 { margin: 0; font-size: 1.05rem; text-transform: none; letter-spacing: 0; color: var(--ink); }
+  .wg-card .row { gap: 8px; }
+  .wg-sec { font-size: .74rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 10px 0 4px; }
+  .wg-game { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); margin: 6px 0; }
+  .wg-game .ic { font-size: 1.5rem; text-align: center; }
+  .wg-game b { display: block; } .wg-game small { display: block; color: var(--muted); font-size: .8rem; }
+  .wg-game button { min-height: 40px; }
+  .wg-score { display: flex; gap: 12px; font-size: .82rem; font-weight: 700; }
+  .wg-toast { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; background: var(--ink); color: var(--bg); border-radius: 14px; padding: 10px 12px; margin: 10px 0; font-size: .86rem; }
+  .wg-toast button { background: transparent; color: var(--bg); font-weight: 800; text-decoration: underline; min-height: 36px; padding: 4px 6px; }
+</style>
+</head>
+<body>
+
+<!-- 1 ─────────────── Us › 📺 Watch: games on the show's own row -->
+<section class="scr" id="us">
+  <div class="mk-note"><b>💞 Us › 📺 Watch.</b> A show's games sit on its own row: <b>💑 Couples picks</b> (with the score) and <b>🎲 Bingo</b> (▶ start a card, or <i>playing now</i>). One tap from Us, instead of four. Shows with no game get nothing extra.</div>
+  <section class="card us-watch">
+    <div class="row between"><h2 class="card-h">📺 Watch</h2><span class="small muted">2 watching · 2 want to watch</span></div>
+    <div class="uw-list">
+      <div class="uw-row"><div class="uw-main"><b>Love Is Blind - US</b><small class="muted"><span class="svc" style="background:#e50914;color:#fff">Netflix</span> Watching · S9 E6</small>
+        <div class="wg-games"><button type="button" class="wg-chip picks">💑 Picks <small>Sam 12 · Pat 9</small> ›</button><button type="button" class="wg-chip">🎲 Bingo ▶</button></div></div>
+        <button type="button" class="small">＋ Episode</button></div>
+      <div class="uw-row"><div class="uw-main"><b>The Gentleman - Season 3</b><small class="muted"><span class="svc" style="background:#e50914;color:#fff">Netflix</span> Watching</small></div>
+        <button type="button" class="small">＋ Episode</button></div>
+      <div class="uw-row"><div class="uw-main"><b>War</b><small class="muted"><span class="svc" style="background:#5822b4;color:#fff">HBO Max</span> 🆕 5 new episodes</small>
+        <div class="wg-games"><button type="button" class="wg-chip live">🎲 Bingo · playing now ›</button></div></div>
+        <button type="button" class="small">＋ Episode</button></div>
+    </div>
+    <div class="row uw-foot"><button type="button" class="grow">Open Watchlist →</button><button type="button" class="ghost wg-icon" aria-label="Games">🎲</button><button type="button" class="ghost">＋ Add</button></div>
+  </section>
+  <div class="mk-note"><b>How a game finds its show:</b> by name, ignoring a region or season tag — <i>Love Is Blind</i> picks match <i>Love Is Blind - US</i>, a <i>The Gentleman</i> card set matches <i>The Gentleman - Season 3</i>. Making a card set from a show (below) links it exactly.</div>
+</section>
+
+<!-- 2 ─────────────── Watchlist: the same chips on each card, and a 🎲 Games tab -->
+<section class="scr" id="list">
+  <div class="mk-note"><b>📺 Watchlist.</b> The same chips on each show's card, and <b>🎲 Games</b> becomes the fourth tab (today it's a link at the very bottom). A show with nothing yet offers a quiet <i>＋ Bingo card</i> under ••• only, so the list stays calm.</div>
+  <div class="row between"><h2>‹ 📺 Watchlist</h2><button type="button" class="small">＋ Add</button></div>
+  <div class="wg-tabs"><button type="button" class="on">Watching 2</button><button type="button">Want to Watch 2</button><button type="button">Watched</button><button type="button">🎲 Games</button></div>
+  <div class="wg-card"><span><span class="svc" style="background:#e50914;color:#fff">Netflix</span></span><h3>Love Is Blind - US</h3><span class="small muted">Watching · S9 E6</span>
+    <div class="wg-games"><button type="button" class="wg-chip picks">💑 Picks <small>Sam 12 · Pat 9</small> ›</button><button type="button" class="wg-chip">🎲 Bingo ▶</button></div>
+    <div class="row between"><button type="button" class="small">＋ Watched an episode</button><span class="icon-btn">•••</span></div></div>
+  <div class="wg-card"><span><span class="svc" style="background:#e50914;color:#fff">Netflix</span></span><h3>The Gentleman - Season 3</h3><span class="small muted">Watching</span>
+    <div class="row between"><button type="button" class="small">＋ Watched an episode</button><span class="icon-btn">•••</span></div></div>
+</section>
+
+<!-- 3 ─────────────── The show's own page: its games at the top -->
+<section class="scr" id="detail">
+  <div class="mk-note"><b>Tapping a show</b> (on Us or the Watchlist): its games come first, then where you're up to, ratings and the rest as today. A show without a game offers both, ready-filled with its name.</div>
+  <div class="mk-sheet">
+    <div class="row between"><h2>Love Is Blind - US</h2><span class="icon-btn">✕</span></div>
+    <p class="small muted"><span class="svc" style="background:#e50914;color:#fff">Netflix</span> Watching · Season 9, episode 6</p>
+    <div class="wg-sec">Play along</div>
+    <div class="wg-game"><span class="ic">💑</span><div><b>Couples picks</b><small>5 couples · week 4</small><span class="wg-score"><span>Sam 12</span><span>Pat 9</span></span></div><button type="button" class="small">Open ›</button></div>
+    <div class="wg-game"><span class="ic">🎲</span><div><b>Bingo</b><small>Card set · 24 squares · last played Fri</small></div><button type="button" class="small">▶ Play</button></div>
+    <div class="wg-sec">Where you're up to</div>
+    <div class="row"><button type="button" class="ghost small">−</button><b>S9 · E6</b><button type="button" class="ghost small">＋</button><button type="button" class="linkish small">Set season &amp; episode</button></div>
+    <div class="mk-dim"><div class="wg-sec">Your rating</div><p class="small">★ ★ ★ ★ ☆ · 💬 Discuss · More</p></div>
+  </div>
+  <div class="mk-note">For <b>The Gentleman - Season 3</b> (no games yet):</div>
+  <div class="mk-sheet">
+    <div class="wg-sec">Play along</div>
+    <div class="wg-game"><span class="ic">🎲</span><div><b>Make a bingo card</b><small>Ask Claude for squares, or write your own — for The Gentleman</small></div><button type="button" class="ghost small">＋ Make</button></div>
+    <div class="wg-game"><span class="ic">💑</span><div><b>Couples picks</b><small>For dating and reality shows</small></div><button type="button" class="ghost small">＋ Start</button></div>
+  </div>
+</section>
+
+<!-- 4 ─────────────── Logging an episode nudges the game -->
+<section class="scr" id="episode">
+  <div class="mk-note"><b>＋ Episode</b> on a show with couples picks: the usual "logged" message offers the picks right then — that's when you'd update them.</div>
+  <section class="card us-watch mk-dim"><div class="row between"><h2 class="card-h">📺 Watch</h2></div>
+    <div class="uw-row"><div class="uw-main"><b>Love Is Blind - US</b><small class="muted">Watching · S9 E7</small></div></div></section>
+  <div class="wg-toast" role="status"><span>📺 Love Is Blind · S9 E7 logged</span><span><button type="button">💑 Update picks</button><button type="button">Undo</button></span></div>
+</section>
+
+<!-- 5 ─────────────── 🎲 Games tab -->
+<section class="scr" id="games">
+  <div class="mk-note"><b>🎲 Games tab</b> (Watchlist, and 🎲 Games on Us): grouped by show — what you're watching first — so each show's bingo and picks are together. Card sets and seasons for shows you're not watching sit under <i>Other shows</i>.</div>
+  <div class="row between"><h2>‹ 📺 Watchlist</h2><button type="button" class="small">＋ Add</button></div>
+  <div class="wg-tabs"><button type="button">Watching 2</button><button type="button">Want to Watch 2</button><button type="button">Watched</button><button type="button" class="on">🎲 Games</button></div>
+  <div class="wg-card"><h3>Love Is Blind - US</h3>
+    <div class="wg-game"><span class="ic">💑</span><div><b>Couples picks</b><small>5 couples · playing</small><span class="wg-score"><span>Sam 12</span><span>Pat 9</span></span></div><button type="button" class="small">Open ›</button></div>
+    <div class="wg-game"><span class="ic">🎲</span><div><b>Bingo</b><small>24 squares</small></div><button type="button" class="small">▶ Play</button></div></div>
+  <div class="wg-card"><h3>War</h3>
+    <div class="wg-game"><span class="ic">🎲</span><div><b>Bingo · playing now</b><small>started by Pat · 2 h ago</small></div><button type="button" class="small">Open ›</button></div></div>
+  <div class="wg-card"><h3>The Gentleman - Season 3</h3><div class="row"><button type="button" class="ghost small">＋ Bingo card</button><button type="button" class="ghost small">＋ Couples picks</button></div></div>
+  <div class="wg-sec">Other shows</div>
+  <div class="wg-card mk-dim"><h3>Squid Game</h3><small class="muted">Bingo · 20 squares</small></div>
+</section>
+
+<script>document.body.dataset.ready = '1';</script>
+</body>
+</html>
