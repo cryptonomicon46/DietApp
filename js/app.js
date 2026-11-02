@@ -4,13 +4,14 @@ import {
   ACTIVITY, activityOf, PACE, PHASES, dailyTargets, goalProjection, planForDay, groceryList, lowCarbTarget,
   weeklyTrend, suggestAdjustment, fitScore,
   FEELINGS, CHECKIN_OPTIONS, deltaKcal, recommendCheckin, weekOverWeek, checkinWindow, isCheckinDue, weeklyReview, deltaMacros,
-  EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE, DRINKS, drinksTotals, fitItems, labelKcal,
+  EAT_OUT, EAT_OUT_SIZE, EAT_OUT_ATE, DRINKS, drinksTotals, labelKcal,
 } from './plan.js';
 import {
   SESSION_TYPES, SPORTS, INTENSITY, trainingDay, applyTraining,
   sportStats, estimateActivity, sessionType,
 } from './activity.js';
 import { devices, syncOwner } from './devices.js';
+import { fitPortions, perMealProtein } from './mealFit.js';
 import { RESEARCH } from './research.js';
 import { initNotes, renderNotes, updateNotesBadge, openUs, homeUs } from './notes.js';
 import { syncLine } from './plans.js';
@@ -1320,7 +1321,12 @@ $('#meals').addEventListener('click', (e) => {
     }
   } else if (e.target.closest('[data-fit]')) {
     const m = todayPlan()[meal], kcal = +e.target.closest('[data-fit]').dataset.fit || m.target.kcal;
-    editCustom(meal, (c) => { c.items = fitItems(c.items, kcal); });
+    // Protein in grams, carbs and fat in the plan's ratio (js/mealFit.js), as in Health.
+    editCustom(meal, (c) => {
+      const ps = (c.items || []).map((x, i) => ({ slot: `i${i}`, food: x.food, grams: +x.grams || 0 }));
+      const r = fitPortions(ps, kcal, FOODS, { plan: m.target, minP: perMealProtein(currentWeight()) });
+      c.items = c.items.map((x, i) => (r.grams[`i${i}`] != null ? { ...x, grams: r.grams[`i${i}`] } : x));
+    });
     resnap(meal);
     renderToday();
   } else if (e.target.closest('[data-prepared]')) {

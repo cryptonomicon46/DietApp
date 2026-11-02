@@ -89,7 +89,20 @@ const bar = (n, of) => `<span class="hl-bar" aria-hidden="true"><i style="width:
 // in, a quiet "done logging". Worked out on this phone with js/dayPlan.js (what the trackers use).
 const MEAL_HOURS = { breakfast: [5, 11], lunch: [11, 15], dinner: [16, 22] };
 const BIG = (e) => e && e.target && e.kcal > e.target.kcal + Math.max(150, e.target.kcal * 0.2);
-export function foodState(data = {}, today, hour = 12) {
+// When a meal was logged (ms): its timestamp, or — for meals logged before it was kept — its
+// "8:15 AM" read on today's date. null when it can't tell.
+export function loggedMs(e, today) {
+  if (Number.isFinite(e?.ts)) return e.ts;
+  const m = /(\d{1,2}):(\d{2})\s*([ap])?\.?\s*m?/i.exec(String(e?.at || ''));
+  if (!m || !today) return null;
+  let h = +m[1] % 12;
+  if (m[3] ? m[3].toLowerCase() === 'p' : +m[1] >= 12) h += 12;
+  if (!m[3] && +m[1] === 12) h = 12;
+  const d = new Date(`${today}T00:00:00`); d.setHours(h, +m[2], 0, 0);
+  return d.getTime();
+}
+export const JUST_LOGGED_MS = 60 * 60 * 1000;
+export function foodState(data = {}, today, hour = 12, now = Date.now()) {
   const d = dietSummary(data, today);
   if (!d.set) return { set: false };
   const log = logOf(data, today), next = nextMeal(data, today);
@@ -99,9 +112,17 @@ export function foodState(data = {}, today, hour = 12) {
   try { left = dayEntry(data, today).left; } catch { left = d.today?.left || null; }
   const last = [...MAIN_MEALS].reverse().find((m) => log.meals?.[m]);
   const lastBig = last && BIG(log.meals[last]);
+  // ✓ Just logged: the meal you logged (or updated) in the last hour, with its macros — until the
+  // next meal's time comes, when that meal's preview takes over again.
+  const recent = MAIN_MEALS.map((m) => ({ m, e: log.meals?.[m], t: loggedMs(log.meals?.[m], today) })).filter((x) => x.e && x.t != null && now - x.t >= -5 * 60e3 && now - x.t < JUST_LOGGED_MS).sort((a, b) => b.t - a.t)[0];
+  const nextStarts = next ? (MEAL_HOURS[next]?.[0] ?? 24) : 24;
+  // (Logged late, with the next meal's time already here: still 15 minutes to see what it came to.)
+  const just = recent && !log.done && (hour < nextStarts || now - recent.t < 15 * 60e3) ? { meal: recent.m, title: recent.e.title, kcal: recent.e.kcal, p: recent.e.p, c: recent.e.c, f: recent.e.f, target: recent.e.target || null, at: recent.e.at || '' } : null;
+  const nt = next && plan?.[next]?.totals;
   return {
     set: true, next, meal: next ? MEAL_NAMES[next] : null,
     title: next && plan?.[next] ? plan[next].title : '', kcal: next && plan?.[next] ? plan[next].totals.kcal : null,
+    macros: nt ? { p: nt.p, c: nt.c, f: nt.f } : null, just,
     logged: MAIN_MEALS.filter((m) => log.meals?.[m]).length, done: !!log.done, left,
     // Every meal today, one tap from Health: what you logged, else what's planned (yours if you
     // described it — a meal from Talk or Tell me becomes that meal's plan).
@@ -143,14 +164,23 @@ function foodRow(f, esc, hot) {
   if (!f.set) return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><div><b>Your food plan</b><small>Set your goal and Health shows each meal here.</small></div><div class="hl-acts"><a class="btn grow" href="../#weight">Set up Diet</a></div></div>`;
   // ✓ As planned, or 🍴 Ate out. Anything else (another breakfast, a combo, a bar, packaged, Fit
   // to N kcal) is in the meal's own sheet: tap the meal's name or its chip.
+  // Protein · carbs · fat, as small chips.
+  const mac = (x) => (x && x.p != null ? `<span class="hl-mac"><span class="ml-p"><b>${r0(x.p)}</b> P</span><span class="ml-c"><b>${r0(x.c)}</b> C</span><span class="ml-f"><b>${r0(x.f)}</b> F</span></span>` : '');
   const acts = (m) => `<div class="hl-acts"><button type="button" class="grow" data-ml="plan:${m}">✓ As planned</button><button type="button" class="ghost grow" data-ml="out:${m}">🍴 Ate out</button></div>`;
   if (f.off) {
-    return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><div><b>${esc(MEAL_NAMES[f.off.meal])} logged ✓</b><small>${esc(f.off.title)} · ${r0(f.off.kcal)} kcal</small></div>
+    return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><div><b>${esc(MEAL_NAMES[f.off.meal])} logged ✓</b><small>${esc(f.off.title)} · ${r0(f.off.kcal)} kcal</small>${f.just?.meal === f.off.meal ? mac(f.just) : ''}</div>
       <p class="hl-ctx">Plans change. ${leftText(f.left)}</p>
       <div class="hl-acts"><button type="button" class="grow" data-ml="adjust">Adjust the rest of today</button><button type="button" class="ghost" data-ml="fits">What fits?</button></div>${mealList(f, esc)}</div>`;
   }
+  // ✓ Just logged (for an hour, or until the next meal's time): what it came to, then what's next.
+  if (f.just) {
+    const j = f.just, vs = j.target?.kcal ? r0(j.kcal - j.target.kcal) : null;
+    const plan = vs == null ? '' : Math.abs(vs) <= 40 ? ' · on plan' : ` · ${vs > 0 ? '+' : '−'}${Math.abs(vs)} kcal vs plan`;
+    const nextLine = f.next ? `<button type="button" class="hl-what hl-nextup" data-ml="open:${f.next}"><small><b>${esc(f.meal)} next</b>${f.title ? ` · ${esc(f.title)} · ${r0(f.kcal)} kcal` : ''}${f.refit ? ' · re-fitted to what\'s left' : ''} ›</small>${mac(f.macros)}</button>` : '';
+    return `<div class="${cls} hl-just" role="status"><span class="hl-ic" aria-hidden="true">🍽</span><button type="button" class="hl-what" data-ml="open:${j.meal}"><b>✓ ${esc(MEAL_NAMES[j.meal])} logged${j.at ? ` · ${esc(j.at)}` : ''}</b><small>${esc(j.title)} · ${r0(j.kcal)} kcal${plan} ›</small>${mac(j)}</button>${nextLine}${mealList(f, esc)}</div>`;
+  }
   if (f.next) {
-    return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><button type="button" class="hl-what" data-ml="open:${f.next}"><b>${esc(f.meal)} is next</b><small>${f.title ? `${esc(f.title)} · ${r0(f.kcal)} kcal` : 'See it in Today\'s plan'}${f.refit ? ' · re-fitted to what\'s left' : f.logged ? ` · ${f.logged} of 3 logged` : ''} ›</small></button>${acts(f.next)}${mealList(f, esc)}</div>`;
+    return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><button type="button" class="hl-what" data-ml="open:${f.next}"><b>${esc(f.meal)} is next</b><small>${f.title ? `${esc(f.title)} · ${r0(f.kcal)} kcal` : 'See it in Today\'s plan'}${f.refit ? ' · re-fitted to what\'s left' : f.logged ? ` · ${f.logged} of 3 logged` : ''} ›</small>${mac(f.macros)}</button>${acts(f.next)}${mealList(f, esc)}</div>`;
   }
   if (f.done) return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><div class="hl-mini"><span><b>Food</b> <span class="good">✓ done for today</span></span><button type="button" class="linkish small" data-ml="undone">Undo</button></div></div>`;
   return `<div class="${cls}"><span class="hl-ic" aria-hidden="true">🍽</span><div><b>${f.logged} meals logged</b><small>${r0(f.eaten).toLocaleString()} kcal · ${r0(f.protein)} g protein${f.left && f.left.kcal > 60 ? ` · ~${r0(f.left.kcal)} kcal left` : ''}</small></div>
@@ -169,13 +199,13 @@ export function healthHtml(data, ctx) {
   const { esc } = ctx, d = dietSummary(data, ctx.today);
   const pr = d.progress, hour = ctx.hour ?? 9;
   const lb = (n) => (Math.round(n * 10) / 10).toFixed(1);
-  const food = foodState(data, ctx.today, hour);
+  const food = foodState(data, ctx.today, hour, ctx.now ?? Date.now());
   const wk = ctx.workout || { state: 'none', html: () => '' };
   const up = nextUp({ hour, weighed: d.weighedToday != null, set: d.set, food, workout: wk.state, title: wk.title });
   const weight = d.weighedToday != null
-    ? `<div class="hl-row2"><span class="hl-ic" aria-hidden="true">⚖️</span><div class="hl-mini"><span><b>Weight</b> <span class="good">✓ ${lb(d.weighedToday)} lb</span></span>${d.trendText ? `<small class="hl-trend">${esc(d.trendText)}</small>` : ''}</div></div>`
+    ? `<div class="hl-row2"><span class="hl-ic" aria-hidden="true">⚖️</span><div class="hl-mini"><span><b>Weight</b> <span class="good">✓ ${lb(d.weighedToday)} lb</span></span>${d.trendText ? `<small class="hl-trend">${esc(d.trendText)}</small>` : ''}</div><button type="button" class="ghost small hl-phbtn" data-wi="photos">📸 Progress photos</button></div>`
     : `<div class="hl-row2${up.anchor === 'weight' ? ' hot' : ''}"><span class="hl-ic" aria-hidden="true">⚖️</span><div><b>Today's weight</b><small>${hour < 11 ? 'Morning is best' : 'Any time counts'}${d.weightLb ? ` · last ${lb(d.weightLb)} lb` : ''}</small></div>
-      <form class="hl-weigh" data-weigh><label for="hlWeigh" class="visually-hidden">Today's weight in pounds</label><span class="hl-weigh-in"><input id="hlWeigh" name="lb" type="number" step="0.1" min="60" max="700" inputmode="decimal" placeholder="${d.weightLb ? lb(d.weightLb) : 'lb'}" required aria-describedby="hlWeighU"><span id="hlWeighU" class="small">lb</span></span><button>Save</button></form></div>`;
+      <form class="hl-weigh" data-weigh><label for="hlWeigh" class="visually-hidden">Today's weight in pounds</label><span class="hl-weigh-in"><input id="hlWeigh" name="lb" type="number" step="0.1" min="60" max="700" inputmode="decimal" placeholder="${d.weightLb ? lb(d.weightLb) : 'lb'}" required aria-describedby="hlWeighU"><span id="hlWeighU" class="small">lb</span></span><button>Save</button></form><small class="hl-phnote">You check it before it saves · 📸 photos optional</small></div>`;
   const status = pr ? `<span class="hl-status ${pr.status}">${STATUS[pr.status].icon} ${STATUS[pr.status].label}</span>` : '';
   const t = d.today;
   const nutrition = !d.set

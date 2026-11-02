@@ -61,16 +61,16 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-11d',
-  title: 'New: ❤️ date nights from your calendar, and easier 💡 date ideas',
-  text: 'A movie or dinner you booked shows under 💞 Us › Dates and counts on your 2-2-2-2. Date ideas now go one at a time with 👁 Seen it, ⏭ Save and Undo — or browse them all as posters.',
+  id: '2026-11e',
+  title: 'New in 💪 Health: check your weight, 📸 photos, and each meal\'s macros',
+  text: 'Save on today\'s weight shows the number to check, with front, side and back photos in one pick. After you log a meal, Health shows its protein, carbs and fat for an hour. Fit to N kcal keeps your protein and your plan\'s carb : fat balance.',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '❤️ Dates, 💡 Ideas, 🗣️ Talk', cards: [
-  ['❤️', 'Booked dates show up', 'A movie or dinner on your calendars for both of you appears under Dates › Coming up, and counts on your 2-2-2-2 the day after.'],
-  ['💡', 'Date ideas, easier', 'One at a time: ✕ Not for us · 👁 Seen it · ⏭ Save · 💗 Want to, each with Undo. Or ▦ Browse all as posters.'],
-  ['💞', 'Picks, matches, saved', 'Your 💗 picks (private), 💞 matches ready to plan, and ⏭ Saved — right at the top of Date ideas.'],
-  ['🗣️', 'Talk waits for you', 'It keeps listening through pauses, and a meal or workout shows as a card to check before it saves.'],
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '⚖️ Weigh-in, 📸 Photos, 🍽 Macros', cards: [
+  ['⚖️', 'Check before it saves', 'Save shows the number and the change since last time — a big jump asks "is that right?"'],
+  ['📸', 'Front, side, back at once', 'Pick all three together; they\'re labelled in order (tap to change). They stay on this phone only.'],
+  ['🍽', 'What you just logged', 'For an hour after logging a meal: its calories and P · C · F, then the next meal\'s planned macros.'],
+  ['🔒', 'Fit and lock, smarter', 'Fit to N kcal keeps protein first and your plan\'s carb : fat ratio; 🔓 keeps a food\'s amount on the coming days.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);

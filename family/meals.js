@@ -7,7 +7,7 @@
 // you to check first; nothing is logged until you tap Log. Photos are never kept.
 import * as D from '../js/dayPlan.js';
 import { FOODS, BREAKFASTS } from '../js/foods.js';
-import { fitPortions } from '../js/mealFit.js';
+import { fitPortions, fitMacros, perMealProtein } from '../js/mealFit.js';
 import { EAT_OUT, EAT_OUT_SIZE, DRINKS, labelKcal } from '../js/plan.js';
 import { parseMeal, parsePart, totalOf } from '../js/foodText.js';
 import { leftText } from './health.js';
@@ -25,6 +25,9 @@ const today = () => ms.c.iso();
 const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
 const r0 = (n) => Math.round(n || 0);
 const NAME = D.MEAL_NAMES;
+// 🔒 / 🔓 drawn (the emoji look alike at this size): a closed padlock when locked, an open one when not.
+const LOCK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5" fill="currentColor" stroke="none"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>';
+const UNLOCK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 7.6-1.8"/></svg>';
 const lockWhere = (meal) => (meal === 'breakfast' ? 'whenever you have this breakfast' : 'at lunch and dinner');
 // A copy to preview changes on (grams you're nudging, before they're saved).
 function mem() { const d = clone(ms.data) || {}; return { d, get: (k, f) => (k in d ? d[k] : f), set: (k, v) => { d[k] = v; } }; }
@@ -33,12 +36,11 @@ const OPS = {
   grams: (s, [meal, slot, g]) => D.setGrams(s, today(), meal, slot, g),
   // A different source for the meal (the plan, another breakfast, a combo, a bar or shake…).
   use: (s, [meal, c]) => D.planAs(s, today(), meal, clone(c)),
-  // ⚖️ Fit to N kcal: protein foods keep their grams, carbs and fats make up the difference.
-  fit: (s, [meal, kcal]) => {
+  // ⚖️ Fit to N kcal: protein in grams, carbs and fat in the plan's ratio (js/mealFit.js).
+  fit: (s, [meal, kcal, left]) => {
     const m = D.planOf(dataOf(s), today())[meal];
     if (!m) return;
-    // A food you've set shows 🔒 in the sheet; a new Fit may still re-fit it (that's what Fit is for).
-    const r = fitPortions((m.portions || []).map((x) => ({ ...x, locked: false })), kcal, FOODS);
+    const r = runFit(s, m, meal, kcal, left);
     // Every food's grams are pinned (not just the ones that changed): otherwise the plan's
     // auto-sizing would add protein back to make up for what the carbs and fat lost.
     for (const x of (m.portions || []).filter((y) => FOODS[y.food])) D.setGrams(s, today(), meal, x.slot, r.grams[x.slot] ?? x.grams);
@@ -119,7 +121,7 @@ function mealSheet(meal) {
     const step = x.range?.[2] || 5;
     // 🔒 / 🔓: lock this amount for the coming days, or let the plan size it (the plan's own meals).
     const lockable = !m.custom && !m.prepared && !m.eatout && D.prefKeyOf(m, meal), on = lockable && D.isLockedFor(s.d, m, meal, x.slot);
-    const lockBtn = lockable ? `<button type="button" class="ml-lock${on ? ' on' : ''}" data-ml="lock:${meal}:${x.slot}:${on ? 0 : 1}" aria-pressed="${!!on}" aria-label="${on ? `Unlock ${E(FOODS[x.food].name)} — let the plan size it` : `Lock ${E(FOODS[x.food].name)} at this amount ${lockWhere(meal)}`}" title="${on ? `Locked ${lockWhere(meal)} — tap to unlock` : 'Tap to keep this amount on the coming days'}">${on ? '🔒' : '🔓'}</button>` : x.locked ? ' <small class="muted">🔒</small>' : '';
+    const lockBtn = lockable ? `<button type="button" class="ml-lock${on ? ' on' : ''}" data-ml="lock:${meal}:${x.slot}:${on ? 0 : 1}" aria-pressed="${!!on}" aria-label="${on ? `Unlock ${E(FOODS[x.food].name)} — let the plan size it` : `Lock ${E(FOODS[x.food].name)} at this amount ${lockWhere(meal)}`}" title="${on ? `Locked ${lockWhere(meal)} — tap to unlock` : 'Tap to keep this amount on the coming days'}">${on ? `${LOCK_SVG}<span>Locked</span>` : UNLOCK_SVG}</button>` : x.locked ? ` <span class="ml-lockmark" title="Set by you">${LOCK_SVG}</span>` : '';
     return `<div class="ml-food"><span><b>${E(FOODS[x.food].name)}</b>${lockBtn}</span>
       <span class="ml-step"><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${-step}" aria-label="Less ${E(FOODS[x.food].name)}">−</button><input inputmode="decimal" data-mle="g:${meal}:${x.slot}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams"><span class="small muted">g</span><button type="button" class="ghost" data-ml="g:${meal}:${x.slot}:${step}" aria-label="More ${E(FOODS[x.food].name)}">＋</button></span>
       <input type="range" class="ml-slide" data-mle="gs:${meal}:${x.slot}" min="0" max="${Math.max(x.range?.[1] || 400, r0(x.grams) * 2)}" step="${step}" value="${r0(x.grams)}" aria-label="${E(FOODS[x.food].name)}, grams" aria-valuetext="${r0(x.grams)} grams${unitHint(x)}"><small class="muted ml-unit" id="mlU-${x.slot}">${E(unitHint(x).replace(/^, /, ''))}</small></div>`;
@@ -127,8 +129,8 @@ function mealSheet(meal) {
   const canFit = rows && !m.prepared && !m.eatout && !m.manual;
   const fitVal = sh.fit ?? fitDefault(meal, m);
   const fit = canFit ? `<div class="ml-fit"><label for="mlFit" class="small"><b>Fit to</b></label><span class="ml-step"><button type="button" class="ghost" data-ml="fitstep:${meal}:-25" aria-label="25 kcal less">−</button><input id="mlFit" inputmode="numeric" data-mle="fit:${meal}" value="${fitVal}" aria-label="Fit this meal to how many calories"><span class="small muted">kcal</span><button type="button" class="ghost" data-ml="fitstep:${meal}:25" aria-label="25 kcal more">＋</button></span><button type="button" class="ghost small" data-ml="fitgo:${meal}">⚖️ Fit</button></div>
-    <div class="row wrap ml-fitq">${fitLeft(meal) >= 150 ? `<button type="button" class="ghost small" data-ml="fitto:${meal}:${fitLeft(meal)}">What's left · ${fitLeft(meal)} kcal</button>` : ''}<button type="button" class="ghost small" data-ml="fitto:${meal}:400">400 kcal</button><button type="button" class="ghost small" data-ml="fitto:${meal}:500">500 kcal</button></div>
-    <p class="tiny muted ml-fitnote" role="status">${sh.fitNote ? E(sh.fitNote) : `Planned ${r0(m.target?.kcal)} kcal · keeps the protein, adjusts carbs and fat`}</p>` : '';
+    <div class="row wrap ml-fitq">${fitLeft(meal) >= 150 ? `<button type="button" class="ghost small" data-ml="fitto:${meal}:${fitLeft(meal)}:left">What's left · ${fitLeft(meal)} kcal</button>` : ''}<button type="button" class="ghost small" data-ml="fitto:${meal}:400">400 kcal</button><button type="button" class="ghost small" data-ml="fitto:${meal}:500">500 kcal</button></div>
+    <p class="tiny muted ml-fitnote" role="status">${sh.fitNote ? E(sh.fitNote) : `Planned ${r0(m.target?.kcal)} kcal · protein first, carbs and fat in your plan's ratio`}</p>` : '';
   const lowcarb = meal !== 'snack' && !m.eatout && !m.prepared && !c.items ? `<button type="button" class="ghost" data-ml="lowcarb:${meal}">🥑 Low-carb ${c.lowCarb ? 'off' : 'today'}</button>` : '';
   const save = rows && !m.prepared && !m.eatout ? `<button type="button" class="ghost" data-ml="savecombo:${meal}">☆ Save as combo</button>` : '';
   open(`${head(NAME[meal], logged ? `✓ logged ${E(logged.at || '')}` : '')}
@@ -576,17 +578,33 @@ function useFit(i) {
 
 // ---------- clicks and typing ----------
 // ⚖️ Fit the meal to sh.fit kcal (on top of the source you picked; the grams you'd nudged go).
-function applyFit(meal) {
+// The macros a fit aims for and the grams that get there. The meal's planned protein stays (up to
+// half its calories, never under 0.4 g/kg); carbs and fat keep the plan's ratio. What's left aims
+// for the day's remaining macros instead. A food you've 🔒 locked for the coming days stays put; a
+// food you've only set today may be re-fitted (that's what Fit is for).
+function runFit(s, m, meal, kcal, left) {
+  const data = dataOf(s), minP = perMealProtein(D.currentWeightOf(data));
+  let aim;
+  if (left) {
+    const l = D.dayEntry(data, today()).left, had = D.logOf(data, today()).meals?.[meal] || {};
+    const rest = { p: Math.max(0, l.p + (+had.p || 0)), c: Math.max(0, l.c + (+had.c || 0)), f: Math.max(0, l.f + (+had.f || 0)) };
+    aim = fitMacros(kcal, { p: rest.p, c: rest.c || m.target?.c, f: rest.f || m.target?.f }, { minP, maxShare: 0.6 });
+  }
+  const portions = (m.portions || []).map((x) => ({ ...x, locked: !!(x.grams > 0 && D.isLockedFor(data, m, meal, x.slot)) }));
+  return fitPortions(portions, kcal, FOODS, { plan: m.target, minP, aim });
+}
+function applyFit(meal, left = false) {
   const sh = ms.sheet, m = planNow()?.[meal];
   if (!m) return null;
   ms.ops = ms.ops.filter((o) => !(['grams', 'fit', 'fitpref'].includes(o[0]) && o[1] === meal));
   const before = preview(), m0 = D.planOf(before.d, today())[meal];
-  const r = fitPortions((m0.portions || []).map((x) => ({ ...x, locked: false })), sh.fit, FOODS);
-  ms.ops.push(['fit', meal, sh.fit], ['fitpref', meal, sh.fit, r0(m.target?.kcal)]);
+  const r = runFit(before, m0, meal, sh.fit, left);
+  ms.ops.push(['fit', meal, sh.fit, left], ['fitpref', meal, sh.fit, r0(m.target?.kcal)]);
   // What it really comes to (the plan's own totals), so the note never says more than is true.
-  const got = r0(planNow()?.[meal]?.totals?.kcal ?? r.kcal), near = Math.abs(got - sh.fit) <= Math.max(25, sh.fit * 0.05);
-  sh.fitNote = near ? `Fitted to ${sh.fit} kcal (${got})${r.proteinCut ? ' — protein had to come down too' : ' · protein kept'}`
-    : `Closest: ${got} kcal${r.proteinCut ? ' (protein came down too)' : ' with the protein kept'} — the foods' smallest and largest amounts limit it`;
+  const t = planNow()?.[meal]?.totals || { kcal: r.kcal, ...r.macros }, got = r0(t.kcal), near = Math.abs(got - sh.fit) <= Math.max(25, sh.fit * 0.05);
+  const mac = `${r0(t.p)} P · ${r0(t.c)} C · ${r0(t.f)} F`, aim = r.aim ? ` (aim ${r.aim.p} · ${r.aim.c} · ${r.aim.f})` : '';
+  sh.fitNote = near ? `Fitted to ${sh.fit} kcal (${got}) · ${mac}${Math.abs(r0(t.p) - (r.aim?.p ?? t.p)) > 4 || Math.abs(r0(t.f) - (r.aim?.f ?? t.f)) > 5 ? aim : ''}`
+    : `Closest: ${got} kcal · ${mac} — the foods' smallest and largest amounts limit it`;
   return mealSheet(meal);
 }
 // ☆ Save as combo: this meal's foods and grams, to load into any meal later (yours only).
@@ -631,11 +649,11 @@ export async function onClick(t) {
         await ms.c.editMine((s) => { D.lockAmount(s, today(), meal, slot, on === '1', shown ? shown.grams : null); fresh = Object.fromEntries(['custom', 'eaten', 'prefs'].map((k) => [k, s.get(k, undefined)])); });
         if (fresh && ms.data) Object.assign(ms.data, clone(fresh));
         ms.ops = ops;
-        ms.c.toast(on === '1' ? `🔒 ${name} stays at this amount ${lockWhere(meal)} — tap 🔒 to unlock` : `🔓 ${name} is sized by your plan again`);
+        ms.c.toast(on === '1' ? `🔒 ${name} stays at this amount ${lockWhere(meal)} — tap Locked to unlock` : `🔓 ${name} is sized by your plan again`);
         return mealSheet(meal);
       })();
     }
-    case 'fitto': { const [meal, n] = r; sh.fit = Math.max(50, +n || 0); return applyFit(meal); }
+    case 'fitto': { const [meal, n, left] = r; sh.fit = Math.max(50, +n || 0); return applyFit(meal, left === 'left'); }
     case 'fitstep': { const [meal, d] = r, m = planNow()?.[meal]; if (!m) return null; sh.fit = Math.max(50, (sh.fit ?? fitDefault(meal, m)) + +d); return applyFit(meal); }
     case 'fitgo': { const m = planNow()?.[r[0]]; if (!m) return null; sh.fit = sh.fit ?? fitDefault(r[0], m); return applyFit(r[0]); }
     case 'relog': { const meal = r[0], at = D.logOf(ms.data, today()).meals?.[meal]?.at; return commit((x) => D.logPlanned(x, today(), meal, at), (e) => (e ? `✓ ${NAME[meal]} updated · ${e.kcal} kcal` : 'Updated')); }
