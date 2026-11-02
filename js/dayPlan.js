@@ -104,7 +104,7 @@ export const atNow = (d = new Date()) => d.toLocaleTimeString(undefined, { hour:
 // What a logged meal keeps: its title, macros, target and foods.
 export function snapshotOf(m, at = atNow()) {
   return {
-    title: m.title, kcal: m.totals.kcal, p: m.totals.p, f: m.totals.f, c: m.totals.c, target: m.target,
+    title: m.title, kcal: m.totals.kcal, p: m.totals.p, f: m.totals.f, c: m.totals.c, target: m.target, ts: Date.now(),
     foods: (m.portions || []).filter((x) => x.grams > 0 && FOODS[x.food]).map((x) => `${FOODS[x.food].name} ${x.grams}g`).join('; '), at,
   };
 }

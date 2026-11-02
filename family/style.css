@@ -1703,3 +1703,28 @@ button.ml-opt.on > span:last-child { color: var(--brand); font-weight: 800; }
 .watch-head + .seg.wt-tabs button { min-width: 0; padding: 6px 4px; font-size: .78rem; line-height: 1.15; white-space: normal; }
 .ml-lock { min-width: 40px; min-height: 40px; padding: 0 6px; margin-left: 4px; border-radius: 10px; background: transparent; border: 1px solid transparent; font-size: 1rem; vertical-align: middle; opacity: .55; }
 .ml-lock.on { opacity: 1; border-color: var(--line); background: var(--bg); }
+/* ⚖️ Weigh-in check + 📸 progress photos (family/weighin.js) */
+.hl-row2 .hl-phbtn { grid-column: 2; justify-self: start; min-height: 40px; margin-top: 4px; }
+.hl-row2 .hl-phnote { grid-column: 2; }
+.wi-sheet h2 { margin: 0; }
+.wi-big { font-size: 2.4rem; margin: 10px 0 0; line-height: 1.1; }
+.wi-big b { font-weight: 800; }
+.wi-warn { color: #b45309; font-weight: 600; }
+.wi-photos { margin: 14px 0; display: grid; gap: 8px; }
+.wi-add { flex-direction: column; align-items: center; text-align: center; gap: 2px; min-height: 56px; }
+.wi-add small { color: var(--muted); font-size: .8rem; }
+.wi-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wi-tile { position: relative; margin: 0; }
+.wi-tile img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 10px; display: block; background: var(--bg); }
+.wi-pose { width: 100%; min-height: 40px; margin-top: 4px; font-size: .85rem; padding: 4px; }
+.wi-x { position: absolute; top: 4px; right: 4px; min-width: 32px; min-height: 32px; padding: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; border: 0; }
+.wi-acts { display: flex; gap: 8px; }
+.wi-acts button { min-height: 48px; }
+.wi-acts button:first-child { flex: 1; }
+/* ✓ Just logged: the meal's macros, then what's next */
+.hl-mac { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: .85rem; margin-top: 2px; }
+.hl-mac > span { white-space: nowrap; }
+.hl-row2 .hl-mac b, .hl-row2 .hl-nextup small b { display: inline; }
+.hl-mac b { font-size: .95rem; }
+.hl-nextup { grid-column: 2; margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--line); }
+

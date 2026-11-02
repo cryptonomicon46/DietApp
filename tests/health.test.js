@@ -195,3 +195,54 @@ test("every meal today is one tap from Health: a meal you described shows as tha
   const html = healthHtml(data, { esc, today, hour: 11, sharing: '' });
   assert.match(html, /data-ml="open:breakfast"/); assert.match(html, /data-ml="open:lunch"/); assert.match(html, /All meals ›/);
 });
+
+test('✓ just logged: the meal\'s macros for an hour, or until the next meal\'s time; then the next meal\'s preview', async () => {
+  const { foodState, healthHtml, loggedMs } = await import('../family/health.js');
+  const profile = { sex: 'male', age: 35, heightIn: 70, phase: 'cut', goalLb: 175, activity: 'light', pace: 'steady' };
+  const weights = [{ date: today, weight: 182 }];
+  const at = (h, m = 0) => { const d = new Date(`${today}T00:00:00`); d.setHours(h, m, 0, 0); return d.getTime(); };
+  const bf = { title: 'Oatmeal with whey', kcal: 430, p: 45, c: 32, f: 14, target: { kcal: 423 }, at: '8:05 AM', ts: at(8, 5) };
+  const data = { profile, weights, eaten: { date: today, meals: { breakfast: bf }, extras: [] } };
+  const now = foodState(data, today, 8, at(8, 30));
+  assert.equal(now.just.meal, 'breakfast');
+  assert.deepEqual([now.just.p, now.just.c, now.just.f], [45, 32, 14]);
+  assert.equal(now.next, 'lunch');
+  assert.ok(now.macros && now.macros.p > 20, 'the next meal\'s planned macros, for its preview');
+  const html = healthHtml(data, { esc, today, hour: 8, now: at(8, 30), sharing: '' });
+  assert.match(html, /✓ Breakfast logged · 8:05 AM/);
+  assert.match(html, /on plan/);
+  assert.match(html, /<b>45<\/b> P.*<b>32<\/b> C.*<b>14<\/b> F/s);
+  assert.match(html, /Lunch next/);
+  assert.equal(foodState(data, today, 9, at(9, 10)).just, null, 'an hour later: gone');
+  assert.equal(foodState(data, today, 11, at(11, 10)).just, null, 'lunch time: the lunch preview instead');
+  assert.equal(foodState(data, today, 11, at(8, 15)).just.meal, 'breakfast', 'logged late: still 15 minutes to see it');
+  const later = healthHtml(data, { esc, today, hour: 9, now: at(9, 10), sharing: '' });
+  assert.match(later, /Lunch is next/);
+  assert.match(later, /hl-mac/, 'the preview shows the planned macros');
+  // Meals logged before the time was kept: read from "8:05 AM".
+  assert.equal(loggedMs({ at: '8:05 AM' }, today), at(8, 5));
+  assert.equal(loggedMs({ at: '12:30 PM' }, today), at(12, 30));
+  assert.equal(loggedMs({ at: '12:10 AM' }, today), at(0, 10));
+  assert.equal(loggedMs({ at: '19:45' }, today), at(19, 45));
+  assert.equal(loggedMs({}, today), null);
+  assert.equal(foodState({ ...data, eaten: { ...data.eaten, meals: { breakfast: { ...bf, ts: undefined } } } }, today, 8, at(8, 30)).just.meal, 'breakfast');
+  // Done for the day: no summary.
+  assert.equal(foodState({ ...data, eaten: { ...data.eaten, done: true } }, today, 8, at(8, 30)).just, null);
+});
+
+test('⚖️ weigh-in check: the change since last time, a warning on a big jump; photos labelled front, side, back', async () => {
+  const W = await import('../family/weighin.js');
+  assert.deepEqual(W.posesFor(3), ['front', 'side', 'back']);
+  assert.deepEqual(W.posesFor(2), ['front', 'side']);
+  assert.equal(W.nextPose('back'), 'front');
+  assert.deepEqual(W.changeLine(160.6, { date: '2026-10-31', weight: 161.4 }), { text: '−0.8 lb since 2026-10-31 (161.4 lb)', warn: false });
+  assert.equal(W.changeLine(161.4, { date: '2026-10-31', weight: 161.4 }).text, 'Same as 2026-10-31 (161.4 lb)');
+  assert.equal(W.changeLine(116.0, { date: '2026-10-31', weight: 161.4 }).warn, true, 'a dropped digit is flagged');
+  assert.equal(W.changeLine(166.0, { date: '2026-10-31', weight: 161.4 }).warn, false, '+4.6 lb is within a normal swing');
+  assert.equal(W.changeLine(160, null).text, 'Your first weigh-in here');
+  // The Health weight row says Save checks it first; once weighed, 📸 photos are one tap.
+  const { healthHtml } = await import('../family/health.js');
+  const p = { sex: 'male', age: 35, heightIn: 70, phase: 'cut', goalLb: 175, activity: 'light', pace: 'steady' };
+  assert.match(healthHtml({ profile: p, weights: [] }, { esc, today, hour: 7, sharing: '' }), /photos optional/);
+  assert.match(healthHtml({ profile: p, weights: [{ date: today, weight: 180 }] }, { esc, today, hour: 7, sharing: '' }), /data-wi="photos"/);
+});

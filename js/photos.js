@@ -60,6 +60,18 @@ async function shrink(file, side = 1080) {
     return await new Promise((res) => c.toBlob((b) => res(b || file), 'image/jpeg', 0.85));
   } catch { return file; }
 }
+// Several photos at once (Health's weigh-in: front, side and back in one pick), saved for `date`.
+//   list: [{ file, pose }] → how many were saved.
+export async function savePhotos(owner, list, date = isoDate()) {
+  if (!owner) throw new Error("Progress photos need your trackers on this phone — open Today's plan once, then try again");
+  let n = 0;
+  for (const [i, x] of list.entries()) {
+    const blob = await shrink(x.file);
+    await put({ id: `ph${Date.now().toString(36)}${i}`, owner, date: date <= isoDate() ? date : isoDate(), pose: POSES[x.pose] ? x.pose : 'front', star: false, at: Date.now() + i, blob });
+    n++;
+  }
+  return n;
+}
 const urls = new Map();
 const urlOf = (p) => { if (!urls.has(p.id)) urls.set(p.id, URL.createObjectURL(p.blob)); return urls.get(p.id); };
 
