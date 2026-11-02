@@ -59,15 +59,19 @@ async function commit(action, msg, undo = null) {
   try {
     // 🎉 A meal newly logged today gets confetti and a line on how the day is going (js/cheer.js).
     const loggedNow = (s) => { const e = s.get('eaten', {}) || {}; return e.date === today() ? Object.keys(e.meals || {}) : []; };
-    let added = [], day = null;
+    let added = [], day = null, fresh = null;
     const out = await ms.c.editMine((s) => {
       const before = loggedNow(s);
       for (const [k, ...a] of ops) OPS[k](s, a);
       const r = action ? action(s) : null;
       added = loggedNow(s).filter((m) => !before.includes(m));
       if (added.length) day = healthDay({ weights: s.get('weights', []) || [], eaten: s.get('eaten', {}) || {}, mealLog: s.get('mealLog', {}) || {} }, today());
+      // This screen's copy (shared with Health) follows what was just saved, so the next sheet or
+      // Talk card shows the meal as it is now, not as it was.
+      fresh = Object.fromEntries(['custom', 'eaten', 'planned', 'mealLog', 'mealFit', 'combos', 'preparedMeals'].map((k) => [k, s.get(k, undefined)]).filter(([, v]) => v !== undefined));
       return r;
     });
+    if (fresh && ms.data) Object.assign(ms.data, clone(fresh));
     ms.ops = [];
     ms.c.closeSheet();
     const cheer = day ? logCheer(day, today(), { meal: added[added.length - 1] }) : null;
@@ -119,6 +123,7 @@ function mealSheet(meal) {
   const canFit = rows && !m.prepared && !m.eatout && !m.manual;
   const fitVal = sh.fit ?? fitDefault(meal, m);
   const fit = canFit ? `<div class="ml-fit"><label for="mlFit" class="small"><b>Fit to</b></label><span class="ml-step"><button type="button" class="ghost" data-ml="fitstep:${meal}:-25" aria-label="25 kcal less">−</button><input id="mlFit" inputmode="numeric" data-mle="fit:${meal}" value="${fitVal}" aria-label="Fit this meal to how many calories"><span class="small muted">kcal</span><button type="button" class="ghost" data-ml="fitstep:${meal}:25" aria-label="25 kcal more">＋</button></span><button type="button" class="ghost small" data-ml="fitgo:${meal}">⚖️ Fit</button></div>
+    <div class="row wrap ml-fitq">${fitLeft(meal) >= 150 ? `<button type="button" class="ghost small" data-ml="fitto:${meal}:${fitLeft(meal)}">What's left · ${fitLeft(meal)} kcal</button>` : ''}<button type="button" class="ghost small" data-ml="fitto:${meal}:400">400 kcal</button><button type="button" class="ghost small" data-ml="fitto:${meal}:500">500 kcal</button></div>
     <p class="tiny muted ml-fitnote" role="status">${sh.fitNote ? E(sh.fitNote) : `Planned ${r0(m.target?.kcal)} kcal · keeps the protein, adjusts carbs and fat`}</p>` : '';
   const lowcarb = meal !== 'snack' && !m.eatout && !m.prepared && !c.items ? `<button type="button" class="ghost" data-ml="lowcarb:${meal}">🥑 Low-carb ${c.lowCarb ? 'off' : 'today'}</button>` : '';
   const save = rows && !m.prepared && !m.eatout ? `<button type="button" class="ghost" data-ml="savecombo:${meal}">☆ Save as combo</button>` : '';
@@ -389,16 +394,35 @@ export async function talkRead(text) {
   }
 }
 // ✓ Log meal (or Plan it), through the meal's own save — with Undo, which puts the meal back as it was.
-export function talkLog(target, items, { plan = false } = {}) {
+export function talkLog(target, items, { plan = false, add = false } = {}) {
   ms.sheet = { kind: 'est', target, est: { size: 1, ate: 1, from: 'tell', name: '', items, plan } };
   const { c, t, name, icon } = estMeal(), kc = `${r0(t.kcal)} kcal`;
   let snap = null;
+  // ＋ Add to the meal (not a new one): undo puts the meal and the extras back as they were.
+  if (add && target !== 'extra') {
+    const undo = () => commit((s) => D.restoreMeal(s, today(), target, snap), `Undone — ${NAME[target].toLowerCase()} is back as it was`);
+    const foods = asMealItems(items);
+    return commit((s) => { snap = D.mealSnapshot(s, today(), target); return D.addToMeal(s, today(), target, foods ? { items: foods } : { entry: { title: `${icon} ${name}`, kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) } }); },
+      (r) => `＋ Added to ${NAME[target].toLowerCase()} · +${kc}${r?.meal ? ` · ${NAME[target].toLowerCase()} is ${r0(r.meal.totals.kcal)} kcal now` : ''}`, undo);
+  }
   if (target === 'extra') {
     const undo = () => commit((s) => D.removeExtra(s, today(), snap.extras), 'Undone');
     return commit((s) => { snap = D.mealSnapshot(s, today(), 'snack'); return D.addExtras(s, today(), [{ title: `${icon} ${name}`, kcal: r0(t.kcal), p: r0(t.p), c: r0(t.c), f: r0(t.f) }]); }, `✓ ${name} logged · ${kc}`, undo);
   }
   const undo = () => commit((s) => D.restoreMeal(s, today(), target, snap), `Undone — ${NAME[target].toLowerCase()} is back as it was`);
   return commit((s) => { snap = D.mealSnapshot(s, today(), target); if (!plan) return D.logAs(s, today(), target, c); const x = D.planAs(s, today(), target, c); D.unlog(s, today(), target); return x; }, `✓ ${NAME[target]} ${plan ? 'planned' : 'logged'} · ${kc}`, undo);
+}
+// What a meal is now (for Talk's card): its name, calories, foods and whether it's logged.
+export function talkExisting(target) {
+  if (target === 'extra') return null;
+  const s = preview(), m = planNow(s)?.[target];
+  if (!m) return null;
+  return { title: m.title, kcal: r0(m.totals?.kcal), logged: !!D.logOf(s.d, today()).meals?.[target], foods: (m.portions || []).filter((x) => x.grams > 0).length };
+}
+// ⚖️ What's left of today's calories for this meal (its own logged calories count as left, since
+// fitting replaces them).
+function fitLeft(meal) {
+  try { const s = preview(); return r0(D.dayEntry(s.d, today()).left.kcal + (D.logOf(s.d, today()).meals?.[meal]?.kcal || 0)); } catch { return 0; }
 }
 // ✏️ Edit: the meal's own estimate sheet with the draft (its amounts, ✓ Plan & log, Plan it).
 export function talkEdit(target, items, { plan = false, text = '' } = {}) {
@@ -594,6 +618,7 @@ export async function onClick(t) {
       sh.pick = false; sh.fit = undefined; sh.fitNote = '';
       return mealSheet(meal);
     }
+    case 'fitto': { const [meal, n] = r; sh.fit = Math.max(50, +n || 0); return applyFit(meal); }
     case 'fitstep': { const [meal, d] = r, m = planNow()?.[meal]; if (!m) return null; sh.fit = Math.max(50, (sh.fit ?? fitDefault(meal, m)) + +d); return applyFit(meal); }
     case 'fitgo': { const m = planNow()?.[r[0]]; if (!m) return null; sh.fit = sh.fit ?? fitDefault(r[0], m); return applyFit(r[0]); }
     case 'relog': { const meal = r[0], at = D.logOf(ms.data, today()).meals?.[meal]?.at; return commit((x) => D.logPlanned(x, today(), meal, at), (e) => (e ? `✓ ${NAME[meal]} updated · ${e.kcal} kcal` : 'Updated')); }

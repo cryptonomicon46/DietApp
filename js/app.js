@@ -217,6 +217,16 @@ function pastTally() {
   return tally(past, today);
 }
 
+// ⚖️ Fit the meal: to what's left of today's calories (this meal's own logged calories count
+// as left, since fitting replaces them), or to 400 or 500 kcal.
+function fitLeft(meal) {
+  const logged = Math.round(todaysLog().meals?.[meal]?.kcal || 0);
+  return Math.round(targets().kcal - consumed().kcal) + logged;
+}
+function fitRow(meal) {
+  const left = fitLeft(meal);
+  return `<div class="row wrap fit-row"><span class="small muted">⚖️ Fit to</span>${left >= 150 ? `<button type="button" class="ghost small" data-fit="${left}" title="Scale every food so the meal uses what's left of today">What's left · ${left} kcal</button>` : ''}<button type="button" class="ghost small" data-fit="400">400 kcal</button><button type="button" class="ghost small" data-fit="500">500 kcal</button></div>`;
+}
 // Quick reference in the header on every tab: eaten vs left for today.
 function renderDayBar() {
   if (state.profile) recordDay();
@@ -1034,9 +1044,23 @@ function sectionFoods(key) {
   const seen = new Set();
   return Object.values(FOOD_GROUPS).flat().filter((k) => FOODS[k] && !FOODS[k].hidden && !seen.has(k) && seen.add(k) && macroGroup(k) === key);
 }
-function addMenu(key, label) {
+// "＋ Add …" for a section: another food of that kind, so a meal can be rice + beans + broccoli,
+// each with its own amount. Carbs offer starches and beans, fruit and veggies (a veggie shows
+// under Veggies once added).
+const CARB_GROUPS = [['Rice, bread & potatoes', (k) => macroGroup(k) === 'carb' && !FOOD_GROUPS['Fruit & veg'].includes(k) && !/beans|chickpea/i.test(k)], ['Beans', (k) => /beans|chickpea/i.test(k)], ['Fruit', (k) => macroGroup(k) === 'carb' && FOOD_GROUPS['Fruit & veg'].includes(k)], ['Veggies', (k) => macroGroup(k) === 'veg']];
+function addMenu(key, label, count = 0) {
   const cat = { protein: 'protein', carb: 'carb', veg: 'carb', fat: 'fat', other: 'mixed' }[key];
-  return `<select class="sec-add" data-cadd data-cat="${cat}" aria-label="Add ${esc(label.toLowerCase())}"><option value="">＋ Add ${esc(label.toLowerCase())}…</option>${sectionFoods(key).map((k) => `<option value="${k}">${esc(FOODS[k].name)}</option>`).join('')}<option value="__new">＋ ${key === 'other' ? 'Packaged item' : `New ${esc(label.toLowerCase().replace(/s$/, ''))}`} (enter its macros)…</option></select>`;
+  const one = { protein: 'protein', carb: 'carb', veg: 'veggie', fat: 'fat', other: 'item' }[key];
+  const opt = (k) => `<option value="${k}">${esc(FOODS[k].name)}</option>`;
+  const all = [...new Set(Object.values(FOOD_GROUPS).flat())].filter((k) => FOODS[k] && !FOODS[k].hidden);
+  const body = key === 'carb' ? CARB_GROUPS.map(([g, ok]) => { const ks = all.filter(ok); return ks.length ? `<optgroup label="${esc(g)}">${ks.map(opt).join('')}</optgroup>` : ''; }).join('') : sectionFoods(key).map(opt).join('');
+  return `<select class="sec-add" data-cadd data-cat="${cat}" aria-label="Add ${count ? 'another ' : ''}${esc(one)}"><option value="">＋ Add ${count ? `another ${esc(one)}` : esc(label.toLowerCase())}…</option>${body}<option value="__new">＋ ${key === 'other' ? 'Packaged item' : `New ${esc(one)}`} (enter its macros)…</option></select>`;
+}
+// A food's own dropdown lists only foods of its section (proteins under Protein, and so on).
+function sectionOptions(key, selected) {
+  if (!key) return foodOptions(selected);
+  const list = sectionFoods(key), keys = !selected || list.includes(selected) ? list : [selected, ...list];
+  return keys.map((k) => `<option value="${k}" ${k === selected ? 'selected' : ''}>${esc(FOODS[k].name)}</option>`).join('') + NEW_FOOD_OPTION;
 }
 function sectioned(meal, m, rowFn) {
   const rows = m.portions.map((x, i) => ({ x, i, g: macroGroup(x.food, x.slot) }));
@@ -1045,8 +1069,8 @@ function sectioned(meal, m, rowFn) {
     const mine = rows.filter((r) => r.g === key);
     const sub = mine.reduce((a, r) => a + ((FOODS[r.x.food]?.[mk] || 0) * r.x.grams) / 100, 0);
     return `<div class="msec msec-${key}"><div class="msec-head"><span>${ico} ${label}</span><small>${mine.length ? `${Math.round(sub)} ${unit[mk]}` : 'none yet'}</small></div>
-      ${mine.length ? `<ul class="portions editable${m.custom ? ' custom' : ''}">${mine.map((r) => rowFn(r.x, r.i)).join('')}</ul>` : ''}
-      ${addMenu(key, label)}</div>`;
+      ${mine.length ? `<ul class="portions editable${m.custom ? ' custom' : ''}">${mine.map((r) => rowFn(r.x, r.i, key)).join('')}</ul>` : ''}
+      ${addMenu(key, label, mine.length)}</div>`;
   }).join('');
 }
 // Protein, carbs and fat for the meal against its target, as bars.
@@ -1102,11 +1126,11 @@ document.addEventListener('click', (e) => {
     saveCustom(); renderToday();
   }
 });
-function customRow(x, i, meal) {
+function customRow(x, i, meal, key = '') {
         const a = amountLabel(x.food, x.grams, meal);
         return `<li data-ci="${i}">
           <div class="item-top">
-            <select data-cfood="${i}" aria-label="Food">${foodOptions(x.food)}</select>
+            <select data-cfood="${i}" aria-label="Food">${sectionOptions(key, x.food)}</select>
             <button class="x" data-cremove="${i}" aria-label="Remove ${esc(FOODS[x.food].name)}">✕</button>
           </div>
           <div class="item-slider stepper">
@@ -1121,9 +1145,9 @@ function customBody(meal, m) {
   return `
     ${meal === 'snack' ? `<ul class="portions editable custom">${m.portions.map((x, i) => customRow(x, i, meal)).join('')}</ul>
       <div class="row" style="margin-top:6px"><select data-cadd aria-label="Add a food">${foodOptions('', '+ Add a food…')}</select></div>`
-      : sectioned(meal, m, (x, i) => customRow(x, i, meal))}
+      : sectioned(meal, m, (x, i, key) => customRow(x, i, meal, key))}
     <div class="row" style="margin-top:6px">
-      ${meal !== 'snack' && m.portions.length && !m.manual ? `<button type="button" class="ghost small" data-fit title="Scale every food so the meal hits its calorie target">⚖️ Fit to ${m.target.kcal} kcal</button>` : ''}
+      ${meal !== 'snack' && m.portions.length && !m.manual ? fitRow(meal) : ''}
     </div>
     <details class="manual" ${m.manual ? 'open' : ''}>
       <summary>✍️ Enter the meal's macros yourself (a packaged meal, another app)</summary>
@@ -1295,8 +1319,8 @@ $('#meals').addEventListener('click', (e) => {
       renderToday();
     }
   } else if (e.target.closest('[data-fit]')) {
-    const m = todayPlan()[meal];
-    editCustom(meal, (c) => { c.items = fitItems(c.items, m.target.kcal); });
+    const m = todayPlan()[meal], kcal = +e.target.closest('[data-fit]').dataset.fit || m.target.kcal;
+    editCustom(meal, (c) => { c.items = fitItems(c.items, kcal); });
     resnap(meal);
     renderToday();
   } else if (e.target.closest('[data-prepared]')) {

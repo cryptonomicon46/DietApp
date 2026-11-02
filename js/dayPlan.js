@@ -235,7 +235,7 @@ export function planAs(s, today, meal, c) {
 export function mealSnapshot(s, today, meal) {
   rollDay(s, today);
   const custom = s.get('custom'), log = s.get('eaten');
-  return JSON.parse(JSON.stringify({ custom: custom.meals?.[meal] ?? null, logged: log.meals?.[meal] ?? null, extras: (log.extras || []).length }));
+  return JSON.parse(JSON.stringify({ custom: custom.meals?.[meal] ?? null, logged: log.meals?.[meal] ?? null, extras: (log.extras || []).length, extrasList: log.extras || [] }));
 }
 export function restoreMeal(s, today, meal, snap) {
   rollDay(s, today);
@@ -243,7 +243,27 @@ export function restoreMeal(s, today, meal, snap) {
   custom.meals = { ...custom.meals };
   if (snap?.custom) custom.meals[meal] = snap.custom; else delete custom.meals[meal];
   s.set('custom', custom);
-  return editLog(s, today, (log) => { log.meals ||= {}; if (snap?.logged) log.meals[meal] = snap.logged; else delete log.meals[meal]; });
+  return editLog(s, today, (log) => { log.meals ||= {}; if (snap?.logged) log.meals[meal] = snap.logged; else delete log.meals[meal]; if (snap?.extrasList) log.extras = snap.extrasList; });
+}
+// ＋ "Add … to dinner": the foods go into the meal as it stands (the plan's foods, or what you
+// logged), a food already there gets the extra grams, and the meal stays logged if it was (else
+// planned). A packaged or eaten-out meal (no foods to add to), or something that isn't a known
+// food, is added alongside as an extra "with dinner".
+//   add: { items: [{ food, grams }] } | { entry: { title, kcal, p, c, f } }
+export function addToMeal(s, today, meal, add) {
+  rollDay(s, today);
+  const data = dataOf(s), m = planOf(data, today)[meal], logged = !!logOf(data, today).meals?.[meal];
+  const base = m && !m.prepared && !m.eatout ? (m.portions || []).filter((x) => x.food && x.grams > 0).map((x) => ({ food: x.food, grams: x.grams })) : null;
+  if (base && add.items?.length) {
+    const items = base.map((x) => ({ ...x }));
+    for (const x of add.items) { const same = items.find((y) => y.food === x.food); if (same) same.grams += x.grams; else items.push({ food: x.food, grams: x.grams }); }
+    const c = { items, how: 'said' };
+    if (logged) logAs(s, today, meal, c); else planAs(s, today, meal, c);
+    return { mode: 'items', logged, meal: planOf(dataOf(s), today)[meal] };
+  }
+  const e = add.entry;
+  addExtras(s, today, [{ ...e, title: `${e.title} · with ${meal}` }]);
+  return { mode: 'extra', logged };
 }
 export function unlog(s, today, meal) { return editLog(s, today, (log) => { delete log.meals[meal]; }); }
 export function addExtras(s, today, items) { return editLog(s, today, (log) => { log.extras = [...(log.extras || []), ...items.filter(Boolean)]; }); }

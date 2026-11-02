@@ -4,6 +4,34 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🍽 Talk: "Log dinner" replaces, "Add … to dinner" adds; every spoken food kept; section-only dropdowns (2026-11-02, `v2/talk-add-meal` from `main` `e8f6174`; front end only, no `pawdeploy`; owner: "Make these changes and if no redeploy needed, merge into main")
+
+**Owner's report:**
+- "Log dinner: whey protein, frozen berries and peanut butter" lost the berries.
+- "add frozen mixed berries to dinner" then replaced dinner with only berries.
+- The protein dropdown listed fats and carbs too, and there was no clear way to add a second carb.
+
+**Fixes:**
+
+| Change | Where | What it does |
+| --- | --- | --- |
+| Every spoken food is kept | `js/foodText.js` `splitFoods` | Spoken lists have no commas, so a part naming several foods is cut before each later food, and its amount goes with it. The longest name wins ("sweet potato", "peanut butter"). The same food named twice is one food. `frozen berries` / `mixed berries` are aliases for Frozen mixed berries. Black beans and chickpeas were added to the foods. |
+| Add vs replace | `js/talkParse.js` | "Add … to dinner", "Add to dinner: …" and "I also had … with lunch" set `add: true`. "Log dinner: …" still replaces. Phrases "Add … to our watchlist" / "… reading list" still go to Watch and Read. |
+| Adding to a meal | `js/dayPlan.js` `addToMeal` | Adds to the meal as it is: the same food is summed, and a logged meal stays logged. A packaged or eaten-out meal, or an unknown food, becomes an extra "with dinner". Undo restores the meal and its extras. |
+| The card says which | `family/talk.js` | Add: "Add to dinner · … Adds to dinner: X · 685 kcal → 738 kcal · ✓ Add to dinner". Log: "Replaces today's planned dinner: X … To keep it, say Add … to dinner". The two commands sit under the examples on Home and Health. |
+| Card shows the meal as it is now | `family/meals.js` `commit` | Keeps its copy in step after each save, so the card no longer shows the meal from before the last log. |
+| Section-only dropdowns | trackers' meal editor (`js/app.js`) | Each food's dropdown lists only its section's foods. "＋ Add another protein / carb / fat…" appears once there's one. The carbs menu is grouped: Rice, bread & potatoes · Beans · Fruit · Veggies. |
+
+**⚖️ Fit** (owner: "fit to macros remaining for the day or 400 or 500. Not 600"). The trackers' meal page and Health's meal sheet both offer *What's left · N kcal* (today's target minus what's eaten, plus this meal's own logged calories), *400 kcal* and *500 kcal*. The trackers no longer have the single "Fit to <plan> kcal" button. In the browser, 400 brought dinner to 388 kcal, and 500 fit lunch to 508 (*protein had to come down too*).
+
+**Tests:** `npm test` passes 562/562. New: `tests/mealadd.test.js` (4: comma-less lists, add to a logged meal, add to a planned meal / packaged → extra, Undo) and 1 in `tests/talkparse.test.js`.
+
+**Browser check** (local, seeded): the owner's exact sequence.
+- "Log dinner whey protein frozen berries and peanut butter" gave a card with all 3 foods, "Replaces today's planned dinner …", and logged 264 kcal.
+- "add frozen mixed berries to dinner" gave "Add to dinner", and after saving: "＋ Added to dinner · +53 kcal · dinner is 317 kcal now".
+- Health shows Dinner at 317 kcal.
+- The trackers' dinner page shows 2 cups of frozen berries, row dropdowns with only proteins (18) / carbs (20) / fats, and "Add another carb…" with the 4 groups.
+
 ### 🔀 Fix: a meal you say or set replaces the old one (2026-11-02, `v2/meal-replace` from `main` `d34b3e7`; front end only, no `pawdeploy`; owner reported two cases)
 
 **The two cases:**
