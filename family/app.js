@@ -2180,6 +2180,8 @@ async function usView() {
   await Promise.all([loadUs(), loadRhythm().then((r) => { calm.rhythm = r; }).catch(() => {}), w, loadIdeas().catch(() => {}), loadThreads().catch(() => {})]);
   if (state.view !== 'us') return;
   renderUs();
+  // ❤️ Date nights from the calendars: drawn when they're in, then counted (the day after).
+  loadDateNights().then(() => { if (state.view !== 'us') return; renderUs(); return countDates(); }).catch(() => {});
   loadTv().then(() => { if (state.view === 'us' && $('#usWatch')) { renderUsWatch(); usBadge(); } }).catch(() => {});
   // Opening Us counts its new notes as seen (after this visit's "new" marks are drawn).
   LS.set(usSeenKey(), String(Date.now()));
@@ -2195,7 +2197,7 @@ function renderUs() {
   // For you
   // (New episodes show on the Watch card above, not here as well.)
   // Only what needs an answer from you: new notes and write-ups show in Notes and Our notebook.
-  $('#usFor').innerHTML = f.ask.length || f.after.length || f.matches.length ? `<div class="foryou"><div class="row between"><b class="small up">For you</b>${f.ask.length + f.after.length + f.matches.length > 1 ? `<span class="small" style="color:var(--like);font-weight:800">${f.ask.length + f.after.length + f.matches.length}</span>` : ''}</div>
+  $('#usFor').innerHTML = f.ask.length || f.after.length || f.matches.length || dn.after.length ? `<div class="foryou"><div class="row between"><b class="small up">For you</b>${f.ask.length + f.after.length + f.matches.length > 1 ? `<span class="small" style="color:var(--like);font-weight:800">${f.ask.length + f.after.length + f.matches.length}</span>` : ''}</div>
     ${f.matches.map((m) => `<div class="fy"><span class="fy-i">💞</span><div><b>It's a match: ${esc(m.idea.title)}</b><small>You both 💗 it${m.idea.day ? ` · ${esc(dayText(m.idea.day, m.idea.time))}` : ''}</small>
       <div class="ans"><button type="button" class="small" data-match="${esc(m.t)}">📅 Make it a plan</button><button type="button" class="ghost small" data-discuss="i:${esc(m.t)}" data-dtitle="${esc(`💡 ${m.idea.title}`)}">💬 Discuss</button></div></div></div>`).join('')}
     ${f.ask.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>${esc(member(x.by)?.name || pName)} suggested ${esc(planTitle(x).toLowerCase().startsWith('date night') ? 'a date night' : planTitle(x))}</b><small>${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}${x.note ? ` · “${esc(x.note)}”` : ''}</small>
@@ -2203,7 +2205,10 @@ function renderUs() {
       ${x.outing ? `<small class="muted">${x.outing.stops.map((st) => `${STOP_ICON[st.kind] || '📍'} ${esc(hm(st.time))}`).join(' → ')}</small><button type="button" class="linkish small" data-outplan="${x.id}">🧭 See the plan</button>` : ''}
       <div class="ans">${Object.entries(ANSWERS).map(([k, t], i) => `<button type="button" class="${i ? 'ghost' : ''} small" data-answer="${x.id}:${k}">${t}</button>`).join('')}</div></div></div>`).join('')}
     ${f.after.map((x) => `<div class="fy"><span class="fy-i">${wn(x)[0]}</span><div><b>How was ${esc(x.outing ? x.outing.title : (FOOD_KINDS.includes(x.kind) && x.where) || planTitle(x))}?</b><small>${esc(planWhen(x))}</small>
-      <div class="ans"><button type="button" class="small" data-rate="${x.id}">⭐ Rate it</button><button type="button" class="ghost small" data-rateskip="${x.id}">Skip</button></div></div></div>`).join('')}</div>` : '';
+      <div class="ans"><button type="button" class="small" data-rate="${x.id}">⭐ Rate it</button><button type="button" class="ghost small" data-rateskip="${x.id}">Skip</button></div></div></div>`).join('')}
+    ${dn.after.map((x) => `<div class="fy"><span class="fy-i">${x.icon}</span><div><b>How was ${esc(dnTitle(x.title))}?</b><small>${esc(planWhen(calPlan(x)))}${x.place ? ` · ${esc(x.place)}` : ''}</small>
+      <small>❤️ Counted as your date night · <button type="button" class="linkish small" data-dateundo="${esc(x.key)}">Undo</button></small>
+      <div class="ans"><button type="button" class="small" data-rate="cal:${esc(x.key)}">⭐ Rate it</button><button type="button" class="ghost small" data-rateskip="cal:${esc(x.key)}">Skip</button></div></div></div>`).join('')}</div>` : '';
   // Notes
   const mine = (n) => n.by === meId;
   $('#usNotesC').innerHTML = `<div class="row between"><b class="us-h">💌 Notes</b><span class="tiny muted">🔒 just you two</span></div>
@@ -2221,15 +2226,17 @@ function renderUs() {
   let rhythm = '';
   if (R) {
     const st = R.rhythmStatus(list, isoLocal());
-    const chip = (k) => { const x = st[k]; const r = R.RHYTHMS[k]; if (k === 'close') return `<span class="rchip">${r.icon} ${x.count} of 2 this week</span>`; const name = r.label.replace('Multi-night ', '').toLowerCase(); return `<span class="rchip ${x.last && x.level === 'due' ? 'due' : ''}">${r.icon} ${!x.last ? `${name} · not yet` : x.level === 'due' ? `${name} due` : x.level === 'soon' ? `${name} soon` : `${name} ✓`}</span>`; };
+    const chip = (k) => { const x = st[k]; const r = R.RHYTHMS[k]; if (k === 'date' && dn.bookedNext && x.level !== 'ok') return `<span class="rchip booked">${r.icon} date night booked · ${esc(new Date(`${dn.bookedNext}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' }))}</span>`; if (k === 'close') return `<span class="rchip">${r.icon} ${x.count} of 2 this week</span>`; const name = r.label.replace('Multi-night ', '').toLowerCase(); return `<span class="rchip ${x.last && x.level === 'due' ? 'due' : ''}">${r.icon} ${!x.last ? `${name} · not yet` : x.level === 'due' ? `${name} due` : x.level === 'soon' ? `${name} soon` : `${name} ✓`}</span>`; };
     const dates = list.filter((e) => e.kind !== 'close').slice().reverse();
     rhythm = `<div class="rchips">${['date', 'close', 'overnight', 'getaway'].map(chip).join('')}</div>
       ${dates.length ? `<details class="small"><summary>Last: ${R.momentIcon(dates[0])} ${esc(R.momentText(dates[0]))} · ${esc(new Date(`${dates[0].date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</summary><ul class="list">${dates.slice(0, 12).map((e) => `<li class="row between"><span>${R.momentIcon(e)} ${esc(R.momentText(e))}</span><span><small class="muted">${esc(new Date(`${e.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: e.date.slice(0, 4) !== isoLocal().slice(0, 4) ? 'numeric' : undefined }))}</small> <button type="button" class="linkish small" data-momentedit="${esc(e.id)}" aria-label="Edit">✎</button></span></li>`).join('')}</ul></details>` : ''}`;
   }
+  // Coming up: plans made here and date nights from your calendars, soonest first.
+  const coming = [...up.map((x) => ({ at: `${x.day} ${x.time || '99'}`, plan: x })), ...dn.up.map((x) => ({ at: `${x.date} ${x.time || '99'}`, cal: x }))].sort((a, b) => a.at.localeCompare(b.at));
+  const planRow = (x) => `<div class="dn-up" data-plan="${x.id}">${dnDay(x.day)}<div class="planrow"><span>${wn(x)[0]} <b>${esc(planTitle(x))}</b> <small class="muted">· ${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}</small>${x.outing ? ` <button type="button" class="linkish small" data-outplan="${x.id}">See plan</button>` : ''}${x.agreed && x.idea?.reserve ? ` <a class="linkish small" href="${esc(x.idea.reserve)}" target="_blank" rel="noopener">🍽 Reserve</a>` : ''}${x.agreed && x.idea?.kind === 'movie' && x.idea.url ? ` <a class="linkish small" href="${esc(x.idea.url)}" target="_blank" rel="noopener">🎟 Book seats</a>` : ''}</span>${status(x)}
+      ${x.by === meId && !x.agreed ? `<span class="planacts"><button type="button" class="linkish small" data-planmove="${x.id}">Another day</button> · <button type="button" class="linkish small" data-plandel="${x.id}">Cancel</button></span>` : ''}</div></div>`;
   $('#usDatesC').innerHTML = `<h2 class="card-h">❤️ Dates</h2>
-    ${up.length ? up.map((x) => `<div class="planrow" data-plan="${x.id}"><span>${wn(x)[0]} <b>${esc(planTitle(x))}</b> <small class="muted">· ${esc(planWhen(x))}${x.where ? ` · ${esc(x.where)}` : ''}</small>${x.outing ? ` <button type="button" class="linkish small" data-outplan="${x.id}">See plan</button>` : ''}${x.agreed && x.idea?.reserve ? ` <a class="linkish small" href="${esc(x.idea.reserve)}" target="_blank" rel="noopener">🍽 Reserve</a>` : ''}${x.agreed && x.idea?.kind === 'movie' && x.idea.url ? ` <a class="linkish small" href="${esc(x.idea.url)}" target="_blank" rel="noopener">🎟 Book seats</a>` : ''}</span>${status(x)}
-      ${x.by === meId && !x.agreed ? `<span class="planacts"><button type="button" class="linkish small" data-planmove="${x.id}">Another day</button> · <button type="button" class="linkish small" data-plandel="${x.id}">Cancel</button></span>` : ''}</div>`).join('')
-      : '<p class="small muted">Nothing planned yet.</p>'}
+    ${coming.length ? `<div class="dn-sec">Coming up</div>${coming.map((c) => (c.plan ? planRow(c.plan) : dnRow(c.cal))).join('')}` : '<p class="small muted">Nothing planned yet. A movie or dinner on your calendars for both of you shows here too.</p>'}
     ${rhythm}
     <div class="row wrap us-acts"><button type="button" class="small" data-act="feel">✨ Suggest</button><button type="button" class="ghost small" data-act="outing">🧭 Plan an outing</button><button type="button" class="ghost small" data-act="lognew">❤️ Log a date</button></div>
     ${savedOutings().length ? `<p class="tiny muted">Recent outings: ${savedOutings().slice(0, 3).map((o, i) => `<button type="button" class="linkish tiny" data-outsaved="${i}">${esc(o.title)}</button>`).join(' · ')}</p>` : ''}`;
@@ -2249,9 +2256,26 @@ async function planToCalendar(p) {
 // ---------- 💡 date ideas: the week's scouted ideas and a starter list, picked in private ----------
 // You 💗 ideas on your own; nobody sees your picks. When you've both 💗 the same one, it's a
 // match — on both phones, ready to make into a plan.
-const ideas = { I: null, week: null, settings: null, mine: [], matches: [], tok: {}, tab: 'all', i: 0, loaded: false };
-const passKey = () => `fam.ideaPass.${state.fid}`;
-const passed = () => { try { return JSON.parse(LS.get(passKey()) || '{}'); } catch { return {}; } };
+const ideas = { I: null, week: null, settings: null, mine: [], matches: [], tok: {}, tab: 'all', i: 0, loaded: false, view: 'deck', list: 'picks', page: 1, hideSeen: true, focus: null, flash: null, st: null };
+// What you've answered (Not for us / Seen it / Save): on this phone at once, and in your own
+// trackers (in no shared part) a moment later, so every phone you use agrees.
+const passKey = () => `fam.ideaPass.${state.fid}`, stKey = () => `fam.ideaState.${state.fid}`;
+function ideaSt() {
+  if (ideas.st?.fid === state.fid) return ideas.st.v;
+  let v = null;
+  try { v = JSON.parse(LS.get(stKey()) || 'null'); } catch { /* none */ }
+  if (!v) { let old = {}; try { old = JSON.parse(LS.get(passKey()) || '{}') || {}; } catch { /* none */ } v = { pass: old, seen: {}, saved: {} }; }
+  ideas.st = { fid: state.fid, v };
+  return v;
+}
+let ideaSync = null;
+function setIdeaSt(v) {
+  ideas.st = { fid: state.fid, v };
+  try { LS.set(stKey(), JSON.stringify(v)); } catch { /* full */ }
+  clearTimeout(ideaSync);
+  ideaSync = setTimeout(() => { if (!lockedHere()) saveRhythm(() => {}, (data) => { data.ideaState = ideas.I.mergeState(data.ideaState, ideas.st.v); }).catch(() => {}); }, 2500);
+}
+const passed = () => ideaSt().pass || {};
 async function loadIdeas() {
   ideas.I ||= await import('./ideas.js');
   const r = await api.get(`/families/${state.fid}/ideas`).catch(() => null);
@@ -2261,9 +2285,16 @@ async function loadIdeas() {
   ideas.matches = (await Promise.all((r.matches || []).map(async (m) => ({ ...m, idea: (await openBox(m.boxes?.[fam().me])) || (await openBox(Object.values(m.boxes || {})[0])) })))).filter((m) => m.idea);
   const all = [...(r.week?.ideas || []), ...ideas.I.STARTERS, ...ideas.I.againIdeas(calm.rhythm || [])];
   await Promise.all(all.filter((x) => !ideas.tok[x.id]).map(async (x) => { ideas.tok[x.id] = await ideas.I.ideaToken(fk(), state.fid, x.id); }));
+  // Your answers from your other phones (kept in your trackers).
+  const mine = await myTrackers().catch(() => null);
+  if (mine?.ideaState && !mine.locked) { const v = ideas.I.mergeState(ideaSt(), mine.ideaState); ideas.st = { fid: state.fid, v }; try { LS.set(stKey(), JSON.stringify(v)); } catch { /* full */ } }
 }
 const ideaById = (id) => [...(ideas.week?.ideas || []), ...(ideas.I?.STARTERS || []), ...(ideas.I?.againIdeas(calm.rhythm || []) || [])].find((x) => x.id === id);
-const ideaDeck = (tab = ideas.tab) => (ideas.I ? ideas.I.deck({ week: ideas.week, rhythm: calm.rhythm || [], passed: passed(), tab, today: isoLocal(), taste: taste() }) : []);
+// Picked ideas and movies already booked on the calendar leave the deck (they're in 💗 My picks /
+// on Dates); ▦ Browse all keeps everything still to come.
+const ideaSkip = () => new Set([...Object.keys(dn.booked || {}), ...ideaAll().filter((x) => picked(x)).map((x) => x.id)]);
+const ideaAll = () => [...(ideas.week?.ideas || []), ...(ideas.I?.STARTERS || []), ...(ideas.I?.againIdeas(calm.rhythm || []) || [])];
+const ideaDeck = (tab = ideas.tab, all = false) => (ideas.I ? ideas.I.deck({ week: ideas.week, rhythm: calm.rhythm || [], passed: passed(), seen: ideaSt().seen, saved: ideaSt().saved, skip: all ? new Set() : ideaSkip(), all, tab, today: isoLocal(), taste: taste() }) : []);
 const picked = (x) => ideas.mine.includes(ideas.tok[x.id]);
 const dayText = (d, t) => `${new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}${t ? ` · ${new Date(`2000-01-01T${t}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : ''}`;
 function ideaMeta(x) {
@@ -2276,41 +2307,17 @@ function ideaMeta(x) {
 }
 const scoreLine = (x) => (x.scores ? [x.scores.rt != null ? `🍅 ${x.scores.rt}%` : x.scores.meta != null ? `Ⓜ ${x.scores.meta}` : '', x.scores.audience != null ? `🍿 ${x.scores.audience}` : ''].filter(Boolean).join(' · ') : '');
 const ideaIcon = (x) => x.icon || ideas.I?.KIND_ICON[x.kind] || '💡';
-// The Us card: "Time for a date?" when the 2-2-2-2 date is due, and the top three.
-function ideasCard() {
-  if (!ideas.loaded) return '';
-  const st = calm.R ? calm.R.rhythmStatus(calm.rhythm || [], isoLocal()).date : null;
-  const due = st && (!st.last || st.level === 'due' || st.level === 'soon');
-  const top = ideaDeck('all').filter((x) => !picked(x)).slice(0, 3);
-  return `<div class="row between"><h2 class="card-h">✨ Ideas for Us</h2><span><button type="button" class="linkish small" data-act="ideaset" aria-label="Date idea settings">⚙︎</button> <button type="button" class="linkish small" data-act="ideas">All ›</button></span></div>
-    ${due ? `<p class="small muted">${st.last ? 'Time for a date? It\'s been a while.' : 'Time for a date? Your first on the 2-2-2-2 is waiting.'} 💗 what you'd like — when you both pick the same one, it's a match.</p>` : '<p class="tiny muted">🔒 Your 💗 stay private until you both pick the same one.</p>'}
-    <div class="idealist">${top.map((x) => `<div class="idearow"><span class="ii">${x.img ? `<img src="${esc(x.img)}" alt="" loading="lazy">` : ideaIcon(x)}</span><div class="grow"><b>${esc(x.title)}</b><small class="muted">${ideaMeta(x) || esc(x.why || '')}${scoreLine(x) ? ` · ${scoreLine(x)}` : ''}</small></div>
-      <button type="button" class="icon-btn" data-idea="${esc(x.id)}:pass" aria-label="Not for us">✕</button><button type="button" class="icon-btn pick" data-idea="${esc(x.id)}:pick" aria-label="Pick">💗</button></div>`).join('') || '<p class="small muted">You\'ve been through them all — new ones come every Wednesday.</p>'}</div>
-    ${ideas.week ? `<p class="tiny muted">This week around ${esc(ideas.week.area?.label || ideas.settings?.label || 'you')} · ${ideas.week.ideas.length} ideas</p>` : '<p class="tiny muted">Movies, events and new places for your area arrive every Wednesday morning.</p>'}`;
-}
+// The Us card: a match first (ready to plan), "Time for a date?" when the 2-2-2-2 date is due, a
+// row of posters to swipe through, and one way into the sheet.
+// The Us page's ✨ Ideas card, the 💡 Date ideas sheet and ❤️ date-night rows are drawn by
+// family/ideas.js (loaded with Us, not at start-up) from what's here.
+let ideaViews = null;
+const iv = () => (ideaViews ||= ideas.I.views({ esc, ideas, dn, calm, isoLocal, dayText, scoreLine, ideaMeta, taste, partnerName, picked, ideaSt, ideaById, ideaAll, ideaDeck, ideaIcon, ideasEmpty, openSheet, fam, member, dnDay, dnTitle }));
+function ideasCard() { return ideas.I ? iv().ideasCard() : ''; }
 function renderIdeasCard() { const el = $('#usIdeasC'); if (el) { el.innerHTML = ideasCard(); el.hidden = !ideas.loaded; } }
-// The deck: one idea at a time.
-function ideasSheet() {
-  const list = ideaDeck();
-  ideas.i = Math.min(ideas.i, Math.max(0, list.length - 1));
-  const x = list[ideas.i];
-  const tabs = Object.entries(ideas.I.TABS).map(([k, l]) => `<button type="button" class="chip ${k === ideas.tab ? 'on' : ''}" data-ideatab="${k}">${l}</button>`).join('');
-  const links = x ? [x.reserve ? `<a class="btn small" href="${esc(x.reserve)}" target="_blank" rel="noopener">🍽️ Reserve on OpenTable</a>` : '', x.url ? `<a class="btn ghost small" href="${esc(x.url)}" target="_blank" rel="noopener">${x.kind === 'event' ? '🎟 Tickets' : '🔗 More'}</a>` : ''].join('') : '';
-  const times = x?.theatres?.length ? `<div class="stack tight">${x.theatres.map((t) => `<div class="small"><b>${esc(t.name)}</b><div class="rchips">${t.times.slice(0, 8).map((s) => `<span class="rchip">${esc(dayText(s.day, s.time))}${s.format ? ` · ${esc(s.format)}` : ''}</span>`).join('')}</div></div>`).join('')}</div>`
-    : x?.kind === 'movie' ? `<p class="tiny muted">Showtimes: ${(ideas.settings?.theatres || []).map(esc).join(' · ') || 'your theatres'}</p>` : '';
-  openSheet(`<div class="row between"><h2>💡 Date ideas</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
-    <div class="rchips ideatabs">${tabs}</div>
-    ${x ? `<article class="ideacard">${x.img ? `<img class="poster" src="${esc(x.img)}" alt="">` : `<div class="ideabig">${ideaIcon(x)}</div>`}
-      <h3>${esc(x.title)}${x.pick ? ' <span class="tag pk">Critics\' pick</span>' : ''}</h3>
-      ${ideaMeta(x) ? `<p class="small">${ideaMeta(x)}</p>` : ''}${scoreLine(x) ? `<p class="small"><b>${scoreLine(x)}</b> <span class="tiny muted">critics · audiences</span></p>` : ''}
-      ${x.why ? `<p class="small muted">${esc(x.why)}</p>` : ''}${taste() && ideas.I.fit(x, taste()).why ? `<p class="fitwhy small">${esc(ideas.I.fit(x, taste()).why)}</p>` : ''}${times}
-      ${links ? `<div class="row wrap">${links}</div>` : ''}
-      <div class="row wrap"><button type="button" class="linkish small" data-ideasuggest="${esc(x.id)}">✨ Suggest it to ${esc(partnerName())} now</button>${ideas.tok[x.id] ? `<button type="button" class="linkish small" data-discuss="i:${ideas.tok[x.id]}" data-dtitle="${esc(`💡 ${x.title}`)}" data-dbody="${esc([x.why || '', x.url || ''].filter(Boolean).join('\n'))}">💬 Discuss</button>` : ''}</div>
-      <div class="deckbtns"><button type="button" class="ghost" data-idea="${esc(x.id)}:pass">✕ Not for us</button><button type="button" class="ghost" data-idea="${esc(x.id)}:later">⏭ Later</button>${picked(x) ? `<button type="button" data-idea="${esc(x.id)}:unpick">💗 Picked</button>` : `<button type="button" class="hot" data-idea="${esc(x.id)}:pick">💗 I'd love this</button>`}</div>
-      <p class="tiny muted center">${ideas.i + 1} of ${list.length}${x.src ? ` · ${esc(x.src)}` : ''}</p></article>`
-      : ideasEmpty()}
-    <p class="tiny muted">🔒 ${esc(partnerName())} can't see what you 💗 — only a match, when you've both picked it.</p>`);
-}
+const SEEN = (x) => iv().SEEN(x);
+function ideasSheet() { return iv().ideasSheet(); }
+const dnRow = (x) => (ideas.I ? iv().dnRow(x) : '');
 // ✨ Tonight?: the best thing from the scout for tonight — a showing at least 45 minutes away, else
 // a new place for dinner.
 function tonightPick() {
@@ -2331,30 +2338,155 @@ function ideasEmpty() {
   const all = tab === 'all' || tab === 'starter' ? null : (w?.ideas || []).filter((x) => x.kind === tab).length;
   if (!w && tab !== 'starter') return `<div class="card"><b class="small">The scout hasn't run for your area yet.</b><p class="tiny muted">New ${tab === 'all' ? 'ideas' : label} arrive Wednesday mornings.${state.user?.isAdmin ? ' Me › Maintainer › Run the scout now.' : ''}</p></div>`;
   if (all === 0) return `<div class="card"><b class="small">No ${esc(label)} this week.</b><p class="tiny muted">${w.problems?.length ? 'The scout had trouble this time — new ones Wednesday.' : 'New ones arrive Wednesday mornings.'}</p></div>`;
-  return `<div class="card"><b class="small">You've been through all of them.</b><p class="tiny muted"><button type="button" class="linkish tiny" data-act="ideaunpass">Show the ones you passed</button> · new ones Wednesday</p></div>`;
+  return `<div class="card"><b class="small">You've been through all of them.</b><p class="tiny muted"><button type="button" class="linkish tiny" data-act="ideaunpass">Show the ones you passed</button> · ⏭ Saved and 💗 My picks are above · new ones Wednesday</p></div>`;
 }
-async function ideaAct(id, what) {
+// An answer: it moves on at once (in the deck) and can be undone. Picks go to the connector as
+// private tokens (as before); everything else stays yours.
+const IDEA_SAID = { pass: '✕ Not for us', save: '⏭ Saved for later', clear: '↩︎ Back in the deck' };
+async function ideaAct(id, what, { undoing = false } = {}) {
   const x = ideaById(id);
   if (!x) return;
-  const inDeck = $('.ideacard');
-  if (what === 'pass' || what === 'later') {
-    const p = passed(); p[id] = Date.now() + (what === 'later' ? 2 : 90) * 864e5;
-    for (const k of Object.keys(p)) if (p[k] < Date.now()) delete p[k];
-    LS.set(passKey(), JSON.stringify(p));
-  } else {
+  const inSheet = !!$('.ideacard, .di-grid, .di-lists');
+  const before = { pass: ideaSt().pass[id], seen: ideaSt().seen[id], saved: ideaSt().saved[id], picked: picked(x) };
+  if (['pass', 'seen', 'save', 'clear'].includes(what)) setIdeaSt(ideas.I.answer(ideaSt(), id, what));
+  else {
     const t = ideas.tok[id] || (ideas.tok[id] = await ideas.I.ideaToken(fk(), state.fid, id));
     if (what === 'unpick') { const r = await api.del(`/families/${state.fid}/ideas/picks/${t}`); ideas.mine = r.mine; }
     else {
       const r = await api.post(`/families/${state.fid}/ideas/picks/${t}`, { box: await lock(ideas.I.pickBox(x)) });
       ideas.mine = r.mine;
-      if (r.match) { await loadIdeas(); renderUs(); return matchSheet(t, true); }
-      if (inDeck) ideas.i++;
-      toast('💗 Picked — just between you and the app');
+      if (r.match) { await loadIdeas(); renderUs(); ideas.flash = null; return matchSheet(t, true); }
     }
   }
-  if (inDeck) ideasSheet();
+  if (!undoing) {
+    const [si, sl] = SEEN(x);
+    const text = what === 'seen' ? `${si} ${sl} — it won't come back` : what === 'pick' ? '💗 Picked — only you see it' : what === 'unpick' ? 'Unpicked' : IDEA_SAID[what];
+    ideas.flash = { id, text, rate: what === 'seen' && x.kind === 'movie', undo: { id, what, before } };
+    // From a single idea (opened from Browse or a list): back to where you were.
+    if (ideas.focus && what !== 'clear') ideas.focus = null;
+  }
+  if (inSheet) ideasSheet();
   renderIdeasCard();
 }
+async function ideaUndo() {
+  const u = ideas.flash?.undo;
+  if (!u) return;
+  ideas.flash = null;
+  const x = ideaById(u.id), b = u.before;
+  if (u.what === 'pick' || u.what === 'unpick') await ideaAct(u.id, b.picked ? 'pick' : 'unpick', { undoing: true });
+  const v = ideas.I.answer(ideaSt(), u.id, 'clear');
+  if (b.pass) v.pass[u.id] = b.pass;
+  if (b.seen) v.seen[u.id] = b.seen;
+  if (b.saved) v.saved[u.id] = b.saved;
+  setIdeaSt(v);
+  // Back to that idea in the deck.
+  const at = ideaDeck().findIndex((y) => y.id === u.id);
+  if (at >= 0) ideas.i = at;
+  toast(`↩︎ ${x?.title || 'Undone'}`);
+  if ($('.ideacard, .di-grid, .di-lists')) ideasSheet();
+  renderIdeasCard();
+}
+// ★ Rate a movie you've seen: it goes to 📺 Watch › Watched (just you two) with your stars.
+function ideaRateSheet(id) {
+  const x = ideaById(id);
+  if (!x) return;
+  openSheet(`<div class="row between"><h2>★ How was ${esc(x.title)}?</h2><button type="button" class="icon-btn" data-act="ideasback" aria-label="Back">✕</button></div>
+    <p class="small muted">Saved to 📺 Watch › Watched with your rating — it also teaches Ideas what you two like.</p>
+    <div class="show-rate di-stars">${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="star" data-idearated="${esc(id)}:${n}" aria-label="${n} of 5">${'★'.repeat(n)}</button>`).join('')}</div>`);
+}
+async function ideaRated(id, n) {
+  const x = ideaById(id);
+  if (!x) return;
+  if (lockedHere()) throw new Error('🔒 This device needs the family key first — Me › 🔐 Encryption');
+  await loadWatch().catch(() => {});
+  const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  let show = (watch.shows || []).find((y) => !y.locked && norm(y.title) === norm(x.title));
+  if (show) await api.patch(`/families/${state.fid}/watch/shows/${show.id}`, { status: 'finished', date: isoLocal() });
+  else { const r = await api.post(`/families/${state.fid}/watch/shows`, { aud: 'us', status: 'finished', date: isoLocal(), body: await lock({ title: x.title, service: 'other', kind: 'movie', date: isoLocal() }) }); show = r.show; }
+  if (show?.id) await api.patch(`/families/${state.fid}/watch/shows/${show.id}`, { rating: n });
+  await watchSaved().catch(() => {});
+  ideas.flash = null;
+  toast(`★ ${n} for ${x.title} — in 📺 Watch › Watched`);
+  ideasSheet();
+}
+// ---------- ❤️ date nights from your calendars (js/dateNights.js) ----------
+// A movie, a dinner reservation or a show on the calendar for both of you shows under Dates ›
+// Coming up; one that only might be a date is asked about once; the day after, it's counted on the
+// 2-2-2-2 (with Undo) and For you asks how it was. All worked out on this phone from what the
+// Calendar tab shows; your answers are kept in your own trackers (`dates`, in no shared part).
+const dn = { N: null, items: [], up: [], after: [], booked: {}, bookedNext: null, marks: {}, counted: {} };
+const dnOpts = () => ({ theatres: ideas.settings?.theatres || [], movies: (ideas.week?.ideas || []).filter((x) => x.kind === 'movie') });
+const dnTitle = (t) => String(t || '').replace(/^\P{L}+/u, '').trim();
+async function loadDateNights() {
+  dn.N ||= await import(`../js/dateNights.js?v=${VERSION}`);
+  await loadCal({ golden: false });
+  const mine = await myTrackers().catch(() => null);
+  if (mine && !mine.locked) { dn.marks = mine.dates?.marks || {}; dn.counted = mine.dates?.counted || {}; }
+  const today = isoLocal(), from = shiftLocal(today, -dn.N.COUNT_BACK), to = shiftLocal(today, dn.N.DAYS_AHEAD), items = [];
+  for (let d = from; d <= to; d = shiftLocal(d, 1)) {
+    for (const e of calItems(d)) {
+      const id = /data-event="([^"]+)"/.exec(e.open || '')?.[1] || '';
+      if (/^t?plan/.test(id)) continue; // a plan made in Us is listed as the plan
+      items.push({ date: d, time: e.allDay ? '' : e.time || '', title: e.title, place: e.place || '', who: e.who, feed: e.feed || '', id });
+    }
+  }
+  dn.items = items;
+  dnRecompute();
+}
+function dnRecompute() {
+  if (!dn.N) return;
+  const today = isoLocal(), o = dnOpts();
+  dn.up = dn.N.comingUp(dn.items, { marks: dn.marks, today, ...o });
+  dn.booked = dn.N.bookedIdeas(dn.items.filter((x) => x.date >= today), o);
+  const firstYes = dn.up.find((x) => x.verdict === 'yes'), plan = us.plans.filter((p) => isUpcoming(p) && p.agreed).sort((a, b) => a.day.localeCompare(b.day))[0];
+  dn.bookedNext = [firstYes?.date, plan?.day].filter(Boolean).sort()[0] || null;
+  // Counted date nights from the last few days you haven't rated or skipped yet.
+  dn.after = dn.items.filter((x) => x.date < today).map((x) => ({ ...x, key: dn.N.eventKey(x), ...(() => { const c = dn.N.classify(x, o); return { kind: c.kind || 'date', icon: dn.N.ICONS[c.kind] || '❤️' }; })() }))
+    .filter((x) => dn.counted[x.key] && dn.counted[x.key] !== 'undone' && !ratedByMe(`cal:${x.key}`)).filter((x, i, a) => a.findIndex((y) => y.key === x.key) === i);
+}
+// The day after: count it (once — the same date logged from your partner's phone counts too).
+async function countDates() {
+  if (!dn.N || lockedHere()) return;
+  const due = dn.N.toCount(dn.items, { marks: dn.marks, counted: dn.counted, today: isoLocal(), ...dnOpts() });
+  if (!due.length) return;
+  const at = Date.now(), add = [], counted = {};
+  for (const x of due) {
+    if (counted[x.key]) continue;
+    const have = (calm.rhythm || []).find((e) => e.cal === x.key);
+    if (have) counted[x.key] = have.id;
+    else { const e = dn.N.entryFor({ ...x, title: dnTitle(x.title) }, at); add.push(e); counted[x.key] = e.id; }
+  }
+  const keep = shiftLocal(isoLocal(), -60);
+  await saveRhythm((r) => { r.entries.push(...add); }, (data) => {
+    const old = Object.fromEntries(Object.entries(data.dates?.counted || {}).filter(([k]) => k.slice(0, 10) >= keep));
+    data.dates = { marks: data.dates?.marks || {}, counted: { ...old, ...counted } };
+  });
+  Object.assign(dn.counted, counted);
+  // A movie you went to leaves Date ideas.
+  if (ideas.I) for (const x of due) { const c = dn.N.classify(x, dnOpts()); if (c.idea) setIdeaSt(ideas.I.answer(ideaSt(), c.idea.id, 'seen')); }
+  calm.rhythm = await loadRhythm().catch(() => calm.rhythm);
+  dnRecompute();
+  if (state.view === 'us') renderUs();
+}
+async function dateMark(key, v) {
+  await saveRhythm(() => {}, (data) => { data.dates = { counted: data.dates?.counted || {}, marks: { ...(data.dates?.marks || {}), [key]: v } }; });
+  dn.marks = { ...dn.marks, [key]: v };
+  dnRecompute();
+  if (state.view === 'us') renderUs();
+  toast(v === 'yes' ? '❤️ Date night — it\'s on Dates' : 'OK — not a date');
+  await countDates().catch(() => {});
+}
+async function dateUncount(key) {
+  const id = dn.counted[key];
+  await saveRhythm((r) => { r.entries = r.entries.filter((e) => e.id !== id); r.removed.push(id); }, (data) => { data.dates = { marks: data.dates?.marks || {}, counted: { ...(data.dates?.counted || {}), [key]: 'undone' } }; });
+  dn.counted = { ...dn.counted, [key]: 'undone' };
+  calm.rhythm = await loadRhythm().catch(() => calm.rhythm);
+  dnRecompute(); renderUs();
+  toast('↩︎ Not counted as a date');
+}
+// A calendar date night as a plan, for ⭐ How was it?
+const calPlan = (x) => ({ id: `cal:${x.key}`, kind: ({ movie: 'movie', food: 'dinner', show: 'event', date: 'date' })[x.kind] || 'date', what: dnTitle(x.title), where: x.place || '', day: x.date, time: x.time || '', agreed: true });
+const dnDay = (d) => { const x = new Date(`${d}T12:00:00`); return `<span class="dn-day" aria-hidden="true"><small>${esc(x.toLocaleDateString(undefined, { weekday: 'short' }))}</small><b>${x.getDate()}</b>${d.slice(0, 7) !== isoLocal().slice(0, 7) ? `<small class="m">${esc(x.toLocaleDateString(undefined, { month: 'short' }))}</small>` : ''}</span>`; };
 // 💞 A match: pick a time and it goes on the calendar for both of you.
 function matchSheet(t, fresh = false) {
   const m = ideas.matches.find((y) => y.t === t);
@@ -2652,15 +2784,15 @@ async function saveRating(f) {
     if (v.get('log')) r.entries.push({ id: at.toString(36) + Math.random().toString(36).slice(2, 5), kind: 'date', date: p.day, at, what: rating.what.replace(/^Date night: ?/, '') || 'Date night', ...(p.where ? { place: p.where } : {}) });
   }, (data) => { data.taste = { ratings: [...(data.taste?.ratings || []), rating].slice(-200) }; });
   calm.myRatings = [...(calm.myRatings || []), rating]; calm.ratings = [...(calm.ratings || []), rating]; tasteCache = null;
-  closeSheet(); calm.rhythm = await loadRhythm().catch(() => calm.rhythm); renderUs(); usBadge();
+  closeSheet(); calm.rhythm = await loadRhythm().catch(() => calm.rhythm); dnRecompute(); renderUs(); usBadge();
   toast(rating.overall === 3 ? '😍 Noted — more like this' : rating.overall === 1 ? "😕 Noted — we'll steer clear" : '🙂 Thanks — noted');
 }
 async function skipRating(id) {
   const p = us.plans.find((x) => x.id === id);
-  if (!p) return;
+  if (!p && !String(id).startsWith('cal:')) return;
   await saveRhythm(() => {}, (data) => { data.taste = { ratings: [...(data.taste?.ratings || []), { id: Date.now().toString(36), plan: id, skip: true, at: Date.now() }].slice(-200) }; });
   calm.myRatings = [...(calm.myRatings || []), { plan: id, skip: true }];
-  closeSheet(); renderUs(); usBadge();
+  closeSheet(); dnRecompute(); renderUs(); usBadge();
 }
 
 // ---------- ⏳ planning jobs: they run in the background, show in a pill, and are never lost ----------
@@ -3720,7 +3852,8 @@ function eventDetail(e) {
     ${(e.who || []).length ? `<p class="small">👥 ${(e.who || []).map((id) => esc(id === fam().me ? 'You' : member(id)?.name || '')).join(', ')}</p>` : ''}
     ${e.notes ? `<p class="small">“${esc(e.notes)}”</p>` : ''}
     <div class="row wrap"><button type="button" class="ghost small" data-eventics="${e.id}">📲 Add to my phone's calendar</button><a class="btn ghost small" href="${esc(C.googleUrl(ics))}" target="_blank" rel="noopener">Google Calendar</a>
-      <button type="button" class="ghost small" data-eventedit="${e.id}">✎ Edit</button><button type="button" class="linkish small danger" data-eventdel="${e.id}">Delete</button></div>`);
+      <button type="button" class="ghost small" data-eventedit="${e.id}">✎ Edit</button><button type="button" class="linkish small danger" data-eventdel="${e.id}">Delete</button></div>
+    ${partnerMember() ? `<button type="button" class="ghost small" data-datemarkev="${e.id}">❤️ Mark as date night</button>` : ''}`);
 }
 // The trackers' calendar events and linked calendars, brought over once per person (locked).
 async function importCal() {
@@ -4597,7 +4730,18 @@ document.addEventListener('click', (e) => {
   if (d.jobx) { const j = jobList().find((x) => x.id === d.jobx); if (j) { j.seen = true; j.dismissed = true; saveJobs(); } return renderPill(); }
   if (d.jobretry) { const j = jobList().find((x) => x.id === d.jobretry); if (!j) return; jobs.list = jobList().filter((x) => x.id !== j.id); saveJobs(); if (j.kind !== 'find') jobWait(j.id, j.label); return runJob(j.kind, j.body, j.label, j.ctx); }
   if (d.jobsuggest != null) { const x = feel.picks[+d.jobsuggest]; return x && feelSheet('dinner', { idea: { ...x, kind: 'food', title: x.name } }); }
-  if (d.rate) { const p = us.plans.find((x) => x.id === d.rate); if (!p) return; return act(async () => { ideas.I ||= await import('./ideas.js'); rateSheet(p); }); }
+  if (d.rate) { const p = d.rate.startsWith('cal:') ? (() => { const x = dn.after.find((y) => `cal:${y.key}` === d.rate); return x && calPlan(x); })() : us.plans.find((x) => x.id === d.rate); if (!p) return; return act(async () => { ideas.I ||= await import('./ideas.js'); rateSheet(p); }); }
+  if (d.datemark) return act(() => dateMark(d.datemark, d.dmv === 'yes' ? 'yes' : 'no'));
+  // From an event's details on the Calendar: it shows under 💞 Us › Dates and counts the day after.
+  if (d.datemarkev) return act(async () => {
+    const e = calm.events.find((x) => x.id === d.datemarkev);
+    if (!e) return;
+    dn.N ||= await import(`../js/dateNights.js?v=${VERSION}`);
+    if (!dn.items.length) { const mine = await myTrackers().catch(() => null); if (mine && !mine.locked) { dn.marks = mine.dates?.marks || {}; dn.counted = mine.dates?.counted || {}; } }
+    closeSheet();
+    await dateMark(dn.N.eventKey({ date: calm.day || e.date, time: e.allDay ? '' : e.start || '', title: e.title }), 'yes');
+  });
+  if (d.dateundo) return act(() => dateUncount(d.dateundo));
   if (d.rateskip) return act(() => skipRating(d.rateskip));
   if (d.tonight) { const t = tonightPick(); return t && feelSheet(t.kind, { idea: t.idea, show: t.show }); }
   if (d.ideasuggest) { const x = ideaById(d.ideasuggest); if (!x) return; const kind = x.kind === 'movie' ? 'movie' : x.kind === 'food' ? 'dinner' : 'other'; const show = x.theatres?.flatMap((th) => th.times.map((t) => ({ ...t, where: th.name }))).find((t) => t.day >= isoLocal()); return feelSheet(kind, { idea: x, show }); }
@@ -4697,7 +4841,16 @@ document.addEventListener('click', (e) => {
   if (d.outcpick) { const [i, c] = d.outcpick.split(':'); return act(() => cuisinePick(+i, c)); }
   if (d.outplan) { const p = us.plans.find((x) => x.id === d.outplan); if (!p?.outing) return; outing.cur = structuredClone(p.outing); outing.plan = p; outing.tab = 'plan'; return outingView(); }
   if (d.idea) { const i = d.idea.lastIndexOf(':'); return act(() => ideaAct(d.idea.slice(0, i), d.idea.slice(i + 1))); }
-  if (d.ideatab) { ideas.tab = d.ideatab; ideas.i = 0; return ideasSheet(); }
+  if (d.ideatab) { Object.assign(ideas, { tab: d.ideatab, i: 0, page: 1, flash: null }); return ideasSheet(); }
+  if (d.ideaview) { const [v, l] = d.ideaview.split(':'); Object.assign(ideas, { view: v, list: l || ideas.list, focus: null, flash: null, page: v === 'browse' ? ideas.page : 1 }); return ideasSheet(); }
+  if (d.ideanav) { ideas.i += +d.ideanav; ideas.flash = null; if (ideas.i < 0) ideas.i = Math.max(0, ideaDeck().length - 1); else if (ideas.i >= ideaDeck().length) ideas.i = 0; return ideasSheet(); }
+  if (d.ideaopen) {
+    // From a list or the grid: that one idea (and back); from the Us card: the deck, at that idea.
+    if (document.querySelector('#sheet[open] .di-lists, #sheet[open] .di-grid')) { Object.assign(ideas, { focus: d.ideaopen, back: d.ideaback || 'browse', flash: null }); return ideasSheet(); }
+    return act(async () => { if (!ideas.loaded) await loadIdeas(); Object.assign(ideas, { view: 'deck', tab: 'all', focus: null, flash: null }); ideas.i = Math.max(0, ideaDeck('all').findIndex((x) => x.id === d.ideaopen)); ideasSheet(); });
+  }
+  if (d.idearate) return ideaRateSheet(d.idearate);
+  if (d.idearated) { const i = d.idearated.lastIndexOf(':'); return act(() => ideaRated(d.idearated.slice(0, i), +d.idearated.slice(i + 1))); }
   if (d.match) return matchSheet(d.match);
   if (d.matchskip) return act(async () => { await api.patch(`/families/${state.fid}/ideas/matches/${d.matchskip}`, { done: true }); await loadIdeas(); closeSheet(); renderUs(); usBadge(); });
   if (d.answer) { const [id, r] = d.answer.split(':'); if ($('#sheetBody .outbody')) closeSheet(); return act(async () => { const res = await api.post(`/families/${state.fid}/us/plans/${id}/reply`, { r }); const p = us.plans.find((x) => x.id === id); if (res.plan?.agreed && p) await planToCalendar({ ...p, agreed: true, replies: res.plan.replies }); await usChanged(); if (res.plan?.agreed) toast("🎉 It's a plan — it's on the calendar"); else if (r === 'in') toast('🙌 Sent'); }); }
@@ -4822,8 +4975,12 @@ document.addEventListener('click', (e) => {
     case 'untidy': { const ta = $('#writeForm [name=body]'); ta.value = t.dataset.before || ta.value; saveDraft(); t.textContent = '✨ Tidy it up'; t.dataset.act = 'tidy'; return; }
     case 'outthread': return act(outingToThread);
     case 'outsend': return act(outingSend);
-    case 'ideaunpass': LS.set(passKey(), null); ideas.i = 0; return ideasSheet();
-    case 'ideas': return act(async () => { if (!ideas.loaded) await loadIdeas(); ideas.i = 0; ideasSheet(); });
+    case 'ideaunpass': setIdeaSt({ ...ideaSt(), pass: {} }); ideas.i = 0; return ideasSheet();
+    case 'ideas': return act(async () => { if (!ideas.loaded) await loadIdeas(); Object.assign(ideas, { i: 0, view: 'deck', focus: null, flash: null, page: 1 }); ideasSheet(); });
+    case 'ideaundo': return act(() => ideaUndo());
+    case 'ideamore': ideas.page++; return ideasSheet();
+    case 'ideahideseen': ideas.hideSeen = !ideas.hideSeen; return ideasSheet();
+    case 'ideasback': return ideasSheet();
     case 'ideaset': return act(async () => { if (!ideas.loaded) await loadIdeas(); ideaSettingsSheet(); });
     case 'linkcheck': t.disabled = true; t.textContent = '🔗 Checking…'; return act(async () => {
       const r = await api.post('/admin/links');
@@ -5594,6 +5751,33 @@ document.addEventListener('change', (e) => { if (e.target.dataset?.fxpick != nul
 // 👔 Look's own inputs, photo pickers and the box you drag over a piece.
 document.addEventListener('change', (e) => { if (!lookMod) return; if (e.target.dataset?.lkpick != null) lookMod.then((L) => L.onPick(e.target)).catch((err) => toast(err.message)); else if (e.target.dataset?.lke && e.target.tagName !== 'INPUT') lookMod.then((L) => L.onInput(e.target)).catch(() => {}); else if (e.target.dataset?.lke && e.target.type === 'checkbox') lookMod.then((L) => L.onInput(e.target)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.lke && e.target.type !== 'checkbox' && lookMod) lookMod.then((L) => L.onInput(e.target)).catch(() => {}); });
+// 🃏 Swiping an idea's picture: → want to, ← not for us (the buttons do the same, with Undo). The
+// picture still scrolls the sheet up and down.
+const swipe = { el: null, x: 0, y: 0, id: '', pid: null };
+document.addEventListener('pointerdown', (e) => {
+  const top = e.target.closest?.('[data-swipe]');
+  if (!top || e.target.closest('button, a') || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  Object.assign(swipe, { el: top.closest('.ideacard'), x: e.clientX, y: e.clientY, id: top.dataset.swipe, pid: e.pointerId });
+});
+document.addEventListener('pointermove', (e) => {
+  if (!swipe.el || e.pointerId !== swipe.pid) return;
+  const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+  if (Math.abs(dy) > Math.abs(dx) * 1.2 && Math.abs(dx) < 30) return; // scrolling, not swiping
+  swipe.el.style.transform = `translateX(${dx}px) rotate(${dx / 30}deg)`;
+  swipe.el.dataset.lean = dx > 70 ? 'want' : dx < -70 ? 'pass' : '';
+});
+function swipeEnd(e) {
+  if (!swipe.el || e.pointerId !== swipe.pid) return;
+  const el = swipe.el, id = swipe.id, dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+  swipe.el = null;
+  const x = ideaById(id), what = e.type === 'pointerup' && Math.abs(dx) > 90 && Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'pick' : 'pass') : '';
+  if (!what || !x || (what === 'pick' && picked(x))) { el.style.transform = ''; delete el.dataset.lean; return; }
+  el.style.transition = 'transform .18s ease-out';
+  el.style.transform = `translateX(${dx > 0 ? 130 : -130}%) rotate(${dx > 0 ? 14 : -14}deg)`;
+  setTimeout(() => act(() => ideaAct(id, what)), 170);
+}
+document.addEventListener('pointerup', swipeEnd);
+document.addEventListener('pointercancel', swipeEnd);
 document.addEventListener('pointerdown', (e) => { if (e.target.closest?.('[data-lkmark]') && lookMod) lookMod.then((L) => L.onPointer(e)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.rdq != null) RM().then((R) => R.onInput(e.target)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.fxe && fitMod) fitMod.then((F) => F.onInput(e.target)).catch(() => {}); });
