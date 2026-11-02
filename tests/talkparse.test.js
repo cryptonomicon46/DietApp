@@ -114,3 +114,27 @@ test('"Add … to dinner" adds to the meal; "Log dinner: …" replaces it', () =
   assert.equal(parseTalk('Add Dune to our watchlist')?.steps[0].do, 'watch.add', 'Watch still wins its own words');
   assert.equal(tidySteps([{ do: 'diet.log', meal: 'dinner', text: 'x', add: true }])[0].add, true);
 });
+
+test('📚 a book with its author, said any way round; "audiobooks" means 🎧', async () => {
+  const { parseTalk: p, tidySteps: tidy, splitByAuthor } = await import('../js/talkParse.js');
+  const want = { do: 'read.add', title: 'Fruit Fly', author: 'Josh Silver', state: 'want', recBy: '', f: 'listen' };
+  assert.deepEqual(p('To my audiobooks add this title by the author Josh Silver called fruit fly').steps[0], want, 'the request that failed');
+  assert.deepEqual(p('Add Fruit Fly by Josh Silver to my audiobooks').steps[0], want);
+  assert.deepEqual(p('Add the audiobook Fruit Fly by Josh Silver to my reading list').steps[0], want);
+  assert.deepEqual(p('On my reading list add Piranesi').steps[0], { do: 'read.add', title: 'Piranesi', author: '', state: 'want', recBy: '' });
+  assert.deepEqual(p('Add a book called Piranesi by Susanna Clarke to my books').steps[0], { do: 'read.add', title: 'Piranesi', author: 'Susanna Clarke', state: 'want', recBy: '' });
+  assert.equal(p('Add Stand by Me to my reading list').steps[0].title, 'Stand by Me', '"by Me" is not an author');
+  assert.deepEqual(p("I'm listening to Fruit Fly by Josh Silver").steps[0], { do: 'read.state', title: 'Fruit Fly', state: 'reading', author: 'Josh Silver', f: 'listen' });
+  // From Claude: an author it split off is kept; one left in the title is split here.
+  assert.deepEqual(tidy([{ do: 'read.add', title: 'fruit fly', author: 'Josh Silver' }])[0].author, 'Josh Silver');
+  assert.deepEqual(tidy([{ do: 'read.add', title: 'Fruit Fly by Josh Silver' }])[0], { do: 'read.add', title: 'Fruit Fly', author: 'Josh Silver', state: 'want', recBy: '' });
+  assert.deepEqual(splitByAuthor('Death by Chocolate'), { title: 'Death by Chocolate', author: '' }, 'one word after "by" stays in the title');
+});
+
+test('📚 the catalogue\'s books by the author you named come first', async () => {
+  const { authorHit } = await import('../family/read.js');
+  assert.equal(authorHit({ authors: [{ name: 'Josh Silver' }] }, 'josh silver'), true);
+  assert.equal(authorHit({ authors: ['Silver, Josh'] }, 'Josh Silver'), true);
+  assert.equal(authorHit({ authors: [{ name: 'Alan Kolipore' }] }, 'Josh Silver'), false);
+  assert.equal(authorHit({ authors: [] }, ''), false);
+});

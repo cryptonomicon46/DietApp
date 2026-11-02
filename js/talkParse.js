@@ -4,7 +4,7 @@
 // cleaned by the same tidySteps, so both paths give the same few step shapes:
 //   { do: 'watch.add', title, kind: 'movie' | 'show' | '', status: 'want' | 'watching' | 'finished' }
 //   { do: 'watch.status', title, status }
-//   { do: 'read.add', title, author, state: 'want' | 'reading' | 'finished', recBy: 'partner' | '' }
+//   { do: 'read.add', title, author, state: 'want' | 'reading' | 'finished', recBy: 'partner' | '', f?: 'listen' (an audiobook) }
 //   { do: 'read.state', title, state }
 //   { do: 'diet.log', meal: 'breakfast' | 'lunch' | 'dinner' | 'extra', text, plan? (true: planning ahead) }
 //   { do: 'fitness.describe', text }      { do: 'fitness.lighter' }      { do: 'care.log', chore }
@@ -20,6 +20,27 @@ const WATCH_ST = ['want', 'watching', 'finished'], READ_ST = ['want', 'reading',
 const clean = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().replace(/^["“'‘]|["”'’.!?]$/g, '').trim().slice(0, n);
 const pick = (v, list, d) => (list.includes(v) ? v : d);
 
+// 📚 "Fruit Fly by Josh Silver" → the title and the author (only when what follows "by" looks like
+// a name: two to four words, so "Stand by Me" stays a title).
+export function splitByAuthor(t) {
+  const m = String(t || '').match(/^(.+?)\s+by\s+(?:the\s+author\s+)?((?:[\p{L}.'’-]+\s+){1,3}[\p{L}.'’-]+)$/iu);
+  return m && !/\b(?:the|a|an|my|our|me|you|him|her|them|us)$/i.test(m[2]) ? { title: m[1], author: m[2] } : { title: String(t || ''), author: '' };
+}
+// What was said about a book after the list's name: "this title by the author Josh Silver called
+// fruit fly", "the audiobook Fruit Fly by Josh Silver", "called Fruit Fly".
+export function bookPhrase(rest) {
+  const r = String(rest || '').trim().replace(/^(?:this|that|the|a|an)\s+(?:title|book|audio\s*book|novel)\s*/i, '').replace(/^(?:called|titled|named)\s+/i, (x) => x);
+  let m = r.match(/^by\s+(?:the\s+author\s+)?(.+?)\s*,?\s+(?:called|titled|named)\s+(.+)$/i);
+  if (m) return { title: m[2], author: m[1] };
+  m = r.match(/^(?:called|titled|named)\s+(.+?)(?:\s*,?\s+by\s+(?:the\s+author\s+)?(.+))?$/i);
+  if (m) return { title: m[1], author: m[2] || '' };
+  return splitByAuthor(r);
+}
+// "fruit fly" said all in lower case → "Fruit Fly" (a title someone typed with capitals stays).
+const titleCase = (t) => (t === t.toLowerCase() ? t.replace(/(^|\s)(\p{L})/gu, (_, a, b) => a + b.toUpperCase()) : t);
+const BOOK_LIST = '(reading\\s+list|read(?:ing)?|books?|to-?read(?:\\s+list)?|book\\s+list|audio\\s*books?(?:\\s+list)?|listening\\s+list|listen\\s+list)';
+const isAudio = (s) => /audio|listen/i.test(s || '');
+
 // Steps from anywhere (this file or Claude) → only the allowed shapes, cleaned; at most 4.
 export function tidySteps(list) {
   const out = [];
@@ -31,9 +52,11 @@ export function tidySteps(list) {
       if (!title) continue;
       out.push(d === 'watch.add' ? { do: d, title, kind: pick(s.kind, ['movie', 'show'], ''), status: pick(s.status, WATCH_ST, 'want') } : { do: d, title, status: pick(s.status, WATCH_ST, 'watching') });
     } else if (d === 'read.add' || d === 'read.state') {
-      const title = clean(s.title, 140);
+      // "Fruit Fly by Josh Silver" said as the title: the author is split off for the search.
+      const sp = s.author ? { title: s.title, author: s.author } : splitByAuthor(clean(s.title, 220));
+      const title = titleCase(clean(sp.title, 140)), author = clean(sp.author, 80), f = s.f === 'listen' ? { f: 'listen' } : {};
       if (!title) continue;
-      out.push(d === 'read.add' ? { do: d, title, author: clean(s.author, 80), state: pick(s.state, READ_ST, 'want'), recBy: s.recBy === 'partner' ? 'partner' : '' } : { do: d, title, state: pick(s.state, READ_ST, 'reading') });
+      out.push(d === 'read.add' ? { do: d, title, author, state: pick(s.state, READ_ST, 'want'), recBy: s.recBy === 'partner' ? 'partner' : '', ...f } : { do: d, title, state: pick(s.state, READ_ST, 'reading'), ...(author ? { author } : {}), ...f });
     } else if (d === 'diet.log' || d === 'fitness.describe') {
       const text = clean(s.text, d === 'diet.log' ? 600 : 1500);
       if (!text) continue;
@@ -59,8 +82,11 @@ const RULES = [
   [/^(?:we\s+(?:finished|watched)(?:\s+watching)?|i\s+(?:finished\s+watching|watched))\s+(?!reading\b)(.+)$/i, (m) => ({ do: 'watch.status', title: m[1], status: 'finished' })],
   [/^mark\s+(.+?)\s+(?:as\s+)?(?:watched|finished)$/i, (m) => ({ do: 'watch.status', title: m[1], status: 'finished' })],
   // Read
-  [/^(?:please\s+)?add\s+(?:the\s+book\s+)?(.+?)\s+to\s+(?:our|my|the)\s+(?:reading\s+list|read(?:ing)?|books?|to-?read(?:\s+list)?|book\s+list)(?:\s*[,—–-]\s*|\s+)?(\[partner\]\s+recommended\s+it|recommended\s+by\s+\[partner\])?$/i, (m) => ({ do: 'read.add', title: m[1], state: 'want', recBy: m[2] ? 'partner' : '' })],
-  [/^i(?:'m|’m| am)\s+(?:starting|reading|listening\s+to)\s+(.+)$/i, (m) => ({ do: 'read.state', title: m[1], state: 'reading' })],
+  [new RegExp(`^(?:please\\s+)?add\\s+(.+?)\\s+to\\s+(?:our|my|the)\\s+${BOOK_LIST}(?:\\s*[,—–-]\\s*|\\s+)?(\\[partner\\]\\s+recommended\\s+it|recommended\\s+by\\s+\\[partner\\])?$`, 'i'), (m) => ({ do: 'read.add', ...bookPhrase(m[1]), state: 'want', recBy: m[3] ? 'partner' : '', ...(isAudio(m[2]) || isAudio(m[1].split(/\s+/).slice(0, 2).join(' ')) ? { f: 'listen' } : {}) })],
+  // "To my audiobooks add this title by the author Josh Silver called Fruit Fly"
+  [new RegExp(`^(?:please\\s+)?(?:to|on|in)\\s+(?:our|my|the)\\s+${BOOK_LIST}\\s*[,:]?\\s+(?:please\\s+)?add\\s+(.+)$`, 'i'), (m) => ({ do: 'read.add', ...bookPhrase(m[2]), state: 'want', recBy: '', ...(isAudio(m[1]) || isAudio(m[2].split(/\s+/).slice(0, 2).join(' ')) ? { f: 'listen' } : {}) })],
+  [/^i(?:'m|’m| am)\s+listening\s+to\s+(?:the\s+audio\s*book\s+)?(.+)$/i, (m) => ({ do: 'read.state', ...bookPhrase(m[1]), state: 'reading', f: 'listen' })],
+  [/^i(?:'m|’m| am)\s+(?:starting|reading)\s+(.+)$/i, (m) => ({ do: 'read.state', title: m[1], state: 'reading' })],
   [/^i\s+(?:started|began)\s+(?:reading\s+)?(.+)$/i, (m) => ({ do: 'read.state', title: m[1], state: 'reading' })],
   [/^i\s+finished\s+(?:reading\s+)?(.+)$/i, (m) => ({ do: 'read.state', title: m[1], state: 'finished' })],
   // Food — planning ahead ("Plan dinner: salmon and rice", "I'll have a burrito bowl for lunch") opens it with Plan it first.

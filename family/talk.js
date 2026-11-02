@@ -167,6 +167,8 @@ export async function send(text) {
   if (forMeal) steps = steps.map((s) => (s.do === 'diet.log' ? { ...s, meal: tk.meal } : s));
   // Roles back to names, in anything shown to you.
   steps = steps.map((s) => Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === 'string' && k !== 'do' ? fromTokens(v, t.map, people) : v])));
+  // "…to my audiobooks", "the audiobook …", "I'm listening to …": the book goes on as 🎧 Audiobook.
+  if (/\baudio\s*books?\b|\blisten/i.test(text)) steps = steps.map((s) => (s.do === 'read.add' || s.do === 'read.state' ? { ...s, f: 'listen' } : s));
   // A meal, a described workout or "make it lighter" on its own: straight to that area's own preview.
   // A meal or a described workout on its own: a review card here (nothing saved until you say so).
   if (steps.length === 1 && steps[0].do === 'diet.log') return proposeMeal(steps[0]);
@@ -384,10 +386,12 @@ async function resolve(s) {
     return { type: 'watchadd', title: s.title, kind: s.kind || 'show', status: s.status, go: true, note: s.do === 'watch.status' ? 'Not on your list yet' : '' };
   }
   if (s.do === 'read.add' || s.do === 'read.state') {
-    const R = await c.read(), f = await R.talkFind(s.title).catch(() => ({ results: [] }));
+    const R = await c.read(), f = await R.talkFind(s.title, s.author || '').catch(() => ({ results: [] }));
     if (f.have?.length) return { type: 'readstate', book: f.have[0], state: s.state, go: f.have[0].state !== s.state };
-    if (!f.results?.length) return { type: 'nobook', title: s.title };
-    return { type: 'readadd', results: f.results, pick: f.results.length === 1 ? 0 : null, state: s.state, recBy: s.recBy === 'partner' && c.partner() ? c.partner().id : '', go: true };
+    // The book as you said it, for when the catalogue doesn't have it (or not by that author).
+    const typed = { title: s.title, authors: s.author ? [s.author] : [], typed: true };
+    const results = f.results || [], sure = results.length === 1 && (!s.author || f.byAuthor);
+    return { type: 'readadd', results, typed, byAuthor: f.byAuthor, pick: !results.length ? 'typed' : sure ? 0 : null, state: s.state, f: s.f === 'listen' ? 'listen' : 'read', recBy: s.recBy === 'partner' && c.partner() ? c.partner().id : '', go: true };
   }
   if (s.do === 'weight.log') return { type: 'weight', lb: s.lb, go: true };
   if (s.do === 'care.log') {
@@ -404,11 +408,15 @@ function cardHtml(x, i) {
   if (x.type === 'watchstatus') return `<div class="tk-card"><b>📺 ${E(x.show.title)}</b><small class="muted">${x.go ? `${E(WATCH[x.show.status] || 'On your list')} → <b>${E(WATCH[x.status])}</b>` : `Already on your list · ${E(WATCH[x.show.status] || '')}`}</small>${x.go ? btn(`Move to ${WATCH[x.status]}`) : ''}</div>`;
   if (x.type === 'pickshow') return `<div class="tk-card"><b>Which one?</b><div class="tk-pick">${x.hits.map((h, j) => `<button type="button" data-talkpickshow="${i}:${j}">${E(h.title)} <small class="muted">· ${E(WATCH[h.status] || '')}</small></button>`).join('')}</div></div>`;
   if (x.type === 'readstate') return `<div class="tk-card"><b>📚 ${E(x.book.title)}</b><small class="muted">${x.go ? `${E(READ[x.book.state] || 'Not on your list')} → <b>${E(READ[x.state])}</b>` : `Already ${E(READ[x.book.state] || '')}`}</small>${x.go ? btn(`Move to ${READ[x.state]}`) : ''}</div>`;
-  if (x.type === 'nobook') return `<div class="tk-card"><b>📚 ${E(x.title)}</b><small class="muted">Couldn't find that book.</small><button type="button" class="ghost" data-talk="readopen">Add it in Read ›</button></div>`;
   if (x.type === 'readadd') {
-    if (x.pick == null) return `<div class="tk-card"><b>Which book?</b><div class="tk-pick">${x.results.map((b, j) => `<button type="button" data-talkpick="${i}:${j}"><b>${E(b.title)}</b> <small class="muted">${E([(b.authors || []).map((a) => a.name || a).join(', '), b.year].filter(Boolean).join(' · '))}</small></button>`).join('')}</div></div>`;
-    const b = x.results[x.pick], p = c.partner();
-    return `<div class="tk-card"><b>📚 ${E(b.title)}</b><small class="muted">${E([(b.authors || []).map((a) => a.name || a).join(', '), b.year].filter(Boolean).join(' · '))} → ${E(READ[x.state])}</small>
+    const by = (b) => [(b.authors || []).map((a) => a.name || a).join(', '), b.year].filter(Boolean).join(' · ');
+    const t = x.typed, asSaid = `<button type="button" data-talkpick="${i}:typed"><b>＋ ${E(t.title)}</b> <small class="muted">${t.authors.length ? `${E(t.authors.join(', '))} · ` : ''}add it as you said it</small></button>`;
+    const list = x.results.map((b, j) => `<button type="button" data-talkpick="${i}:${j}"><b>${E(b.title)}</b> <small class="muted">${E(by(b))}</small></button>`).join('');
+    // No book by that author in the catalogue: yours comes first, the near matches after.
+    if (x.pick == null) return `<div class="tk-card"><b>Which book?</b>${t.authors.length && !x.byAuthor ? `<small class="muted">The book catalogue has nothing by ${E(t.authors[0])} called that.</small>` : ''}<div class="tk-pick">${t.authors.length && !x.byAuthor ? asSaid + list : list + asSaid}</div></div>`;
+    const b = x.pick === 'typed' ? t : x.results[x.pick], p = c.partner();
+    const fmt = `<div class="seg tk-seg"><button type="button" class="${x.f !== 'listen' ? 'on' : ''}" aria-pressed="${x.f !== 'listen'}" data-talkset="${i}:f:read">📖 Book</button><button type="button" class="${x.f === 'listen' ? 'on' : ''}" aria-pressed="${x.f === 'listen'}" data-talkset="${i}:f:listen">🎧 Audiobook</button></div>`;
+    return `<div class="tk-card"><b>${x.f === 'listen' ? '🎧' : '📚'} ${E(b.title)}</b><small class="muted">${E(by(b))}${b.typed ? `${by(b) ? ' · ' : ''}as you said it${x.results.length ? '' : ' (not in the book catalogue)'}` : ''} → ${E(READ[x.state])}</small>${x.done ? '' : fmt}
       ${p && !x.done ? `<label class="tk-rec"><input type="checkbox" data-talkrec="${i}" ${x.recBy ? 'checked' : ''}> Recommended by ${E(p.first)}</label>` : ''}${btn('Add to Read')}</div>`;
   }
   if (x.type === 'answer') return `<div class="tk-card tk-answer">${SPEAK_OK() ? '<button type="button" class="icon-btn tk-say" data-talk="speak" aria-label="Read this aloud">🔊</button>' : ''}${E(x.text).replace(/\n/g, '<br>')}${(x.go || []).map((g) => `<a class="tk-go small" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(g.q)}&travelmode=driving" target="_blank" rel="noopener">🚗 ${E(g.name)}${g.min ? ` · ${g.min} min now` : ''} · Directions ›</a>`).join('')}${x.to === 'health' ? '<button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button>' : '<button type="button" class="linkish small" data-talk="calopen">Open Calendar ›</button>'}</div>`;
@@ -440,9 +448,9 @@ async function go(i) {
       await c.watchStatus(x.show.id, x.status);
       x.done = WATCH[x.status]; x.undo = () => c.watchStatus(x.show.id, before || 'want'); x.said = `📺 ${x.show.title} → ${WATCH[x.status]}`;
     } else if (x.type === 'readadd') {
-      const R = await c.read(), b = x.results[x.pick];
-      const id = await R.talkAdd(b, x.state, x.recBy);
-      x.done = 'Added'; x.undo = () => R.talkUndoAdd(id); x.said = `📚 ${b.title} → ${READ[x.state]}`;
+      const R = await c.read(), b = x.pick === 'typed' ? x.typed : x.results[x.pick];
+      const id = await R.talkAdd(b, x.state, x.recBy, x.f);
+      x.done = 'Added'; x.undo = () => R.talkUndoAdd(id); x.said = `${x.f === 'listen' ? '🎧' : '📚'} ${b.title} → ${READ[x.state]}${x.f === 'listen' ? ' · Audiobook' : ''}`;
     } else if (x.type === 'readstate') {
       const R = await c.read(), before = await R.talkSetState(x.book.id, x.state);
       x.done = READ[x.state]; x.undo = () => R.talkSetState(x.book.id, before || 'want'); x.said = `📚 ${x.book.title} → ${READ[x.state]}`;
@@ -474,7 +482,7 @@ export async function onClick(t) {
   if (d.talkgo != null) return go(+d.talkgo);
   if (d.talkundo != null) { const x = tk.cards?.[+d.talkundo]; if (!x?.undo) return null; await x.undo(); Object.assign(x, { done: '', undo: null, said: '' }); c.toast('Undone'); return redraw(); }
   if (d.talkset) { const [i, k, v] = d.talkset.split(':'); tk.cards[+i][k] = v; return redraw(); }
-  if (d.talkpick) { const [i, j] = d.talkpick.split(':').map(Number); tk.cards[i].pick = j; return redraw(); }
+  if (d.talkpick) { const [i, j] = d.talkpick.split(':'); tk.cards[+i].pick = j === 'typed' ? 'typed' : +j; return redraw(); }
   if (d.talkpickshow) { const [i, j] = d.talkpickshow.split(':').map(Number); const x = tk.cards[i]; tk.cards[i] = { type: 'watchstatus', show: x.hits[j], status: x.status, go: true }; return redraw(); }
   if (d.talkcare) { const [i, kind] = d.talkcare.split(':'); const k = tk.cards[+i].kinds.find((y) => y.kind === kind); tk.cards[+i] = { type: 'care', care: k, go: true }; return redraw(); }
   if (d.talk === 'all') { for (let i = 0; i < tk.cards.length; i++) if (tk.cards[i].go && !tk.cards[i].done && tk.cards[i].type !== 'handoff') await go(i); return null; }
@@ -491,7 +499,6 @@ export async function onClick(t) {
   if (d.talk === 'calopen') { c.closeSheet(); return c.show('calendar'); }
   if (d.talk === 'healthopen') { c.closeSheet(); return c.show('health'); }
   if (d.talk === 'seen') { try { c.LS.set(SEEN, '1'); } catch { /* private mode */ } return draw(); }
-  if (d.talk === 'readopen') { c.closeSheet(); return c.show('read'); }
   return null;
 }
 export function onChange(t) { if (t.dataset.talkrec != null) { const x = tk.cards[+t.dataset.talkrec]; x.recBy = t.checked && c.partner() ? c.partner().id : ''; } }
