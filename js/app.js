@@ -21,6 +21,7 @@ import { initDress } from './dressTab.js';
 import { initLift, renderLift, applyAssistantActions, setCommandFeedback } from './lift.js';
 import { scoreDay, tally, MILESTONES } from './rewards.js';
 import { consistency, burnSummary } from './dietDays.js';
+import { targetsForDay, isSick, sickDates } from './sickDay.js';
 import { store, global, PROFILES, activeProfile, setActiveProfile, ownerId, setOwner, exportProfile, importProfile, profileStore } from './storage.js';
 import { sync, pushNow } from './sync.js';
 import { account } from './account.js';
@@ -89,7 +90,7 @@ function currentWeight() {
 }
 
 // The day's numbers come from js/dayPlan.js (Health works them out the same way).
-const dataNow = () => ({ profile: state.profile, weights: state.weights, adjust: state.adjust, macroAdjust: state.macroAdjust, workouts: state.workouts, activities: state.activities, whoopTotal: state.whoopTotal, deviceTotal: store.get('deviceTotal', {}), eaten: state.eaten });
+const dataNow = () => ({ profile: state.profile, weights: state.weights, adjust: state.adjust, macroAdjust: state.macroAdjust, workouts: state.workouts, activities: state.activities, whoopTotal: state.whoopTotal, deviceTotal: store.get('deviceTotal', {}), eaten: state.eaten, sick: store.get('sick', {}) });
 const baseTargets = () => baseTargetsOf(dataNow());
 
 const firstName = () => (state.profile?.name || '').trim().split(/\s+/)[0];
@@ -314,9 +315,10 @@ function viewLog() {
 
 const todaysTraining = () => trainingOf(dataNow(), isoDate());
 
-// Today's targets, including workout calories and intra-workout carbs.
+// Today's targets, including workout calories and intra-workout carbs (and, on a 🤒 sick day set
+// on Health, maintenance calories with the same protein: js/sickDay.js).
 function targets() {
-  return applyTraining(baseTargets(), todaysTraining());
+  return applyTraining(targetsForDay(baseTargets(), dataNow(), isoDate()), todaysTraining());
 }
 
 // ---------- formatting ----------
@@ -1099,7 +1101,8 @@ function mealModes(meal, m) {
 function restDayBar() {
   const c = todaysCustom();
   const on = ['breakfast', 'lunch', 'dinner'].every((x) => c[x]?.lowCarb);
-  return `<div class="card restday"><label class="switch-row"><span><b>😴 Rest day: low-carb meals</b><small>Fewer carbs in all three meals, protein the same. Or set it per meal.</small></span><input type="checkbox" data-restday ${on ? 'checked' : ''}><i class="switch"></i></label></div>`;
+  const sick = viewingToday() && isSick(dataNow(), isoDate()) ? '<div class="card restday"><p class="small" style="margin:0"><b>🤒 Sick day</b> — calories at maintenance today, protein the same. Turn it off on 💪 Health.</p></div>' : '';
+  return `${sick}<div class="card restday"><label class="switch-row"><span><b>😴 Rest day: low-carb meals</b><small>Fewer carbs in all three meals, protein the same. Or set it per meal.</small></span><input type="checkbox" data-restday ${on ? 'checked' : ''}><i class="switch"></i></label></div>`;
 }
 document.addEventListener('change', (e) => {
   const t = e.target;
@@ -1855,7 +1858,7 @@ function renderCheckin() {
   const r = weeklyReview({
     days: weekDays.map((d) => ({ date: d, ...(state.days[d] || {}) })), weights: phaseWeights(),
     targetKcal: base.kcal, targetRate: phase === 'cut' ? base.lbPerWeek : 0, floor: state.profile.sex === 'male' ? 1500 : 1200,
-    weightLb: currentWeight(), weeksIn: win.week, plannedWeeks, phase, feeling: draft.feeling,
+    weightLb: currentWeight(), weeksIn: win.week, plannedWeeks, phase, feeling: draft.feeling, sickDates: sickDates(dataNow()),
   });
   const wow = weekOverWeek(state.weights);
   const suggested = r.id === 'suggested' ? { id: 'suggested', label: `${r.delta > 0 ? '+' : '−'}${Math.abs(r.delta)} kcal`, detail: (() => { const m = deltaMacros(r.delta); return `${m.c > 0 ? '+' : '−'}${Math.abs(m.c)} g carbs, ${m.f > 0 ? '+' : '−'}${Math.abs(m.f)} g fat · protein stays`; })(), delta: deltaMacros(r.delta) } : null;
@@ -1959,7 +1962,7 @@ function weekReview(from) {
   return weeklyReview({
     days: days.map((d) => ({ date: d, ...(state.days[d] || {}) })), weights: phaseWeights(), targetKcal: base.kcal,
     targetRate: phase === 'cut' ? base.lbPerWeek : 0, floor: state.profile.sex === 'male' ? 1500 : 1200, weightLb: currentWeight(),
-    weeksIn: win?.week || 1, plannedWeeks: state.profile.phaseWeeks || PHASES[phase].weeks, phase, feeling: draft?.feeling,
+    weeksIn: win?.week || 1, plannedWeeks: state.profile.phaseWeeks || PHASES[phase].weeks, phase, feeling: draft?.feeling, sickDates: sickDates(dataNow()),
   });
 }
 function weekCsv(from) { return toCsv(weekRows(exportProfile(activeProfile().id), from)); }

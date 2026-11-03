@@ -148,6 +148,20 @@ export function howAsk(text) {
   if (/\b(weight|weigh[- ]?ins?)\b/i.test(what)) return { topic: 'weight' };
   return null;
 }
+// 🤒 "I'm sick today", "I've got a cold", "not feeling well", "make today a sick day" → { on: true };
+// "I'm feeling better", "end my sick day" → { on: false }. Only about you (never "Pat is sick"), and
+// not "sick of…" or a cold brew. Read on the phone; nothing is sent anywhere.
+export function sickAsk(text) {
+  const t = String(text || '').toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '');
+  if (!t || t.length > 160 || /\bsick (?:of|and tired)\b/.test(t)) return null;
+  const me = "(?:i'?m|i am|i feel|i'm feeling|i am feeling|feeling|i've been|i have been|been)";
+  if (new RegExp(`^(?:(?:hi|hey|ok|okay)[,!]?\\s+)?(?:${me}\\s+(?:much\\s+|a lot\\s+|a bit\\s+)?better|i'?m not sick any ?more|i'?m no longer sick|(?:end|stop|turn off|cancel|finish)\\s+(?:the\\s+|my\\s+|today'?s\\s+)?sick ?day)\\b`).test(t)) return { on: false };
+  if (/\b(?:make|start|turn on|set|it'?s|today is)\b.{0,20}\bsick ?day\b/.test(t) || /^sick ?day\b/.test(t)) return { on: true };
+  if (new RegExp(`(?:^|\\b)${me}\\s+(?:a (?:bit|little)\\s+|really\\s+|so\\s+|pretty\\s+|kind of\\s+|very\\s+)?(?:sick|ill|unwell|under the weather|poorly)\\b`).test(t)) return { on: true };
+  if (/\bnot feeling (?:so |too |very )?(?:well|good|great)\b/.test(t)) return { on: true };
+  if (/\bi(?:'ve| have)?(?: got| caught| come down with)? (?:a |the |some )?(?:cold|flu|fever|sore throat|stomach bug|tummy bug|bug|virus|covid|cough|stomach flu|chest infection)\b(?! ?(?:brew|coffee|plunge|shower|drink|one|brew))/.test(t)) return { on: true };
+  return null;
+}
 // → { steps } when the phone could read it all, else null (ask Claude, if it's on).
 export function parseTalk(text) {
   const t = String(text || '').replace(/\s+/g, ' ').trim().replace(/[.!]+$/, '');

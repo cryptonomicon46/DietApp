@@ -533,6 +533,9 @@ function talk() {
       careLog: async (kind) => { const r = await api.post(`/families/${state.fid}/care`, { kind, date: isoLocal(), by: 'me' }); if (state.view === 'home') { renderCare(); renderRace(); } return r.entry?.id; },
       weighLog: (lb) => saveWeight(lb),
       weighUndo: (prev) => undoWeight(prev),
+      // 🤒 "I'm sick today" / "I'm feeling better": the day on or off (returns what it was, for Undo).
+      sickSet: (on) => sickSave((S, s, day) => S.setSick(s, day, on)),
+      sickNow: async () => { const d = health.data || await openData(await memberData().catch(() => null)).catch(() => null); return !!d?.sick?.[isoLocal()]; },
       careUndo: async (id) => { if (id) await api.del(`/families/${state.fid}/care/${isoLocal()}/${id}`); if (state.view === 'home') { renderCare(); renderRace(); } },
       dietTell: async (meal, text, opts = {}) => { const M = await dietReady(); return M.tellWith(meal, text, opts); },
       // 📷 A meal eaten out, from the photo taken or picked in Talk: the meal photo sheet, estimating it.
@@ -618,8 +621,55 @@ async function healthView() {
   health.data = data;
   if (mealMod) mealMod.then((M) => M.setData(data)).catch(() => {});
   const whoop = wh && WD ? whoopModel(wh, WD, F ? F.lighterState() : null) : null;
-  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today: isoLocal(), hour: new Date().getHours(), now: Date.now(), photosToday, workout: F ? F.healthRow(esc) : undefined, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), devices: devicesLine(), whoop })}</div>`;
+  const today = isoLocal();
+  let sickAsked = false;
+  try { sickAsked = localStorage.getItem('fam.sick.asked') === today; } catch { /* private mode */ }
+  $('#view').innerHTML = `${demoBanner()}<div class="health-page">${H.healthHtml(data, { esc, today, hour: new Date().getHours(), now: Date.now(), photosToday, workout: F ? F.healthRow(esc) : undefined, reminder: nudges ? !!nudges.weighin : null, sharing: sharingLine(), devices: devicesLine(), whoop, sickWeigh: sickUi.weigh === today, sickWorkout: sickUi.workout === today, sickAsked })}</div>`;
   if (wh) { whoopAutoSync(); whoopTicker(); }
+}
+// 🤒 Sick day (js/sickDay.js): turned on by you — here or by telling Talk — never guessed. Each
+// change shows at once on Health and is saved into your trackers right behind it (editMine), with
+// today's summary kept in step (maintenance calories, left out of the check-in); if the save fails,
+// Health goes back and says so.
+const sickUi = { weigh: '', workout: '' };
+const memStore = (d) => ({ get: (k, f) => (k in d && d[k] !== undefined ? d[k] : f), set: (k, v) => { d[k] = v; } });
+async function sickSave(apply) {
+  const [S, D] = await Promise.all([import(`../js/sickDay.js?v=${VERSION}`), import(`../js/dayPlan.js?v=${VERSION}`)]);
+  const today = isoLocal();
+  const run = (s) => { D.rollDay(s, today); const out = apply(S, s, today, D); try { D.record(s, today); } catch { /* no plan yet */ } return out; };
+  const before = health.data ? structuredClone(health.data) : null;
+  let out = null;
+  if (health.data) { out = run(memStore(health.data)); seedMine(health.data); if (mealMod) mealMod.then((M) => M.setData(health.data)).catch(() => {}); if (state.view === 'health') healthView(); }
+  const saved = editMine((s) => run(s)).catch(async (e) => {
+    if (before) { health.data = before; seedMine(before); }
+    toast(`Not saved — ${e.message || 'try again'}`);
+    if (state.view === 'health') healthView();
+    throw e;
+  });
+  if (!health.data) out = await saved;
+  else saved.catch(() => {});
+  return out;
+}
+async function sickClick(t) {
+  const [a, x, y] = String(t.dataset.sick).split(':'), today = isoLocal();
+  if (a === 'on' || a === 'off') {
+    const before = await sickSave((S, s, day) => S.setSick(s, day, a === 'on'));
+    return toast(a === 'on' ? '🤒 Sick day on — no calorie cut today. Rest up.' : "😊 Glad you're feeling better — back to your plan", () => sickSave((S, s, day) => S.setSick(s, day, before)).then(() => toast('Undone')));
+  }
+  if (a === 'better') { try { localStorage.setItem('fam.sick.asked', today); } catch { /* private mode */ } toast("😊 Good to hear — back to your plan today"); return healthView(); }
+  if (a === 'weigh') { sickUi.weigh = today; await healthView(); return document.getElementById('hlWeigh')?.focus(); }
+  if (a === 'workout') { sickUi.workout = today; return healthView(); }
+  if (a === 'fluid') { const n = await sickSave((S, s, day) => S.addFluid(s, day, +x || 1)); return +x > 0 && n != null ? toast(`💧 ${n} cup${n === 1 ? '' : 's'} today`) : null; }
+  if (a === 'comfort') return sickSave((S, s, day) => S.toggleComfort(s, day, x));
+  if (a === 'drink') {
+    const r = await sickSave((S, s, day, D) => { const d = S.feelDrink(x); if (!d) return null; const n = S.addFluid(s, day, d.cups), e = S.drinkExtra(d); if (e) D.addExtras(s, day, [e]); return { d, n }; });
+    return r ? toast(`💧 ${r.d.name}${r.d.kcal ? ` · ${r.d.kcal} kcal logged` : ''} · ${r.n} cup${r.n === 1 ? '' : 's'} today`) : null;
+  }
+  if (a === 'easy') {
+    const e = await sickSave((S, s, day, D) => { const f = S.easyFood(y); return f ? D.logAs(s, day, x, S.easyEntry(f)) : null; });
+    return e ? toast(`✓ ${{ breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Snack', dinner: 'Dinner' }[x] || 'Meal'} logged · ${e.title} · ${e.kcal} kcal`) : null;
+  }
+  return null;
 }
 // 📸 The poses of today's progress photos on this phone (js/photos.js; never leaves it).
 async function posesToday() {
@@ -4759,6 +4809,7 @@ document.addEventListener('click', (e) => {
   // From Health: open Fitness on the right screen (Start Workout starts it and opens Train).
   if (d.lk) return act(async () => (await looks()).onClick(t));
   if (d.wi) return act(async () => (await weighIn()).onClick(t));
+  if (d.sick) return act(() => sickClick(t));
   if (d.ml) return act(async () => { const M = await meals(); if (health.data) M.setData(health.data); return M.onClick(t); });
   if (d.fx) return act(async () => { const F = await fit(); if (['open', 'main', 'add', 'today', 'train', 'start'].includes(d.fx) && state.view !== 'fitness') { if (d.fx === 'start') F.begin(); else F.state.view = { open: 'today', today: 'today', train: 'train' }[d.fx] || 'main'; return show('fitness'); } return F.onClick(t); });
   if (d.discuss) return act(() => discuss(d.discuss, d.dtitle || '💬', d.dbody || ''));

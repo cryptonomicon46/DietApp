@@ -567,19 +567,24 @@ export function isCheckinDue(start, today, checkins = [], snoozedOn = null) {
 // a maintenance phase / diet break of 1–2 weeks (Byrne 2018 MATADOR; Peos 2021 ICECAP).
 // in: { days: [{date, eaten, target}], weights: [{date, weight}] (this phase), targetKcal, targetRate
 //       (lb/wk lost; 0 maintenance), floor, weightLb, weeksIn, plannedWeeks, phase, feeling }
+//     sickDates: days marked 🤒 sick — left out of the food average and the weight trend.
 export function weeklyReview(o) {
-  const logged = (o.days || []).filter((d) => d.eaten > 300);
+  const sick = new Set([...(o.sickDates || []), ...(o.days || []).filter((d) => d.sick).map((d) => d.date)]);
+  const logged = (o.days || []).filter((d) => d.eaten > 300 && !sick.has(d.date));
   const avgIntake = logged.length ? Math.round(logged.reduce((a, d) => a + d.eaten, 0) / logged.length) : null;
   const avgTarget = logged.length ? Math.round(logged.reduce((a, d) => a + (d.target || o.targetKcal), 0) / logged.length) : o.targetKcal;
-  const trend = weeklyTrend(o.weights || [], 14);
-  const lost = trend && trend.spanDays >= 6 && (o.weights || []).length >= 3 ? +(-trend.lbPerWeek).toFixed(2) : null;
+  const weights = (o.weights || []).filter((w) => !sick.has(w.date));
+  const trend = weeklyTrend(weights, 14);
+  const lost = trend && trend.spanDays >= 6 && weights.length >= 3 ? +(-trend.lbPerWeek).toFixed(2) : null;
   const enoughFood = logged.length >= 4;
   const onPlan = enoughFood && Math.abs(avgIntake - avgTarget) <= avgTarget * 0.1;
   const tdee = enoughFood && lost != null ? Math.round(avgIntake + (lost * KCAL_PER_LB) / 7) : null;
   const cutting = (o.phase || 'cut') === 'cut';
   const struggling = ['hungry', 'tired', 'hard'].includes(o.feeling);
   const pctPerWeek = lost != null && o.weightLb ? (lost / o.weightLb) * 100 : null;
-  const out = { logged: logged.length, avgIntake, avgTarget, lost, tdee, pctPerWeek, onPlan, notes: [] };
+  const sickDays = (o.days || []).filter((d) => sick.has(d.date)).length;
+  const out = { logged: logged.length, avgIntake, avgTarget, lost, tdee, pctPerWeek, onPlan, sickDays, notes: [] };
+  if (sickDays) out.notes.push(`${sickDays} sick day${sickDays === 1 ? '' : 's'} left out of this week's numbers.`);
   const round50 = (x) => Math.round(x / 50) * 50;
   const clampDelta = (d) => Math.max(o.floor - o.targetKcal, Math.max(-250, Math.min(250, d)));
 
@@ -595,7 +600,8 @@ export function weeklyReview(o) {
   }
   if (!enoughFood) {
     out.id = 'keep'; out.delta = 0;
-    out.why = `Only ${logged.length} day${logged.length === 1 ? '' : 's'} of meals logged this week — not enough to judge. Keep your targets and log most days so next week's check-in can fine-tune.`;
+    out.why = sickDays ? `${sickDays} sick day${sickDays === 1 ? '' : 's'} this week, so only ${logged.length} day${logged.length === 1 ? '' : 's'} to go on — not enough to judge. Keep your targets; next week's check-in can fine-tune.`
+      : `Only ${logged.length} day${logged.length === 1 ? '' : 's'} of meals logged this week — not enough to judge. Keep your targets and log most days so next week's check-in can fine-tune.`;
     return out;
   }
   if (avgIntake > avgTarget * 1.1 && cutting) {
