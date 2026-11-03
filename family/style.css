@@ -1745,3 +1745,6 @@ button.ml-opt.on > span:last-child { color: var(--brand); font-weight: 800; }
 .tk-way b { display: block; }
 .tk-way small { display: block; color: var(--muted); }
 .tk-way .linkish { display: inline-block; min-height: 36px; margin-right: 10px; text-align: left; }
+/* 🔥 Burned today (WHOOP) under the calorie and protein bars */
+.hl-today .hl-burned { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.hl-today .hl-burned-note { margin: 2px 0 0; }

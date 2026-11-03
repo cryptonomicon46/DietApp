@@ -195,6 +195,8 @@ function foodRow(f, esc, hot) {
 // than your usual or the night was short, and there's a workout today — an offer to make it
 // lighter, previewed first. WHOOP informs; it never changes your plan by itself. Private to you.
 // WHOOP's own palette (WHOOP Brand & Design Guidelines): its scores keep its colours.
+// 🔥 Burned today, from WHOOP (only with WHOOP connected on this phone): resting plus activity so far.
+const burnedRow = (kcal) => (Number.isFinite(kcal) && kcal > 0 ? `<div class="row between hl-burned"><span class="small">🔥 Burned · WHOOP</span><span class="small"><b>${Math.round(kcal).toLocaleString()}</b> kcal so far</span></div><p class="tiny muted hl-burned-note">Resting plus activity today, as WHOOP counts it.</p>` : '');
 export function healthHtml(data, ctx) {
   const { esc } = ctx, d = dietSummary(data, ctx.today);
   const pr = d.progress, hour = ctx.hour ?? 9;
@@ -216,7 +218,8 @@ export function healthHtml(data, ctx) {
   const nutrition = !d.set
     ? '<p class="small muted">Set your goal and your plan works out calories and protein for each day.</p><a class="btn wide" href="../#weight">Set up Diet</a>'
     : `${t ? `<div class="hl-today"><div class="row between"><span class="small">Calories</span><span class="small"><b>${t.kcal.toLocaleString()}</b> / ${t.kcalTarget.toLocaleString()} kcal</span></div>${bar(t.kcal, t.kcalTarget)}
-        <div class="row between"><span class="small">Protein</span><span class="small"><b>${t.p}</b> / ${t.pTarget} g</span></div>${bar(t.p, t.pTarget)}</div>` : ''}
+        <div class="row between"><span class="small">Protein</span><span class="small"><b>${t.p}</b> / ${t.pTarget} g</span></div>${bar(t.p, t.pTarget)}
+        ${burnedRow(ctx.whoop?.burned)}</div>` : ''}
       ${t?.alc ? `<p class="tiny muted">Includes ${t.alc} kcal from alcohol (counted apart from protein, carbs and fat).</p>` : ''}
       ${pr ? `<a class="hl-plan" href="../#today"><span class="small">${esc(pr.phaseLabel)}${pr.week ? ` · week ${pr.week} of ${pr.weeks}` : ''}</span>${status}</a>` : ''}
       ${d.completeDays ? `<p class="tiny muted">${d.completeDays} complete day${d.completeDays === 1 ? '' : 's'} logged this week${d.completeDays >= 4 ? ' — enough for a useful weekly check-in' : ''}.</p>` : ''}
