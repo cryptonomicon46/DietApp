@@ -21,7 +21,8 @@ test('the opening is in the page, hidden from screen readers, with no script of 
 });
 
 test('it lifts by itself, has a dark look and a Reduce Motion fade, and moves only transform/opacity', () => {
-  assert.match(css, /\.splash \{[^}]*animation: sp-out \.42s ease-in 6s both/);
+  assert.match(css, /\.splash \{[^}]*animation: sp-out \.42s ease-in 10s both; --sp-t: 3;/);
+  assert.match(css, /\.splash\.done\.skip \{ animation: sp-out \.25s/);
   assert.match(css, /\.nosplash \.splash \{ display: none; \}/);
   assert.match(css, /:root\[data-theme=dark\] \.splash/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.sp-paw, \.sp-toe, \.sp-heart \{ animation: none; \}/);
@@ -34,6 +35,8 @@ test('cold launches only, and the app lifts it once the first screen is drawn', 
   assert.match(theme, /\/family\\\/\(index\\\.html\)\?\$/);
   assert.match(app, /function splashDone\(\)/);
   assert.match(app, /\.finally\(splashDone\);/);
-  assert.match(app, /calm \? 300 : 1280/);
+  assert.match(app, /calm \? 300 : SPLASH_MS/);
+  assert.match(app, /const SPLASH_MS = 3 \* 1280;/);
+  assert.match(app, /getElementById\('splash'\)\?\.addEventListener\('click'/);
   assert.equal(manifest.background_color, '#2f7d5b');
 });

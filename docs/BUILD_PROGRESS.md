@@ -4,6 +4,14 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🐾 Opening, slow-mo (2026-11-03, `v2/splash-slow` from `main` `3b8a80f`; owner: "I prefer the slowmo ×3", and confirm it plays only on a cold launch)
+
+- `family/style.css`: every opening duration and delay is now `calc(var(--sp-t) * …)` with `--sp-t: 3`. That's about 3.8 s to the full name and tagline, then a 1.3 s fade. The self-lift moved from 6 s to 10 s.
+- `family/app.js`: `SPLASH_MS = 3 × 1280`; **a tap skips** (`liftSplash(el, true)`, 0.25 s fade).
+- Unchanged: cold launch only (`theme.js` gate); Reduce Motion is still a short fade.
+- Cost, stated to the owner: Home is usually ready in about 1.3 s, so every cold launch now shows the opening for about 3.5 s longer than needed, unless tapped.
+- Docs: README, help guide, ARCHITECTURE.
+
 ### 🐾 Opening animation (2026-11-03, `v2/splash` from `main` `c04c209`; front end only, no `pawdeploy`; owner: "Build it into the app with standard timing", every cold launch; prototype: the paw-splash artifact)
 
 **Done:**
