@@ -148,3 +148,44 @@ test('the finish time can be tuned between 1.5 and 6 s', () => {
   assert.equal(finishMsOf(500), LISTEN.finishMs);
   assert.equal(finishMsOf('x'), LISTEN.finishMs);
 });
+
+// A real recogniser says when its microphone started (onaudiostart); iPhone sometimes never does.
+function realPhone({ deadFirst = 0 } = {}) {
+  const made = [];
+  const create = (o = {}) => {
+    const dead = made.length < deadFirst;
+    const r = { onaudiostart: null, onstart: null, started: 0, aborted: 0, fresh: !!o.fresh, start() { this.started++; if (!dead) queueMicrotask(() => this.onaudiostart?.call(this)); }, stop() {}, abort() { this.aborted++; } };
+    r.say = (finals) => r.onresult({ resultIndex: 0, results: finals.map((x) => Object.assign([{ transcript: x }], { isFinal: true })) });
+    made.push(r);
+    return r;
+  };
+  return { create, made, get r() { return made[made.length - 1]; } };
+}
+const settle = () => new Promise((r) => setTimeout(r, 0));
+
+test('🎤 a microphone that never starts: one fresh recogniser, then "didn\'t start" — no app restart needed', async () => {
+  const c = clock(), p = realPhone({ deadFirst: 1 }), s = makeListener({ create: p.create, timers: c, now: c.now });
+  await settle();
+  c.tick(LISTEN.bootMs + 10);
+  assert.equal(p.made.length, 2, 'a fresh one is tried');
+  assert.equal(p.made[0].aborted, 1);
+  assert.equal(p.made[1].fresh, true);
+  await settle();
+  c.tick(LISTEN.bootMs + 10);
+  assert.equal(s.ended, false, 'the fresh one started: still listening');
+  p.r.say(['log my weight 160']);
+  c.tick(LISTEN.finishMs + 10);
+  assert.equal(s.text, 'log my weight 160');
+
+  const c2 = clock(), p2 = realPhone({ deadFirst: 9 }), s2 = makeListener({ create: p2.create, timers: c2, now: c2.now });
+  await settle(); c2.tick(LISTEN.bootMs + 10); await settle(); c2.tick(LISTEN.bootMs + 10);
+  assert.deepEqual([s2.ended, s2.reason, s2.error, p2.made.length], [true, 'error', 'no-start', 2], 'two silent ones: say so, once');
+});
+
+test('🎤 a microphone that starts normally is never second-guessed', async () => {
+  const c = clock(), p = realPhone(), s = makeListener({ create: p.create, timers: c, now: c.now });
+  await settle();
+  c.tick(LISTEN.bootMs * 2);
+  assert.equal(p.made.length, 1);
+  assert.equal(s.ended, false);
+});

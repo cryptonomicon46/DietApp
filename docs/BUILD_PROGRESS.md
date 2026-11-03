@@ -4,6 +4,35 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🎤 Steadier microphone on iPhone: fewer asks, no app restart when it goes deaf (2026-11-03, `v2/mic-steady` from `main` `007a7bd`; front end only, no `pawdeploy`; owner: "it asks to allow permissions and sometimes doesn't take in audio input, needs me to close and reopen the app")
+
+**Likely causes found:**
+1. A new `SpeechRecognition` was created for every listen *and* every automatic restart. iPhone asks per recogniser.
+2. With "Read answers aloud" on, every 🎤 tap also spoke a silent word in the same instant the microphone opened. On iPhone this can leave recognition deaf.
+3. After the app was in the background, the recogniser could be left dead, and nothing noticed that its microphone never started.
+
+**Done:**
+- `family/app.js`:
+  - `recogniser()` reuses one per app run. It makes a new one only when the last is busy, is asked for `fresh`, or after the app was hidden.
+  - Speech is cancelled before listening, and the iOS primer runs once per run.
+  - A `visibilitychange` handler on hidden stops (keeps words) or aborts the session, and drops the recogniser.
+- `js/listen.js`: a 3 s watch on a real recogniser's `onaudiostart`. No audio → one fresh recogniser; still none → `no-start`.
+- `family/talk.js`: the `no-start` message ("The microphone didn't start — tap 🎤 to try again, or type.").
+- README, help guide, ARCHITECTURE.
+
+**Not fixable in code:** in a Home Screen web app, iOS may still ask once each time the app is opened. That is the phone's own rule.
+
+**Tests:** `tests/listen.test.js` (+2): a dead mic leads to one fresh recogniser and then `no-start`; a normal mic is never second-guessed. `npm test` 580/580.
+
+**Browser check** (fake recogniser that reports `onaudiostart`):
+- 1 recogniser made for the first listen, the phone-ended restart and a second listen.
+- Words heard → weight card.
+- Going hidden ended listening, and the next listen made a fresh one.
+- A recogniser that never starts → 2 made, then "The microphone didn't start…".
+- No page errors.
+
+**To watch:** the silent primer is now spoken and cancelled right away. If 🔊 Read answers aloud stops speaking on iPhone, that is the place to look.
+
 ### ⚙️ Free start-up space: Me and Family settings load when opened (2026-11-02, `v2/lazy-settings` from `main` `392e804`; front end only, no `pawdeploy`; owner: "Free up startup space by lazy-loading Me and Family settings")
 
 **Done:** eight functions moved out of `family/app.js` into a new lazy `family/settings.js`:

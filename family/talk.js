@@ -66,7 +66,7 @@ export function open(tab = 'home', { voice = null, meal = null } = {}) {
 const BLOCKED = /iPhone|iPad|iPod/.test(globalThis.navigator?.userAgent || '')
   ? "The microphone or speech recognition is blocked for Pawmily. On iPhone: Settings › Privacy & Security › Speech Recognition and › Microphone — turn on Safari (or OurPawmily); and Settings › Apps › Safari › Microphone › Ask. Then close Pawmily fully and open it again. Or type."
   : "The microphone is blocked for this app — allow it in your browser's or phone's settings, then open the app again. Or type.";
-const SPEECH_ERR = { 'not-allowed': BLOCKED, 'service-not-allowed': BLOCKED, 'no-speech': "I didn't hear anything — tap 🎤 to try again, or type.", 'audio-capture': "The microphone isn't available — type instead.", network: "Speech recognition needs a connection — type instead." };
+const SPEECH_ERR = { 'not-allowed': BLOCKED, 'service-not-allowed': BLOCKED, 'no-speech': "I didn't hear anything — tap 🎤 to try again, or type.",  'no-start': "The microphone didn't start — tap 🎤 to try again, or type.", 'audio-capture': "The microphone isn't available — type instead.", network: "Speech recognition needs a connection — type instead." };
 export function listen(voice, { onWords = null } = {}) {
   hush();
   if (!voice) { tk.error = "Listening isn't available here — type, or tap 🎤 on your keyboard."; return onWords ? onWords(null) : draw(); }
