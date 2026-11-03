@@ -4,6 +4,15 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🔥 Calories burned today from WHOOP on Health (2026-11-03, `v2/whoop-burned` from `main` `140b717`; front end only, no `pawdeploy`; owner: "In the second row with the calorie bars, also show the same whoop tracked calories burned for the day")
+
+**Done:**
+- `js/whoopDay.js` `burnedToday(daily, today)`: today's cycle `score.kilojoule` ÷ 4.184, rounded; `null` before WHOOP scores today. It's the same number as the Strain sheet's calories (resting plus activity, so it rises through the day).
+- `family/app.js` `whoopModel` carries `burned`; `family/health.js` adds *🔥 Burned · WHOOP — N kcal so far* under the calorie and protein bars in Nutrition & plan, only when WHOOP is connected on this phone and has today's number. It's display only: Diet's burn adjustment (device data) is unchanged.
+- Docs: README (Nutrition & plan), help guide, ARCHITECTURE (`burnedToday`). Privacy is unchanged: no new data is stored or sent; it reads the WHOOP day already kept on the phone.
+
+**Tests:** `tests/health.test.js` "🔥 calories burned today from WHOOP…" (the kJ→kcal value, pending/empty → nothing, the row on Health with WHOOP, no row without). `npm test`: 581/581 pass (2026-11-03).
+
 ### 🎤 Steadier microphone on iPhone: fewer asks, no app restart when it goes deaf (2026-11-03, `v2/mic-steady` from `main` `007a7bd`; front end only, no `pawdeploy`; owner: "it asks to allow permissions and sometimes doesn't take in audio input, needs me to close and reopen the app")
 
 **Likely causes found:**

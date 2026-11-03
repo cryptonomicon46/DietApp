@@ -261,3 +261,17 @@ test('📸 today\'s progress photos already in: the weight row stops asking', as
   assert.equal(W.doneLine(['front', 'back']), "📸 ✓ Today's photos are in (Front · Back)");
   assert.equal(W.doneLine([]), '');
 });
+
+test('🔥 calories burned today from WHOOP, under the calorie and protein bars (only when WHOOP has today)', async () => {
+  const D = await import('../js/whoopDay.js');
+  const { burnedToday } = D;
+  const { healthHtml } = await import('../family/health.js');
+  assert.equal(burnedToday({ [today]: { whoop: { cycle: { score: { kilojoule: 9665 } } } } }, today), 2310);
+  assert.equal(burnedToday({ [today]: { whoop: { cycle: { score_state: 'PENDING_SCORE' } } } }, today), null);
+  assert.equal(burnedToday({}, today), null);
+  const p = { sex: 'male', age: 35, heightIn: 70, phase: 'cut', goalLb: 175, activity: 'light', pace: 'steady' };
+  const data = { profile: p, weights: [{ date: today, weight: 180 }], eaten: { date: today, meals: { breakfast: { title: 'b', kcal: 420, p: 40, c: 30, f: 14 } }, extras: [] } };
+  const html = healthHtml(data, { esc, today, hour: 9, sharing: '', whoop: { ...D.recoveryContext({}, today), lighter: {}, burned: 2310 } });
+  assert.match(html, /🔥 Burned · WHOOP<\/span><span class="small"><b>2,310<\/b> kcal so far/);
+  assert.ok(!healthHtml(data, { esc, today, hour: 9, sharing: '' }).includes('Burned · WHOOP'), 'no WHOOP: no row');
+});

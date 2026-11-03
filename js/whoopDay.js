@@ -208,6 +208,12 @@ export function sleepDetail(daily = {}, today) {
     disturbances: st.disturbance_count ?? null, cycles: st.sleep_cycle_count ?? null,
   };
 }
+// 🔥 Calories burned today so far, as WHOOP counts them (its day's energy: resting plus activity,
+// kilojoules → kcal). null before today's day has a scored number.
+export function burnedToday(daily = {}, today) {
+  const kj = daily[today]?.whoop?.cycle?.score?.kilojoule;
+  return Number.isFinite(kj) && kj > 0 ? Math.round(kj / 4.184) : null;
+}
 // Strain: today's so far, and today's WHOOP workouts with their heart-rate zones (WHOOP gives zones
 // per workout, not for the whole day — the total is your workouts'). `workouts`: workoutHistory.
 export function strainDetail(daily = {}, today, workouts = []) {

@@ -672,7 +672,7 @@ function whoopTicker() {
 }
 // The WHOOP card's model, the same for Home and Health (js/whoopDay.js recoveryContext + whether
 // WHOOP needs reconnecting for Recovery and Sleep + the "make it lighter" offer, when there is one).
-const whoopModel = (wh, WD, lighter = null) => ({ ...WD.recoveryContext(wh.daily, isoLocal()), dailyMissing: !WD.hasDaily(wh.t), lighter });
+const whoopModel = (wh, WD, lighter = null) => ({ ...WD.recoveryContext(wh.daily, isoLocal()), dailyMissing: !WD.hasDaily(wh.t), lighter, burned: WD.burnedToday?.(wh.daily, isoLocal()) ?? null });
 // When last night's sleep ended, in WHOOP's own record ("6:41 AM"), or ''.
 const sleepEnded = (wh, WD) => { const s = wh.daily[isoLocal()]?.whoop?.sleep; return s?.end ? WD.clockAt(s.end, s.timezone_offset) : ''; };
 
