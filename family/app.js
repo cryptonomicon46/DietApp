@@ -5665,16 +5665,24 @@ setTimeout(checkForUpdate, 3000);
 const wantHelp = new URLSearchParams(location.search).has('help');
 if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
 // 🐾 The opening (index.html #splash): once the first screen is drawn it lifts — not before the
-// name has written in (about 1.3 s after launch; at once with Reduce Motion), and never held for
-// anything else. Home starts loading underneath it from the first moment.
+// name and tagline have written in (slow-mo: about 3.8 s after launch; 0.3 s with Reduce Motion),
+// and never held for anything else. Home loads underneath it from the first moment; a tap skips it.
+const SPLASH_MS = 3 * 1280; // style.css .splash --sp-t × the standard 1.28 s
+function liftSplash(el, skip = false) {
+  if (!el || el.classList.contains('done')) return;
+  el.classList.add('done');
+  if (skip) el.classList.add('skip');
+  setTimeout(() => el.remove(), skip ? 400 : 1500);
+}
 function splashDone() {
   const el = document.getElementById('splash');
   if (!el || el.classList.contains('done')) return;
   let calm = false;
   try { calm = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* moves */ }
-  const wait = document.documentElement.classList.contains('nosplash') ? 0 : Math.max(0, (calm ? 300 : 1280) - performance.now());
-  setTimeout(() => { el.classList.add('done'); setTimeout(() => el.remove(), 700); }, wait);
+  const wait = document.documentElement.classList.contains('nosplash') ? 0 : Math.max(0, (calm ? 300 : SPLASH_MS) - performance.now());
+  setTimeout(() => liftSplash(el), wait);
 }
+document.getElementById('splash')?.addEventListener('click', (e) => liftSplash(e.currentTarget, true));
 boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; }).finally(splashDone);
 document.addEventListener('toggle', (e) => {
   if (e.target.id === 'dogMore' && e.target.open) { dogMore().catch(() => {}); return; }
