@@ -1772,3 +1772,37 @@ button.ml-opt.on > span:last-child { color: var(--brand); font-weight: 800; }
 .hl-care { padding: 10px 14px 0; margin: 0; }
 .tk-list { margin: 6px 0; padding-left: 18px; display: grid; gap: 4px; }
 .ml-easyf { margin: 0 0 4px; }
+/* 🐾 The opening (family/index.html #splash): on each cold launch, the icon's green and paw, the toes
+   step, the heart beats, the name writes in — about 1.3 s — then app.js splashDone() lifts it once
+   the first screen is drawn. Transform and opacity only (no layout work). If the app never says it's
+   ready, it lifts by itself at 6 s. Reduce Motion: no movement, a short fade. */
+.splash { --sp-a: #43a97a; --sp-b: #1d5a41; --sp-cream: #fffdf7; position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center;
+  background: radial-gradient(120% 80% at 28% 14%, rgba(255,255,255,.16), transparent 55%), linear-gradient(150deg, var(--sp-a), var(--sp-b));
+  animation: sp-out .42s ease-in 6s both; }
+:root[data-theme=dark] .splash { --sp-a: #2c7a57; --sp-b: #0f2e21; --sp-cream: #f6efe0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .splash { --sp-a: #2c7a57; --sp-b: #0f2e21; --sp-cream: #f6efe0; } }
+.nosplash .splash { display: none; }
+.splash.done { animation: sp-out .42s ease-in both; pointer-events: none; }
+.sp-lock { display: grid; justify-items: center; gap: min(3.6vw, 16px); }
+.sp-paw { width: min(36vw, 160px); height: min(36vw, 160px); overflow: visible; transform: translateY(min(12vw, 54px)); animation: sp-settle .5s cubic-bezier(.2, .8, .2, 1) .55s both; }
+.sp-toe, .sp-ball { fill: var(--sp-cream); transform-box: fill-box; transform-origin: 50% 100%; }
+.sp-pads { filter: drop-shadow(0 8px 9px rgba(6, 30, 20, .35)); }
+.sp-heart { fill: #e05a62; transform-box: fill-box; transform-origin: 50% 55%; animation: sp-beat .42s ease-in-out .3s both; }
+.sp-toe { animation: sp-step .3s cubic-bezier(.3, 1.4, .5, 1) both; }
+.sp-toe:nth-child(1) { animation-delay: .04s; } .sp-toe:nth-child(2) { animation-delay: .11s; } .sp-toe:nth-child(3) { animation-delay: .18s; } .sp-toe:nth-child(4) { animation-delay: .25s; }
+.sp-word { display: grid; justify-items: center; gap: min(1.6vw, 8px); min-height: min(22vw, 98px); }
+.sp-name { font: 600 min(11.4vw, 52px)/1 ui-serif, "New York", "Iowan Old Style", Georgia, serif; color: var(--sp-cream); letter-spacing: -.01em; white-space: nowrap; }
+.sp-name span { display: inline-block; opacity: 0; transform: translateY(min(2.2vw, 10px)); animation: sp-letter .38s cubic-bezier(.2, .8, .2, 1) calc(.66s + var(--i) * .035s) both; }
+.sp-tag { font-size: min(4vw, 18px); color: var(--sp-cream); opacity: 0; animation: sp-tag .4s ease-out 1.02s both; }
+@keyframes sp-step { 0%, 100% { transform: none; } 40% { transform: translateY(-14%) scale(1.04, .96); } 70% { transform: translateY(2%) scale(.98, 1.03); } }
+@keyframes sp-beat { 0%, 100% { transform: none; } 30% { transform: scale(1.24); } 55% { transform: scale(.94); } 75% { transform: scale(1.08); } }
+@keyframes sp-settle { from { transform: translateY(min(12vw, 54px)); } to { transform: translateY(0) scale(.62); } }
+@keyframes sp-letter { to { opacity: 1; transform: none; } }
+@keyframes sp-tag { from { opacity: 0; transform: translateY(6px); } to { opacity: .82; transform: none; } }
+@keyframes sp-out { to { opacity: 0; transform: scale(1.04); visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) {
+  .sp-paw, .sp-toe, .sp-heart { animation: none; }
+  .sp-name span, .sp-tag { animation: none; opacity: 1; transform: none; }
+  .sp-tag { opacity: .82; }
+  .splash.done { animation: sp-out .3s ease both; }
+}

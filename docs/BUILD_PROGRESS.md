@@ -4,6 +4,31 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🐾 Opening animation (2026-11-03, `v2/splash` from `main` `c04c209`; front end only, no `pawdeploy`; owner: "Build it into the app with standard timing", every cold launch; prototype: the paw-splash artifact)
+
+**Done:**
+- `family/index.html` `#splash` (inline SVG paw, letter spans, tagline *Home, health and the dogs*).
+- `family/style.css` `.splash`: standard timing, about 1.3 s to the name, then the lift. It has a dark variant, a Reduce Motion fade and a 6 s fallback.
+- `theme.js` cold-launch gate: no replay on a reload, back/forward, or coming back from the trackers.
+- `family/app.js` `splashDone()`.
+- Manifest `background_color` → `#2f7d5b`.
+- Docs: README, help guide (theme), ARCHITECTURE.
+
+**Tests:** `tests/splash.test.js` (markup is aria-hidden with no inline script, the cold-launch gate, the fallback and Reduce Motion CSS, `splashDone` wired to `boot`). `npm test` all pass (2026-11-03).
+
+**Browser check** (local `pages.mjs` + `wrangler dev` DEMO, 390 px, Chromium): frames at 150, 450, 800 and 1,150 ms show the paw, the steps, the paw settling with the name writing in, and the full name; Home is showing at 1,500 ms. Light, dark and Reduce Motion all play; a reload shows no opening. No errors, including with the page's own CSP enforced.
+
+**Performance** (same machine, `budget.mjs`, 2 runs each, `main` served from a worktree on :8098 in turn):
+
+| | cold first paint | cold largest paint | warm largest paint | script | API | layout shift |
+|---|---|---|---|---|---|---|
+| main | 1,344 / 1,388 ms | 1,344 / 1,388 ms | 1,084 / 1,064 ms | 194 KB | 15 | 0.005 |
+| branch | 620 / 612 ms | 1,384 / 1,432 ms | 1,128 / 1,080 ms | 194 KB | 15 | 0 |
+
+The largest paint is within noise (+40 ms). Home now becomes visible no earlier than about 1.3 s plus a 0.4 s fade. On a phone where Home is ready sooner, that is the cost of the opening (accepted: the owner asked for it on every cold launch).
+
+**Open:** no iOS `apple-touch-startup-image` yet, so iPhone may still show a brief plain screen before the page paints. That would take one image per device size.
+
 ### 🤒 Sick day (2026-11-03, `v2/sick-day` from `main` `f4197c2`; front end only, no `pawdeploy`; owner: "on the days that someone's sick… a special diet tab that shows things easy to eat?", then "I'd rather report that I'm sick than the app having to determine it", "Build this")
 
 **Decisions (owner):** no new tab: a day mode on Health. Manual only, never inferred (no WHOOP-based detection). No medicines in the app: "ask a pharmacist" plus when to call a doctor. Telling a partner (Pat's Home card from the mockups) is **not built**: it needs a cross-member share and is left for a later decision.

@@ -20,9 +20,14 @@
   <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="stylesheet" href="style.css?v=112">
+  <link rel="stylesheet" href="style.css?v=113">
 </head>
 <body>
+  <!-- 🐾 The opening (style.css .splash): plays on each cold launch while the app starts; app.js splashDone() lifts it. -->
+  <div class="splash" id="splash" aria-hidden="true"><div class="sp-lock">
+    <svg class="sp-paw" viewBox="96 98 320 340"><g class="sp-pads"><g><ellipse class="sp-toe" cx="142" cy="236" rx="40" ry="51" transform="rotate(-28 142 236)"/><ellipse class="sp-toe" cx="209" cy="160" rx="43" ry="56" transform="rotate(-9 209 160)"/><ellipse class="sp-toe" cx="303" cy="160" rx="43" ry="56" transform="rotate(9 303 160)"/><ellipse class="sp-toe" cx="370" cy="236" rx="40" ry="51" transform="rotate(28 370 236)"/></g><path class="sp-ball" d="M256 262C205 262 158 316 147 356C134 404 168 430 208 424C232 420 242 410 256 410C270 410 280 420 304 424C344 430 378 404 365 356C354 316 307 262 256 262Z"/></g><path class="sp-heart" d="M256 392C226 370 208 354 208 332C208 316 220 304 236 304C246 304 252 309 256 316C260 309 266 304 276 304C292 304 304 316 304 332C304 354 286 370 256 392Z"/></svg>
+    <div class="sp-word"><div class="sp-name"><span style="--i:0">O</span><span style="--i:1">u</span><span style="--i:2">r</span><span style="--i:3">P</span><span style="--i:4">a</span><span style="--i:5">w</span><span style="--i:6">m</span><span style="--i:7">i</span><span style="--i:8">l</span><span style="--i:9">y</span></div><div class="sp-tag">Home, health and the dogs</div></div>
+  </div></div>
   <header class="bar" id="bar" hidden>
     <button type="button" class="fam-switch" id="famSwitch"></button>
     <span class="row"><button type="button" class="chat-top" id="chatTop" data-view="chats" aria-label="Chats" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 6.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H11l-4.5 3.5V16.5h0a2 2 0 0 1-2-2z"/><path d="M8.5 9.5h7M8.5 12.5h4.5"/></svg><span class="badge" id="chatBadge" hidden></span></button><button type="button" class="help-top" data-act="help" aria-label="Help and the tour">?</button><button type="button" class="icon-btn plus-top" id="newPostTop" aria-label="Create">＋</button>
@@ -43,6 +48,6 @@
   <div class="toast" id="toast" hidden></div>
   <!-- Fetched alongside app.js, not after api.js asks for it (one round trip less before the first paint). -->
   <link rel="modulepreload" href="../js/server.js">
-  <script type="module" src="app.js?v=156"></script>
+  <script type="module" src="app.js?v=157"></script>
 </body>
 </html>

@@ -5664,7 +5664,18 @@ setTimeout(checkForUpdate, 3000);
 
 const wantHelp = new URLSearchParams(location.search).has('help');
 if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
-boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; });
+// 🐾 The opening (index.html #splash): once the first screen is drawn it lifts — not before the
+// name has written in (about 1.3 s after launch; at once with Reduce Motion), and never held for
+// anything else. Home starts loading underneath it from the first moment.
+function splashDone() {
+  const el = document.getElementById('splash');
+  if (!el || el.classList.contains('done')) return;
+  let calm = false;
+  try { calm = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* moves */ }
+  const wait = document.documentElement.classList.contains('nosplash') ? 0 : Math.max(0, (calm ? 300 : 1280) - performance.now());
+  setTimeout(() => { el.classList.add('done'); setTimeout(() => el.remove(), 700); }, wait);
+}
+boot().then(() => { if (wantHelp) helpView(); }).catch((err) => { $('#view').innerHTML = `<section class="hero"><h1>Something went wrong</h1><p class="lede">${esc(err.message)}</p><button type="button" data-act="home">Try again</button></section>`; }).finally(splashDone);
 document.addEventListener('toggle', (e) => {
   if (e.target.id === 'dogMore' && e.target.open) { dogMore().catch(() => {}); return; }
   if (e.target.matches?.('details[data-house]')) { LS.set(`fam.${e.target.dataset.house || 'house'}Open`, e.target.open ? '1' : '0'); const f = e.target.querySelector('.fold'); if (f) f.textContent = e.target.open ? 'Hide' : 'Show'; return; } const c = e.target.closest?.('[data-couple]'); if (c && e.target === c) bingo.open[c.dataset.couple] = c.open; }, true);
