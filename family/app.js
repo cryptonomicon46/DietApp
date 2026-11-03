@@ -467,18 +467,44 @@ const loadListen = () => (listenLoading ||= import(`../js/listen.js?v=${VERSION}
 setTimeout(loadListen, 6500);
 document.addEventListener('pointerdown', (e) => { if (!listenMod && e.target.closest?.('.talk-bar, .talk-fab, [data-talk="mic"], [data-talk="change"], [data-talkmeal]')) loadListen(); }, { passive: true, capture: true });
 let talkVoice = null;
+// 🎤 One recogniser for the app's run, started again for each listen and restart (iPhone asks for
+// the microphone per recogniser it hasn't seen start, so fewer of them means fewer asks). A new
+// one only when the last is still busy, never started its microphone (fresh), or the app was in
+// the background (iPhone can leave it dead — see the visibility handler below).
+let srCache = null, srIdle = true, spokePrimed = false;
+function recogniser({ fresh = false } = {}) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (fresh || !srCache || !srIdle) {
+    try { if (srCache && fresh) srCache.abort(); } catch { /* already stopped */ }
+    const r = new SR(); r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1;
+    r.addEventListener('end', () => { if (srCache === r) srIdle = true; });
+    const start = r.start.bind(r);
+    r.start = () => { srIdle = false; start(); };
+    srCache = r; srIdle = true;
+  }
+  return srCache;
+}
 function listenNow(asked = false) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR || !listenMod || (!asked && LS.get('fam.talk.voice') === 'off')) return null;
   try {
-    const create = () => { const r = new SR(); r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1; return r; };
+    // Nothing may be speaking as the microphone opens (on iPhone that can leave it deaf).
+    try { window.speechSynthesis?.cancel(); } catch { /* no speech here */ }
+    // iOS only lets a page speak after a tap has started speech once: a silent word, once per run.
+    try { if (!spokePrimed && window.speechSynthesis && LS.get('fam.talk.speak') === 'on') { spokePrimed = true; const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); speechSynthesis.cancel(); } } catch { /* no speech here */ }
     talkVoice?.abort();
-    talkVoice = listenMod.makeListener({ create, finishMs: LS.get('fam.talk.pauseMs') });
-    // iOS only lets a page speak after a tap has started speech once: a silent word now, in the tap.
-    try { if (window.speechSynthesis && LS.get('fam.talk.speak') === 'on') { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch { /* no speech here */ }
+    talkVoice = listenMod.makeListener({ create: recogniser, finishMs: LS.get('fam.talk.pauseMs') });
     return talkVoice.ended && talkVoice.error === 'error' ? null : talkVoice;
   } catch { return null; }
 }
+// Leaving the app mid-listen: iPhone stops the microphone underneath. Keep what was said (or let it
+// go if nothing was), and start with a fresh recogniser next time.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'hidden') return;
+  if (talkVoice && !talkVoice.ended) { if (talkVoice.text) talkVoice.stop(); else talkVoice.abort(); }
+  try { srCache?.abort(); } catch { /* already stopped */ }
+  srCache = null; srIdle = true;
+});
 let talkMod = null;
 function talk() {
   talkMod ||= import(`./talk.js?v=${VERSION}`).then((m) => {

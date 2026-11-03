@@ -5,9 +5,13 @@
 //   being heard. When the phone ends recognition on its own, it's restarted and nothing heard is
 //   lost; if the phone refuses the restart (iPhone may want a tap), it holds: the words stay on
 //   screen with "Tap to keep talking" (which adds to them) and Done. Never a restart loop.
+//   A microphone that never starts (iPhone sometimes leaves recognition dead — after the app was
+//   in the background, or speech played in the same tap): no "audio started" within 3 s → one fresh
+//   recogniser is tried (create({ fresh: true })); if that is silent too, it ends with 'no-start'
+//   (Talk says tap 🎤 again) — never a wait that needs the app closed.
 // Pure: the recogniser, the clock and the timers are passed in (tests use fakes; app.js passes
 // the browser's SpeechRecognition). Only words ever reach it — never audio.
-export const LISTEN = { hintMs: 2000, finishMs: 3500, noWordsMs: 9000, maxMs: 90000, restartMs: 250 };
+export const LISTEN = { hintMs: 2000, finishMs: 3500, noWordsMs: 9000, maxMs: 90000, restartMs: 250, bootMs: 3000 };
 // Errors that mean "this phone won't listen" (not "nobody spoke").
 const REFUSED = new Set(['not-allowed', 'service-not-allowed', 'audio-capture', 'network']);
 const norm = (t) => String(t || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
@@ -17,8 +21,10 @@ const tidy = (t) => String(t || '').replace(/\s+/g, ' ').trim();
 export const finishMsOf = (v) => { const n = +v; return Number.isFinite(n) && n >= 1500 && n <= 6000 ? n : LISTEN.finishMs; };
 
 /**
- * @param create  () => recogniser ({ start, stop, abort, onresult, onerror, onend }), already set up
- *                (lang, continuous, interimResults). Called for the first start and every restart.
+ * @param create  ({ again, fresh }) => recogniser ({ start, stop, abort, onresult, onerror, onend,
+ *                and on a real one onstart / onaudiostart }), already set up (lang, continuous,
+ *                interimResults). Called for the first start and every restart; `fresh` asks for a
+ *                new one (the last one never started its microphone).
  * @returns the session: { state: 'listening'|'pausing'|'held'|'done', text, ended, reason, error,
  *          listener, stop() (Done), abort() (Cancel / Type instead: keeps nothing), resume() (Tap to
  *          keep talking — call it inside the tap) }
@@ -27,7 +33,7 @@ export function makeListener({ create, timers = globalThis, now = () => Date.now
   const T = { ...LISTEN, finishMs: finishMsOf(finishMs) };
   const segs = []; // one array of final pieces per recognition session (restarts add one)
   const seen = new Set(); // `${session}:${resultIndex}` already kept
-  let interim = '', rec = null, sess = -1, frozen = null, restarts = [], lastErr = '';
+  let interim = '', rec = null, sess = -1, frozen = null, restarts = [], lastErr = '', retried = false, heardAudio = false;
   const t = {};
   const s = {
     state: 'listening', ended: false, reason: '', error: '', listener: null, hintMs: T.hintMs, finishMs: T.finishMs,
@@ -49,6 +55,7 @@ export function makeListener({ create, timers = globalThis, now = () => Date.now
   const has = () => segs.some((x) => x.length) || !!interim;
 
   function keep(i, text) {
+    heardAudio = true; clear('boot');
     const key = `${sess}:${i}`, piece = tidy(text);
     if (seen.has(key) || !piece) return;
     seen.add(key);
@@ -91,20 +98,31 @@ export function makeListener({ create, timers = globalThis, now = () => Date.now
     restarts.push(at);
     arm('restart', T.restartMs, () => { if (!s.ended && s.state !== 'held') start(true); });
   }
-  function start(again = false) {
+  function start(again = false, fresh = false) {
     lastErr = '';
     let r;
-    try { r = create(); } catch { return again ? hold() : finish('error', 'error'); }
+    try { r = create({ again, fresh }); } catch { return again ? hold() : finish('error', 'error'); }
     rec = r; sess += 1; segs[sess] = [];
     interim && segs[sess - 1]?.push(interim); // words heard but not yet final when it stopped stay
     interim = '';
     r.onresult = onresult; r.onerror = onerror; r.onend = onend;
+    // The microphone really started (a real recogniser says so); words count too.
+    const live = function () { if (this === rec) { heardAudio = true; clear('boot'); } };
+    const watch = !heardAudio && ('onaudiostart' in r || 'onstart' in r);
+    if (watch) { r.onaudiostart = live; r.onstart = live; }
     try { r.start(); } catch { return again ? hold() : finish('error', 'error'); }
+    if (watch) arm('boot', T.bootMs, () => { if (!s.ended && rec === r && !heardAudio && !has()) noStart(r); });
     return null;
+  }
+  // Started, but its microphone never did: once with a fresh recogniser, then say so.
+  function noStart(r) {
+    try { r.onend = null; r.abort(); } catch { /* already stopped */ }
+    if (!retried) { retried = true; return start(true, true); }
+    return finish('error', 'no-start');
   }
   function hold() {
     if (s.ended) return;
-    clear('hint', 'finish', 'restart', 'nowords');
+    clear('hint', 'finish', 'restart', 'nowords', 'boot');
     if (!has()) return finish('nowords', lastErr && REFUSED.has(lastErr) ? lastErr : 'no-speech');
     s.state = 'held';
     emit();
@@ -114,7 +132,7 @@ export function makeListener({ create, timers = globalThis, now = () => Date.now
     if (frozen == null) frozen = s.text;
     if (reason === 'nowords' && !frozen) error ||= 'no-speech';
     Object.assign(s, { ended: true, state: 'done', reason, error });
-    clear('hint', 'finish', 'restart', 'nowords', 'max');
+    clear('hint', 'finish', 'restart', 'nowords', 'max', 'boot');
     const r = rec; rec = null;
     try { r?.abort(); } catch { /* already stopped */ }
     emit();
