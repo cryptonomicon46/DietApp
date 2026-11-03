@@ -6,6 +6,7 @@
 import { dailyTargets, activityOf, planForDay, DRINKS } from './plan.js';
 import { trainingDay, applyTraining } from './activity.js';
 import { FOODS, addScannedFoods, addMyFoods, makeMyFood } from './foods.js';
+import { targetsForDay, isSick } from './sickDay.js';
 
 export const MAIN_MEALS = ['breakfast', 'lunch', 'dinner'];
 export const MEAL_NAMES = { breakfast: 'Breakfast', lunch: 'Lunch', snack: 'Snack', dinner: 'Dinner' };
@@ -40,8 +41,9 @@ export function trainingOf(data, today) {
   const manual = (data.activities || []).filter((a) => a.date === today);
   return trainingDay(workouts, manual, { bmr: base.bmr, weightKg: currentWeightOf(data) / 2.20462, tracked: !!activityOf(data.profile).tracked });
 }
-// Today's targets, including workout calories and intra-workout carbs.
-export const targetsOf = (data, today) => applyTraining(baseTargetsOf(data), trainingOf(data, today));
+// Today's targets, including workout calories and intra-workout carbs — and, on a 🤒 sick day
+// (js/sickDay.js), maintenance calories with the same protein.
+export const targetsOf = (data, today) => applyTraining(targetsForDay(baseTargetsOf(data), data, today), trainingOf(data, today));
 
 // Today's meal changes, read only: today's edits, else what was planned ahead for today.
 export function customOf(data, today) {
@@ -89,15 +91,17 @@ export function plannedDeficit(base, burned, t) {
 // The day's summary the trackers keep in `days` (and Health reads).
 export function dayEntry(data, today) {
   const t = targetsOf(data, today), base = baseTargetsOf(data), log = logOf(data, today), ate = consumedOf(log);
-  const burned = burnedOf(data, today).kcal;
+  const burned = burnedOf(data, today).kcal, sick = isSick(data, today);
   return {
     eaten: r(ate.kcal), burned, target: t.kcal,
-    plannedDeficit: plannedDeficit(base, burned, t), protein: r(ate.p), proteinTarget: t.p,
+    plannedDeficit: sick ? 0 : plannedDeficit(base, burned, t), protein: r(ate.p), proteinTarget: t.p,
     left: { kcal: r(t.kcal - ate.kcal), p: r(t.p - ate.p), c: r(t.c - ate.c), f: r(t.f - ate.f) },
     floor: data.profile?.sex === 'male' ? 1500 : 1200,
     meals: Object.keys(log.meals || {}).length,
     ...(ate.alc ? { alc: r(ate.alc) } : {}),
     ...(log.done ? { complete: true } : {}),
+    // 🤒 A sick day: left out of the weekly check-in and the "days on target" count.
+    ...(sick ? { sick: true } : {}),
   };
 }
 export const atNow = (d = new Date()) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });

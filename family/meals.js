@@ -14,6 +14,7 @@ import { leftText } from './health.js';
 import { healthDay, logCheer } from '../js/habit.js';
 import { confetti } from '../js/confetti.js';
 import { amountOf, resize, nudge, placeItems, asMealItems, packagedAsk } from '../js/mealEstimate.js';
+import { isSick, easyFoods, easyFood, easyEntry, EASY_TAGS } from '../js/sickDay.js';
 
 const ms = { c: null, data: null, sheet: null, ops: [], ai: null, busy: false };
 export const state = ms;
@@ -118,7 +119,7 @@ const QUICK = () => Object.keys(FOODS).filter((k) => FOODS[k].quick);
 // What the picker shows as the meal's source now.
 function sourceLabel(c, m) {
   if (c.eatout || m.eatout) return 'ate out';
-  if (c.prepared) return c.prepared.icon === '🔁' ? 'same as yesterday' : c.prepared.icon === '📦' || !c.prepared.icon ? 'packaged' : 'logged';
+  if (c.prepared) return c.prepared.icon === '🔁' ? 'same as yesterday' : c.prepared.icon === '🥣' ? 'easy to eat' : c.prepared.icon === '📦' || !c.prepared.icon ? 'packaged' : 'logged';
   if (c.combo) return 'combo';
   if (c.items && c.items.length === 1 && FOODS[c.items[0].food]?.quick) return 'bar or shake';
   if (c.items) return 'your own';
@@ -128,7 +129,8 @@ function sourceLabel(c, m) {
 const fitDefault = (meal, m) => { const pf = ms.data?.mealFit?.[meal]; return pf && pf.base === m.target?.kcal ? pf.kcal : r0(m.target?.kcal); };
 function mealSheet(meal) {
   const was = ms.sheet?.kind === 'meal' && ms.sheet.meal === meal ? ms.sheet : {};
-  ms.sheet = { kind: 'meal', meal, pick: !!was.pick, fit: was.fit, fitNote: was.fitNote || '', partner: was.partner };
+  // 🤒 On a sick day the picker opens with 🥣 Easy to eat first.
+  ms.sheet = { kind: 'meal', meal, pick: 'pick' in was ? !!was.pick : isSick(ms.data, today()), fit: was.fit, fitNote: was.fitNote || '', partner: was.partner, easy: was.easy ?? null };
   const sh = ms.sheet, s = preview(), plan = planNow(s), m = plan?.[meal];
   const logged = D.logOf(s.d, today()).meals?.[meal];
   if (!m) return open(`${head(NAME[meal])}<p class="small">Your phone can't work this meal out yet — open Today's plan once, then try again.</p><a class="btn wide" href="../#today">Today's plan ›</a>`);
@@ -189,12 +191,20 @@ function pickerHtml(meal, s, m, c) {
   const theirRows = partner?.combos?.length ? partner.combos.map((x) => row(`p_${x.id}`, `⭐ ${x.name}`, kc(comboKcal(x), comboP(x)), c.combo === `p:${x.id}`)).join('') : '';
   const bars = QUICK().map((k) => { const f = FOODS[k], g = f.unit?.grams || 100; return row(`b_${k}`, f.name, `1 ${f.unit?.label || '100 g'} · ${kc((f.kcal * g) / 100, (f.p * g) / 100)}`, c.items?.length === 1 && c.items[0].food === k); }).join('');
   const y = yesterdays(meal);
+  // 🥣 Easy to eat (js/sickDay.js): soft, warm or bland foods, filtered by what's bothering you.
+  const tag = ms.sheet.easy, sick = isSick(s.d, today());
+  const chip = (id, label) => `<button type="button" class="chip ${tag === id ? 'on' : ''}" aria-pressed="${tag === id}" data-ml="easyf:${meal}:${id || 'all'}">${E(label)}</button>`;
+  const easyRows = `<div class="chips ml-easyf" role="group" aria-label="What's bothering you?">${chip(null, 'All')}${Object.entries(EASY_TAGS).map(([k, v]) => chip(k, v)).join('')}</div>`
+    + easyFoods(tag).map((f) => row(`e_${f.id}`, `🥣 ${f.name}`, `${f.portion} · ${kc(f.kcal, f.p)} · ${f.why}`, c.prepared?.icon === '🥣' && c.prepared.name === f.name)).join('');
+  const easy = group(sick ? '🥣 Easy to eat' : '🥣 Easy to eat (when you’re unwell)', easyRows);
   return `<div class="ml-picker" role="group" aria-label="Where this ${NAME[meal].toLowerCase()} comes from">
+    ${sick ? easy : ''}
     ${group("Today's plan", planRows)}
     ${group('Your combos', mineRows || '<p class="tiny muted">None yet — ☆ Save as combo keeps a meal you like.</p>')}
     ${partner === null ? '<p class="tiny muted">Looking for shared combos…</p>' : group(`${E(partner?.name || '')}'s combos`, theirRows)}
     ${group('Bars &amp; shakes', bars)}
     ${y ? group('Again', row('again', `🔁 Same as yesterday · ${strip(y.title)}`, kc(y.kcal, y.p))) : ''}
+    ${sick ? '' : easy}
   </div>`;
 }
 // The plan with one meal swapped to `c`, on a copy (to show each choice's calories).
@@ -210,6 +220,7 @@ function sourceFor(meal, src) {
     if (!x) return null;
     return { items: (x.items || []).map((i) => ({ food: i.food, grams: i.grams })), title: x.name, combo: kind === 'c' ? x.id : `p:${x.id}`, ...(x.manual ? { manual: { ...x.manual } } : {}) };
   }
+  if (kind === 'e' && easyFood(id)) return easyEntry(easyFood(id));
   if (kind === 'b' && FOODS[id]) return { items: [{ food: id, grams: FOODS[id].unit?.grams || 100 }], title: FOODS[id].name };
   if (src === 'again') { const y = yesterdays(meal); return y ? { prepared: { name: strip(y.title), kcal: y.kcal, p: y.p, c: y.c, f: y.f, servings: 1, icon: '🔁' } } : null; }
   return null;
@@ -662,6 +673,7 @@ export async function onClick(t) {
     case 'plan': return commit((s) => D.logPlanned(s, today(), r[0]), (e) => (e ? `✓ ${NAME[r[0]]} logged · ${e.kcal} kcal` : 'Logged'));
     case 'save': return commit(null, 'Saved');
     case 'srcopen': sh.pick = !sh.pick; return mealSheet(r[0]);
+    case 'easyf': sh.easy = r[1] === 'all' ? null : r[1]; return mealSheet(r[0]);
     case 'src': {
       const [meal, ...rest] = r, c = sourceFor(meal, rest.join(':'));
       if (!c) return null;

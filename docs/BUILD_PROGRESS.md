@@ -4,6 +4,27 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🤒 Sick day (2026-11-03, `v2/sick-day` from `main` `f4197c2`; front end only, no `pawdeploy`; owner: "on the days that someone's sick… a special diet tab that shows things easy to eat?", then "I'd rather report that I'm sick than the app having to determine it", "Build this")
+
+**Decisions (owner):** no new tab: a day mode on Health. Manual only, never inferred (no WHOOP-based detection). No medicines in the app: "ask a pharmacist" plus when to call a doctor. Telling a partner (Pat's Home card from the mockups) is **not built**: it needs a cross-member share and is left for a later decision.
+
+**Done:**
+- `js/sickDay.js` (new, pure): the `sick` key, `sickTargets` / `targetsForDay` (maintenance, same protein), `trendWeights`, `setSick` / `addFluid` / `toggleComfort`, `askStillSick`, `sickRun`, `EASY_FOODS` (13, tagged), `FEEL_DRINKS`, `COMFORTS`, `CARE_LINE`.
+- Targets: `js/dayPlan.js` `targetsOf` and `dayEntry` (`sick`, `plannedDeficit: 0`); the trackers' `targets()` and Today line (`js/app.js`).
+- Left out: `onTarget` (`js/dietDays.js`), `weeklyReview` (`js/plan.js`, `sickDates`, `sickDays` note; both trackers callers pass `sickDates`), Health's trend, progress and complete days.
+- `sick` is in the Diet part (`js/healthParts.js`).
+- Health (`family/health.js`, `family/style.css`): the banner with I'm better, the next-morning Still feeling sick?, Weigh-in skipped / Weigh anyway, the 💧 fluids row, easy picks on the next meal, Rest today / Show workout, Feel better, the *maintenance* pill and note, More › Turn on; no weigh-in or workout nudges.
+- `family/app.js`: `sickSave` (optimistic, then `editMine`, reverted on failure), `sickClick`, the Talk ctx `sickSet` / `sickNow`.
+- `family/meals.js`: the 🥣 Easy to eat picker group with filters (first and open on a sick day).
+- Talk: `js/talkParse.js` `sickAsk` (phone only; first person only; not "sick of", not cold brew) and `family/talk.js` the card (Start sick day / Not now; End sick day) with Undo.
+- Docs: README, help guide, tour What's new `2026-11g`, privacy (Last updated November 3, 2026), ARCHITECTURE.
+
+**Tests:** `tests/sickday.test.js` (9 tests: targets, day plan, check-in exclusions, changes and Undo, trend, Diet part, easy foods macros, no medicines, Health on/off/morning-after, Talk phrases). `npm test` 590/590 pass (2026-11-03).
+
+**Browser check** (2026-11-03; local `pages.mjs` + `wrangler dev` DEMO, seeded family, 390 px, Chromium). Turn on → banner in about 90 ms (optimistic). Calories showed *maintenance* 2,240 kcal. +1 cup and tea with honey → 2 cups; gargle ticked. An easy pick logged breakfast as Chicken noodle soup, 190 kcal. The meal sheet opened with 🥣 Easy to eat and the Upset stomach filter worked. A fresh load still showed the sick day (saved to the account). In Talk, "I'm feeling better" → End sick day → off, and "I'm sick today, I've got a cold" → the card. No page errors. Startup is unchanged: `sickDay.js` loads only with Health, meals, Talk or the trackers.
+
+**Not done / open:** sharing a sick day with a partner (needs a decision); the server's morning weigh-in reminder still fires on a sick day; no dark-mode screenshot taken (colours use the theme tokens).
+
 ### 🔥 Calories burned today from WHOOP on Health (2026-11-03, `v2/whoop-burned` from `main` `140b717`; front end only, no `pawdeploy`; owner: "In the second row with the calorie bars, also show the same whoop tracked calories burned for the day")
 
 **Done:**

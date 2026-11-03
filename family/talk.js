@@ -7,7 +7,8 @@
 // for workouts, Make it lighter). T1 only does things that are yours; T2a answers questions about your
 // day (js/talkDay.js — with your OK once) and can add a suggested time to your own calendar only.
 // Nothing you said is kept (no history).
-import { parseTalk, photoAsk, howAsk } from '../js/talkParse.js';
+import { parseTalk, photoAsk, howAsk, sickAsk } from '../js/talkParse.js';
+import { CARE_LINE } from '../js/sickDay.js';
 import { toTokens, fromTokens } from '../js/talkActions.js';
 import { isDayQuestion, checkSuggestions } from '../js/talkDay.js';
 import { browserVoiceOutput } from './voice.js';
@@ -28,7 +29,7 @@ export const ICON = '<svg class="tk-ic" viewBox="0 0 32 32" aria-hidden="true"><
 const EXAMPLES = {
   home: ["What's on today?", 'When should I go for a run today?', 'Add Dune to our watchlist', 'Walked the dogs', 'Fed the dogs dinner'],
   us: ["We're watching Severance now", 'Add Project Hail Mary to our reading list', 'I finished reading Piranesi'],
-  health: ['Log dinner: salmon and rice', 'Add peanut butter to breakfast', 'Log my weight 160.6', 'Plan dinner: salmon and rice', 'Log a packaged meal for lunch', 'How much protein is left today?', "Make today's workout lighter"],
+  health: ['Log dinner: salmon and rice', 'Add peanut butter to breakfast', 'Log my weight 160.6', 'Plan dinner: salmon and rice', 'Log a packaged meal for lunch', 'How much protein is left today?', "Make today's workout lighter", "I'm sick today"],
 };
 const WATCH = { want: 'Want to Watch', watching: 'Watching', finished: 'Watched', upnext: 'Up Next', dropped: 'Stopped' };
 const READ = { want: 'Want to Read', reading: 'Reading', finished: 'Finished', dropped: 'Stopped' };
@@ -150,6 +151,15 @@ export async function send(text) {
   // ❓ "How do I log a meal / a workout?": every way to do it, each one a tap away.
   const how = howAsk(text);
   if (how) { tk.cards = [{ type: 'how', topic: how.topic }]; tk.say = ''; speak(HOW_SAY[how.topic]); return draw(); }
+  // 🤒 "I'm sick today" / "I'm feeling better": a card saying what a sick day changes; nothing
+  // changes until you tap Start (you say you're sick — the app never decides it for you).
+  const sick = sickAsk(text);
+  if (sick) {
+    const now = await c.sickNow?.().catch(() => false);
+    tk.cards = [{ type: 'sick', on: sick.on, go: sick.on !== !!now, already: sick.on === !!now }];
+    speak(sick.on ? (now ? 'Today is already a sick day. Rest up.' : "Sorry you're not well. Want me to make today a sick day?") : now ? 'Glad you’re feeling better. End today’s sick day?' : "Today isn't a sick day.");
+    return draw();
+  }
   const photo = photoAsk(text, new Date().getHours());
   if (photo) {
     tk.cards = [photo.kind === 'workout' ? { type: 'photoworkout' } : { type: 'photomeal', meal: tk.meal && !/\b(breakfast|lunch|dinner|snack)\b/i.test(text) ? tk.meal : photo.meal }];
@@ -434,6 +444,14 @@ function cardHtml(x, i) {
   }
   if (x.type === 'answer') return `<div class="tk-card tk-answer">${SPEAK_OK() ? '<button type="button" class="icon-btn tk-say" data-talk="speak" aria-label="Read this aloud">🔊</button>' : ''}${E(x.text).replace(/\n/g, '<br>')}${(x.go || []).map((g) => `<a class="tk-go small" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(g.q)}&travelmode=driving" target="_blank" rel="noopener">🚗 ${E(g.name)}${g.min ? ` · ${g.min} min now` : ''} · Directions ›</a>`).join('')}${x.to === 'health' ? '<button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button>' : '<button type="button" class="linkish small" data-talk="calopen">Open Calendar ›</button>'}</div>`;
   if (x.type === 'suggest') { const d = new Date(`${x.s.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' }); return `<div class="tk-card"><b>🗓 ${E(x.s.title)} · ${E(d)} ${E(time12(x.s.start))}–${E(time12(x.s.end))}</b>${x.s.why ? `<small class="muted">${E(x.s.why)}</small>` : ''}${btn('Add to my calendar', true)}</div>`; }
+  if (x.type === 'sick') {
+    if (x.already) return `<div class="tk-card"><b>${x.on ? '🤒 Today is already a sick day' : "😊 Today isn't a sick day"}</b><small class="muted">${x.on ? 'Rest up — fluids first, then whatever easy food you can manage.' : 'Your plan is as usual.'}</small><button type="button" class="linkish small" data-talk="healthopen">Open Health ›</button></div>`;
+    if (!x.on) return `<div class="tk-card"><b>😊 Glad you're feeling better</b><small class="muted">End today's sick day? Your calories go back to your plan.</small>${btn('End sick day')}</div>`;
+    return `<div class="tk-card"><b>🤒 Make today a sick day?</b><small class="muted">Sorry you're not well. For today:</small>
+      <ul class="tk-list small"><li><b>Calories:</b> no cut, up to maintenance. Protein stays the same.</li><li><b>Weigh-in:</b> skipped. Today stays out of your trend and weekly check-in.</li><li><b>Workout:</b> rest today; it will wait.</li><li><b>On Health:</b> a fluids counter, easy-to-eat foods and a Feel better list.</li></ul>
+      ${x.done ? btn('') : `<div class="tk-two"><button type="button" data-talkgo="${i}">Start sick day</button><button type="button" class="ghost" data-talk="sickno">Not now</button></div>`}
+      <small class="tiny muted">${E(CARE_LINE)}</small></div>`;
+  }
   if (x.type === 'photomeal') {
     const meals = ['breakfast', 'lunch', 'dinner', 'extra'];
     return `<div class="tk-card"><b>📷 ${E(MEAL[x.meal] || 'Your meal')} · eaten out</b><small class="muted">A photo of the dish — it estimates it, and you check it before it's logged.</small>
@@ -513,6 +531,10 @@ async function go(i) {
     } else if (x.type === 'suggest') {
       const id = await c.calendarAdd(x.s);
       x.done = 'On your calendar'; x.undo = () => c.calendarDelete(id); x.said = `🗓 ${x.s.title} added to your calendar`;
+    } else if (x.type === 'sick') {
+      const before = await c.sickSet(x.on);
+      x.done = x.on ? 'Sick day on' : 'Sick day off'; x.undo = () => c.sickSet(before);
+      x.said = x.on ? '🤒 Sick day on — no calorie cut today. Rest up.' : "😊 Sick day off — back to your plan";
     } else if (x.type === 'handoff') { x.done = 'Opened'; c.closeSheet(); await handOff(x.step); return null; }
   } catch (e) { x.busy = false; c.toast(e.message || "Couldn't do that just now"); return redraw(); }
   x.busy = false;
@@ -549,6 +571,7 @@ export async function onClick(t) {
   if (d.talk === 'speak') { const a = tk.cards?.find((x) => x.type === 'answer'); return speak(a?.text, { always: true }); }
   if (d.talk === 'calopen') { c.closeSheet(); return c.show('calendar'); }
   if (d.talk === 'healthopen') { c.closeSheet(); return c.show('health'); }
+  if (d.talk === 'sickno') { c.closeSheet(); return c.toast('OK — your plan stays as it is today'); }
   if (d.talk === 'fitopen') { c.closeSheet(); return c.show('fitness'); }
   if (d.talk === 'seen') { try { c.LS.set(SEEN, '1'); } catch { /* private mode */ } return draw(); }
   return null;

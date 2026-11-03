@@ -61,16 +61,16 @@ export const SLIDES = [
 
 // After an update with new features: one card on Home for people who aren't new.
 export const WHATS_NEW = {
-  id: '2026-11f',
-  title: 'New: 📷 "Take a photo of my dinner" — or of the WOD — in Talk',
-  text: 'Say it in 🗣️ Talk and tap 📷 Take a photo or 🖼 From Photos: a meal eaten out is estimated, a workout photo becomes today\'s workout — you check both first. Ask "how do I log a meal?" to see every way. Health also saves as you tap, and foods swap from their own menu.',
+  id: '2026-11g',
+  title: 'New: 🤒 Sick day on 💪 Health',
+  text: 'Not feeling well? Turn on Sick day (Health › More, or tell 🗣️ Talk "I\'m sick today"): no calorie cut that day, the weigh-in is skipped and the day stays out of your check-in, plus a fluids counter, 🥣 easy-to-eat foods and a Feel better list. It ends with the day. Health also shows 🔥 calories burned from WHOOP.',
   slides: ['new', 'help'],
 };
-SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '⚖️ Weigh-in, 📸 Photos, 🍽 Macros', cards: [
-  ['⚖️', 'Check before it saves', 'Save shows the number and the change since last time — a big jump asks "is that right?"'],
-  ['📸', 'Front, side, back at once', 'Pick all three together; they\'re labelled in order (tap to change). They stay on this phone only.'],
-  ['🍽', 'What you just logged', 'For an hour after logging a meal: its calories and P · C · F, then the next meal\'s planned macros.'],
-  ['🔒', 'Fit and lock, smarter', 'Fit to N kcal keeps protein first and your plan\'s carb : fat ratio; 🔓 keeps a food\'s amount on the coming days.'],
+SLIDES.push({ id: 'new', eyebrow: '✨ What’s new', title: '🤒 Sick day', cards: [
+  ['🤒', 'You say when', 'Health › More › Sick day, or tell Talk "I\'m sick today". The app never decides it for you, and it ends with the day.'],
+  ['🍲', 'No calorie cut', 'Calories go up to maintenance, protein stays. The weigh-in is skipped and the day is left out of your check-in.'],
+  ['💧', 'Fluids and easy food', 'Count cups, log 🥣 easy-to-eat foods (filter by sore throat, upset stomach…) in one tap.'],
+  ['☕', 'Feel better', 'Tea with honey, ginger tea, broth, a salt-water gargle, steam, rest — tick what you\'ve done. For medicines, ask a pharmacist.'],
 ] });
 
 export const TOUR = SLIDES.filter((s) => s.id !== 'new').map((s) => s.id);

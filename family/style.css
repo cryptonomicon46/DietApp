@@ -1748,3 +1748,27 @@ button.ml-opt.on > span:last-child { color: var(--brand); font-weight: 800; }
 /* 🔥 Burned today (WHOOP) under the calorie and protein bars */
 .hl-today .hl-burned { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
 .hl-today .hl-burned-note { margin: 2px 0 0; }
+/* 🤒 Sick day on Health (family/health.js, js/sickDay.js). */
+.hl-sick { background: color-mix(in srgb, var(--warn) 9%, var(--card)); border-color: color-mix(in srgb, var(--warn) 30%, var(--line)); }
+.hl-sick p { margin: 6px 0 0; }
+.hl-sick .hl-acts { grid-column: auto; margin-top: 10px; }
+.hl-sick .linkish, .hl-tap { min-height: 44px; }
+.hl-mini > span small { display: block; }
+.hl-easy { grid-column: 2; display: grid; gap: 6px; margin-top: 8px; }
+.hl-easyrow { display: flex; gap: 6px; flex-wrap: wrap; }
+.hl-easyb { flex: 1 1 140px; min-height: 48px; text-align: left; padding: 6px 10px; display: grid; gap: 1px; }
+.hl-easyb b { font-size: .88rem; } .hl-easyb small { font-size: .78rem; }
+.hl-easy .linkish { justify-self: start; min-height: 36px; }
+.hl-fluids .hl-bar { margin-top: 6px; }
+.hl-less { width: 48px; flex: none; }
+.hl-pill { display: inline-block; font-size: .72rem; font-weight: 700; padding: 1px 8px; border-radius: 99px; background: color-mix(in srgb, var(--warn) 14%, var(--card)); color: var(--warn); }
+.hl-feelc { padding: 4px 0 12px; }
+.hl-feelc .ml-label { padding: 10px 14px 2px; }
+.hl-feel { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; min-height: 48px; background: none; color: var(--ink); border: 0; border-top: 1px solid var(--line); border-radius: 0; text-align: left; font-weight: 500; }
+.hl-feel b { display: block; font-weight: 600; }
+.hl-feel small { display: block; color: var(--muted); font-size: .8rem; font-weight: 400; }
+.hl-feel .go { color: var(--brand); font-weight: 700; font-size: 1.1rem; flex: none; }
+.hl-feel.on b { color: var(--brand); }
+.hl-care { padding: 10px 14px 0; margin: 0; }
+.tk-list { margin: 6px 0; padding-left: 18px; display: grid; gap: 4px; }
+.ml-easyf { margin: 0 0 4px; }
