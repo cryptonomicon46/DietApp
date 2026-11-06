@@ -27,3 +27,20 @@ test('meat or fish with no amount is a typical portion, marked to check; unknown
   assert.deepEqual(r.unread, ['3 slices pizza']);
   assert.deepEqual(parseMeal('', FOODS), { items: [], unread: [] });
 });
+
+test('🍲 a dish is left for Claude, not read as its main ingredient; describing words are still fine', async () => {
+  const { placeItems } = await import('../js/mealEstimate.js');
+  for (const t of ['Two cups of chicken noodle soup', 'beef stew', 'fried chicken', 'chicken tikka masala'])
+    assert.deepEqual(parseMeal(t, FOODS).items, [], t);
+  assert.deepEqual(parseMeal('Two cups of chicken noodle soup', FOODS).unread, ['Two cups of chicken noodle soup']);
+  const foods = (t) => parseMeal(t, FOODS).items.map((x) => x.food);
+  assert.deepEqual(foods('grilled chicken and rice'), ['chicken', 'rice']);
+  assert.deepEqual(foods('2 large eggs and toast'), ['egg', 'wheatBread']);
+  assert.deepEqual(foods('8 oz grilled salmon'), ['salmon']);
+  assert.deepEqual(foods('plain greek yogurt with blueberries'), ['greekYogurt', 'berries']);
+  assert.deepEqual(foods('I had 2 scrambled eggs for breakfast'), ['egg']);
+  // Claude's answer for the soup stays the soup (its own numbers), not chicken breast.
+  const [soup] = placeItems([{ name: 'Chicken noodle soup', amount: '2 cups', kcal: 250, p: 18, c: 26, f: 8 }], FOODS, parseMeal);
+  assert.equal(soup.food, undefined);
+  assert.equal(soup.kcal, 250);
+});

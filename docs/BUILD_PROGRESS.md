@@ -4,6 +4,25 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🍲 Describe a dish → Claude (2026-11-06, `v2/describe-dishes` from `main` `2374b78`; front end only, no `pawdeploy`; owner: "chicken noodle soup, 2 cups … the describe feature cannot understand what it is … send the description to Claude … instead of being stringent")
+
+**Cause:** `parsePart` matched a known food anywhere in a part and ignored the other words. "Two cups of chicken noodle soup" → *Chicken breast ~300 g*, read entirely on the phone, so Claude was never asked. Even Claude's own *Chicken noodle soup* item could be turned back into chicken breast by `placeItems`.
+
+**Fix:**
+- `js/foodText.js` `dishWords` + `PLAIN`: a part is a known food only when every leftover word is a plain describing word or another name of the same food. Otherwise it's unread, so the words go to Claude (`/ai/diet/text`, already there).
+- `family/meals.js`: phone readings show *✨ Not right? Ask Claude instead* when Claude is set up.
+
+**Checked on the phone parser:**
+
+| Said | Result |
+|---|---|
+| Two cups of chicken noodle soup, beef stew, fried chicken, chicken tikka masala | → Claude |
+| grilled chicken and rice, 2 eggs and toast, 8 oz grilled salmon, 1 scoop whey protein 1 cup frozen berries… | still read on the phone |
+
+**Tests:** `tests/foodtext.test.js` (dishes left for Claude, describing words still fine, Claude's dish item not re-read as an ingredient). `npm test` all pass.
+
+**Docs:** README, help guide, privacy (Last updated November 6, 2026), ARCHITECTURE.
+
 ### 🐾 Opening, slow-mo (2026-11-03, `v2/splash-slow` from `main` `3b8a80f`; owner: "I prefer the slowmo ×3", and confirm it plays only on a cold launch)
 
 - `family/style.css`: every opening duration and delay is now `calc(var(--sp-t) * …)` with `--sp-t: 3`. That's about 3.8 s to the full name and tagline, then a 1.3 s fade. The self-lift moved from 6 s to 10 s.

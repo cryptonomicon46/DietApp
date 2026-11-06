@@ -500,12 +500,14 @@ function drawTell() {
     ${error ? `<p class="small" role="alert">${E(error)}</p>` : ''}
     <div class="ml-primary"><button type="button" data-ml="tread" ${ms.busy ? 'disabled' : ''}>${ms.busy ? 'Reading…' : 'Read it'}</button></div>`);
 }
-async function readTell() {
+async function readTell({ claude = false } = {}) {
   const sh = ms.sheet, text = (document.getElementById('mlTell')?.value ?? sh.text).trim();
   sh.text = text;
   if (!text) { sh.error = 'Say or type what you had first.'; return drawTell(); }
   const local = parseMeal(text, FOODS);
-  if (!local.unread.length && local.items.length) return estimateSheet(sh.target, { from: 'tell', name: '', items: local.items, text, plan: sh.plan });
+  // Plain foods the phone knows are read on the phone (instant, nothing sent); a dish it doesn't
+  // know (or ✨ Ask Claude instead) goes to Claude.
+  if (!claude && !local.unread.length && local.items.length) return estimateSheet(sh.target, { from: 'tell', name: '', items: local.items, text, plan: sh.plan, askable: (await aiCheck()) !== false });
   if ((await aiCheck()) === false) return estimateSheet(sh.target, { from: 'tell', name: '', items: local.items, unread: local.unread, text, plan: sh.plan });
   ms.busy = true; drawTell();
   try {
@@ -547,7 +549,7 @@ function drawEst() {
   const second = extra ? '' : e.plan ? '<button type="button" class="ghost" data-ml="elog">✓ Plan & log</button>' : '<button type="button" class="ghost" data-ml="eplan">Plan it</button>';
   open(`${head(e.from === 'photo' ? '📷 Estimate' : '🎙️ Here\'s what I got', extra ? 'a snack or extra' : NAME[target])}
     ${e.note ? `<p class="small" role="status">${E(e.note)}</p>` : ''}
-    <p class="ml-note">${e.from === 'photo' ? 'A rough estimate — adjust anything that looks off.' : e.claude ? 'Read by Claude from your words — check it.' : 'Read on your phone — check it.'}${e.restaurant ? ' Restaurant food usually has more oil than it looks.' : ''} Change how much of each food with ✏️ Edit amounts — the numbers follow.</p>
+    <p class="ml-note">${e.from === 'photo' ? 'A rough estimate — adjust anything that looks off.' : e.claude ? 'Read by Claude from your words — check it.' : 'Read on your phone — check it.'}${e.from === 'tell' && !e.claude && e.askable ? ' <button type="button" class="linkish small" data-ml="eclaude">✨ Not right? Ask Claude instead</button>' : ''}${e.restaurant ? ' Restaurant food usually has more oil than it looks.' : ''} Change how much of each food with ✏️ Edit amounts — the numbers follow.</p>
     <div class="ml-est">${rows || '<p class="small muted">Nothing left — add it another way.</p>'}</div>
     ${e.unread?.length ? `<p class="small">Couldn't place: ${e.unread.map((x) => `“${E(x)}”`).join(', ')} — say it again with an amount, or add ${e.unread.length === 1 ? 'it' : 'them'} after logging.</p>` : ''}
     ${e.from === 'photo' ? `<div class="ml-label small">Portion</div><div class="seg">${[[0.75, 'Light'], [1, 'Regular'], [1.3, 'Large']].map(([v, l]) => `<button type="button" class="${e.size === v ? 'on' : ''}" data-ml="esize:${v}">${l}</button>`).join('')}</div>
@@ -758,6 +760,8 @@ export async function onClick(t) {
     case 'enudge': sh.est.items[+r[0]] = nudge(sh.est.items[+r[0]], +r[1], FOODS); return drawEst();
     case 'epack': { const t = estTotals(sh.est); return packSheet(sh.target, { name: (sh.est.name || sh.est.text || '').slice(0, 60), p: '', c: '', f: '', kcal: '', servings: 1, save: true, was: r0(t.kcal) }); }
     case 'eplan': return planEstimate();
+    // ✨ Read on the phone but not right: the same words go to Claude.
+    case 'eclaude': { const e = sh.est; ms.sheet = { kind: 'tell', target: sh.target, text: e.text || '', est: null, error: '', plan: !!e.plan, out: !!e.restaurant }; return readTell({ claude: true }); }
     case 'elog': return logEstimate();
     case 'adjust': return fitsSheet(true);
     case 'fits': return fitsSheet(false);

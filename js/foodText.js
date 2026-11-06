@@ -16,8 +16,13 @@ const ALIAS = {
   tuna: 'tuna', shrimp: 'shrimp', cod: 'cod', beans: 'blackBeans', 'black beans': 'blackBeans', chickpeas: 'chickpeas', garbanzo: 'chickpeas', potato: 'potato', 'sweet potato': 'sweetPotato', quinoa: 'quinoa', broccoli: 'broccoli', veggies: 'veggies', vegetables: 'veggies', salad: 'salad',
   banana: 'banana', apple: 'apple', orange: 'orange', pear: 'pear', grapes: 'grapes', blueberries: 'berries', berries: 'berries', strawberries: 'strawberries', 'frozen berries': 'frozenBerries', 'frozen mixed berries': 'frozenBerries', 'mixed berries': 'frozenBerries', 'frozen fruit': 'frozenBerries',
   'peanut butter': 'pb', 'almond butter': 'almondButter', almonds: 'almonds', cashews: 'cashews', nuts: 'mixedNuts', walnuts: 'walnuts', butter: 'butter', cheese: 'cheddar', cheddar: 'cheddar',
-  'olive oil': 'oliveOil', milk: 'milk2', 'oat milk': 'oatMilk', 'almond milk': 'almondMilk', cookie: 'chocCookie', 'protein bar': 'questBar', whey: 'whey', 'protein powder': 'whey',
+  'olive oil': 'oliveOil', milk: 'milk2', 'oat milk': 'oatMilk', 'almond milk': 'almondMilk', cookie: 'chocCookie', 'protein bar': 'questBar', whey: 'whey', 'protein powder': 'whey', 'whey protein': 'whey',
 };
+// Words that describe a known food without changing what it is ("grilled chicken", "2 large eggs",
+// "plain greek yogurt", "for lunch"). Any other word left over means a dish the phone doesn't know
+// ("chicken noodle soup", "beef stew", "fried chicken") — that part is left for Claude rather than
+// read as the plain food.
+const PLAIN = new Set(['grilled', 'baked', 'roasted', 'roast', 'boiled', 'poached', 'steamed', 'scrambled', 'hard', 'soft', 'sliced', 'diced', 'chopped', 'shredded', 'cooked', 'raw', 'plain', 'fresh', 'lean', 'skinless', 'boneless', 'organic', 'homemade', 'leftover', 'leftovers', 'small', 'large', 'big', 'little', 'extra', 'some', 'my', 'the', 'a', 'an', 'of', 'whole', 'hot', 'iced', 'cold', 'warm', 'unsweetened', 'nonfat', 'non-fat', 'fat-free', 'low-fat', 'lowfat', 'skim', 'toasted', 'black', 'ripe', 'i', 'had', 'ate', 'just', 'for', 'at', 'breakfast', 'lunch', 'dinner', 'snack', 'today', 'this', 'morning', 'tonight', 'about', 'around', 'approx', 'approximately', 'ish', 'portion', 'regular', 'fillet', 'filet', 'breast', 'mixed']);
 // Meat and fish without an amount: a typical cooked portion (shown as "~", to check).
 const PORTION_G = 150;
 const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}½¼¾⅓⅔/.\s'-]/gu, ' ').replace(/\s+/g, ' ').trim();
@@ -63,6 +68,8 @@ export function parsePart(part, foods, lex = lexicon(foods)) {
   const phrase = rest.join(' ');
   const hit = lex.find(([a]) => (` ${phrase} `).includes(` ${a} `) || (` ${phrase} `).includes(` ${sing(a)} `) || sing(phrase) === sing(a));
   if (!hit) return null;
+  // The food's name, and only describing words around it: anything else makes it a dish to ask about.
+  if (dishWords(rest, hit[0], lex.filter(([, k]) => k === hit[1]).map(([a]) => a)).length) return null;
   const key = hit[1], f = foods[key];
   const qty = n ?? 1;
   let grams, guess = false;
@@ -76,6 +83,16 @@ export function parsePart(part, foods, lex = lexicon(foods)) {
     amount: unit && WEIGHT[unit] ? `${grams} g` : f.unit ? `${nice(qty)} ${qty > 1 ? plural(f.unit.label) : f.unit.label}` : `~${grams} g`,
     kcal: Math.round(f.kcal * k), p: Math.round(f.p * k), c: Math.round(f.c * k), f: Math.round(f.f * k),
   };
+}
+// The words of a part left over once the food's own name (and plain describing words) are taken out.
+// `names`: every name the same food goes by ("2 eggs whole eggs" names it twice).
+export function dishWords(words, name, names = [name]) {
+  const nw = name.split(' '), left = [...words];
+  for (let i = 0; i + nw.length <= left.length; i++) {
+    if (nw.every((w, j) => left[i + j] === w || sing(left[i + j]) === sing(w))) { left.splice(i, nw.length); break; }
+  }
+  const own = new Set(names.flatMap((a) => a.split(' ')).map(sing));
+  return left.filter((w) => !PLAIN.has(w) && !own.has(sing(w)) && !/^\d/.test(w) && NUM[w] == null && FRAC[w] == null && !WEIGHT[w] && !UNIT_WORDS.includes(w));
 }
 // Spoken lists have no commas ("whey protein frozen berries and peanut butter"): a part that names
 // more than one food is cut before each food after the first, keeping its amount with it
