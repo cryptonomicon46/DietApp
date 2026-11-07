@@ -4,6 +4,17 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🍲 How was it made? (2026-11-07, `v2/how-made` on top of `v2/fresh-shared-files`; front end only; owner: "Give me the option to say hearty home made … denser and less brothy than the store bought one")
+
+**Done:**
+- `js/mealEstimate.js` `HOW_MADE` + `withHowMade`.
+- Chips on Claude estimates in the meal sheet (`ehow`) and Talk's meal card (`data-talkhow`, routed in `family/app.js`). A tap re-asks Claude with the original words, with that description first.
+- Store-bought's wording mentions "packaged", so Talk no longer hands it to the label form when a style is chosen.
+
+**Tests:** `tests/mealestimate.test.js` (wording, replacement, length cap, still goes to Claude). `npm test` 596/596.
+
+**Browser check** (stand-in Claude): Talk *Chicken noodle soup 150 kcal* → 🍲 Hearty homemade → *Homemade chicken noodle soup 360 kcal*; same in Ate out › Describe it. No errors.
+
 ### 🔄 Fresh shared files for OurPawmily (2026-11-07, `v2/fresh-shared-files` from `main` `13baca6`; front end only)
 
 **Why:** after PR #49, the owner still saw *Chicken breast* for "Log 2 cups of chicken noodle soup" in Talk. The current code sends it to Claude: verified in a browser, the card shows *Chicken noodle soup*. The likely cause is a stale file: OurPawmily's screens import shared files (`../js/foodText.js` and others) at a fixed address, so a phone can mix a new screen with an old cached food reader.
