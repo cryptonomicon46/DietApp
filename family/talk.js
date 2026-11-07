@@ -13,6 +13,7 @@ import { toTokens, fromTokens } from '../js/talkActions.js';
 import { isDayQuestion, checkSuggestions } from '../js/talkDay.js';
 import { browserVoiceOutput } from './voice.js';
 import * as P from '../js/proposal.js';
+import { HOW_MADE, withHowMade } from '../js/mealEstimate.js';
 
 let c = null;
 // Closing Talk stops listening (the microphone goes off) and forgets any card not yet saved.
@@ -212,12 +213,12 @@ async function proposeMeal(s) {
   try {
     const M = await c.dietMod();
     // "Log a packaged meal": the label form, as before.
-    if (M.talkPackaged(s.meal, s.text)) { tk.busy = false; c.closeSheet(); return handOff(s); }
-    const r = await M.talkRead(s.text);
+    if (!s.how && M.talkPackaged(s.meal, s.text)) { tk.busy = false; c.closeSheet(); return handOff(s); }
+    const r = await M.talkRead(s.text, { claude: !!s.how });
     tk.busy = false;
     if (!r.items.length) { tk.say = r.note || "I couldn't make out the food in that — try naming each thing, like “2 eggs and a slice of toast”."; speak(tk.say); return draw(); }
     tk.M = M;
-    tk.prop = P.makeProposal('meal', { meal: s.meal, items: r.items, unread: r.unread || [], plan: !!s.plan, add: !!s.add && s.meal !== 'extra', text: s.text, by: r.by });
+    tk.prop = P.makeProposal('meal', { meal: s.meal, items: r.items, unread: r.unread || [], plan: !!s.plan, add: !!s.add && s.meal !== 'extra', text: s.text, base: s.base ?? s.text, how: s.how || null, by: r.by });
     tk.propMsg = r.note || '';
     speak('Here’s what I heard. Does this look right?');
   } catch (e) { tk.busy = false; tk.error = e.message || "Couldn't read that just now."; }
@@ -272,6 +273,7 @@ function propHtml() {
       <ul class="tk-rows">${rows}</ul>
       ${d.unread?.length ? `<p class="small">Couldn't place: ${d.unread.map((x) => `“${E(x)}”`).join(', ')} — say it with an amount, or ✏️ Edit.</p>` : ''}
       <p class="tk-tot"><b>${r0(t.kcal)}</b> kcal · <b>${r0(t.p)}</b> P · <b>${r0(t.c)}</b> C · <b>${r0(t.f)}</b> F</p>
+      ${d.by === 'claude' && live && !tk.voice ? `<p class="small tk-howq">How was it made?</p><div class="chips tk-how" role="group" aria-label="How was it made?">${HOW_MADE.map((h) => `<button type="button" class="chip ${d.how === h.id ? 'on' : ''}" aria-pressed="${d.how === h.id}" data-talkhow="${h.id}">${E(h.label)}</button>`).join('')}</div>` : ''}
       ${msg}<p class="small">${live ? 'Does this look right?' : 'This one expired — say it again.'}</p>${acts(d.add ? `✓ Add to ${mn}` : d.plan ? '✓ Plan meal' : '✓ Log meal')}</div>`;
   }
   const w = p.payload.workout, mins = W$?.durationFor(w)?.minutes;
@@ -559,6 +561,8 @@ export async function onClick(t) {
   if (d.talkpickshow) { const [i, j] = d.talkpickshow.split(':').map(Number); const x = tk.cards[i]; tk.cards[i] = { type: 'watchstatus', show: x.hits[j], status: x.status, go: true }; return redraw(); }
   if (d.talkcare) { const [i, kind] = d.talkcare.split(':'); const k = tk.cards[+i].kinds.find((y) => y.kind === kind); tk.cards[+i] = { type: 'care', care: k, go: true }; return redraw(); }
   if (d.talk === 'all') { for (let i = 0; i < tk.cards.length; i++) if (tk.cards[i].go && !tk.cards[i].done && tk.cards[i].type !== 'handoff') await go(i); return null; }
+  // 🍲 Hearty homemade / Restaurant / Store-bought: Claude reads the same words again with that said first.
+  if (d.talkhow) { const x = tk.prop?.payload; if (!x || x.how === d.talkhow) return null; const base = x.base ?? x.text; P.cancel(tk.prop); tk.prop = null; return proposeMeal({ meal: x.meal, plan: x.plan, add: x.add, text: withHowMade(base, d.talkhow), base, how: d.talkhow }); }
   if (d.talk === 'pyes') return commitProp();
   if (d.talk === 'pno') return cancelProp();
   if (d.talk === 'pedit') return editProp();
