@@ -77,7 +77,7 @@ Doc rules: no secrets, keys, tokens, household codes, invite or device links, ac
 ## Repository facts (verified 2026-10-28)
 
 - Pushing or merging to `main` deploys the front end (GitHub Pages). Work on a branch (e.g. `v2/phase-…`); merge to `main` only with deployment approval. The Worker deploys only when the user runs `pawdeploy` (deploy the app first, then the Worker, unless a change needs the reverse).
-- Before each commit that changes app files: `node scripts/bump-version.mjs` (trackers' file versions and the offline cache) and bump `app.js?v=` / `style.css?v=` in `family/index.html` by hand; then `npm test`.
+- Before each commit that changes app files: `node scripts/bump-version.mjs` (both pages' shared-file versions — OurPawmily's import map and its CSP hash too — and the offline cache) and bump `app.js?v=` / `style.css?v=` in `family/index.html` by hand; then `npm test`.
 - Commit messages end with the session's Co-Authored-By and Claude-Session lines; no model identifiers in commits, PRs or code.
 - The Check (`.github/workflows/check.yml`) runs tests, the link check and the performance budget on every push; green on the latest commit means it's safe to `pawdeploy`.
 - Performance budget: `scripts/perf/` (`pages.mjs` serves the repo like Pages on :8098; `wrangler dev` on :8787 with `--var DEMO:1 --var APP_ORIGIN:http://localhost:8098/DietApp/`; `seed.mjs` makes a synthetic family; `budget.mjs` measures cold and warm start against `budget.json`). Compare before/after on the same machine (serve the old commit from a worktree on :8098 in turn).
