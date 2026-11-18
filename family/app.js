@@ -4599,7 +4599,7 @@ document.addEventListener('click', (e) => {
   // 🎤 Change by voice on a review card: listening starts in this tap, for that card only.
   if (d.talk === 'change') { const voice = listenNow(true); return act(async () => (await talk()).change(voice)); }
   if (d.wl) return act(async () => (await wish()).onClick(t));
-  if (d.talk || d.talkex != null || d.talkgo != null || d.talkundo != null || d.talkset || d.talkpick || d.talkpickshow || d.talkcare || d.talksay) return act(async () => (await talk()).onClick(t));
+  if (d.talk || d.talkex != null || d.talkgo != null || d.talkundo != null || d.talkset || d.talkpick || d.talkpickshow || d.talkcare || d.talksay || d.talkhow) return act(async () => (await talk()).onClick(t));
   if (d.care) {
     const box = t.getBoundingClientRect();
     celebrate(d.care, box.left + box.width / 2, box.top + box.height / 2);

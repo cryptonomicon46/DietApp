@@ -72,3 +72,17 @@ export function packagedAsk(text) {
     kcal: num(/(\d+(?:\.\d+)?)\s*(?:kcal|calories|cal)\b/i), p: num(/(\d+(?:\.\d+)?)\s*g?\s*(?:of\s+)?protein/i), c: num(/(\d+(?:\.\d+)?)\s*g?\s*(?:of\s+)?carbs?/i), f: num(/(\d+(?:\.\d+)?)\s*g?\s*(?:of\s+)?fat/i),
   };
 }
+
+// 🍲 How a dish was made, for Claude's estimate: the same soup is ~75 kcal a cup from a can and
+// ~150–200 homemade (denser, more chicken and noodles, less broth). A tap re-asks with this said
+// first; the words you said stay as they were (base), so picking another one replaces it.
+export const HOW_MADE = [
+  { id: 'homemade', label: '🍲 Hearty homemade', say: 'Hearty homemade — dense, generous with the meat, noodles or vegetables, less broth or sauce than store-bought' },
+  { id: 'restaurant', label: '🍽 Restaurant', say: 'From a restaurant — a typical restaurant portion and recipe' },
+  { id: 'store', label: '🥫 Store-bought', say: 'Store-bought (canned or packaged), prepared as the label says' },
+];
+export function withHowMade(text, id) {
+  const h = HOW_MADE.find((x) => x.id === id);
+  const base = String(text || '').trim();
+  return h ? `${h.say}: ${base}`.slice(0, 600) : base;
+}

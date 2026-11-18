@@ -64,3 +64,14 @@ test('Talk: planning ahead opens it with Plan it first; logging stays logging', 
   assert.deepEqual(parseTalk('Log 2 eggs and a slice of sourdough for breakfast').steps[0], { do: 'diet.log', meal: 'breakfast', text: '2 eggs and a slice of sourdough' });
   assert.deepEqual(parseTalk('Log a packaged meal for lunch').steps[0], { do: 'diet.log', meal: 'lunch', text: 'a packaged meal' });
 });
+
+test('🍲 how it was made: said first to Claude, replacing an earlier choice, never "packaged" by accident', async () => {
+  const { HOW_MADE, withHowMade } = await import('../js/mealEstimate.js');
+  assert.deepEqual(HOW_MADE.map((h) => h.id), ['homemade', 'restaurant', 'store']);
+  const t = withHowMade('2 cups of chicken noodle soup', 'homemade');
+  assert.match(t, /^Hearty homemade — dense.*: 2 cups of chicken noodle soup$/);
+  assert.equal(withHowMade('2 cups of chicken noodle soup', 'nope'), '2 cups of chicken noodle soup');
+  assert.ok(withHowMade('x'.repeat(700), 'store').length <= 600, 'within what the server accepts');
+  // Each one, with the dish, still goes to Claude (never read as a plain food on the phone).
+  for (const h of HOW_MADE) assert.ok(parseMeal(withHowMade('2 cups of chicken noodle soup', h.id), FOODS).unread.length, h.id);
+});
