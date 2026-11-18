@@ -4,6 +4,16 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🔄 Fresh shared files for OurPawmily (2026-11-07, `v2/fresh-shared-files` from `main` `13baca6`; front end only)
+
+**Why:** after PR #49, the owner still saw *Chicken breast* for "Log 2 cups of chicken noodle soup" in Talk. The current code sends it to Claude: verified in a browser, the card shows *Chicken noodle soup*. The likely cause is a stale file: OurPawmily's screens import shared files (`../js/foodText.js` and others) at a fixed address, so a phone can mix a new screen with an old cached food reader.
+
+**Fix:** `scripts/bump-version.mjs` writes a versioned import map into `family/index.html`, plus its CSP hash.
+
+**Checked** in Chromium with the page's own CSP enforced: no script refusals, and `js/foodText.js?v=368` loaded. Talk still shows *Chicken noodle soup*.
+
+**Tests:** `tests/versions.test.js`; `npm test` all pass.
+
 ### 🍲 Describe a dish → Claude (2026-11-06, `v2/describe-dishes` from `main` `2374b78`; front end only, no `pawdeploy`; owner: "chicken noodle soup, 2 cups … the describe feature cannot understand what it is … send the description to Claude … instead of being stringent")
 
 **Cause:** `parsePart` matched a known food anywhere in a part and ignored the other words. "Two cups of chicken noodle soup" → *Chicken breast ~300 g*, read entirely on the phone, so Claude was never asked. Even Claude's own *Chicken noodle soup* item could be turned back into chicken breast by `placeItems`.

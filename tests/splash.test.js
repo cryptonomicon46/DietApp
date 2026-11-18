@@ -14,7 +14,7 @@ test('the opening is in the page, hidden from screen readers, with no script of 
   const m = html.match(/<div class="splash" id="splash" aria-hidden="true">[\s\S]*?<\/div><\/div>/);
   assert.ok(m, 'splash markup right after <body>');
   assert.ok(html.indexOf('id="splash"') < html.indexOf('<main id="view"'));
-  assert.ok(!/<script(?![^>]*src=)[^>]*>/.test(html), 'no inline script (CSP)');
+  assert.ok(!/<script(?![^>]*src=)(?![^>]*type="importmap")[^>]*>/.test(html), 'no inline script (CSP) besides the hash-allowed import map');
   assert.equal([...m[0].matchAll(/<span style="--i:\d+">(.)<\/span>/g)].map((x) => x[1]).join(''), 'OurPawmily');
   assert.match(m[0], /Home, health and the dogs/);
   assert.ok(!/<img|url\(/.test(m[0]), 'no image to download');
