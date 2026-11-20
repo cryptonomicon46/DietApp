@@ -10,13 +10,15 @@
 //             uncertain?: ['rounds' | 'kind'] }
 //   Item    { id, name, note?, perSide?, ref? (the program's exercise id), sets: [Set] (one per round),
 //             uncertain?: ['name'] }
-//   Set     { reps, weight, unit: 'lb' | 'kg', bw, time, distance, distUnit, done, got?, uncertain? }
+//   Set     { reps, weight, unit: 'lb' | 'kg', bw, time, distance, distUnit, done, got?, typed?, uncertain? }
 //
 // A block is done in rounds: each round does every item once, in order. Straight sets are a block
 // with one item (rounds = sets); a superset alternates two; a circuit goes through three or more.
 // Every set holds its own target, so 12 / 12 / 11 / 11 reps or 40 / 45 / 50 lb are just four sets.
 // The plan is each set's target; what you actually did goes in its `got` when you log it, so a
 // finished workout keeps both. perSide: the reps are for each side (lunges, single-arm rows).
+// typed: numbers typed on Train for a set not ticked yet — kept with the workout, so editing it,
+// saving or leaving the screen never loses them; ✓ turns them into `got`.
 // Nothing here guesses: a value nobody gave stays null, and a parser marks what it isn't sure of.
 export const KINDS = { straight: 'Straight sets', superset: 'Superset', circuit: 'Circuit' };
 const UNITS = ['lb', 'kg'], DIST = ['mi', 'km', 'm'];
@@ -35,6 +37,10 @@ export function makeSet(o = {}) {
   };
   if (o.got && typeof o.got === 'object') s.got = { reps: int(o.got.reps, MAX.reps), weight: num(o.got.weight, MAX.weight), time: int(o.got.time, MAX.time), distance: num(o.got.distance, MAX.distance) };
   if (o.asPlanned && s.done) s.asPlanned = true; // ticked with "log as planned", not typed in
+  if (!s.done && o.typed && typeof o.typed === 'object') {
+    const t = { reps: int(o.typed.reps, MAX.reps), weight: num(o.typed.weight, MAX.weight), time: int(o.typed.time, MAX.time), distance: num(o.typed.distance, MAX.distance) };
+    if (Object.values(t).some((v) => v != null)) s.typed = t;
+  }
   const u = okFields(o.uncertain, ['reps', 'weight', 'time', 'distance']);
   if (u.length) s.uncertain = u;
   return s;
@@ -113,7 +119,7 @@ const clone = (w) => JSON.parse(JSON.stringify(w));
 export function setRounds(w, bi, n) {
   const c = clone(w), b = c.blocks[bi], rounds = Math.max(1, Math.min(MAX.rounds, Math.round(n)));
   // More rounds: the new sets start as a copy of that item's last set (the person asked for them).
-  for (const it of b.items) { while (it.sets.length < rounds) it.sets.push(makeSet({ ...it.sets[it.sets.length - 1], done: false, got: undefined, uncertain: [] })); it.sets.length = rounds; }
+  for (const it of b.items) { while (it.sets.length < rounds) it.sets.push(makeSet({ ...it.sets[it.sets.length - 1], done: false, got: undefined, typed: undefined, uncertain: [] })); it.sets.length = rounds; }
   b.rounds = rounds; b.uncertain = (b.uncertain || []).filter((f) => f !== 'rounds');
   if (!b.uncertain.length) delete b.uncertain;
   return c;
@@ -137,9 +143,25 @@ export function renameItem(w, bi, ii, name) {
 export function logSet(w, bi, ii, si, got = {}) {
   const c = clone(w), s = c.blocks[bi].items[ii].sets[si];
   const g = makeSet({ reps: got.reps ?? s.reps, weight: got.weight ?? s.weight, time: got.time ?? s.time, distance: got.distance ?? s.distance });
-  s.got = { reps: g.reps, weight: g.weight, time: g.time, distance: g.distance }; s.done = true;
+  s.got = { reps: g.reps, weight: g.weight, time: g.time, distance: g.distance }; s.done = true; delete s.typed;
   if (c.status === 'planned') { c.status = 'active'; c.startedAt ||= Date.now(); }
   return c;
+}
+// Numbers typed on Train before ✓ (kept, not logged): { reps?, weight?, time?, distance? }.
+export function typeSet(w, bi, ii, si, patch = {}) {
+  const c = clone(w), s = c.blocks[bi]?.items[ii]?.sets[si];
+  if (!s || s.done) return w;
+  c.blocks[bi].items[ii].sets[si] = makeSet({ ...s, typed: { ...(s.typed || {}), ...patch } });
+  return c;
+}
+// In the editor, a set shows what Train shows: what you logged for a done set (and editing it
+// corrects the log), else what you typed, else the plan (and editing it sets the plan).
+export const shownOf = (s) => (s.done ? { ...s, ...Object.fromEntries(Object.entries(s.got || {}).filter(([, v]) => v != null)) } : { ...s, ...Object.fromEntries(Object.entries(s.typed || {}).filter(([, v]) => v != null)) });
+export function editShown(w, bi, ii, si, field, value) {
+  const s = w.blocks[bi].items[ii].sets[si];
+  if (s.done) return editSet(w, bi, ii, si, { got: { ...(s.got || {}), [field]: value } });
+  const typed = s.typed ? { ...s.typed, [field]: null } : undefined;
+  return editSet(w, bi, ii, si, { [field]: value, typed });
 }
 export function unlogSet(w, bi, ii, si) { const c = clone(w), s = c.blocks[bi].items[ii].sets[si]; s.done = false; delete s.got; delete s.asPlanned; return c; }
 // ✓ All sets of one exercise, or every set still open: recorded as done with the planned reps

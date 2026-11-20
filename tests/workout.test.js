@@ -288,3 +288,38 @@ test('undo a variant: the original plan back, with every set ticked since', () =
   const sh = W.proposeVariant(w, 'shorter').workout;
   assert.equal(W.undoVariant(w, sh).blocks.length, 4);
 });
+
+test('✅ editing a workout mid-way keeps what you logged and what you typed', async () => {
+  const W = await import('../js/workout.js');
+  let w = W.normalize({ title: 'Legs', blocks: [{ items: [{ name: 'Machine RDL', sets: [{ weight: 45 }, { weight: 55 }, { weight: 70 }] }] }] });
+  w = W.logSet(w, 0, 0, 0, { reps: 12, weight: 45 });          // set 1 done: 12 × 45
+  w = W.typeSet(w, 0, 0, 1, { reps: 10 });                     // set 2 typed, not ticked yet
+  // Edit: one more set, a new exercise, then Save (normalize) — nothing logged or typed is lost.
+  let d = W.normalize(w);
+  d = W.setRounds(d, 0, 4);
+  d.blocks.push(W.makeBlock({ items: [{ name: 'Seated calf raise', sets: [{ reps: 15, weight: 70 }] }] }));
+  const saved = W.normalize(d);
+  const sets = saved.blocks[0].items[0].sets;
+  assert.equal(sets.length, 4);
+  assert.deepEqual([sets[0].done, sets[0].got.reps, sets[0].got.weight], [true, 12, 45]);
+  assert.equal(sets[1].typed.reps, 10);
+  assert.equal(sets[3].done, false); assert.equal(sets[3].typed, undefined, 'a new set copies the plan, not the log');
+  assert.equal(saved.blocks[1].items[0].name, 'Seated calf raise');
+  // The editor shows what was logged for a done set, and what was typed for an open one.
+  assert.equal(W.shownOf(sets[0]).reps, 12);
+  assert.equal(W.shownOf(sets[1]).reps, 10);
+  assert.equal(W.shownOf(sets[2]).reps, null);
+  // Editing a done set corrects the log (not the plan); editing an open one sets the plan.
+  let e = W.editShown(saved, 0, 0, 0, 'reps', 11);
+  assert.equal(e.blocks[0].items[0].sets[0].got.reps, 11);
+  assert.equal(e.blocks[0].items[0].sets[0].reps, null, 'plan unchanged');
+  e = W.editShown(e, 0, 0, 1, 'reps', 8);
+  assert.equal(e.blocks[0].items[0].sets[1].reps, 8);
+  assert.equal(e.blocks[0].items[0].sets[1].typed, undefined, 'the typed value it replaced is gone');
+  // ✓ turns typed numbers into the log.
+  const t = W.typeSet(saved, 0, 0, 2, { reps: 9, weight: 70 });
+  const logged = W.logSet(t, 0, 0, 2, { reps: 9, weight: 70 });
+  assert.equal(logged.blocks[0].items[0].sets[2].typed, undefined);
+  assert.equal(logged.blocks[0].items[0].sets[2].got.reps, 9);
+  assert.equal(W.typeSet(logged, 0, 0, 2, { reps: 1 }), logged, 'a done set is not typed over');
+});

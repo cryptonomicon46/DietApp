@@ -5722,7 +5722,10 @@ document.addEventListener('pointerup', swipeEnd);
 document.addEventListener('pointercancel', swipeEnd);
 document.addEventListener('pointerdown', (e) => { if (e.target.closest?.('[data-lkmark]') && lookMod) lookMod.then((L) => L.onPointer(e)).catch(() => {}); });
 document.addEventListener('input', (e) => { if (e.target.dataset?.rdq != null) RM().then((R) => R.onInput(e.target)).catch(() => {}); });
-document.addEventListener('input', (e) => { if (e.target.dataset?.fxe && fitMod) fitMod.then((F) => F.onInput(e.target)).catch(() => {}); });
+document.addEventListener('input', (e) => {
+  if (e.target.dataset?.fxe && fitMod) fitMod.then((F) => F.onInput(e.target)).catch(() => {});
+  if (e.target.dataset?.fxl && fitMod) fitMod.then((F) => F.onTrainInput(e.target)).catch(() => {});
+});
 document.addEventListener('input', (e) => { if (e.target.dataset?.mle != null && mealMod) mealMod.then((M) => M.onInput(e.target)).catch(() => {}); });
 document.addEventListener('change', (e) => { if (e.target.dataset?.wiphotos != null) weighIn().then((W) => W.onPick(e.target)).catch((err) => toast(err.message)); });
 document.addEventListener('change', (e) => { if (e.target.dataset?.mlpick != null && mealMod) mealMod.then((M) => M.onPick(e.target)).catch(() => {}); });
