@@ -1807,3 +1807,4 @@ button.ml-opt.on > span:last-child { color: var(--brand); font-weight: 800; }
   .sp-tag { opacity: .82; }
   .splash.done { animation: sp-out .3s ease both; }
 }
+.fx-set.done input { border-color: color-mix(in srgb, var(--brand) 50%, var(--line)); }

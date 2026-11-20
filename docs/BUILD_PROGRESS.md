@@ -4,6 +4,21 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### 🏋️ Editing a workout keeps logged and typed sets (2026-11-20, `v2/keep-logged-sets` from `main` `f8499b0`; front end only; owner: "if I edit the workout to add more sets and more exercises… whatever I have logged previously… goes away")
+
+**Cause:**
+- The editor showed each set's plan, not what was logged, so a done set with a blank plan looked erased.
+- Numbers typed on Train before ✓ lived only in the screen, so Edit → Save redrew them away.
+
+**Fix:**
+- `js/workout.js`: `typed` on a set, plus `typeSet`, `shownOf` and `editShown`. `logSet` clears `typed`; `setRounds` never copies `typed`.
+- `family/fitness.js`: Train inputs show and save `typed` (`onTrainInput`, routed from `family/app.js`). The editor shows `shownOf`, marks done sets ✓, and edits via `editShown`.
+- `family/style.css`: done-set outline.
+
+**Tests:** `tests/workout.test.js`; `npm test` 597/597.
+
+**Browser check** (local Pages + `wrangler dev` DEMO, 390 px): built Machine RDL 45/55/70 → Start → set 1 12 × 45 ✓, set 2 typed 10 → Edit (shows 12/45 ✓ and 10) → +1 set, + Seated calf raise 15 × 70 → Save. Train shows *Set 1 — 12 × 45 ✓* and set 2's input still 10, and Edit again shows the same. No errors.
+
 ### 🍲 How was it made? (2026-11-07, `v2/how-made` on top of `v2/fresh-shared-files`; front end only; owner: "Give me the option to say hearty home made … denser and less brothy than the store bought one")
 
 **Done:**

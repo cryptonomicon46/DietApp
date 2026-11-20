@@ -314,9 +314,12 @@ async function readPic() {
 // The editor — for building a workout, and for reviewing one read from words or a photo.
 const measureOf = (it) => (it.sets.some((s) => s.time != null) ? 'time' : it.sets.some((s) => s.distance != null) ? 'distance' : it.sets.every((s) => s.bw) ? 'bw' : 'reps');
 const unsure = (o, f) => (o?.uncertain || []).includes(f);
-function setCell(bi, ii, si, s, m) {
-  const inp = (f, ph, val, extra = '') => `<input class="${unsure(s, f) ? 'unsure' : ''}" inputmode="decimal" data-fxe="${f}:${bi}:${ii}:${si}" value="${val ?? ''}" placeholder="${ph}" aria-label="${ph}, round ${si + 1}${unsure(s, f) ? ' — check this' : ''}" ${extra}>`;
-  return `<div class="fx-set"><small>${si + 1}</small>${m === 'time' ? inp('time', 'sec', s.time) : m === 'distance' ? inp('distance', s.distUnit, s.distance) : inp('reps', 'reps', s.reps)}${m === 'reps' ? inp('weight', s.unit, s.weight) : ''}</div>`;
+// A done set shows what you logged (✓, and editing it corrects the log); an open one what you
+// typed on Train, else the plan (W.shownOf / W.editShown).
+function setCell(bi, ii, si, s0, m) {
+  const s = W.shownOf(s0);
+  const inp = (f, ph, val, extra = '') => `<input class="${unsure(s, f) ? 'unsure' : ''}${s0.done ? ' done' : ''}" inputmode="decimal" data-fxe="${f}:${bi}:${ii}:${si}" value="${val ?? ''}" placeholder="${ph}" aria-label="${ph}, round ${si + 1}${s0.done ? ', done' : ''}${unsure(s, f) ? ' — check this' : ''}" ${extra}>`;
+  return `<div class="fx-set${s0.done ? ' done' : ''}"><small>${si + 1}${s0.done ? '<span class="good" aria-hidden="true"> ✓</span>' : ''}</small>${m === 'time' ? inp('time', 'sec', s.time) : m === 'distance' ? inp('distance', s.distUnit, s.distance) : inp('reps', 'reps', s.reps)}${m === 'reps' ? inp('weight', s.unit, s.weight) : ''}</div>`;
 }
 function editorHtml() {
   const w = fx.draft, u = W.uncertain(w), p = W.problems(w);
@@ -366,7 +369,7 @@ function trainHtml() {
         return all ? `<p class="small fx-rdone">${lab} — ${b.items.map((it) => `${b.items.length > 1 ? `${E(it.name)} ` : ''}${E(didText(it.sets[r]))}${changed(it.sets[r]) ? ` <small class="muted">(plan ${E(planText(it.sets[r]))})</small>` : ''}`).join(' · ')} ✓ <button type="button" class="linkish tiny" data-fx="undo:${bi}:${r}" aria-label="Undo ${lab}">undo</button></p>`
           : `<div class="fx-round ${nx && nx.bi === bi && nx.si === r ? 'next' : ''}">${b.items.length > 1 ? `<div class="small"><b>${lab}</b></div>` : ''}${b.items.map((it, ii) => { const x = it.sets[r], m = measureOf(it); return `<div class="fx-logrow ${x.done ? 'done' : ''}">
             <span class="grow"><b>${b.items.length > 1 ? `${E(it.name)}${it.perSide ? ' <small class="muted">each side</small>' : ''}` : lab}</b><small class="muted">${E(planText(x)) || 'as you like'}</small></span>
-            ${x.done ? `<span class="small">${E(didText(x))} ✓</span>` : `<span class="fx-in">${m === 'time' ? `<input inputmode="numeric" data-fxl="time:${bi}:${ii}:${r}" value="${x.time ?? ''}" aria-label="Seconds, ${E(it.name)} ${lab}" placeholder="sec">` : m === 'distance' ? `<input inputmode="decimal" data-fxl="distance:${bi}:${ii}:${r}" value="${x.distance ?? ''}" aria-label="Distance, ${E(it.name)} ${lab}" placeholder="${x.distUnit}">` : `<input inputmode="numeric" data-fxl="reps:${bi}:${ii}:${r}" value="${x.reps ?? ''}" aria-label="Reps, ${E(it.name)} ${lab}" placeholder="reps">${m === 'reps' ? `<input inputmode="decimal" data-fxl="weight:${bi}:${ii}:${r}" value="${x.weight ?? ''}" aria-label="Weight (${x.unit}), ${E(it.name)} ${lab}" placeholder="${x.unit}">` : ''}`}</span>
+            ${x.done ? `<span class="small">${E(didText(x))} ✓</span>` : `<span class="fx-in">${m === 'time' ? `<input inputmode="numeric" data-fxl="time:${bi}:${ii}:${r}" value="${x.typed?.time ?? x.time ?? ''}" aria-label="Seconds, ${E(it.name)} ${lab}" placeholder="sec">` : m === 'distance' ? `<input inputmode="decimal" data-fxl="distance:${bi}:${ii}:${r}" value="${x.typed?.distance ?? x.distance ?? ''}" aria-label="Distance, ${E(it.name)} ${lab}" placeholder="${x.distUnit}">` : `<input inputmode="numeric" data-fxl="reps:${bi}:${ii}:${r}" value="${x.typed?.reps ?? x.reps ?? ''}" aria-label="Reps, ${E(it.name)} ${lab}" placeholder="reps">${m === 'reps' ? `<input inputmode="decimal" data-fxl="weight:${bi}:${ii}:${r}" value="${x.typed?.weight ?? x.weight ?? ''}" aria-label="Weight (${x.unit}), ${E(it.name)} ${lab}" placeholder="${x.unit}">` : ''}`}</span>
               <button type="button" class="fx-check" data-fx="log:${bi}:${ii}:${r}" aria-label="Done: ${E(it.name)}, ${b.items.length > 1 ? 'round' : 'set'} ${r + 1}">✓</button>`}</div>`; }).join('')}</div>`; }).join('')}
       ${fx.rest?.bi === bi ? restHtml() : ''}
     </section>`; }).join('')}
@@ -734,6 +737,14 @@ export function onInput(t) {
     it.sets = it.sets.map((s) => W.makeSet({ ...s, bw: t.value === 'bw', weight: t.value === 'reps' ? s.weight : null, time: t.value === 'time' ? s.time ?? null : null, distance: t.value === 'distance' ? s.distance ?? null : null, reps: t.value === 'time' || t.value === 'distance' ? null : s.reps }));
     return render();
   }
-  fx.draft = W.editSet(fx.draft, bi, ii, si, { [f]: num(t.value) });
+  fx.draft = W.editShown(fx.draft, bi, ii, si, f, num(t.value));
   t.classList.remove('unsure');
+}
+// Typing on Train (before ✓): kept with today's workout at once, so Edit, Save, leaving the
+// screen or closing the app never loses it.
+export function onTrainInput(t) {
+  const [f, bi, ii, si] = t.dataset.fxl.split(':'), v = num(t.value);
+  if (!fx.today || !['reps', 'weight', 'time', 'distance'].includes(f)) return;
+  fx.today = W.typeSet(fx.today, +bi, +ii, +si, { [f]: v });
+  saveToday();
 }
