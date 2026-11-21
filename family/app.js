@@ -5640,18 +5640,22 @@ window.addEventListener('unhandledrejection', (e) => glitch(e.reason?.message ||
 
 // ✨ A newer version is out (a Home Screen app can keep the old one in memory for a while):
 // checked when the app opens or comes back, and offered as one tap.
+// The version is this page's own <script src="app.js?v=…">, not the first "app.js?v=" in the page:
+// its import map also lists the trackers' js/app.js, under a different number.
+export const latestVersion = (html) => String(html || '').match(/<script type="module" src="app\.js\?v=(\d+)"/)?.[1] || null;
 let updateCheckedAt = 0;
 async function checkForUpdate() {
   if (VERSION === 'dev' || Date.now() - updateCheckedAt < 60000 || $('.update-bar')) return;
   updateCheckedAt = Date.now();
   try {
     const html = await (await fetch('./index.html', { cache: 'no-store' })).text();
-    const latest = html.match(/app\.js\?v=(\d+)/)?.[1];
+    const latest = latestVersion(html);
     if (!latest || +latest <= +VERSION) return;
     const bar = document.createElement('button');
     bar.type = 'button'; bar.className = 'update-bar';
     bar.innerHTML = '✨ A new version is ready — <b>tap to update</b>';
-    bar.onclick = () => { bar.textContent = 'Updating…'; navigator.serviceWorker?.getRegistration?.().then((r) => r?.update()).catch(() => {}).finally(() => location.reload()); };
+    // A new address (?fresh=…) so the phone fetches the page itself, not a cached copy of it.
+    bar.onclick = () => { bar.textContent = 'Updating…'; navigator.serviceWorker?.getRegistration?.().then((r) => r?.update()).catch(() => {}).finally(() => location.replace(`${location.pathname}?fresh=${latest}${location.hash}`)); };
     document.body.append(bar);
   } catch { /* offline: next time */ }
 }
@@ -5663,7 +5667,7 @@ document.addEventListener('visibilitychange', () => {
 setTimeout(checkForUpdate, 3000);
 
 const wantHelp = new URLSearchParams(location.search).has('help');
-if (wantHelp) history.replaceState(null, '', location.pathname + location.hash);
+if (wantHelp || new URLSearchParams(location.search).has('fresh')) history.replaceState(null, '', location.pathname + location.hash);
 // 🐾 The opening (index.html #splash): once the first screen is drawn it lifts — not before the
 // name and tagline have written in (slow-mo: about 3.8 s after launch; 0.3 s with Reduce Motion),
 // and never held for anything else. Home loads underneath it from the first moment; a tap skips it.

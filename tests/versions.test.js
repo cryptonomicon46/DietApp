@@ -20,3 +20,17 @@ test('family/index.html maps every shared file to the current version, allowed b
   assert.ok(html.indexOf('id="versions"') < html.indexOf('<script type="module"'), 'before the first module');
   assert.ok(html.indexOf('Content-Security-Policy') < html.indexOf('id="versions"'), 'after the CSP');
 });
+
+test("✨ the update check reads OurPawmily's own version, not the trackers' entry in the map", () => {
+  const app = readFileSync(new URL('../family/app.js', import.meta.url), 'utf8');
+  const line = app.split('\n').find((l) => l.startsWith('export const latestVersion'));
+  assert.ok(line, 'latestVersion is defined');
+  const latestVersion = new Function(`return ${line.replace('export const latestVersion = ', '').replace(/;$/, '')}`)();
+  const own = html.match(/<script type="module" src="app\.js\?v=(\d+)"><\/script>/)[1];
+  assert.equal(latestVersion(html), own);
+  assert.notEqual(latestVersion(html), html.match(/app\.js\?v=(\d+)/)[1], 'the first app.js?v= in the page is the map\'s, which is why the old check never settled');
+  assert.equal(latestVersion('<html></html>'), null);
+  // The update tap loads a fresh address, and the app tidies it away on arrival.
+  assert.match(app, /location\.replace\(`\$\{location\.pathname\}\?fresh=\$\{latest\}\$\{location\.hash\}`\)/);
+  assert.match(app, /has\('fresh'\)\) history\.replaceState/);
+});
