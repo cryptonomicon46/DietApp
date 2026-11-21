@@ -4,6 +4,16 @@ Last update: 2026-11-01 — 🌅 Daily Health + Talk UX: Phase 0/1 audit + 390 p
 
 ## Current phase and task
 
+### ✨ Update bar that never cleared (2026-11-21, `v2/update-bar` from `main` `c45514f`; front end only; owner: "when I tap to update app it doesn't do that. Keeps showing the same tap to load updated app")
+
+**Cause:** a regression from PR #50. `checkForUpdate` read the first `app.js?v=` in `family/index.html`, which became the import map's `../js/app.js?v=371` (the trackers' file) rather than the page's own `app.js?v=163`. Every check saw a "newer" version, so the bar came back after every update.
+
+**Fix:** `latestVersion` reads the page's own `<script type="module" src="app.js?v=…">`. The tap loads `?fresh=<version>` so no cached page is reused, and the app strips the parameter on arrival.
+
+**Tests:** `tests/versions.test.js` (against the real page); `npm test` 598/598.
+
+**Browser check** (local, a route serving a newer page): same version → no bar; newer → bar; tap → `app.js?v=999` loaded, the address back to `/family/`, no bar, no errors.
+
 ### 🏋️ Editing a workout keeps logged and typed sets (2026-11-20, `v2/keep-logged-sets` from `main` `f8499b0`; front end only; owner: "if I edit the workout to add more sets and more exercises… whatever I have logged previously… goes away")
 
 **Cause:**
